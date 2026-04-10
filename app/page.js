@@ -44,9 +44,12 @@ return(
 
 <img src="/logo-endurance.png" style={{width:"60px"}}/>
 
-<div>
-<h1>ENDURANCE</h1>
-<p style={{opacity:0.6}}>Train samen</p>
+<div style={{display:"flex",justifyContent:"center",width:"100%"}}>
+  <img
+    src="/logo-endurance.png"
+    alt="Endurance"
+    style={{height:"70px",width:"auto"}}
+  />
 </div>
 
 </header>
