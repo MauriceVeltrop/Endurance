@@ -2,93 +2,27 @@
 import { useState } from "react";
 
 export default function Home() {
+  const m = true;
+  const [t, s] = useState([
+    { id: 1, titel: "Duurloop Brunssummerheide", sport: "Hardlopen", datum: "17 mei", tijd: "09:00", locatie: "Brunssummerheide", deelnemers: ["Maurice", "Ronald"] },
+    { id: 2, titel: "Racefiets Parkstad", sport: "Fietsen", datum: "18 mei", tijd: "10:00", locatie: "Landgraaf", deelnemers: ["Ronald"] }
+  ]);
+  const mee = (id) => s(t.map(x => x.id === id && !x.deelnemers.includes("Jij") ? { ...x, deelnemers: [...x.deelnemers, "Jij"] } : x));
+  const del = (id) => confirm("Training verwijderen?") && s(t.filter(x => x.id !== id));
 
-const [trainingen,setTrainingen] = useState([
-{
-id:1,
-titel:"Duurloop Brunssummerheide",
-sport:"Hardlopen",
-datum:"17 mei",
-tijd:"09:00",
-locatie:"Brunssummerheide",
-deelnemers:["Maurice","Ronald"]
-},
-{
-id:2,
-titel:"Racefiets Parkstad",
-sport:"Fietsen",
-datum:"18 mei",
-tijd:"10:00",
-locatie:"Landgraaf",
-deelnemers:["Ronald"]
-}
-])
-
-function doeMee(id){
-
-setTrainingen(
-trainingen.map(t =>
-t.id===id
-? {...t,deelnemers:[...t.deelnemers,"Jij"]}
-: t
-)
-)
-
-}
-
-return(
-
-<main style={{background:"#050505",color:"white",minHeight:"100vh",padding:"20px",fontFamily:"sans-serif"}}>
-
-<header style={{display:"flex",alignItems:"center",gap:"15px",marginBottom:"25px"}}>
-
-<div style={{display:"flex",justifyContent:"center",width:"100%"}}>
-  <img
-    src="/logo-endurance.png"
-    alt="Endurance"
-    style={{height:"70px",width:"auto"}}
-  />
-</div>
-
-</header>
-
-{trainingen.map(t => (
-
-<div key={t.id} style={{background:"#111",padding:"20px",borderRadius:"15px",marginBottom:"15px"}}>
-
-<h2>{t.titel}</h2>
-
-<p>{t.sport}</p>
-<p>{t.datum} · {t.tijd}</p>
-<p>{t.locatie}</p>
-
-<p style={{opacity:0.7}}>
-Deelnemers: {t.deelnemers.length}
-</p>
-
-<button
-onClick={()=>doeMee(t.id)}
-style={{
-marginTop:"10px",
-background:"#e4ef16",
-color:"black",
-border:"none",
-padding:"10px 15px",
-borderRadius:"10px",
-fontWeight:"bold"
-}}
->
-
-Ik doe mee
-
-</button>
-
-</div>
-
-))}
-
-</main>
-
-)
-
+  return <main style={{ background:"#050505", color:"white", minHeight:"100vh", padding:20, fontFamily:"sans-serif" }}>
+    {m && <button onClick={() => alert("Training toevoegen")} style={{ background:"#e4ef16", color:"black", border:"none", padding:"12px 16px", borderRadius:12, fontWeight:"bold", marginBottom:20 }}>+ Training toevoegen</button>}
+    <header style={{ display:"flex", justifyContent:"center", marginBottom:25 }}>
+      <img src="/logo-endurance.png" alt="Endurance" style={{ height:70, width:"auto" }} />
+    </header>
+    {t.map(x => <div key={x.id} style={{ background:"#111", padding:20, borderRadius:24, marginBottom:20 }}>
+      <h2 style={{ fontSize:28 }}>{x.titel}</h2>
+      <p>{x.sport}</p><p>{x.datum} · {x.tijd}</p><p>{x.locatie}</p><p style={{ opacity:.7 }}>Deelnemers: {x.deelnemers.length}</p>
+      <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+        <button onClick={() => mee(x.id)} style={{ background:"#e4ef16", color:"black", border:"none", padding:"10px 14px", borderRadius:10, fontWeight:"bold" }}>Ik doe mee</button>
+        {m && <button onClick={() => alert("Training bewerken")} style={{ background:"#2a2a2a", color:"white", border:"none", padding:"10px 14px", borderRadius:10 }}>Bewerk</button>}
+        {m && <button onClick={() => del(x.id)} style={{ background:"#5a1f1f", color:"white", border:"none", padding:"10px 14px", borderRadius:10 }}>Verwijder</button>}
+      </div>
+    </div>)}
+  </main>;
 }
