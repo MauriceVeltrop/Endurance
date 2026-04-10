@@ -14,6 +14,7 @@ export default function Home() {
 
   const leeg = {
     titel: "",
+    afstand: "",
     sport: "Hardlopen",
     datum: "",
     tijd: "",
@@ -24,6 +25,7 @@ export default function Home() {
     {
       id: 1,
       titel: "Duurloop Brunssummerheide",
+      afstand: "10 km",
       sport: "Hardlopen",
       datum: "2026-05-17",
       tijd: "09:00",
@@ -33,6 +35,7 @@ export default function Home() {
     {
       id: 2,
       titel: "Racefiets Parkstad",
+      afstand: "55 km",
       sport: "Wielrennen",
       datum: "2026-05-18",
       tijd: "10:00",
@@ -79,6 +82,7 @@ export default function Home() {
     setEditId(id);
     setF({
       titel: x.titel,
+      afstand: x.afstand || "",
       sport: x.sport,
       datum: x.datum,
       tijd: x.tijd,
@@ -86,11 +90,12 @@ export default function Home() {
     });
     setOpen(true);
   };
+
 const save = (e) => {
     e.preventDefault();
 
     if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
-      alert("Vul alle velden in.");
+      alert("Vul alle verplichte velden in.");
       return;
     }
 
@@ -181,11 +186,19 @@ const save = (e) => {
                 ✕
               </button>
             </div>
+
 <div style={grid}>
               <input
                 value={f.titel}
                 onChange={(e) => setF({ ...f, titel: e.target.value })}
                 placeholder="Titel"
+                style={veld}
+              />
+
+              <input
+                value={f.afstand}
+                onChange={(e) => setF({ ...f, afstand: e.target.value })}
+                placeholder="Afstand (bijv. 10 km)"
                 style={veld}
               />
 
@@ -258,6 +271,10 @@ const save = (e) => {
           <div key={x.id} style={card}>
             <div style={sportTag}>{x.sport}</div>
             <h2 style={cardTitle}>{x.titel}</h2>
+
+            {x.afstand ? (
+              <div style={afstandText}>{x.afstand}</div>
+            ) : null}
 
             <div style={meta}>
               <div>📅 {fmtDatum(x.datum)}</div>
@@ -440,7 +457,15 @@ const sportTag = {
   marginBottom: 10,
 };
 
-const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 14 };
+const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 6 };
+
+const afstandText = {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#cfd3d6",
+  marginBottom: 14,
+};
+
 const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
 
 const btnRow = {
@@ -505,6 +530,7 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
 
 
 
