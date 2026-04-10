@@ -2,349 +2,470 @@
 import { useState } from "react";
 
 export default function Home() {
+  const m = true;
 
-const m = true;
+  const sporten = [
+    "Hardlopen",
+    "Wielrennen",
+    "Trailrun",
+    "Mountainbike",
+    "Wandelen",
+  ];
 
-const sporten = [
-  "Hardlopen",
-  "Wielrennen"
-];
+  const leeg = {
+    titel: "",
+    sport: "Hardlopen",
+    datum: "",
+    tijd: "",
+    locatie: "",
+  };
 
-const leeg = {
-  titel:"",
-  sport:"Hardlopen",
-  datum:"",
-  tijd:"",
-  locatie:""
-};
+  const [t, s] = useState([
+    {
+      id: 1,
+      titel: "Duurloop Brunssummerheide",
+      sport: "Hardlopen",
+      datum: "2026-05-17",
+      tijd: "09:00",
+      locatie: "Brunssummerheide",
+      deelnemers: ["Maurice", "Ronald"],
+    },
+    {
+      id: 2,
+      titel: "Racefiets Parkstad",
+      sport: "Wielrennen",
+      datum: "2026-05-18",
+      tijd: "10:00",
+      locatie: "Landgraaf",
+      deelnemers: ["Ronald"],
+    },
+  ]);
 
-const [t,s] = useState([
-{
-id:1,
-titel:"Duurloop Brunssummerheide",
-sport:"Hardlopen",
-datum:"17 mei",
-tijd:"09:00",
-locatie:"Brunssummerheide",
-deelnemers:["Maurice","Ronald"]
-},
-{
-id:2,
-titel:"Racefiets Parkstad",
-sport:"Wielrennen",
-datum:"18 mei",
-tijd:"10:00",
-locatie:"Landgraaf",
-deelnemers:["Ronald"]
-}
-]);
+  const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [f, setF] = useState(leeg);
 
-const [open,setOpen] = useState(false);
-const [editId,setEditId] = useState(null);
-const [f,setF] = useState(leeg);
+  const fmtDatum = (d) => {
+    if (!d) return "";
+    const x = new Date(d);
+    return x.toLocaleDateString("nl-NL", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
 
-const mee = (id)=>
-s(
-t.map(x =>
-x.id===id && !x.deelnemers.includes("Jij")
-? {...x,deelnemers:[...x.deelnemers,"Jij"]}
-: x
-)
-);
+  const mee = (id) =>
+    s(
+      t.map((x) =>
+        x.id === id && !x.deelnemers.includes("Jij")
+          ? { ...x, deelnemers: [...x.deelnemers, "Jij"] }
+          : x
+      )
+    );
 
-const del = (id)=>
-confirm("Training verwijderen?")
-&& s(t.filter(x=>x.id!==id));
+  const del = (id) =>
+    confirm("Training verwijderen?") && s(t.filter((x) => x.id !== id));
 
-const nieuw = ()=>{
-setEditId(null);
-setF(leeg);
-setOpen(true);
-};const bewerk = (id)=>{
-const x = t.find(a=>a.id===id);
-if(!x) return;
+  const nieuw = () => {
+    setEditId(null);
+    setF(leeg);
+    setOpen(true);
+  };
 
-setEditId(id);
+  const bewerk = (id) => {
+    const x = t.find((a) => a.id === id);
+    if (!x) return;
+    setEditId(id);
+    setF({
+      titel: x.titel,
+      sport: x.sport,
+      datum: x.datum,
+      tijd: x.tijd,
+      locatie: x.locatie,
+    });
+    setOpen(true);
+  };
 
-setF({
-titel:x.titel,
-sport:x.sport,
-datum:x.datum,
-tijd:x.tijd,
-locatie:x.locatie
-});
+const save = (e) => {
+    e.preventDefault();
 
-setOpen(true);
-};
+    if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
+      alert("Vul alle velden in.");
+      return;
+    }
 
-const save = (e)=>{
-e.preventDefault();
+    if (editId) {
+      s(t.map((x) => (x.id === editId ? { ...x, ...f } : x)));
+    } else {
+      s([{ id: Date.now(), ...f, deelnemers: [] }, ...t]);
+    }
 
-if(!f.titel || !f.datum || !f.tijd || !f.locatie){
-alert("Vul alle velden in");
-return;
-}
+    setOpen(false);
+    setEditId(null);
+    setF(leeg);
+  };
 
-if(editId){
+  const agenda = (x) => {
+    const start = `${x.datum.replaceAll("-", "")}T${x.tijd.replace(":", "")}00`;
+    const eindDate = new Date(`${x.datum}T${x.tijd}:00`);
+    eindDate.setHours(eindDate.getHours() + 1);
 
-s(
-t.map(x =>
-x.id===editId
-? {...x,...f}
-: x
-)
-);
+    const yyyy = eindDate.getFullYear();
+    const mm = String(eindDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(eindDate.getDate()).padStart(2, "0");
+    const hh = String(eindDate.getHours()).padStart(2, "0");
+    const mi = String(eindDate.getMinutes()).padStart(2, "0");
+    const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
 
-}else{
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      `SUMMARY:${x.titel}`,
+      `DTSTART:${start}`,
+      `DTEND:${end}`,
+      `LOCATION:${x.locatie}`,
+      `DESCRIPTION:${x.sport} training via Endurance`,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\n");
 
-s([
-{
-id:Date.now(),
-...f,
-deelnemers:[]
-},
-...t
-]);
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${x.titel.replace(/\s+/g, "-").toLowerCase()}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-}
+  return (
+    <main style={app}>
+      <header style={header}>
+        <img
+          src="/logo-endurance.png"
+          alt="Endurance"
+          style={{ height: 64, width: "auto", maxWidth: "82vw" }}
+        />
+      </header>
 
-setOpen(false);
-setEditId(null);
-setF(leeg);
-};
+      <section style={hero}>
+        <div style={heroBadge}>Train samen</div>
+        <h1 style={heroTitle}>Vind trainingen en sluit direct aan</h1>
+        <p style={heroText}>
+          Endurance brengt sporters samen rond geplande trainingen.
+        </p>
+      </section>
 
-return(
+      {open && (
+        <div style={overlay}>
+          <form onSubmit={save} style={modal}>
+            <div style={modalTop}>
+              <h2 style={{ margin: 0, fontSize: 24 }}>
+                {editId ? "Training bewerken" : "Training toevoegen"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setEditId(null);
+                  setF(leeg);
+                }}
+                style={closeBtn}
+              >
+                ✕
+              </button>
+            </div>
+<div style={grid}>
+              <input
+                value={f.titel}
+                onChange={(e) => setF({ ...f, titel: e.target.value })}
+                placeholder="Titel"
+                style={veld}
+              />
 
-<main
-style={{
-background:"#050505",
-color:"white",
-minHeight:"100vh",
-padding:20,
-fontFamily:"sans-serif"
-}}
->
+              <div>
+                <div style={label}>Kies sport</div>
+                <select
+                  value={f.sport}
+                  onChange={(e) => setF({ ...f, sport: e.target.value })}
+                  style={veld}
+                >
+                  {sporten.map((sport) => (
+                    <option key={sport} value={sport}>
+                      {sport}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
+              <div>
+                <div style={label}>Datum</div>
+                <input
+                  type="date"
+                  value={f.datum}
+                  onChange={(e) => setF({ ...f, datum: e.target.value })}
+                  style={veld}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Tijd</div>
+                <input
+                  type="time"
+                  value={f.tijd}
+                  onChange={(e) => setF({ ...f, tijd: e.target.value })}
+                  style={veld}
+                />
+              </div>
+
+              <input
+                value={f.locatie}
+                onChange={(e) => setF({ ...f, locatie: e.target.value })}
+                placeholder="Locatie"
+                style={veld}
+              />
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button type="submit" style={primaryBtn}>
+                  Opslaan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setEditId(null);
+                    setF(leeg);
+                  }}
+                  style={secondaryBtn}
+                >
+                  Annuleren
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <section style={{ paddingBottom: 110 }}>
+        {t.map((x) => (
+          <div key={x.id} style={card}>
+            <div style={sportTag}>{x.sport}</div>
+            <h2 style={cardTitle}>{x.titel}</h2>
+
+            <div style={meta}>
+              <div>📅 {fmtDatum(x.datum)}</div>
+              <div>⏰ {x.tijd}</div>
+              <div>📍 {x.locatie}</div>
+              <div style={{ opacity: 0.75 }}>
+                Deelnemers: {x.deelnemers.length}
+              </div>
+            </div>
+
+            <div style={btnRow}>
+              <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
+                Ik doe mee
+              </button>
+
+              <button onClick={() => agenda(x)} style={secondaryBtnSmall}>
+                Zet in agenda
+              </button>
+
+              {m && (
+                <button onClick={() => bewerk(x.id)} style={secondaryBtnSmall}>
+                  Bewerk
+                </button>
+              )}
+
+              {m && (
+                <button onClick={() => del(x.id)} style={dangerBtnSmall}>
+                  Verwijder
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </section>
 {m && (
-<button
-onClick={nieuw}
-style={{
-background:"#e4ef16",
-color:"black",
-border:"none",
-padding:"12px 16px",
-borderRadius:12,
-fontWeight:"bold",
-marginBottom:20
-}}
->
-+ Training toevoegen
-</button>
-)}
-
-<header
-style={{
-display:"flex",
-justifyContent:"center",
-marginBottom:25
-}}
->
-<img
-src="/logo-endurance.png"
-alt="Endurance"
-style={{height:70,width:"auto"}}
-/>
-</header>
-
-{open && (
-
-<form
-onSubmit={save}
-style={{
-background:"#111",
-padding:20,
-borderRadius:24,
-marginBottom:20,
-display:"grid",
-gap:12
-}}
->
-
-<input
-value={f.titel}
-onChange={(e)=>setF({...f,titel:e.target.value})}
-placeholder="Titel"
-style={veld}
-/>
-
-<div>
-<div style={{marginBottom:6,opacity:0.8}}>
-Kies sport
-</div>
-
-<select
-value={f.sport}
-onChange={(e)=>setF({...f,sport:e.target.value})}
-style={veld}
->
-{sporten.map(sport=>(
-<option key={sport} value={sport}>
-{sport}
-</option>
-))}
-</select>
-
-</div>
-
-<input
-value={f.datum}
-onChange={(e)=>setF({...f,datum:e.target.value})}
-placeholder="Datum"
-style={veld}
-/>
-
-<input
-value={f.tijd}
-onChange={(e)=>setF({...f,tijd:e.target.value})}
-placeholder="Tijd"
-style={veld}
-/>
-
-<input
-value={f.locatie}
-onChange={(e)=>setF({...f,locatie:e.target.value})}
-placeholder="Locatie"
-style={veld}
-/>
-
-<div style={{display:"flex",gap:10}}>
-
-<button
-type="submit"
-style={{
-background:"#e4ef16",
-color:"black",
-border:"none",
-padding:"10px 14px",
-borderRadius:10,
-fontWeight:"bold"
-}}
->
-Opslaan
-</button>
-
-<button
-type="button"
-onClick={()=>setOpen(false)}
-style={{
-background:"#2a2a2a",
-color:"white",
-border:"none",
-padding:"10px 14px",
-borderRadius:10
-}}
->
-Annuleren
-</button>
-
-</div>
-
-</form>
-
-)}
-
-{t.map(x => (
-
-<div
-key={x.id}
-style={{
-background:"#111",
-padding:20,
-borderRadius:24,
-marginBottom:20
-}}
->
-
-<h2 style={{fontSize:28}}>
-{x.titel}
-</h2>
-
-<p>{x.sport}</p>
-
-<p>
-{x.datum} · {x.tijd}
-</p>
-
-<p>{x.locatie}</p>
-
-<p style={{opacity:0.7}}>
-Deelnemers: {x.deelnemers.length}
-</p>
-
-<div style={{display:"flex",gap:10}}>
-
-<button
-onClick={()=>mee(x.id)}
-style={{
-background:"#e4ef16",
-color:"black",
-border:"none",
-padding:"10px 14px",
-borderRadius:10,
-fontWeight:"bold"
-}}
->
-Ik doe mee
-</button>
-
-{m && (
-<button
-onClick={()=>bewerk(x.id)}
-style={{
-background:"#2a2a2a",
-color:"white",
-border:"none",
-padding:"10px 14px",
-borderRadius:10
-}}
->
-Bewerk
-</button>
-)}
-
-{m && (
-<button
-onClick={()=>del(x.id)}
-style={{
-background:"#5a1f1f",
-color:"white",
-border:"none",
-padding:"10px 14px",
-borderRadius:10
-}}
->
-Verwijder
-</button>
-)}
-
-</div>
-
-</div>
-
-))}
-
-</main>
-);
+        <button onClick={nieuw} style={fab}>
+          +
+        </button>
+      )}
+    </main>
+  );
 }
 
-const veld={
-width:"100%",
-background:"#1b1b1b",
-color:"white",
-border:"1px solid #333",
-padding:"12px",
-borderRadius:10,
-boxSizing:"border-box"
+const app = {
+  background: "#050505",
+  color: "white",
+  minHeight: "100vh",
+  padding: 16,
+  fontFamily: "sans-serif",
 };
-  
-  
+
+const header = {
+  position: "sticky",
+  top: 0,
+  zIndex: 5,
+  display: "flex",
+  justifyContent: "center",
+  padding: "12px 0 18px",
+  background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
+};
+
+const hero = {
+  background: "linear-gradient(180deg, #111 0%, #0b0b0b 100%)",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 24,
+  padding: 20,
+  marginBottom: 18,
+};
+
+const heroBadge = {
+  display: "inline-block",
+  background: "rgba(228,239,22,0.14)",
+  color: "#e4ef16",
+  padding: "8px 12px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: "bold",
+  marginBottom: 12,
+};
+
+const heroTitle = { margin: 0, fontSize: 28, lineHeight: 1.1 };
+const heroText = { opacity: 0.72, marginBottom: 0, marginTop: 10 };
+const label = { marginBottom: 6, opacity: 0.82, fontSize: 14 };
+
+const overlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.72)",
+  zIndex: 20,
+  padding: 16,
+  display: "flex",
+  alignItems: "center",
+};
+
+const modal = {
+  width: "100%",
+  background: "#111",
+  borderRadius: 24,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const modalTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 14,
+};
+
+const closeBtn = {
+  background: "#1d1d1d",
+  color: "white",
+  border: "none",
+  width: 36,
+  height: 36,
+  borderRadius: 999,
+};
+
+const grid = { display: "grid", gap: 12 };
+
+const veld = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "14px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+};
+
+const card = {
+  background: "#111",
+  padding: 20,
+  borderRadius: 24,
+  marginBottom: 16,
+  border: "1px solid rgba(255,255,255,0.05)",
+};
+
+const sportTag = {
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "7px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+  marginBottom: 10,
+};
+
+const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 14 };
+const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
+
+const btnRow = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const primaryBtn = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const secondaryBtn = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const primaryBtnSmall = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const secondaryBtnSmall = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const dangerBtnSmall = {
+  background: "#5a1f1f",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const fab = {
+  position: "fixed",
+  right: 18,
+  bottom: 22,
+  width: 62,
+  height: 62,
+  borderRadius: 999,
+  border: "none",
+  background: "#e4ef16",
+  color: "black",
+  fontSize: 34,
+  fontWeight: "bold",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+};
+
