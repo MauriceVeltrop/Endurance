@@ -1,2 +1,2 @@
 # Endurance
-Alles over duursport
+ALLES over duursport
