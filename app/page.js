@@ -86,7 +86,6 @@ export default function Home() {
     });
     setOpen(true);
   };
-
 const save = (e) => {
     e.preventDefault();
 
@@ -138,6 +137,11 @@ const save = (e) => {
     a.download = `${x.titel.replace(/\s+/g, "-").toLowerCase()}.ics`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const maps = (locatie) => {
+    const q = encodeURIComponent(locatie);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
   return (
@@ -258,9 +262,41 @@ const save = (e) => {
             <div style={meta}>
               <div>📅 {fmtDatum(x.datum)}</div>
               <div>⏰ {x.tijd}</div>
-              <div>📍 {x.locatie}</div>
+
+              <button
+                onClick={() => maps(x.locatie)}
+                style={{
+                  background: "transparent",
+                  color: "white",
+                  border: "none",
+                  padding: 0,
+                  textAlign: "left",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
+              >
+                📍 {x.locatie}
+              </button>
+
               <div style={{ opacity: 0.75 }}>
                 Deelnemers: {x.deelnemers.length}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                {x.deelnemers.map((naam, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      background: "#1f1f1f",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      fontSize: 13,
+                    }}
+                  >
+                    {naam}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -288,6 +324,7 @@ const save = (e) => {
           </div>
         ))}
       </section>
+
 {m && (
         <button onClick={nieuw} style={fab}>
           +
@@ -468,4 +505,8 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
+
+
+
 
