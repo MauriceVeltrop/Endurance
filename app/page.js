@@ -42,8 +42,6 @@ return(
 
 <header style={{display:"flex",alignItems:"center",gap:"15px",marginBottom:"25px"}}>
 
-<img src="/logo-endurance.png" style={{width:"60px"}}/>
-
 <div style={{display:"flex",justifyContent:"center",width:"100%"}}>
   <img
     src="/logo-endurance.png"
