@@ -12,10 +12,18 @@ export default function Home() {
     "Wandelen",
   ];
 
+  const afstandRanges = {
+    Hardlopen: { min: 1, max: 50 },
+    Wielrennen: { min: 10, max: 250 },
+    Trailrun: { min: 1, max: 50 },
+    Mountainbike: { min: 5, max: 120 },
+    Wandelen: { min: 1, max: 40 },
+  };
+
   const leeg = {
     titel: "",
-    afstand: "",
     sport: "Hardlopen",
+    afstand: 10,
     datum: "",
     tijd: "",
     locatie: "",
@@ -25,8 +33,8 @@ export default function Home() {
     {
       id: 1,
       titel: "Duurloop Brunssummerheide",
-      afstand: "10 km",
       sport: "Hardlopen",
+      afstand: 10,
       datum: "2026-05-17",
       tijd: "09:00",
       locatie: "Brunssummerheide",
@@ -35,8 +43,8 @@ export default function Home() {
     {
       id: 2,
       titel: "Racefiets Parkstad",
-      afstand: "55 km",
       sport: "Wielrennen",
+      afstand: 55,
       datum: "2026-05-18",
       tijd: "10:00",
       locatie: "Landgraaf",
@@ -47,6 +55,8 @@ export default function Home() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [f, setF] = useState(leeg);
+
+  const range = afstandRanges[f.sport] || { min: 1, max: 50 };
 
   const fmtDatum = (d) => {
     if (!d) return "";
@@ -82,8 +92,8 @@ export default function Home() {
     setEditId(id);
     setF({
       titel: x.titel,
-      afstand: x.afstand || "",
       sport: x.sport,
+      afstand: x.afstand || afstandRanges[x.sport]?.min || 1,
       datum: x.datum,
       tijd: x.tijd,
       locatie: x.locatie,
@@ -186,7 +196,6 @@ const save = (e) => {
                 ✕
               </button>
             </div>
-
 <div style={grid}>
               <input
                 value={f.titel}
@@ -195,18 +204,17 @@ const save = (e) => {
                 style={veld}
               />
 
-              <input
-                value={f.afstand}
-                onChange={(e) => setF({ ...f, afstand: e.target.value })}
-                placeholder="Afstand (bijv. 10 km)"
-                style={veld}
-              />
-
               <div>
                 <div style={label}>Kies sport</div>
                 <select
                   value={f.sport}
-                  onChange={(e) => setF({ ...f, sport: e.target.value })}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      sport: e.target.value,
+                      afstand: afstandRanges[e.target.value].min,
+                    })
+                  }
                   style={veld}
                 >
                   {sporten.map((sport) => (
@@ -215,6 +223,33 @@ const save = (e) => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <div style={label}>Afstand: {f.afstand} km</div>
+                <input
+                  type="range"
+                  min={range.min}
+                  max={range.max}
+                  step="1"
+                  value={f.afstand}
+                  onChange={(e) =>
+                    setF({ ...f, afstand: Number(e.target.value) })
+                  }
+                  style={{ width: "100%" }}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    opacity: 0.6,
+                    marginTop: 4,
+                  }}
+                >
+                  <span>{range.min} km</span>
+                  <span>{range.max} km</span>
+                </div>
               </div>
 
               <div>
@@ -272,9 +307,7 @@ const save = (e) => {
             <div style={sportTag}>{x.sport}</div>
             <h2 style={cardTitle}>{x.titel}</h2>
 
-            {x.afstand ? (
-              <div style={afstandText}>{x.afstand}</div>
-            ) : null}
+            <div style={afstandText}>{x.afstand} km</div>
 
             <div style={meta}>
               <div>📅 {fmtDatum(x.datum)}</div>
@@ -530,6 +563,13 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
+
+
+
+
+
+
 
 
 
