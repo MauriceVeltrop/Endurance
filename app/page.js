@@ -27,6 +27,7 @@ export default function Home() {
     datum: "",
     tijd: "",
     locatie: "",
+    toelichting: "",
   };
 
   const [t, s] = useState([
@@ -38,7 +39,17 @@ export default function Home() {
       datum: "2026-05-17",
       tijd: "09:00",
       locatie: "Brunssummerheide",
+      toelichting:
+        "Rustige duurloop in groepsverband. Iedereen loopt op eigen niveau. Neem water mee.",
       deelnemers: ["Maurice", "Ronald"],
+      likes: ["Maurice"],
+      reacties: [
+        {
+          id: 101,
+          naam: "Ronald",
+          tekst: "Ik ben erbij. Ik neem ook nog een extra bidon mee.",
+        },
+      ],
     },
     {
       id: 2,
@@ -48,13 +59,17 @@ export default function Home() {
       datum: "2026-05-18",
       tijd: "10:00",
       locatie: "Landgraaf",
+      toelichting: "Social ride, tempo blijft beheerst. Helm verplicht.",
       deelnemers: ["Ronald"],
+      likes: [],
+      reacties: [],
     },
   ]);
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [f, setF] = useState(leeg);
+  const [reactieTekst, setReactieTekst] = useState({});
 
   const range = afstandRanges[f.sport] || { min: 1, max: 50 };
 
@@ -77,6 +92,46 @@ export default function Home() {
       )
     );
 
+  const likeToggle = (id) => {
+    s(
+      t.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              likes: x.likes?.includes("Jij")
+                ? x.likes.filter((naam) => naam !== "Jij")
+                : [...(x.likes || []), "Jij"],
+            }
+          : x
+      )
+    );
+  };
+
+  const reactiePlaatsen = (id) => {
+    const tekst = (reactieTekst[id] || "").trim();
+    if (!tekst) return;
+
+    s(
+      t.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              reacties: [
+                ...(x.reacties || []),
+                {
+                  id: Date.now(),
+                  naam: "Jij",
+                  tekst,
+                },
+              ],
+            }
+          : x
+      )
+    );
+
+    setReactieTekst((prev) => ({ ...prev, [id]: "" }));
+  };
+
   const del = (id) =>
     confirm("Training verwijderen?") && s(t.filter((x) => x.id !== id));
 
@@ -86,7 +141,10 @@ export default function Home() {
     setOpen(true);
   };
 
-  const bewerk = (id) => {
+
+
+
+const bewerk = (id) => {
     const x = t.find((a) => a.id === id);
     if (!x) return;
     setEditId(id);
@@ -97,14 +155,12 @@ export default function Home() {
       datum: x.datum,
       tijd: x.tijd,
       locatie: x.locatie,
+      toelichting: x.toelichting || "",
     });
     setOpen(true);
   };
 
-
-
-
-const save = (e) => {
+  const save = (e) => {
     e.preventDefault();
 
     if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
@@ -115,7 +171,16 @@ const save = (e) => {
     if (editId) {
       s(t.map((x) => (x.id === editId ? { ...x, ...f } : x)));
     } else {
-      s([{ id: Date.now(), ...f, deelnemers: [] }, ...t]);
+      s([
+        {
+          id: Date.now(),
+          ...f,
+          deelnemers: [],
+          likes: [],
+          reacties: [],
+        },
+        ...t,
+      ]);
     }
 
     setOpen(false);
@@ -159,7 +224,10 @@ const save = (e) => {
 
   const maps = (locatie) => {
     const q = encodeURIComponent(locatie);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
+    window.open(
+      `https://www.google.com/maps/search/?api=1&query=${q}`,
+      "_blank"
+    );
   };
 
   const now = new Date();
@@ -205,8 +273,6 @@ const save = (e) => {
                 ✕
               </button>
             </div>
-
-
 
 <div style={grid}>
               <input
@@ -291,6 +357,16 @@ const save = (e) => {
                 style={veld}
               />
 
+              <div>
+                <div style={label}>Toelichting</div>
+                <textarea
+                  value={f.toelichting}
+                  onChange={(e) => setF({ ...f, toelichting: e.target.value })}
+                  placeholder="Extra info over de training, tempo, materiaal, parkeerinfo, etc."
+                  style={{ ...veld, minHeight: 110, resize: "vertical" }}
+                />
+              </div>
+
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button type="submit" style={primaryBtn}>
                   Opslaan
@@ -332,8 +408,7 @@ const save = (e) => {
 
                 <div style={afstandText}>{x.afstand} km</div>
 
-
-<div style={meta}>
+                <div style={meta}>
                   <div>📅 {fmtDatum(x.datum)}</div>
                   <div>⏰ {x.tijd}</div>
 
@@ -352,7 +427,10 @@ const save = (e) => {
                     📍 {x.locatie}
                   </button>
 
-                  <div style={{ opacity: 0.75 }}>
+
+
+
+<div style={{ opacity: 0.75 }}>
                     Deelnemers: {x.deelnemers.length}
                   </div>
 
@@ -381,6 +459,65 @@ const save = (e) => {
                   </div>
                 </div>
 
+                <div style={communityBox}>
+                  <div style={communityTitle}>Toelichting</div>
+
+                  <div style={communityText}>
+                    {x.toelichting?.trim()
+                      ? x.toelichting
+                      : "Nog geen toelichting toegevoegd."}
+                  </div>
+
+                  <div style={likeRow}>
+                    <button onClick={() => likeToggle(x.id)} style={likeBtn}>
+                      {x.likes?.includes("Jij") ? "❤️ Geliket" : "🤍 Like"}
+                    </button>
+
+                    <div style={likeCount}>
+                      {x.likes?.length || 0} like
+                      {(x.likes?.length || 0) === 1 ? "" : "s"}
+                    </div>
+                  </div>
+
+                  <div style={reactiesWrap}>
+                    <div style={communityTitle}>Reacties</div>
+
+                    {x.reacties?.length ? (
+                      <div style={reactieLijst}>
+                        {x.reacties.map((r) => (
+                          <div key={r.id} style={reactieItem}>
+                            <div style={reactieNaam}>{r.naam}</div>
+                            <div style={reactieTekstStyle}>{r.tekst}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={communityMuted}>Nog geen reacties.</div>
+                    )}
+
+                    <div style={reactieForm}>
+                      <textarea
+                        value={reactieTekst[x.id] || ""}
+                        onChange={(e) =>
+                          setReactieTekst((prev) => ({
+                            ...prev,
+                            [x.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Plaats een reactie..."
+                        style={reactieVeld}
+                      />
+
+                      <button
+                        onClick={() => reactiePlaatsen(x.id)}
+                        style={primaryBtnSmall}
+                      >
+                        Reageer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div style={btnRow}>
                   <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
                     Ik doe mee
@@ -391,7 +528,10 @@ const save = (e) => {
                   </button>
 
                   {m && (
-                    <button onClick={() => bewerk(x.id)} style={secondaryBtnSmall}>
+                    <button
+                      onClick={() => bewerk(x.id)}
+                      style={secondaryBtnSmall}
+                    >
                       Bewerk
                     </button>
                   )}
@@ -416,6 +556,7 @@ const save = (e) => {
     </main>
   );
 }
+
 
 const app = {
   background: "#050505",
@@ -536,10 +677,109 @@ const afstandText = {
 
 const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
 
+const communityBox = {
+  marginTop: 18,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const communityTitle = {
+  fontSize: 15,
+  fontWeight: 700,
+  marginBottom: 8,
+  color: "#f3f3f3",
+};
+
+const communityText = {
+  fontSize: 14,
+  lineHeight: 1.5,
+  color: "#d6d6d6",
+  marginBottom: 14,
+  whiteSpace: "pre-wrap",
+};
+
+const likeRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
+const likeBtn = {
+  background: "#1d1d1d",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "10px 14px",
+  borderRadius: 12,
+};
+
+const likeCount = {
+  fontSize: 14,
+  opacity: 0.75,
+};
+
+const reactiesWrap = {
+  display: "grid",
+  gap: 10,
+};
+
+const reactieLijst = {
+  display: "grid",
+  gap: 10,
+};
+
+const reactieItem = {
+  background: "#151515",
+  border: "1px solid rgba(255,255,255,0.05)",
+  borderRadius: 14,
+  padding: 12,
+};
+
+const reactieNaam = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#e4ef16",
+  marginBottom: 4,
+};
+
+const reactieTekstStyle = {
+  fontSize: 14,
+  lineHeight: 1.45,
+  color: "#e3e3e3",
+  whiteSpace: "pre-wrap",
+};
+
+const communityMuted = {
+  fontSize: 14,
+  opacity: 0.6,
+};
+
+const reactieForm = {
+  display: "grid",
+  gap: 10,
+  marginTop: 6,
+};
+
+const reactieVeld = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "12px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+  minHeight: 90,
+  resize: "vertical",
+};
+
 const btnRow = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
+  marginTop: 16,
 };
 
 const primaryBtn = {
@@ -618,6 +858,10 @@ const fab = {
 
 
 
+
+
+
+  
 
 
 
