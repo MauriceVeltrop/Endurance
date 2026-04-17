@@ -98,26 +98,6 @@ export default function Home() {
   };
 
   const eventKaartData = useMemo(() => {
-    const profileMap = new Map();
-
-    comments.forEach((c) => {
-      if (c.user_profile?.id) {
-        profileMap.set(c.user_profile.id, c.user_profile);
-      }
-    });
-
-    participants.forEach((p) => {
-      if (p.user_profile?.id) {
-        profileMap.set(p.user_profile.id, p.user_profile);
-      }
-    });
-
-    likes.forEach((l) => {
-      if (l.user_profile?.id) {
-        profileMap.set(l.user_profile.id, l.user_profile);
-      }
-    });
-
     const now = new Date();
 
     return [...events]
@@ -310,7 +290,8 @@ useEffect(() => {
       return;
     }
 
-    alert("Account aangemaakt. Als email-confirmatie aan staat, bevestig eerst je mail.");
+    alert("Account aangemaakt. Je kunt nu inloggen.");
+    setAuthMode("signin");
   };
 
   const handleSignIn = async (e) => {
@@ -331,7 +312,8 @@ useEffect(() => {
     await supabase.auth.signOut();
   };
 
-  const saveEvent = async (e) => {
+
+const saveEvent = async (e) => {
     e.preventDefault();
 
     if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
@@ -387,11 +369,7 @@ useEffect(() => {
     await laadEvents();
     setSavingEvent(false);
     sluitModal();
-
-
-    
   };
-
 
   const deleteEvent = async (id) => {
     if (!confirm("Training verwijderen?")) return;
@@ -548,10 +526,15 @@ useEffect(() => {
   };
 
   if (loading) {
-    return <main style={app}><div style={emptyCard}>Laden...</div></main>;
+    return (
+      <main style={app}>
+        <div style={emptyCard}>Laden...</div>
+      </main>
+    );
   }
 
-  if (!session) {
+
+if (!session) {
     return (
       <main style={app}>
         <header style={header}>
@@ -614,10 +597,9 @@ useEffect(() => {
         </div>
       </main>
     );
-                  }
+  }
 
-
-return (
+  return (
     <main style={app}>
       <header style={header}>
         <img
@@ -633,9 +615,17 @@ return (
           <div style={roleBadge}>{profiel?.role || "gebruiker"}</div>
         </div>
 
-        <button onClick={handleSignOut} style={secondaryBtn}>
-          Uitloggen
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {isModerator && (
+            <a href="/admin" style={adminLinkBtn}>
+              Admin
+            </a>
+          )}
+
+          <button onClick={handleSignOut} style={secondaryBtn}>
+            Uitloggen
+          </button>
+        </div>
       </section>
 
       {open && (
@@ -747,7 +737,10 @@ return (
         </div>
       )}
 
-      <section style={eventsSection}>
+
+
+
+<section style={eventsSection}>
         {eventKaartData.length === 0 ? (
           <div style={emptyCard}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
@@ -789,6 +782,7 @@ return (
 
                 <div style={communityBox}>
                   <div style={communityTitle}>Toelichting</div>
+
                   <div style={communityText}>
                     {event.toelichting?.trim()
                       ? event.toelichting
@@ -906,8 +900,7 @@ return (
       )}
     </main>
   );
-                      }
-
+}
 
 const app = {
   background: "#050505",
@@ -968,6 +961,15 @@ const roleBadge = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
+};
+
+const adminLinkBtn = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
 };
 
 const eventsSection = {
@@ -1301,3 +1303,5 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
+
