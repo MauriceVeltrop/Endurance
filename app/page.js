@@ -1,17 +1,18 @@
 "use client";
-import { useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
-  const m = true;
-
-  const gebruikers = [
-    { id: 1, naam: "Maurice" },
-    { id: 2, naam: "Ronald" },
-    { id: 3, naam: "Linda" },
-    { id: 4, naam: "Kevin" },
-    { id: 5, naam: "Gast" },
-  ];
+  const leegEvent = {
+    titel: "",
+    sport: "Hardlopen",
+    afstand: 10,
+    datum: "",
+    tijd: "",
+    locatie: "",
+    toelichting: "",
+  };
 
   const sporten = [
     "Hardlopen",
@@ -29,60 +30,34 @@ export default function Home() {
     Wandelen: { min: 1, max: 40 },
   };
 
-  const leeg = {
-    titel: "",
-    sport: "Hardlopen",
-    afstand: 10,
-    datum: "",
-    tijd: "",
-    locatie: "",
-    toelichting: "",
-  };
+  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+  const [profiel, setProfiel] = useState(null);
 
-  const [huidigeGebruiker, setHuidigeGebruiker] = useState("Maurice");
+  const [events, setEvents] = useState([]);
+  const [likes, setLikes] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [participants, setParticipants] = useState([]);
 
-  const [t, s] = useState([
-    {
-      id: 1,
-      titel: "Duurloop Brunssummerheide",
-      sport: "Hardlopen",
-      afstand: 10,
-      datum: "2026-05-17",
-      tijd: "09:00",
-      locatie: "Brunssummerheide",
-      toelichting:
-        "Rustige duurloop in groepsverband. Iedereen loopt op eigen niveau. Neem water mee.",
-      deelnemers: ["Maurice", "Ronald"],
-      likes: ["Maurice"],
-      reacties: [
-        {
-          id: 101,
-          naam: "Ronald",
-          tekst: "Ik ben erbij. Ik neem ook nog een extra bidon mee.",
-        },
-      ],
-    },
-    {
-      id: 2,
-      titel: "Racefiets Parkstad",
-      sport: "Wielrennen",
-      afstand: 55,
-      datum: "2026-05-18",
-      tijd: "10:00",
-      locatie: "Landgraaf",
-      toelichting: "Social ride, tempo blijft beheerst. Helm verplicht.",
-      deelnemers: ["Ronald"],
-      likes: [],
-      reacties: [],
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [savingEvent, setSavingEvent] = useState(false);
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [f, setF] = useState(leeg);
+  const [f, setF] = useState(leegEvent);
+
   const [reactieTekst, setReactieTekst] = useState({});
 
+  const [authMode, setAuthMode] = useState("signin");
+  const [authNaam, setAuthNaam] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+
   const range = afstandRanges[f.sport] || { min: 1, max: 50 };
+
+  const isModerator = profiel?.role === "moderator";
+  const isOrganisator = profiel?.role === "organisator";
+  const magEventsBeheren = isModerator || isOrganisator;
 
   const fmtDatum = (d) => {
     if (!d) return "";
@@ -94,108 +69,269 @@ export default function Home() {
     });
   };
 
-  const signUpTest = async () => {
-    const { data, error } = await supabase.auth.signUp({
-      email: "test@endurance.app",
-      password: "test123456",
+  const fmtDateTime = (datum, tijd) => new Date(`${datum}T${tijd}`);
+
+  const openNieuw = () => {
+    setEditId(null);
+    setF(leegEvent);
+    setOpen(true);
+  };
+
+  const openBewerk = (event) => {
+    setEditId(event.id);
+    setF({
+      titel: event.titel,
+      sport: event.sport,
+      afstand: event.afstand,
+      datum: event.datum,
+      tijd: event.tijd,
+      locatie: event.locatie,
+      toelichting: event.toelichting || "",
+    });
+    setOpen(true);
+  };
+
+  const sluitModal = () => {
+    setOpen(false);
+    setEditId(null);
+    setF(leegEvent);
+  };
+
+  const eventKaartData = useMemo(() => {
+    const profileMap = new Map();
+
+    comments.forEach((c) => {
+      if (c.user_profile?.id) {
+        profileMap.set(c.user_profile.id, c.user_profile);
+      }
+    });
+
+    participants.forEach((p) => {
+      if (p.user_profile?.id) {
+        profileMap.set(p.user_profile.id, p.user_profile);
+      }
+    });
+
+    likes.forEach((l) => {
+      if (l.user_profile?.id) {
+        profileMap.set(l.user_profile.id, l.user_profile);
+      }
+    });
+
+    const now = new Date();
+
+    return [...events]
+      .filter((e) => fmtDateTime(e.datum, e.tijd) >= now)
+      .sort((a, b) => fmtDateTime(a.datum, a.tijd) - fmtDateTime(b.datum, b.tijd))
+      .map((e) => {
+        const eventLikes = likes.filter((l) => l.event_id === e.id);
+        const eventComments = comments.filter((c) => c.event_id === e.id);
+        const eventParticipants = participants.filter((p) => p.event_id === e.id);
+
+        return {
+          ...e,
+          likes: eventLikes,
+          reacties: eventComments,
+          deelnemers: eventParticipants,
+          isOwner: user?.id === e.creator_id,
+          likedByMe: !!eventLikes.find((l) => l.user_id === user?.id),
+          joinedByMe: !!eventParticipants.find((p) => p.user_id === user?.id),
+        };
+      });
+  }, [events, likes, comments, participants, user]);
+
+
+
+useEffect(() => {
+    const init = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setProfiel(null);
+      setEvents([]);
+      setLikes([]);
+      setComments([]);
+      setParticipants([]);
+      return;
+    }
+
+    laadProfiel();
+    laadAlles();
+  }, [user?.id]);
+
+  const laadProfiel = async () => {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (error) {
+      console.error("profiel laden fout", error);
+      return;
+    }
+
+    setProfiel(data);
+  };
+
+  const laadAlles = async () => {
+    await Promise.all([
+      laadEvents(),
+      laadLikes(),
+      laadComments(),
+      laadParticipants(),
+    ]);
+  };
+
+  const laadEvents = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .order("datum", { ascending: true })
+      .order("tijd", { ascending: true });
+
+    if (error) {
+      console.error("events laden fout", error);
+      return;
+    }
+
+    setEvents(data || []);
+  };
+
+  const laadLikes = async () => {
+    const { data, error } = await supabase
+      .from("event_likes")
+      .select(`
+        id,
+        event_id,
+        user_id,
+        created_at,
+        user_profile:profiles!event_likes_user_id_fkey (
+          id,
+          naam,
+          role
+        )
+      `);
+
+    if (error) {
+      console.error("likes laden fout", error);
+      return;
+    }
+
+    setLikes(data || []);
+  };
+
+  const laadComments = async () => {
+    const { data, error } = await supabase
+      .from("event_comments")
+      .select(`
+        id,
+        event_id,
+        user_id,
+        tekst,
+        created_at,
+        user_profile:profiles!event_comments_user_id_fkey (
+          id,
+          naam,
+          role
+        )
+      `)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("comments laden fout", error);
+      return;
+    }
+
+    setComments(data || []);
+  };
+
+  const laadParticipants = async () => {
+    const { data, error } = await supabase
+      .from("event_participants")
+      .select(`
+        id,
+        event_id,
+        user_id,
+        created_at,
+        user_profile:profiles!event_participants_user_id_fkey (
+          id,
+          naam,
+          role
+        )
+      `)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("participants laden fout", error);
+      return;
+    }
+
+    setParticipants(data || []);
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+
+    const { error } = await supabase.auth.signUp({
+      email: authEmail,
+      password: authPassword,
       options: {
         data: {
-          naam: "Testgebruiker",
+          naam: authNaam || authEmail.split("@")[0],
         },
       },
     });
 
-    console.log("signup", data, error);
-    alert(error ? `Signup fout: ${error.message}` : "Signup gelukt");
+    if (error) {
+      alert(`Signup fout: ${error.message}`);
+      return;
+    }
+
+    alert("Account aangemaakt. Als email-confirmatie aan staat, bevestig eerst je mail.");
   };
 
-  const signInTest = async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: "test@endurance.app",
-      password: "test123456",
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: authPassword,
     });
 
-    console.log("signin", data, error);
-    alert(error ? `Signin fout: ${error.message}` : "Signin gelukt");
+    if (error) {
+      alert(`Signin fout: ${error.message}`);
+      return;
+    }
   };
 
-  const mee = (id) =>
-    s(
-      t.map((x) =>
-        x.id === id && !x.deelnemers.includes(huidigeGebruiker)
-          ? { ...x, deelnemers: [...x.deelnemers, huidigeGebruiker] }
-          : x
-      )
-    );
-
-  const likeToggle = (id) => {
-    s(
-      t.map((x) =>
-        x.id === id
-          ? {
-              ...x,
-              likes: x.likes?.includes(huidigeGebruiker)
-                ? x.likes.filter((naam) => naam !== huidigeGebruiker)
-                : [...(x.likes || []), huidigeGebruiker],
-            }
-          : x
-      )
-    );
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
   };
 
-
-
-const reactiePlaatsen = (id) => {
-    const tekst = (reactieTekst[id] || "").trim();
-    if (!tekst) return;
-
-    s(
-      t.map((x) =>
-        x.id === id
-          ? {
-              ...x,
-              reacties: [
-                ...(x.reacties || []),
-                {
-                  id: Date.now(),
-                  naam: huidigeGebruiker,
-                  tekst,
-                },
-              ],
-            }
-          : x
-      )
-    );
-
-    setReactieTekst((prev) => ({ ...prev, [id]: "" }));
-  };
-
-  const del = (id) =>
-    confirm("Training verwijderen?") && s(t.filter((x) => x.id !== id));
-
-  const nieuw = () => {
-    setEditId(null);
-    setF(leeg);
-    setOpen(true);
-  };
-
-  const bewerk = (id) => {
-    const x = t.find((a) => a.id === id);
-    if (!x) return;
-    setEditId(id);
-    setF({
-      titel: x.titel,
-      sport: x.sport,
-      afstand: x.afstand || afstandRanges[x.sport]?.min || 1,
-      datum: x.datum,
-      tijd: x.tijd,
-      locatie: x.locatie,
-      toelichting: x.toelichting || "",
-    });
-    setOpen(true);
-  };
-
-  const save = (e) => {
+  const saveEvent = async (e) => {
     e.preventDefault();
 
     if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
@@ -203,29 +339,178 @@ const reactiePlaatsen = (id) => {
       return;
     }
 
-    if (editId) {
-      s(t.map((x) => (x.id === editId ? { ...x, ...f } : x)));
-    } else {
-      s([
-        {
-          id: Date.now(),
-          ...f,
-          deelnemers: [huidigeGebruiker],
-          likes: [],
-          reacties: [],
-        },
-        ...t,
-      ]);
+    if (!user?.id) {
+      alert("Je moet ingelogd zijn.");
+      return;
     }
 
-    setOpen(false);
-    setEditId(null);
-    setF(leeg);
+    setSavingEvent(true);
+
+    if (editId) {
+      const { error } = await supabase
+        .from("events")
+        .update({
+          titel: f.titel,
+          sport: f.sport,
+          afstand: f.afstand,
+          datum: f.datum,
+          tijd: f.tijd,
+          locatie: f.locatie,
+          toelichting: f.toelichting,
+        })
+        .eq("id", editId);
+
+      if (error) {
+        setSavingEvent(false);
+        alert(`Opslaan mislukt: ${error.message}`);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("events").insert({
+        creator_id: user.id,
+        titel: f.titel,
+        sport: f.sport,
+        afstand: f.afstand,
+        datum: f.datum,
+        tijd: f.tijd,
+        locatie: f.locatie,
+        toelichting: f.toelichting,
+      });
+
+      if (error) {
+        setSavingEvent(false);
+        alert(`Aanmaken mislukt: ${error.message}`);
+        return;
+      }
+    }
+
+    await laadEvents();
+    setSavingEvent(false);
+    sluitModal();
+
+
+    
   };
 
-  const agenda = (x) => {
-    const start = `${x.datum.replaceAll("-", "")}T${x.tijd.replace(":", "")}00`;
-    const eindDate = new Date(`${x.datum}T${x.tijd}:00`);
+
+  const deleteEvent = async (id) => {
+    if (!confirm("Training verwijderen?")) return;
+
+    const { error } = await supabase.from("events").delete().eq("id", id);
+
+    if (error) {
+      alert(`Verwijderen mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadAlles();
+  };
+
+  const toggleDeelname = async (event) => {
+    if (!user?.id) {
+      alert("Je moet ingelogd zijn.");
+      return;
+    }
+
+    if (event.joinedByMe) {
+      const { error } = await supabase
+        .from("event_participants")
+        .delete()
+        .eq("event_id", event.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        alert(`Afmelden mislukt: ${error.message}`);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("event_participants").insert({
+        event_id: event.id,
+        user_id: user.id,
+      });
+
+      if (error) {
+        alert(`Aanmelden mislukt: ${error.message}`);
+        return;
+      }
+    }
+
+    await laadParticipants();
+  };
+
+  const toggleLike = async (event) => {
+    if (!user?.id) {
+      alert("Je moet ingelogd zijn.");
+      return;
+    }
+
+    if (event.likedByMe) {
+      const { error } = await supabase
+        .from("event_likes")
+        .delete()
+        .eq("event_id", event.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        alert(`Unlike mislukt: ${error.message}`);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("event_likes").insert({
+        event_id: event.id,
+        user_id: user.id,
+      });
+
+      if (error) {
+        alert(`Like mislukt: ${error.message}`);
+        return;
+      }
+    }
+
+    await laadLikes();
+  };
+
+  const plaatsReactie = async (eventId) => {
+    if (!user?.id) {
+      alert("Je moet ingelogd zijn.");
+      return;
+    }
+
+    const tekst = (reactieTekst[eventId] || "").trim();
+    if (!tekst) return;
+
+    const { error } = await supabase.from("event_comments").insert({
+      event_id: eventId,
+      user_id: user.id,
+      tekst,
+    });
+
+    if (error) {
+      alert(`Reactie plaatsen mislukt: ${error.message}`);
+      return;
+    }
+
+    setReactieTekst((prev) => ({ ...prev, [eventId]: "" }));
+    await laadComments();
+  };
+
+  const deleteReactie = async (reactieId) => {
+    const { error } = await supabase
+      .from("event_comments")
+      .delete()
+      .eq("id", reactieId);
+
+    if (error) {
+      alert(`Reactie verwijderen mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadComments();
+  };
+
+  const agenda = (event) => {
+    const start = `${event.datum.replaceAll("-", "")}T${event.tijd.replace(":", "")}00`;
+    const eindDate = new Date(`${event.datum}T${event.tijd}:00`);
     eindDate.setHours(eindDate.getHours() + 1);
 
     const yyyy = eindDate.getFullYear();
@@ -239,11 +524,11 @@ const reactiePlaatsen = (id) => {
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "BEGIN:VEVENT",
-      `SUMMARY:${x.titel}`,
+      `SUMMARY:${event.titel}`,
       `DTSTART:${start}`,
       `DTEND:${end}`,
-      `LOCATION:${x.locatie}`,
-      `DESCRIPTION:${x.sport} training via Endurance`,
+      `LOCATION:${event.locatie}`,
+      `DESCRIPTION:${event.sport} training via Endurance`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\n");
@@ -252,34 +537,87 @@ const reactiePlaatsen = (id) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${x.titel.replace(/\s+/g, "-").toLowerCase()}.ics`;
+    a.download = `${event.titel.replace(/\s+/g, "-").toLowerCase()}.ics`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const maps = (locatie) => {
     const q = encodeURIComponent(locatie);
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${q}`,
-      "_blank"
-    );
+    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
-  const now = new Date();
+  if (loading) {
+    return <main style={app}><div style={emptyCard}>Laden...</div></main>;
+  }
 
-  const zichtbareTrainingen = [...t]
-    .filter((x) => {
-      if (!x.datum || !x.tijd) return false;
-      const eventDate = new Date(`${x.datum}T${x.tijd}`);
-      return eventDate >= now;
-    })
-    .sort((a, b) => {
-      const dateA = new Date(`${a.datum}T${a.tijd}`);
-      const dateB = new Date(`${b.datum}T${b.tijd}`);
-      return dateA - dateB;
-    });
+  if (!session) {
+    return (
+      <main style={app}>
+        <header style={header}>
+          <img
+            src="/logo-endurance.png"
+            alt="Endurance"
+            style={{ height: 64, width: "auto", maxWidth: "82vw" }}
+          />
+        </header>
 
-  return (
+        <div style={authCard}>
+          <div style={authTabs}>
+            <button
+              style={authMode === "signin" ? primaryBtn : secondaryBtn}
+              onClick={() => setAuthMode("signin")}
+              type="button"
+            >
+              Inloggen
+            </button>
+
+            <button
+              style={authMode === "signup" ? primaryBtn : secondaryBtn}
+              onClick={() => setAuthMode("signup")}
+              type="button"
+            >
+              Account maken
+            </button>
+          </div>
+
+          <form onSubmit={authMode === "signup" ? handleSignUp : handleSignIn} style={grid}>
+            {authMode === "signup" && (
+              <input
+                value={authNaam}
+                onChange={(e) => setAuthNaam(e.target.value)}
+                placeholder="Naam"
+                style={veld}
+              />
+            )}
+
+            <input
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              placeholder="E-mailadres"
+              type="email"
+              style={veld}
+            />
+
+            <input
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              placeholder="Wachtwoord"
+              type="password"
+              style={veld}
+            />
+
+            <button type="submit" style={primaryBtn}>
+              {authMode === "signup" ? "Registreren" : "Inloggen"}
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+                  }
+
+
+return (
     <main style={app}>
       <header style={header}>
         <img
@@ -289,53 +627,25 @@ const reactiePlaatsen = (id) => {
         />
       </header>
 
-
-
-
-<section style={loginBar}>
+      <section style={loginBar}>
         <div style={loginInfo}>
-          Ingelogd als <strong>{huidigeGebruiker}</strong>
+          Ingelogd als <strong>{profiel?.naam || user?.email}</strong>
+          <div style={roleBadge}>{profiel?.role || "gebruiker"}</div>
         </div>
 
-        <select
-          value={huidigeGebruiker}
-          onChange={(e) => setHuidigeGebruiker(e.target.value)}
-          style={loginSelect}
-        >
-          {gebruikers.map((g) => (
-            <option key={g.id} value={g.naam}>
-              {g.naam}
-            </option>
-          ))}
-        </select>
+        <button onClick={handleSignOut} style={secondaryBtn}>
+          Uitloggen
+        </button>
       </section>
-
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={signUpTest} style={primaryBtn}>
-          Test signup
-        </button>
-
-        <button onClick={signInTest} style={secondaryBtn}>
-          Test signin
-        </button>
-      </div>
 
       {open && (
         <div style={overlay}>
-          <form onSubmit={save} style={modal}>
+          <form onSubmit={saveEvent} style={modal}>
             <div style={modalTop}>
               <h2 style={{ margin: 0, fontSize: 24 }}>
                 {editId ? "Training bewerken" : "Training toevoegen"}
               </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setEditId(null);
-                  setF(leeg);
-                }}
-                style={closeBtn}
-              >
+              <button type="button" onClick={sluitModal} style={closeBtn}>
                 ✕
               </button>
             </div>
@@ -377,20 +687,10 @@ const reactiePlaatsen = (id) => {
                   max={range.max}
                   step="1"
                   value={f.afstand}
-                  onChange={(e) =>
-                    setF({ ...f, afstand: Number(e.target.value) })
-                  }
+                  onChange={(e) => setF({ ...f, afstand: Number(e.target.value) })}
                   style={{ width: "100%" }}
                 />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    opacity: 0.6,
-                    marginTop: 4,
-                  }}
-                >
+                <div style={rangeRow}>
                   <span>{range.min} km</span>
                   <span>{range.max} km</span>
                 </div>
@@ -428,25 +728,17 @@ const reactiePlaatsen = (id) => {
                 <textarea
                   value={f.toelichting}
                   onChange={(e) => setF({ ...f, toelichting: e.target.value })}
-                  placeholder="Extra info over de training, tempo, materiaal, parkeerinfo, etc."
+                  placeholder="Extra info over de training"
                   style={{ ...veld, minHeight: 110, resize: "vertical" }}
                 />
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button type="submit" style={primaryBtn}>
-                  Opslaan
+                  {savingEvent ? "Opslaan..." : "Opslaan"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setEditId(null);
-                    setF(leeg);
-                  }}
-                  style={secondaryBtn}
-                >
+                <button type="button" onClick={sluitModal} style={secondaryBtn}>
                   Annuleren
                 </button>
               </div>
@@ -455,69 +747,41 @@ const reactiePlaatsen = (id) => {
         </div>
       )}
 
-
-<section style={eventsSection}>
-        {zichtbareTrainingen.length === 0 ? (
+      <section style={eventsSection}>
+        {eventKaartData.length === 0 ? (
           <div style={emptyCard}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
               Nog geen trainingen gepland
             </div>
             <div style={{ opacity: 0.7 }}>
-              Maak een nieuwe training aan met de + knop
+              Zodra er trainingen zijn toegevoegd, verschijnen ze hier.
             </div>
           </div>
         ) : (
           <div style={hScroll}>
-            {zichtbareTrainingen.map((x) => (
-              <div key={x.id} style={card}>
-                <div style={sportTag}>{x.sport}</div>
-                <h2 style={cardTitle}>{x.titel}</h2>
+            {eventKaartData.map((event) => (
+              <div key={event.id} style={card}>
+                <div style={sportTag}>{event.sport}</div>
+                <h2 style={cardTitle}>{event.titel}</h2>
 
-                <div style={afstandText}>{x.afstand} km</div>
+                <div style={afstandText}>{event.afstand} km</div>
 
                 <div style={meta}>
-                  <div>📅 {fmtDatum(x.datum)}</div>
-                  <div>⏰ {x.tijd}</div>
+                  <div>📅 {fmtDatum(event.datum)}</div>
+                  <div>⏰ {event.tijd}</div>
 
-                  <button
-                    onClick={() => maps(x.locatie)}
-                    style={{
-                      background: "transparent",
-                      color: "white",
-                      border: "none",
-                      padding: 0,
-                      textAlign: "left",
-                      fontSize: 16,
-                      cursor: "pointer",
-                    }}
-                  >
-                    📍 {x.locatie}
+                  <button onClick={() => maps(event.locatie)} style={mapBtn}>
+                    📍 {event.locatie}
                   </button>
 
                   <div style={{ opacity: 0.75 }}>
-                    Deelnemers: {x.deelnemers.length}
+                    Deelnemers: {event.deelnemers.length}
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      marginTop: 6,
-                    }}
-                  >
-                    {x.deelnemers.map((naam, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          background: "#1f1f1f",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          fontSize: 13,
-                        }}
-                      >
-                        {naam}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                    {event.deelnemers.map((d) => (
+                      <span key={d.id} style={chip}>
+                        {d.user_profile?.naam || "Onbekend"}
                       </span>
                     ))}
                   </div>
@@ -525,38 +789,53 @@ const reactiePlaatsen = (id) => {
 
                 <div style={communityBox}>
                   <div style={communityTitle}>Toelichting</div>
-
                   <div style={communityText}>
-                    {x.toelichting?.trim()
-                      ? x.toelichting
+                    {event.toelichting?.trim()
+                      ? event.toelichting
                       : "Nog geen toelichting toegevoegd."}
                   </div>
 
                   <div style={likeRow}>
-                    <button onClick={() => likeToggle(x.id)} style={likeBtn}>
-                      {x.likes?.includes(huidigeGebruiker)
-                        ? "❤️ Geliket"
-                        : "🤍 Like"}
+                    <button onClick={() => toggleLike(event)} style={likeBtn}>
+                      {event.likedByMe ? "❤️ Geliket" : "🤍 Like"}
                     </button>
 
                     <div style={likeCount}>
-                      {x.likes?.length || 0} like
-                      {(x.likes?.length || 0) === 1 ? "" : "s"}
+                      {event.likes.length} like{event.likes.length === 1 ? "" : "s"}
                     </div>
 
-                    {!!x.likes?.length && (
-                      <div style={likeUsers}>{x.likes.join(", ")}</div>
+                    {!!event.likes.length && (
+                      <div style={likeUsers}>
+                        {event.likes
+                          .map((l) => l.user_profile?.naam || "Onbekend")
+                          .join(", ")}
+                      </div>
                     )}
                   </div>
 
                   <div style={reactiesWrap}>
                     <div style={communityTitle}>Reacties</div>
 
-                    {x.reacties?.length ? (
+                    {event.reacties.length ? (
                       <div style={reactieLijst}>
-                        {x.reacties.map((r) => (
+                        {event.reacties.map((r) => (
                           <div key={r.id} style={reactieItem}>
-                            <div style={reactieNaam}>{r.naam}</div>
+                            <div style={reactieKop}>
+                              <div style={reactieNaam}>
+                                {r.user_profile?.naam || "Onbekend"}
+                              </div>
+
+                              {(r.user_id === user?.id || isModerator) && (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteReactie(r.id)}
+                                  style={miniDeleteBtn}
+                                >
+                                  Verwijder
+                                </button>
+                              )}
+                            </div>
+
                             <div style={reactieTekstStyle}>{r.tekst}</div>
                           </div>
                         ))}
@@ -567,15 +846,15 @@ const reactiePlaatsen = (id) => {
 
                     <div style={reactieForm}>
                       <div style={reactionUserLabel}>
-                        Reageren als <strong>{huidigeGebruiker}</strong>
+                        Reageren als <strong>{profiel?.naam || user?.email}</strong>
                       </div>
 
                       <textarea
-                        value={reactieTekst[x.id] || ""}
+                        value={reactieTekst[event.id] || ""}
                         onChange={(e) =>
                           setReactieTekst((prev) => ({
                             ...prev,
-                            [x.id]: e.target.value,
+                            [event.id]: e.target.value,
                           }))
                         }
                         placeholder="Plaats een reactie..."
@@ -584,7 +863,7 @@ const reactiePlaatsen = (id) => {
 
                       <button
                         type="button"
-                        onClick={() => reactiePlaatsen(x.id)}
+                        onClick={() => plaatsReactie(event.id)}
                         style={primaryBtnSmall}
                       >
                         Reageer
@@ -594,27 +873,22 @@ const reactiePlaatsen = (id) => {
                 </div>
 
                 <div style={btnRow}>
-                  <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
-                    {x.deelnemers.includes(huidigeGebruiker)
-                      ? "Je doet mee"
-                      : "Ik doe mee"}
+                  <button onClick={() => toggleDeelname(event)} style={primaryBtnSmall}>
+                    {event.joinedByMe ? "Afmelden" : "Ik doe mee"}
                   </button>
 
-                  <button onClick={() => agenda(x)} style={secondaryBtnSmall}>
+                  <button onClick={() => agenda(event)} style={secondaryBtnSmall}>
                     Zet in agenda
                   </button>
 
-                  {m && (
-                    <button
-                      onClick={() => bewerk(x.id)}
-                      style={secondaryBtnSmall}
-                    >
+                  {(event.isOwner || isModerator) && (
+                    <button onClick={() => openBewerk(event)} style={secondaryBtnSmall}>
                       Bewerk
                     </button>
                   )}
 
-                  {m && (
-                    <button onClick={() => del(x.id)} style={dangerBtnSmall}>
+                  {(event.isOwner || isModerator) && (
+                    <button onClick={() => deleteEvent(event.id)} style={dangerBtnSmall}>
                       Verwijder
                     </button>
                   )}
@@ -625,16 +899,14 @@ const reactiePlaatsen = (id) => {
         )}
       </section>
 
-      {m && (
-        <button onClick={nieuw} style={fab}>
+      {magEventsBeheren && (
+        <button onClick={openNieuw} style={fab}>
           +
         </button>
       )}
     </main>
   );
-                    }
-
-
+                      }
 
 
 const app = {
@@ -655,6 +927,20 @@ const header = {
   background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
 };
 
+const authCard = {
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 24,
+  padding: 20,
+};
+
+const authTabs = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
 const loginBar = {
   display: "flex",
   justifyContent: "space-between",
@@ -673,12 +959,15 @@ const loginInfo = {
   color: "#ddd",
 };
 
-const loginSelect = {
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "10px 12px",
-  borderRadius: 12,
+const roleBadge = {
+  marginTop: 6,
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
 };
 
 const eventsSection = {
@@ -701,7 +990,11 @@ const emptyCard = {
   border: "1px solid rgba(255,255,255,0.05)",
 };
 
-const label = { marginBottom: 6, opacity: 0.82, fontSize: 14 };
+const label = {
+  marginBottom: 6,
+  opacity: 0.82,
+  fontSize: 14,
+};
 
 const overlay = {
   position: "fixed",
@@ -719,6 +1012,8 @@ const modal = {
   borderRadius: 24,
   padding: 18,
   border: "1px solid rgba(255,255,255,0.08)",
+  maxHeight: "90vh",
+  overflowY: "auto",
 };
 
 const modalTop = {
@@ -737,7 +1032,10 @@ const closeBtn = {
   borderRadius: 999,
 };
 
-const grid = { display: "grid", gap: 12 };
+const grid = {
+  display: "grid",
+  gap: 12,
+};
 
 const veld = {
   width: "100%",
@@ -747,6 +1045,14 @@ const veld = {
   padding: "14px 12px",
   borderRadius: 12,
   boxSizing: "border-box",
+};
+
+const rangeRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 12,
+  opacity: 0.6,
+  marginTop: 4,
 };
 
 const card = {
@@ -771,7 +1077,11 @@ const sportTag = {
   marginBottom: 10,
 };
 
-const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 6 };
+const cardTitle = {
+  fontSize: 26,
+  marginTop: 0,
+  marginBottom: 6,
+};
 
 const afstandText = {
   fontSize: 16,
@@ -780,7 +1090,30 @@ const afstandText = {
   marginBottom: 14,
 };
 
-const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
+const meta = {
+  display: "grid",
+  gap: 8,
+  marginBottom: 16,
+  opacity: 0.95,
+};
+
+const mapBtn = {
+  background: "transparent",
+  color: "white",
+  border: "none",
+  padding: 0,
+  textAlign: "left",
+  fontSize: 16,
+  cursor: "pointer",
+};
+
+const chip = {
+  background: "#1f1f1f",
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 13,
+};
 
 const communityBox = {
   marginTop: 18,
@@ -848,11 +1181,18 @@ const reactieItem = {
   padding: 12,
 };
 
+const reactieKop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 4,
+};
+
 const reactieNaam = {
   fontSize: 13,
   fontWeight: 700,
   color: "#e4ef16",
-  marginBottom: 4,
 };
 
 const reactieTekstStyle = {
@@ -939,6 +1279,14 @@ const dangerBtnSmall = {
   borderRadius: 10,
 };
 
+const miniDeleteBtn = {
+  background: "transparent",
+  color: "#ff8d8d",
+  border: "none",
+  padding: 0,
+  fontSize: 12,
+};
+
 const fab = {
   position: "fixed",
   right: 18,
@@ -953,5 +1301,3 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
-
-
