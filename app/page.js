@@ -101,6 +101,9 @@ export default function Home() {
     setOpen(true);
   };
 
+
+
+
 const save = (e) => {
     e.preventDefault();
 
@@ -159,6 +162,20 @@ const save = (e) => {
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
+  const now = new Date();
+
+  const zichtbareTrainingen = [...t]
+    .filter((x) => {
+      if (!x.datum || !x.tijd) return false;
+      const eventDate = new Date(`${x.datum}T${x.tijd}`);
+      return eventDate >= now;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(`${a.datum}T${a.tijd}`);
+      const dateB = new Date(`${b.datum}T${b.tijd}`);
+      return dateA - dateB;
+    });
+
   return (
     <main style={app}>
       <header style={header}>
@@ -168,14 +185,6 @@ const save = (e) => {
           style={{ height: 64, width: "auto", maxWidth: "82vw" }}
         />
       </header>
-
-      <section style={hero}>
-        <div style={heroBadge}>Train samen</div>
-        <h1 style={heroTitle}>Vind trainingen en sluit direct aan</h1>
-        <p style={heroText}>
-          Endurance brengt sporters samen rond geplande trainingen.
-        </p>
-      </section>
 
       {open && (
         <div style={overlay}>
@@ -196,6 +205,9 @@ const save = (e) => {
                 ✕
               </button>
             </div>
+
+
+
 <div style={grid}>
               <input
                 value={f.titel}
@@ -301,81 +313,102 @@ const save = (e) => {
         </div>
       )}
 
-      <section style={{ paddingBottom: 110 }}>
-        {t.map((x) => (
-          <div key={x.id} style={card}>
-            <div style={sportTag}>{x.sport}</div>
-            <h2 style={cardTitle}>{x.titel}</h2>
-
-            <div style={afstandText}>{x.afstand} km</div>
-
-            <div style={meta}>
-              <div>📅 {fmtDatum(x.datum)}</div>
-              <div>⏰ {x.tijd}</div>
-
-              <button
-                onClick={() => maps(x.locatie)}
-                style={{
-                  background: "transparent",
-                  color: "white",
-                  border: "none",
-                  padding: 0,
-                  textAlign: "left",
-                  fontSize: 16,
-                  cursor: "pointer",
-                }}
-              >
-                📍 {x.locatie}
-              </button>
-
-              <div style={{ opacity: 0.75 }}>
-                Deelnemers: {x.deelnemers.length}
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                {x.deelnemers.map((naam, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      background: "#1f1f1f",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      fontSize: 13,
-                    }}
-                  >
-                    {naam}
-                  </span>
-                ))}
-              </div>
+      <section style={eventsSection}>
+        {zichtbareTrainingen.length === 0 ? (
+          <div style={emptyCard}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+              Nog geen trainingen gepland
             </div>
-
-            <div style={btnRow}>
-              <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
-                Ik doe mee
-              </button>
-
-              <button onClick={() => agenda(x)} style={secondaryBtnSmall}>
-                Zet in agenda
-              </button>
-
-              {m && (
-                <button onClick={() => bewerk(x.id)} style={secondaryBtnSmall}>
-                  Bewerk
-                </button>
-              )}
-
-              {m && (
-                <button onClick={() => del(x.id)} style={dangerBtnSmall}>
-                  Verwijder
-                </button>
-              )}
+            <div style={{ opacity: 0.7 }}>
+              Maak een nieuwe training aan met de + knop
             </div>
           </div>
-        ))}
+        ) : (
+          <div style={hScroll}>
+            {zichtbareTrainingen.map((x) => (
+              <div key={x.id} style={card}>
+                <div style={sportTag}>{x.sport}</div>
+                <h2 style={cardTitle}>{x.titel}</h2>
+
+                <div style={afstandText}>{x.afstand} km</div>
+
+
+<div style={meta}>
+                  <div>📅 {fmtDatum(x.datum)}</div>
+                  <div>⏰ {x.tijd}</div>
+
+                  <button
+                    onClick={() => maps(x.locatie)}
+                    style={{
+                      background: "transparent",
+                      color: "white",
+                      border: "none",
+                      padding: 0,
+                      textAlign: "left",
+                      fontSize: 16,
+                      cursor: "pointer",
+                    }}
+                  >
+                    📍 {x.locatie}
+                  </button>
+
+                  <div style={{ opacity: 0.75 }}>
+                    Deelnemers: {x.deelnemers.length}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      marginTop: 6,
+                    }}
+                  >
+                    {x.deelnemers.map((naam, i) => (
+                      <span
+                        key={i}
+                        style={{
+                          background: "#1f1f1f",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          fontSize: 13,
+                        }}
+                      >
+                        {naam}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={btnRow}>
+                  <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
+                    Ik doe mee
+                  </button>
+
+                  <button onClick={() => agenda(x)} style={secondaryBtnSmall}>
+                    Zet in agenda
+                  </button>
+
+                  {m && (
+                    <button onClick={() => bewerk(x.id)} style={secondaryBtnSmall}>
+                      Bewerk
+                    </button>
+                  )}
+
+                  {m && (
+                    <button onClick={() => del(x.id)} style={dangerBtnSmall}>
+                      Verwijder
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-{m && (
+      {m && (
         <button onClick={nieuw} style={fab}>
           +
         </button>
@@ -402,27 +435,26 @@ const header = {
   background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
 };
 
-const hero = {
-  background: "linear-gradient(180deg, #111 0%, #0b0b0b 100%)",
-  border: "1px solid rgba(255,255,255,0.06)",
+const eventsSection = {
+  paddingBottom: 110,
+};
+
+const hScroll = {
+  display: "flex",
+  gap: 16,
+  overflowX: "auto",
+  paddingBottom: 8,
+  scrollSnapType: "x mandatory",
+  WebkitOverflowScrolling: "touch",
+};
+
+const emptyCard = {
+  background: "#111",
+  padding: 24,
   borderRadius: 24,
-  padding: 20,
-  marginBottom: 18,
+  border: "1px solid rgba(255,255,255,0.05)",
 };
 
-const heroBadge = {
-  display: "inline-block",
-  background: "rgba(228,239,22,0.14)",
-  color: "#e4ef16",
-  padding: "8px 12px",
-  borderRadius: 999,
-  fontSize: 13,
-  fontWeight: "bold",
-  marginBottom: 12,
-};
-
-const heroTitle = { margin: 0, fontSize: 28, lineHeight: 1.1 };
-const heroText = { opacity: 0.72, marginBottom: 0, marginTop: 10 };
 const label = { marginBottom: 6, opacity: 0.82, fontSize: 14 };
 
 const overlay = {
@@ -475,8 +507,11 @@ const card = {
   background: "#111",
   padding: 20,
   borderRadius: 24,
-  marginBottom: 16,
   border: "1px solid rgba(255,255,255,0.05)",
+  minWidth: "85vw",
+  maxWidth: "85vw",
+  scrollSnapAlign: "start",
+  flexShrink: 0,
 };
 
 const sportTag = {
@@ -563,6 +598,18 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
