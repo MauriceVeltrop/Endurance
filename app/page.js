@@ -4,6 +4,14 @@ import { useState } from "react";
 export default function Home() {
   const m = true;
 
+  const gebruikers = [
+    { id: 1, naam: "Maurice" },
+    { id: 2, naam: "Ronald" },
+    { id: 3, naam: "Linda" },
+    { id: 4, naam: "Kevin" },
+    { id: 5, naam: "Gast" },
+  ];
+
   const sporten = [
     "Hardlopen",
     "Wielrennen",
@@ -29,6 +37,8 @@ export default function Home() {
     locatie: "",
     toelichting: "",
   };
+
+  const [huidigeGebruiker, setHuidigeGebruiker] = useState("Maurice");
 
   const [t, s] = useState([
     {
@@ -86,8 +96,8 @@ export default function Home() {
   const mee = (id) =>
     s(
       t.map((x) =>
-        x.id === id && !x.deelnemers.includes("Jij")
-          ? { ...x, deelnemers: [...x.deelnemers, "Jij"] }
+        x.id === id && !x.deelnemers.includes(huidigeGebruiker)
+          ? { ...x, deelnemers: [...x.deelnemers, huidigeGebruiker] }
           : x
       )
     );
@@ -98,9 +108,9 @@ export default function Home() {
         x.id === id
           ? {
               ...x,
-              likes: x.likes?.includes("Jij")
-                ? x.likes.filter((naam) => naam !== "Jij")
-                : [...(x.likes || []), "Jij"],
+              likes: x.likes?.includes(huidigeGebruiker)
+                ? x.likes.filter((naam) => naam !== huidigeGebruiker)
+                : [...(x.likes || []), huidigeGebruiker],
             }
           : x
       )
@@ -120,7 +130,7 @@ export default function Home() {
                 ...(x.reacties || []),
                 {
                   id: Date.now(),
-                  naam: "Jij",
+                  naam: huidigeGebruiker,
                   tekst,
                 },
               ],
@@ -140,10 +150,6 @@ export default function Home() {
     setF(leeg);
     setOpen(true);
   };
-
-
-
-
 const bewerk = (id) => {
     const x = t.find((a) => a.id === id);
     if (!x) return;
@@ -175,7 +181,7 @@ const bewerk = (id) => {
         {
           id: Date.now(),
           ...f,
-          deelnemers: [],
+          deelnemers: [huidigeGebruiker],
           likes: [],
           reacties: [],
         },
@@ -253,6 +259,24 @@ const bewerk = (id) => {
           style={{ height: 64, width: "auto", maxWidth: "82vw" }}
         />
       </header>
+
+      <section style={loginBar}>
+        <div style={loginInfo}>
+          Ingelogd als <strong>{huidigeGebruiker}</strong>
+        </div>
+
+        <select
+          value={huidigeGebruiker}
+          onChange={(e) => setHuidigeGebruiker(e.target.value)}
+          style={loginSelect}
+        >
+          {gebruikers.map((g) => (
+            <option key={g.id} value={g.naam}>
+              {g.naam}
+            </option>
+          ))}
+        </select>
+      </section>
 
       {open && (
         <div style={overlay}>
@@ -427,10 +451,7 @@ const bewerk = (id) => {
                     📍 {x.locatie}
                   </button>
 
-
-
-
-<div style={{ opacity: 0.75 }}>
+                  <div style={{ opacity: 0.75 }}>
                     Deelnemers: {x.deelnemers.length}
                   </div>
 
@@ -459,7 +480,8 @@ const bewerk = (id) => {
                   </div>
                 </div>
 
-                <div style={communityBox}>
+
+<div style={communityBox}>
                   <div style={communityTitle}>Toelichting</div>
 
                   <div style={communityText}>
@@ -470,13 +492,21 @@ const bewerk = (id) => {
 
                   <div style={likeRow}>
                     <button onClick={() => likeToggle(x.id)} style={likeBtn}>
-                      {x.likes?.includes("Jij") ? "❤️ Geliket" : "🤍 Like"}
+                      {x.likes?.includes(huidigeGebruiker)
+                        ? "❤️ Geliket"
+                        : "🤍 Like"}
                     </button>
 
                     <div style={likeCount}>
                       {x.likes?.length || 0} like
                       {(x.likes?.length || 0) === 1 ? "" : "s"}
                     </div>
+
+                    {!!x.likes?.length && (
+                      <div style={likeUsers}>
+                        {x.likes.join(", ")}
+                      </div>
+                    )}
                   </div>
 
                   <div style={reactiesWrap}>
@@ -496,6 +526,10 @@ const bewerk = (id) => {
                     )}
 
                     <div style={reactieForm}>
+                      <div style={reactionUserLabel}>
+                        Reageren als <strong>{huidigeGebruiker}</strong>
+                      </div>
+
                       <textarea
                         value={reactieTekst[x.id] || ""}
                         onChange={(e) =>
@@ -509,6 +543,7 @@ const bewerk = (id) => {
                       />
 
                       <button
+                        type="button"
                         onClick={() => reactiePlaatsen(x.id)}
                         style={primaryBtnSmall}
                       >
@@ -520,7 +555,9 @@ const bewerk = (id) => {
 
                 <div style={btnRow}>
                   <button onClick={() => mee(x.id)} style={primaryBtnSmall}>
-                    Ik doe mee
+                    {x.deelnemers.includes(huidigeGebruiker)
+                      ? "Je doet mee"
+                      : "Ik doe mee"}
                   </button>
 
                   <button onClick={() => agenda(x)} style={secondaryBtnSmall}>
@@ -557,8 +594,7 @@ const bewerk = (id) => {
   );
 }
 
-
-const app = {
+      const app = {
   background: "#050505",
   color: "white",
   minHeight: "100vh",
@@ -574,6 +610,32 @@ const header = {
   justifyContent: "center",
   padding: "12px 0 18px",
   background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
+};
+
+const loginBar = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+  padding: "14px 16px",
+  marginBottom: 18,
+};
+
+const loginInfo = {
+  fontSize: 14,
+  color: "#ddd",
+};
+
+const loginSelect = {
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "10px 12px",
+  borderRadius: 12,
 };
 
 const eventsSection = {
@@ -721,6 +783,11 @@ const likeCount = {
   opacity: 0.75,
 };
 
+const likeUsers = {
+  fontSize: 13,
+  opacity: 0.6,
+};
+
 const reactiesWrap = {
   display: "grid",
   gap: 10,
@@ -755,6 +822,11 @@ const reactieTekstStyle = {
 const communityMuted = {
   fontSize: 14,
   opacity: 0.6,
+};
+
+const reactionUserLabel = {
+  fontSize: 13,
+  opacity: 0.75,
 };
 
 const reactieForm = {
@@ -857,11 +929,10 @@ const fab = {
 
 
 
-
-
-
-
   
+
+
+
 
 
 
