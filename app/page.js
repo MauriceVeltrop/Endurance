@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const m = true;
@@ -93,6 +94,31 @@ export default function Home() {
     });
   };
 
+  const signUpTest = async () => {
+    const { data, error } = await supabase.auth.signUp({
+      email: "test@endurance.app",
+      password: "test123456",
+      options: {
+        data: {
+          naam: "Testgebruiker",
+        },
+      },
+    });
+
+    console.log("signup", data, error);
+    alert(error ? `Signup fout: ${error.message}` : "Signup gelukt");
+  };
+
+  const signInTest = async () => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: "test@endurance.app",
+      password: "test123456",
+    });
+
+    console.log("signin", data, error);
+    alert(error ? `Signin fout: ${error.message}` : "Signin gelukt");
+  };
+
   const mee = (id) =>
     s(
       t.map((x) =>
@@ -117,7 +143,9 @@ export default function Home() {
     );
   };
 
-  const reactiePlaatsen = (id) => {
+
+
+const reactiePlaatsen = (id) => {
     const tekst = (reactieTekst[id] || "").trim();
     if (!tekst) return;
 
@@ -150,7 +178,8 @@ export default function Home() {
     setF(leeg);
     setOpen(true);
   };
-const bewerk = (id) => {
+
+  const bewerk = (id) => {
     const x = t.find((a) => a.id === id);
     if (!x) return;
     setEditId(id);
@@ -260,7 +289,10 @@ const bewerk = (id) => {
         />
       </header>
 
-      <section style={loginBar}>
+
+
+
+<section style={loginBar}>
         <div style={loginInfo}>
           Ingelogd als <strong>{huidigeGebruiker}</strong>
         </div>
@@ -277,6 +309,16 @@ const bewerk = (id) => {
           ))}
         </select>
       </section>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        <button onClick={signUpTest} style={primaryBtn}>
+          Test signup
+        </button>
+
+        <button onClick={signInTest} style={secondaryBtn}>
+          Test signin
+        </button>
+      </div>
 
       {open && (
         <div style={overlay}>
@@ -298,7 +340,7 @@ const bewerk = (id) => {
               </button>
             </div>
 
-<div style={grid}>
+            <div style={grid}>
               <input
                 value={f.titel}
                 onChange={(e) => setF({ ...f, titel: e.target.value })}
@@ -413,7 +455,8 @@ const bewerk = (id) => {
         </div>
       )}
 
-      <section style={eventsSection}>
+
+<section style={eventsSection}>
         {zichtbareTrainingen.length === 0 ? (
           <div style={emptyCard}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
@@ -480,8 +523,7 @@ const bewerk = (id) => {
                   </div>
                 </div>
 
-
-<div style={communityBox}>
+                <div style={communityBox}>
                   <div style={communityTitle}>Toelichting</div>
 
                   <div style={communityText}>
@@ -503,9 +545,7 @@ const bewerk = (id) => {
                     </div>
 
                     {!!x.likes?.length && (
-                      <div style={likeUsers}>
-                        {x.likes.join(", ")}
-                      </div>
+                      <div style={likeUsers}>{x.likes.join(", ")}</div>
                     )}
                   </div>
 
@@ -592,9 +632,12 @@ const bewerk = (id) => {
       )}
     </main>
   );
-}
+                    }
 
-      const app = {
+
+
+
+const app = {
   background: "#050505",
   color: "white",
   minHeight: "100vh",
@@ -910,31 +953,5 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-
-
-
-
-
 
 
