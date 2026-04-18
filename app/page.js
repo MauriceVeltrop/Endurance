@@ -122,7 +122,10 @@ export default function Home() {
 
 
 
-useEffect(() => {
+
+
+
+  useEffect(() => {
     const init = async () => {
       const {
         data: { session },
@@ -188,7 +191,15 @@ useEffect(() => {
   const laadEvents = async () => {
     const { data, error } = await supabase
       .from("events")
-      .select("*")
+      .select(`
+        *,
+        creator_profile:profiles!events_creator_id_fkey (
+          id,
+          naam,
+          email,
+          role
+        )
+      `)
       .order("datum", { ascending: true })
       .order("tijd", { ascending: true });
 
@@ -534,6 +545,9 @@ const saveEvent = async (e) => {
   }
 
 
+
+
+
 if (!session) {
     return (
       <main style={app}>
@@ -738,8 +752,6 @@ if (!session) {
       )}
 
 
-
-
 <section style={eventsSection}>
         {eventKaartData.length === 0 ? (
           <div style={emptyCard}>
@@ -762,6 +774,12 @@ if (!session) {
                 <div style={meta}>
                   <div>📅 {fmtDatum(event.datum)}</div>
                   <div>⏰ {event.tijd}</div>
+                  <div style={creatorText}>
+                    👤 Aangemaakt door:{" "}
+                    {event.creator_profile?.naam ||
+                      event.creator_profile?.email ||
+                      "Onbekend"}
+                  </div>
 
                   <button onClick={() => maps(event.locatie)} style={mapBtn}>
                     📍 {event.locatie}
@@ -1092,6 +1110,11 @@ const afstandText = {
   marginBottom: 14,
 };
 
+const creatorText = {
+  fontSize: 14,
+  opacity: 0.85,
+};
+
 const meta = {
   display: "grid",
   gap: 8,
@@ -1303,5 +1326,14 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
+
+
+
+
+
+  
+
+
+
 
 
