@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -119,9 +120,6 @@ export default function Home() {
         };
       });
   }, [events, likes, comments, participants, user]);
-
-
-
 
 
 
@@ -545,10 +543,7 @@ const saveEvent = async (e) => {
   }
 
 
-
-
-
-if (!session) {
+  if (!session) {
     return (
       <main style={app}>
         <header style={header}>
@@ -630,10 +625,14 @@ if (!session) {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href={`/profile/${user.id}`} style={adminLinkBtn}>
+            Mijn profiel
+          </Link>
+
           {isModerator && (
-            <a href="/admin" style={adminLinkBtn}>
+            <Link href="/admin" style={adminLinkBtn}>
               Admin
-            </a>
+            </Link>
           )}
 
           <button onClick={handleSignOut} style={secondaryBtn}>
@@ -776,9 +775,14 @@ if (!session) {
                   <div>⏰ {event.tijd}</div>
                   <div style={creatorText}>
                     👤 Aangemaakt door:{" "}
-                    {event.creator_profile?.naam ||
-                      event.creator_profile?.email ||
-                      "Onbekend"}
+                    <Link
+                      href={`/profile/${event.creator_id}`}
+                      style={profileLink}
+                    >
+                      {event.creator_profile?.naam ||
+                        event.creator_profile?.email ||
+                        "Onbekend"}
+                    </Link>
                   </div>
 
                   <button onClick={() => maps(event.locatie)} style={mapBtn}>
@@ -791,9 +795,13 @@ if (!session) {
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
                     {event.deelnemers.map((d) => (
-                      <span key={d.id} style={chip}>
+                      <Link
+                        key={d.id}
+                        href={`/profile/${d.user_id}`}
+                        style={chipLink}
+                      >
                         {d.user_profile?.naam || "Onbekend"}
-                      </span>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -818,9 +826,17 @@ if (!session) {
 
                     {!!event.likes.length && (
                       <div style={likeUsers}>
-                        {event.likes
-                          .map((l) => l.user_profile?.naam || "Onbekend")
-                          .join(", ")}
+                        {event.likes.map((l, index) => (
+                          <span key={l.id}>
+                            <Link
+                              href={`/profile/${l.user_id}`}
+                              style={inlineProfileLink}
+                            >
+                              {l.user_profile?.naam || "Onbekend"}
+                            </Link>
+                            {index < event.likes.length - 1 ? ", " : ""}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -834,7 +850,12 @@ if (!session) {
                           <div key={r.id} style={reactieItem}>
                             <div style={reactieKop}>
                               <div style={reactieNaam}>
-                                {r.user_profile?.naam || "Onbekend"}
+                                <Link
+                                  href={`/profile/${r.user_id}`}
+                                  style={inlineProfileLink}
+                                >
+                                  {r.user_profile?.naam || "Onbekend"}
+                                </Link>
                               </div>
 
                               {(r.user_id === user?.id || isModerator) && (
@@ -1115,6 +1136,27 @@ const creatorText = {
   opacity: 0.85,
 };
 
+const profileLink = {
+  color: "#e4ef16",
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const inlineProfileLink = {
+  color: "#e4ef16",
+  textDecoration: "none",
+};
+
+const chipLink = {
+  background: "#1f1f1f",
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 13,
+  color: "white",
+  textDecoration: "none",
+};
+
 const meta = {
   display: "grid",
   gap: 8,
@@ -1130,14 +1172,6 @@ const mapBtn = {
   textAlign: "left",
   fontSize: 16,
   cursor: "pointer",
-};
-
-const chip = {
-  background: "#1f1f1f",
-  border: "1px solid rgba(255,255,255,0.08)",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 13,
 };
 
 const communityBox = {
@@ -1326,14 +1360,5 @@ const fab = {
   fontWeight: "bold",
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
-
-
-
-
-
-  
-
-
-
 
 
