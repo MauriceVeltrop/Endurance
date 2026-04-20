@@ -23,7 +23,13 @@ export default function ProfilePage({ params }) {
     strava_url: "",
     garmin_url: "",
     suunto_url: "",
+    geboortedatum: "",
   });
+
+  const [visibility, setVisibility] = useState(null);
+
+  const [partnerRow, setPartnerRow] = useState(null);
+  const [partnerLoading, setPartnerLoading] = useState(false);
 
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
@@ -66,6 +72,14 @@ export default function ProfilePage({ params }) {
     }
   }, [user?.id]);
 
+  useEffect(() => {
+    if (user?.id && profileId && user.id !== profileId) {
+      laadPartnerStatus();
+    } else {
+      setPartnerRow(null);
+    }
+  }, [user?.id, profileId]);
+
   const laadProfiel = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -87,7 +101,16 @@ export default function ProfilePage({ params }) {
       strava_url: data.strava_url || "",
       garmin_url: data.garmin_url || "",
       suunto_url: data.suunto_url || "",
+      geboortedatum: data.geboortedatum || "",
     });
+
+    const { data: visData } = await supabase
+      .from("profile_visibility_settings")
+      .select("*")
+      .eq("user_id", profileId)
+      .single();
+
+    setVisibility(visData || null);
   };
 
   const laadMijnProfiel = async () => {
@@ -105,8 +128,97 @@ export default function ProfilePage({ params }) {
     setMijnProfiel(data);
   };
 
-const isEigenProfiel = user?.id === profiel?.id;
-  const isModerator = mijnProfiel?.role === "moderator";
+
+const laadPartnerStatus = async () => {
+    setPartnerLoading(true);
+
+    const { data, error } = await supabase
+      .from("training_partners")
+      .select("*")
+      .or(
+        `and(requester_id.eq.${user.id},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${user.id})`
+      )
+      .maybeSingle();
+
+    setPartnerLoading(false);
+
+    if (error) {
+      console.error("partner status laden fout", error);
+      return;
+    }
+
+    setPartnerRow(data || null);
+  };
+
+  const stuurPartnerVerzoek = async () => {
+    const { error } = await supabase.from("training_partners").insert({
+      requester_id: user.id,
+      addressee_id: profileId,
+      status: "pending",
+    });
+
+    if (error) {
+      alert(`Verzoek sturen mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadPartnerStatus();
+  };
+
+  const accepteerPartnerVerzoek = async () => {
+    if (!partnerRow?.id) return;
+
+    const { error } = await supabase
+      .from("training_partners")
+      .update({
+        status: "accepted",
+        responded_at: new Date().toISOString(),
+      })
+      .eq("id", partnerRow.id);
+
+    if (error) {
+      alert(`Accepteren mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadPartnerStatus();
+  };
+
+  const weigerPartnerVerzoek = async () => {
+    if (!partnerRow?.id) return;
+
+    const { error } = await supabase
+      .from("training_partners")
+      .update({
+        status: "rejected",
+        responded_at: new Date().toISOString(),
+      })
+      .eq("id", partnerRow.id);
+
+    if (error) {
+      alert(`Weigeren mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadPartnerStatus();
+  };
+
+  const verwijderTrainingPartner = async () => {
+    if (!partnerRow?.id) return;
+    if (!confirm("Training Partner verwijderen?")) return;
+
+    const { error } = await supabase
+      .from("training_partners")
+      .delete()
+      .eq("id", partnerRow.id);
+
+    if (error) {
+      alert(`Verwijderen mislukt: ${error.message}`);
+      return;
+    }
+
+    await laadPartnerStatus();
+  };
 
   const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
     setCroppedAreaPixels(croppedPixels);
@@ -150,13 +262,44 @@ const isEigenProfiel = user?.id === profiel?.id;
     );
 
     return new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => resolve(blob),
-        "image/jpeg",
-        0.92
-      );
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
     });
   };
+
+const isEigenProfiel = user?.id === profiel?.id;
+  const isModerator = mijnProfiel?.role === "moderator";
+  const isPartner =
+    partnerRow?.status === "accepted" &&
+    (partnerRow?.requester_id === user?.id || partnerRow?.addressee_id === user?.id);
+
+  const magVeldZien = (visibilityValue) => {
+    if (isEigenProfiel || isModerator) return true;
+    if (!visibilityValue) return false;
+    if (visibilityValue === "all") return true;
+    if (visibilityValue === "partners" && isPartner) return true;
+    return false;
+  };
+
+  const berekenLeeftijd = (geboortedatum) => {
+    if (!geboortedatum) return null;
+
+    const vandaag = new Date();
+    const geboorte = new Date(geboortedatum);
+
+    let leeftijd = vandaag.getFullYear() - geboorte.getFullYear();
+    const maandVerschil = vandaag.getMonth() - geboorte.getMonth();
+
+    if (
+      maandVerschil < 0 ||
+      (maandVerschil === 0 && vandaag.getDate() < geboorte.getDate())
+    ) {
+      leeftijd--;
+    }
+
+    return leeftijd;
+  };
+
+  const leeftijd = berekenLeeftijd(profiel?.geboortedatum);
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -182,7 +325,6 @@ const isEigenProfiel = user?.id === profiel?.id;
 
     try {
       const croppedBlob = await getCroppedImgBlob(imageSrc, croppedAreaPixels);
-
       if (!croppedBlob) {
         setUploadingAvatar(false);
         alert("Kon de afbeelding niet verwerken.");
@@ -233,6 +375,8 @@ const isEigenProfiel = user?.id === profiel?.id;
   };
 
 
+
+
   const opslaanProfiel = async (e) => {
     e.preventDefault();
 
@@ -246,6 +390,7 @@ const isEigenProfiel = user?.id === profiel?.id;
         strava_url: form.strava_url,
         garmin_url: form.garmin_url,
         suunto_url: form.suunto_url,
+        geboortedatum: form.geboortedatum || null,
       })
       .eq("id", profiel.id);
 
@@ -288,12 +433,8 @@ const isEigenProfiel = user?.id === profiel?.id;
         <div style={profileHeader}>
           <div style={avatarWrap}>
             <div style={avatarRing}>
-              {profiel.avatar_url ? (
-                <img
-                  src={profiel.avatar_url}
-                  alt={profiel.naam}
-                  style={avatar}
-                />
+              {profiel.avatar_url && magVeldZien(visibility?.avatar_visibility) ? (
+                <img src={profiel.avatar_url} alt={profiel.naam} style={avatar} />
               ) : (
                 <div style={avatarPlaceholder}>
                   {(profiel.naam || "?").charAt(0).toUpperCase()}
@@ -321,47 +462,90 @@ const isEigenProfiel = user?.id === profiel?.id;
             <h1 style={name}>{profiel.naam || "Onbekend"}</h1>
             <div style={roleBadge}>{profiel.role || "gebruiker"}</div>
 
-            {profiel.woonplaats && (
+            {leeftijd !== null && magVeldZien(visibility?.leeftijd_visibility) && (
+              <div style={metaLine}>🎂 {leeftijd} jaar</div>
+            )}
+
+            {profiel.woonplaats && magVeldZien(visibility?.woonplaats_visibility) && (
               <div style={metaLine}>📍 {profiel.woonplaats}</div>
             )}
 
-            {profiel.email && (
+            {profiel.email && magVeldZien(visibility?.email_visibility) && (
               <div style={metaLine}>✉️ {profiel.email}</div>
             )}
 
-            {profiel.telefoonnummer && (
+            {profiel.telefoonnummer && magVeldZien(visibility?.telefoon_visibility) && (
               <div style={metaLine}>📞 {profiel.telefoonnummer}</div>
             )}
           </div>
         </div>
 
+        {!isEigenProfiel && session && (
+          <div style={partnerBox}>
+            {partnerLoading ? (
+              <div style={emptyText}>Status laden...</div>
+            ) : !partnerRow ? (
+              <button onClick={stuurPartnerVerzoek} style={primaryBtn}>
+                Word Training Partner
+              </button>
+            ) : partnerRow.status === "pending" && partnerRow.requester_id === user.id ? (
+              <div style={statusPill}>Training Partner verzoek verzonden</div>
+            ) : partnerRow.status === "pending" && partnerRow.addressee_id === user.id ? (
+              <div style={btnRow}>
+                <button onClick={accepteerPartnerVerzoek} style={primaryBtn}>
+                  Accepteren
+                </button>
+                <button onClick={weigerPartnerVerzoek} style={secondaryBtn}>
+                  Weigeren
+                </button>
+              </div>
+            ) : partnerRow.status === "accepted" ? (
+              <div style={btnRow}>
+                <div style={statusPill}>Jullie zijn Training Partners</div>
+                <button onClick={verwijderTrainingPartner} style={secondaryBtn}>
+                  Verwijder
+                </button>
+              </div>
+            ) : partnerRow.status === "rejected" ? (
+              <button onClick={stuurPartnerVerzoek} style={primaryBtn}>
+                Nieuw verzoek sturen
+              </button>
+            ) : (
+              <div style={emptyText}>Geen actie beschikbaar.</div>
+            )}
+          </div>
+        )}
+
         <div style={linksBox}>
           <div style={sectionTitle}>Sportprofielen</div>
 
-          {profiel.strava_url ? (
+          {profiel.strava_url && magVeldZien(visibility?.strava_visibility) ? (
             <a href={profiel.strava_url} target="_blank" rel="noreferrer" style={sportLink}>
               Strava
             </a>
           ) : null}
 
-          {profiel.garmin_url ? (
+          {profiel.garmin_url && magVeldZien(visibility?.garmin_visibility) ? (
             <a href={profiel.garmin_url} target="_blank" rel="noreferrer" style={sportLink}>
               Garmin
             </a>
           ) : null}
 
-          {profiel.suunto_url ? (
+          {profiel.suunto_url && magVeldZien(visibility?.suunto_visibility) ? (
             <a href={profiel.suunto_url} target="_blank" rel="noreferrer" style={sportLink}>
               Suunto
             </a>
           ) : null}
 
-          {!profiel.strava_url && !profiel.garmin_url && !profiel.suunto_url && (
-            <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
-          )}
+          {!(
+            (profiel.strava_url && magVeldZien(visibility?.strava_visibility)) ||
+            (profiel.garmin_url && magVeldZien(visibility?.garmin_visibility)) ||
+            (profiel.suunto_url && magVeldZien(visibility?.suunto_visibility))
+          ) && <div style={emptyText}>Geen zichtbare sportprofielen.</div>}
         </div>
 
-{(isEigenProfiel || isModerator) && !editing && (
+
+    {(isEigenProfiel || isModerator) && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Profiel bewerken
@@ -374,91 +558,53 @@ const isEigenProfiel = user?.id === profiel?.id;
             <div style={grid}>
               <div>
                 <div style={label}>Naam</div>
+                <input value={form.naam} onChange={(e) => setForm({ ...form, naam: e.target.value })} style={veld} />
+              </div>
+
+              <div>
+                <div style={label}>Geboortedatum</div>
                 <input
-                  value={form.naam}
-                  onChange={(e) => setForm({ ...form, naam: e.target.value })}
+                  type="date"
+                  value={form.geboortedatum}
+                  onChange={(e) => setForm({ ...form, geboortedatum: e.target.value })}
                   style={veld}
                 />
               </div>
 
               <div>
                 <div style={label}>Woonplaats</div>
-                <input
-                  value={form.woonplaats}
-                  onChange={(e) => setForm({ ...form, woonplaats: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.woonplaats} onChange={(e) => setForm({ ...form, woonplaats: e.target.value })} style={veld} />
               </div>
 
               <div>
                 <div style={label}>Mailadres</div>
-                <input
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={veld} />
               </div>
 
               <div>
                 <div style={label}>Telefoonnummer</div>
-                <input
-                  value={form.telefoonnummer}
-                  onChange={(e) => setForm({ ...form, telefoonnummer: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.telefoonnummer} onChange={(e) => setForm({ ...form, telefoonnummer: e.target.value })} style={veld} />
               </div>
 
               <div>
                 <div style={label}>Strava link</div>
-                <input
-                  value={form.strava_url}
-                  onChange={(e) => setForm({ ...form, strava_url: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.strava_url} onChange={(e) => setForm({ ...form, strava_url: e.target.value })} style={veld} />
               </div>
 
               <div>
                 <div style={label}>Garmin link</div>
-                <input
-                  value={form.garmin_url}
-                  onChange={(e) => setForm({ ...form, garmin_url: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.garmin_url} onChange={(e) => setForm({ ...form, garmin_url: e.target.value })} style={veld} />
               </div>
 
               <div>
                 <div style={label}>Suunto link</div>
-                <input
-                  value={form.suunto_url}
-                  onChange={(e) => setForm({ ...form, suunto_url: e.target.value })}
-                  style={veld}
-                />
+                <input value={form.suunto_url} onChange={(e) => setForm({ ...form, suunto_url: e.target.value })} style={veld} />
               </div>
             </div>
 
             <div style={btnRow}>
-              <button type="submit" style={primaryBtn}>
-                Opslaan
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(false);
-                  setForm({
-                    naam: profiel.naam || "",
-                    woonplaats: profiel.woonplaats || "",
-                    email: profiel.email || "",
-                    telefoonnummer: profiel.telefoonnummer || "",
-                    strava_url: profiel.strava_url || "",
-                    garmin_url: profiel.garmin_url || "",
-                    suunto_url: profiel.suunto_url || "",
-                  });
-                }}
-                style={secondaryBtn}
-              >
-                Annuleren
-              </button>
+              <button type="submit" style={primaryBtn}>Opslaan</button>
+              <button type="button" onClick={() => setEditing(false)} style={secondaryBtn}>Annuleren</button>
             </div>
           </form>
         )}
@@ -468,7 +614,6 @@ const isEigenProfiel = user?.id === profiel?.id;
         <div style={cropOverlay}>
           <div style={cropModal}>
             <div style={cropTitle}>Profielfoto bijsnijden</div>
-
             <div style={cropAreaWrap}>
               <Cropper
                 image={imageSrc}
@@ -497,25 +642,10 @@ const isEigenProfiel = user?.id === profiel?.id;
             </div>
 
             <div style={btnRow}>
-              <button
-                type="button"
-                onClick={uploadCroppedAvatar}
-                style={primaryBtn}
-                disabled={uploadingAvatar}
-              >
+              <button type="button" onClick={uploadCroppedAvatar} style={primaryBtn}>
                 {uploadingAvatar ? "Opslaan..." : "Gebruik deze foto"}
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCropModalOpen(false);
-                  setImageSrc(null);
-                  setZoom(1);
-                  setCrop({ x: 0, y: 0 });
-                }}
-                style={secondaryBtn}
-              >
+              <button type="button" onClick={() => setCropModalOpen(false)} style={secondaryBtn}>
                 Annuleren
               </button>
             </div>
@@ -524,241 +654,41 @@ const isEigenProfiel = user?.id === profiel?.id;
       )}
     </main>
   );
-  }
+}
 
-const app = {
-  minHeight: "100vh",
-  background: "#050505",
-  color: "white",
-  padding: 16,
-  fontFamily: "sans-serif",
-};
+const app = { minHeight: "100vh", background: "#050505", color: "white", padding: 16, fontFamily: "sans-serif" };
+const topBar = { marginBottom: 16 };
+const card = { background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 24, padding: 20 };
+const profileHeader = { display: "flex", gap: 20, alignItems: "center", marginBottom: 24 };
+const avatarWrap = { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 };
+const avatarRing = { width: 118, height: 118, borderRadius: "50%", padding: 4, background: "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))", display: "flex", alignItems: "center", justifyContent: "center" };
+const avatar = { width: 110, height: 110, borderRadius: "50%", objectFit: "cover", objectPosition: "center", display: "block", border: "3px solid rgba(228,239,22,0.35)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", background: "#111" };
+const avatarPlaceholder = { width: 110, height: 110, borderRadius: "50%", background: "#1f1f1f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, fontWeight: "bold", color: "#e4ef16", border: "3px solid rgba(228,239,22,0.18)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)" };
+const uploadWrap = { marginTop: 2 };
+const uploadLabel = { display: "inline-block", background: "#2a2a2a", color: "white", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontSize: 13, fontWeight: "bold", border: "1px solid rgba(255,255,255,0.08)" };
+const name = { margin: 0, fontSize: 28 };
+const roleBadge = { marginTop: 8, display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
+const metaLine = { marginTop: 8, opacity: 0.8 };
+const partnerBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const statusPill = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "10px 14px", borderRadius: 12, fontWeight: "bold" };
+const linksBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, display: "grid", gap: 10 };
+const sectionTitle = { fontSize: 16, fontWeight: 700 };
+const sportLink = { display: "inline-block", color: "#e4ef16", textDecoration: "none" };
+const emptyText = { opacity: 0.65 };
+const editBox = { marginTop: 20, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const grid = { display: "grid", gap: 12 };
+const label = { marginBottom: 6, fontSize: 13, opacity: 0.75 };
+const veld = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box" };
+const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
+const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
+const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
+const linkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
+const cropOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadius: 24, padding: 16, border: "1px solid rgba(255,255,255,0.08)" };
+const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
+const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
+const zoomWrap = { marginTop: 16 };
 
-const topBar = {
-  marginBottom: 16,
-};
 
-const card = {
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 24,
-  padding: 20,
-};
-
-const profileHeader = {
-  display: "flex",
-  gap: 20,
-  alignItems: "center",
-  marginBottom: 24,
-};
-
-const avatarWrap = {
-  flexShrink: 0,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 10,
-};
-
-const avatarRing = {
-  width: 118,
-  height: 118,
-  borderRadius: "50%",
-  padding: 4,
-  background:
-    "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const avatar = {
-  width: 110,
-  height: 110,
-  borderRadius: "50%",
-  objectFit: "cover",
-  objectPosition: "center",
-  display: "block",
-  border: "3px solid rgba(228,239,22,0.35)",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-  background: "#111",
-};
-
-const avatarPlaceholder = {
-  width: 110,
-  height: 110,
-  borderRadius: "50%",
-  background: "#1f1f1f",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 42,
-  fontWeight: "bold",
-  color: "#e4ef16",
-  border: "3px solid rgba(228,239,22,0.18)",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-};
-
-const uploadWrap = {
-  marginTop: 2,
-};
-
-const uploadLabel = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 12,
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: "bold",
-  border: "1px solid rgba(255,255,255,0.08)",
-};
-
-const name = {
-  margin: 0,
-  fontSize: 28,
-};
-
-const roleBadge = {
-  marginTop: 8,
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const metaLine = {
-  marginTop: 8,
-  opacity: 0.8,
-};
-
-const linksBox = {
-  marginTop: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  display: "grid",
-  gap: 10,
-};
-
-const sectionTitle = {
-  fontSize: 16,
-  fontWeight: 700,
-};
-
-const sportLink = {
-  display: "inline-block",
-  color: "#e4ef16",
-  textDecoration: "none",
-};
-
-const emptyText = {
-  opacity: 0.65,
-};
-
-const editBox = {
-  marginTop: 20,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const grid = {
-  display: "grid",
-  gap: 12,
-};
-
-const label = {
-  marginBottom: 6,
-  fontSize: 13,
-  opacity: 0.75,
-};
-
-const veld = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "12px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-};
-
-const btnRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 16,
-};
-
-const primaryBtn = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const secondaryBtn = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const linkBtn = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const cropOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.8)",
-  zIndex: 50,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-};
-
-const cropModal = {
-  width: "100%",
-  maxWidth: 420,
-  background: "#111",
-  borderRadius: 24,
-  padding: 16,
-  border: "1px solid rgba(255,255,255,0.08)",
-};
-
-const cropTitle = {
-  fontSize: 20,
-  fontWeight: 700,
-  marginBottom: 12,
-};
-
-const cropAreaWrap = {
-  position: "relative",
-  width: "100%",
-  height: 320,
-  background: "#000",
-  borderRadius: 18,
-  overflow: "hidden",
-};
-
-const zoomWrap = {
-  marginTop: 16,
-};
+           
   
