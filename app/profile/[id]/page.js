@@ -27,6 +27,16 @@ export default function ProfilePage({ params }) {
   });
 
   const [visibility, setVisibility] = useState(null);
+  const [visibilityForm, setVisibilityForm] = useState({
+    avatar_visibility: "all",
+    woonplaats_visibility: "partners",
+    email_visibility: "private",
+    telefoon_visibility: "private",
+    strava_visibility: "partners",
+    garmin_visibility: "partners",
+    suunto_visibility: "partners",
+    leeftijd_visibility: "partners",
+  });
 
   const [partnerRow, setPartnerRow] = useState(null);
   const [partnerLoading, setPartnerLoading] = useState(false);
@@ -111,6 +121,19 @@ export default function ProfilePage({ params }) {
       .single();
 
     setVisibility(visData || null);
+
+    if (visData) {
+      setVisibilityForm({
+        avatar_visibility: visData.avatar_visibility || "all",
+        woonplaats_visibility: visData.woonplaats_visibility || "partners",
+        email_visibility: visData.email_visibility || "private",
+        telefoon_visibility: visData.telefoon_visibility || "private",
+        strava_visibility: visData.strava_visibility || "partners",
+        garmin_visibility: visData.garmin_visibility || "partners",
+        suunto_visibility: visData.suunto_visibility || "partners",
+        leeftijd_visibility: visData.leeftijd_visibility || "partners",
+      });
+    }
   };
 
   const laadMijnProfiel = async () => {
@@ -127,6 +150,10 @@ export default function ProfilePage({ params }) {
 
     setMijnProfiel(data);
   };
+
+
+
+
 
 
 const laadPartnerStatus = async () => {
@@ -220,6 +247,30 @@ const laadPartnerStatus = async () => {
     await laadPartnerStatus();
   };
 
+  const opslaanVisibility = async () => {
+    const { error } = await supabase
+      .from("profile_visibility_settings")
+      .update({
+        avatar_visibility: visibilityForm.avatar_visibility,
+        woonplaats_visibility: visibilityForm.woonplaats_visibility,
+        email_visibility: visibilityForm.email_visibility,
+        telefoon_visibility: visibilityForm.telefoon_visibility,
+        strava_visibility: visibilityForm.strava_visibility,
+        garmin_visibility: visibilityForm.garmin_visibility,
+        suunto_visibility: visibilityForm.suunto_visibility,
+        leeftijd_visibility: visibilityForm.leeftijd_visibility,
+      })
+      .eq("user_id", profiel.id);
+
+    if (error) {
+      alert(`Privacy opslaan mislukt: ${error.message}`);
+      return;
+    }
+
+    alert("Privacy-instellingen opgeslagen");
+    await laadProfiel();
+  };
+
   const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
     setCroppedAreaPixels(croppedPixels);
   }, []);
@@ -266,11 +317,17 @@ const laadPartnerStatus = async () => {
     });
   };
 
+
+
+
+
+
 const isEigenProfiel = user?.id === profiel?.id;
   const isModerator = mijnProfiel?.role === "moderator";
   const isPartner =
     partnerRow?.status === "accepted" &&
-    (partnerRow?.requester_id === user?.id || partnerRow?.addressee_id === user?.id);
+    (partnerRow?.requester_id === user?.id ||
+      partnerRow?.addressee_id === user?.id);
 
   const magVeldZien = (visibilityValue) => {
     if (isEigenProfiel || isModerator) return true;
@@ -325,6 +382,7 @@ const isEigenProfiel = user?.id === profiel?.id;
 
     try {
       const croppedBlob = await getCroppedImgBlob(imageSrc, croppedAreaPixels);
+
       if (!croppedBlob) {
         setUploadingAvatar(false);
         alert("Kon de afbeelding niet verwerken.");
@@ -374,9 +432,6 @@ const isEigenProfiel = user?.id === profiel?.id;
     setUploadingAvatar(false);
   };
 
-
-
-
   const opslaanProfiel = async (e) => {
     e.preventDefault();
 
@@ -421,7 +476,8 @@ const isEigenProfiel = user?.id === profiel?.id;
     );
   }
 
-  return (
+
+return (
     <main style={app}>
       <div style={topBar}>
         <a href="/" style={linkBtn}>
@@ -434,7 +490,11 @@ const isEigenProfiel = user?.id === profiel?.id;
           <div style={avatarWrap}>
             <div style={avatarRing}>
               {profiel.avatar_url && magVeldZien(visibility?.avatar_visibility) ? (
-                <img src={profiel.avatar_url} alt={profiel.naam} style={avatar} />
+                <img
+                  src={profiel.avatar_url}
+                  alt={profiel.naam}
+                  style={avatar}
+                />
               ) : (
                 <div style={avatarPlaceholder}>
                   {(profiel.naam || "?").charAt(0).toUpperCase()}
@@ -466,17 +526,19 @@ const isEigenProfiel = user?.id === profiel?.id;
               <div style={metaLine}>🎂 {leeftijd} jaar</div>
             )}
 
-            {profiel.woonplaats && magVeldZien(visibility?.woonplaats_visibility) && (
-              <div style={metaLine}>📍 {profiel.woonplaats}</div>
-            )}
+            {profiel.woonplaats &&
+              magVeldZien(visibility?.woonplaats_visibility) && (
+                <div style={metaLine}>📍 {profiel.woonplaats}</div>
+              )}
 
             {profiel.email && magVeldZien(visibility?.email_visibility) && (
               <div style={metaLine}>✉️ {profiel.email}</div>
             )}
 
-            {profiel.telefoonnummer && magVeldZien(visibility?.telefoon_visibility) && (
-              <div style={metaLine}>📞 {profiel.telefoonnummer}</div>
-            )}
+            {profiel.telefoonnummer &&
+              magVeldZien(visibility?.telefoon_visibility) && (
+                <div style={metaLine}>📞 {profiel.telefoonnummer}</div>
+              )}
           </div>
         </div>
 
@@ -488,9 +550,11 @@ const isEigenProfiel = user?.id === profiel?.id;
               <button onClick={stuurPartnerVerzoek} style={primaryBtn}>
                 Word Training Partner
               </button>
-            ) : partnerRow.status === "pending" && partnerRow.requester_id === user.id ? (
+            ) : partnerRow.status === "pending" &&
+              partnerRow.requester_id === user.id ? (
               <div style={statusPill}>Training Partner verzoek verzonden</div>
-            ) : partnerRow.status === "pending" && partnerRow.addressee_id === user.id ? (
+            ) : partnerRow.status === "pending" &&
+              partnerRow.addressee_id === user.id ? (
               <div style={btnRow}>
                 <button onClick={accepteerPartnerVerzoek} style={primaryBtn}>
                   Accepteren
@@ -502,7 +566,10 @@ const isEigenProfiel = user?.id === profiel?.id;
             ) : partnerRow.status === "accepted" ? (
               <div style={btnRow}>
                 <div style={statusPill}>Jullie zijn Training Partners</div>
-                <button onClick={verwijderTrainingPartner} style={secondaryBtn}>
+                <button
+                  onClick={verwijderTrainingPartner}
+                  style={secondaryBtn}
+                >
                   Verwijder
                 </button>
               </div>
@@ -515,24 +582,203 @@ const isEigenProfiel = user?.id === profiel?.id;
             )}
           </div>
         )}
+  
+
+
+{(isEigenProfiel || isModerator) && (
+          <div style={privacyBox}>
+            <div style={sectionTitle}>Privacy-instellingen</div>
+
+            <div style={privacyGrid}>
+              <div>
+                <div style={label}>Profielfoto</div>
+                <select
+                  value={visibilityForm.avatar_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      avatar_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Leeftijd</div>
+                <select
+                  value={visibilityForm.leeftijd_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      leeftijd_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Woonplaats</div>
+                <select
+                  value={visibilityForm.woonplaats_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      woonplaats_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Mailadres</div>
+                <select
+                  value={visibilityForm.email_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      email_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Telefoonnummer</div>
+                <select
+                  value={visibilityForm.telefoon_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      telefoon_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Strava</div>
+                <select
+                  value={visibilityForm.strava_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      strava_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Garmin</div>
+                <select
+                  value={visibilityForm.garmin_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      garmin_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={label}>Suunto</div>
+                <select
+                  value={visibilityForm.suunto_visibility}
+                  onChange={(e) =>
+                    setVisibilityForm({
+                      ...visibilityForm,
+                      suunto_visibility: e.target.value,
+                    })
+                  }
+                  style={veld}
+                >
+                  <option value="private">Alleen ik</option>
+                  <option value="partners">Training Partners</option>
+                  <option value="all">Alle gebruikers</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={btnRow}>
+              <button
+                type="button"
+                onClick={opslaanVisibility}
+                style={primaryBtn}
+              >
+                Privacy opslaan
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={linksBox}>
           <div style={sectionTitle}>Sportprofielen</div>
 
           {profiel.strava_url && magVeldZien(visibility?.strava_visibility) ? (
-            <a href={profiel.strava_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.strava_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Strava
             </a>
           ) : null}
 
           {profiel.garmin_url && magVeldZien(visibility?.garmin_visibility) ? (
-            <a href={profiel.garmin_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.garmin_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Garmin
             </a>
           ) : null}
 
           {profiel.suunto_url && magVeldZien(visibility?.suunto_visibility) ? (
-            <a href={profiel.suunto_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.suunto_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Suunto
             </a>
           ) : null}
@@ -545,7 +791,8 @@ const isEigenProfiel = user?.id === profiel?.id;
         </div>
 
 
-    {(isEigenProfiel || isModerator) && !editing && (
+
+       {(isEigenProfiel || isModerator) && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Profiel bewerken
@@ -558,7 +805,13 @@ const isEigenProfiel = user?.id === profiel?.id;
             <div style={grid}>
               <div>
                 <div style={label}>Naam</div>
-                <input value={form.naam} onChange={(e) => setForm({ ...form, naam: e.target.value })} style={veld} />
+                <input
+                  value={form.naam}
+                  onChange={(e) =>
+                    setForm({ ...form, naam: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
@@ -566,45 +819,91 @@ const isEigenProfiel = user?.id === profiel?.id;
                 <input
                   type="date"
                   value={form.geboortedatum}
-                  onChange={(e) => setForm({ ...form, geboortedatum: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, geboortedatum: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
 
               <div>
                 <div style={label}>Woonplaats</div>
-                <input value={form.woonplaats} onChange={(e) => setForm({ ...form, woonplaats: e.target.value })} style={veld} />
+                <input
+                  value={form.woonplaats}
+                  onChange={(e) =>
+                    setForm({ ...form, woonplaats: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
                 <div style={label}>Mailadres</div>
-                <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={veld} />
+                <input
+                  value={form.email}
+                  onChange={(e) =>
+                    setForm({ ...form, email: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
                 <div style={label}>Telefoonnummer</div>
-                <input value={form.telefoonnummer} onChange={(e) => setForm({ ...form, telefoonnummer: e.target.value })} style={veld} />
+                <input
+                  value={form.telefoonnummer}
+                  onChange={(e) =>
+                    setForm({ ...form, telefoonnummer: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
                 <div style={label}>Strava link</div>
-                <input value={form.strava_url} onChange={(e) => setForm({ ...form, strava_url: e.target.value })} style={veld} />
+                <input
+                  value={form.strava_url}
+                  onChange={(e) =>
+                    setForm({ ...form, strava_url: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
                 <div style={label}>Garmin link</div>
-                <input value={form.garmin_url} onChange={(e) => setForm({ ...form, garmin_url: e.target.value })} style={veld} />
+                <input
+                  value={form.garmin_url}
+                  onChange={(e) =>
+                    setForm({ ...form, garmin_url: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
 
               <div>
                 <div style={label}>Suunto link</div>
-                <input value={form.suunto_url} onChange={(e) => setForm({ ...form, suunto_url: e.target.value })} style={veld} />
+                <input
+                  value={form.suunto_url}
+                  onChange={(e) =>
+                    setForm({ ...form, suunto_url: e.target.value })
+                  }
+                  style={veld}
+                />
               </div>
             </div>
 
             <div style={btnRow}>
-              <button type="submit" style={primaryBtn}>Opslaan</button>
-              <button type="button" onClick={() => setEditing(false)} style={secondaryBtn}>Annuleren</button>
+              <button type="submit" style={primaryBtn}>
+                Opslaan
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                style={secondaryBtn}
+              >
+                Annuleren
+              </button>
             </div>
           </form>
         )}
@@ -642,10 +941,18 @@ const isEigenProfiel = user?.id === profiel?.id;
             </div>
 
             <div style={btnRow}>
-              <button type="button" onClick={uploadCroppedAvatar} style={primaryBtn}>
+              <button
+                type="button"
+                onClick={uploadCroppedAvatar}
+                style={primaryBtn}
+              >
                 {uploadingAvatar ? "Opslaan..." : "Gebruik deze foto"}
               </button>
-              <button type="button" onClick={() => setCropModalOpen(false)} style={secondaryBtn}>
+              <button
+                type="button"
+                onClick={() => setCropModalOpen(false)}
+                style={secondaryBtn}
+              >
                 Annuleren
               </button>
             </div>
@@ -671,6 +978,8 @@ const roleBadge = { marginTop: 8, display: "inline-block", background: "rgba(228
 const metaLine = { marginTop: 8, opacity: 0.8 };
 const partnerBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
 const statusPill = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "10px 14px", borderRadius: 12, fontWeight: "bold" };
+const privacyBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const privacyGrid = { display: "grid", gap: 12, marginTop: 12 };
 const linksBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, display: "grid", gap: 10 };
 const sectionTitle = { fontSize: 16, fontWeight: 700 };
 const sportLink = { display: "inline-block", color: "#e4ef16", textDecoration: "none" };
@@ -687,8 +996,6 @@ const cropOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)"
 const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadius: 24, padding: 16, border: "1px solid rgba(255,255,255,0.08)" };
 const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
 const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
-const zoomWrap = { marginTop: 16 };
+const zoomWrap = { marginTop: 16 };    
 
-
-           
   
