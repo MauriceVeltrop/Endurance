@@ -197,7 +197,7 @@ const handleAvatarUpload = async (e) => {
     );
   }
 
-  return (
+return (
     <main style={app}>
       <div style={topBar}>
         <a href="/" style={linkBtn}>
@@ -208,17 +208,19 @@ const handleAvatarUpload = async (e) => {
       <section style={card}>
         <div style={profileHeader}>
           <div style={avatarWrap}>
-            {profiel.avatar_url ? (
-              <img
-                src={profiel.avatar_url}
-                alt={profiel.naam}
-                style={avatar}
-              />
-            ) : (
-              <div style={avatarPlaceholder}>
-                {(profiel.naam || "?").charAt(0).toUpperCase()}
-              </div>
-            )}
+            <div style={avatarRing}>
+              {profiel.avatar_url ? (
+                <img
+                  src={profiel.avatar_url}
+                  alt={profiel.naam}
+                  style={avatar}
+                />
+              ) : (
+                <div style={avatarPlaceholder}>
+                  {(profiel.naam || "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
 
             {(isEigenProfiel || isModerator) && (
               <div style={uploadWrap}>
@@ -296,7 +298,6 @@ const handleAvatarUpload = async (e) => {
               <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
             )}
         </div>
-
 
 {(isEigenProfiel || isModerator) && !editing && (
           <div style={btnRow}>
@@ -412,7 +413,8 @@ const handleAvatarUpload = async (e) => {
       </section>
     </main>
   );
-          }
+                    }
+
 
 
 const app = {
@@ -436,47 +438,72 @@ const card = {
 
 const profileHeader = {
   display: "flex",
-  gap: 16,
+  gap: 20,
   alignItems: "center",
-  marginBottom: 20,
+  marginBottom: 24,
 };
 
 const avatarWrap = {
   flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 10,
+};
+
+const avatarRing = {
+  width: 118,
+  height: 118,
+  borderRadius: "50%",
+  padding: 4,
+  background:
+    "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const avatar = {
-  width: 84,
-  height: 84,
+  width: 110,
+  height: 110,
   borderRadius: "50%",
   objectFit: "cover",
+  objectPosition: "center",
+  display: "block",
+  border: "3px solid rgba(228,239,22,0.35)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+  background: "#111",
 };
 
 const avatarPlaceholder = {
-  width: 84,
-  height: 84,
+  width: 110,
+  height: 110,
   borderRadius: "50%",
   background: "#1f1f1f",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: 32,
+  fontSize: 42,
   fontWeight: "bold",
   color: "#e4ef16",
+  border: "3px solid rgba(228,239,22,0.18)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
 };
 
 const uploadWrap = {
-  marginTop: 10,
+  marginTop: 2,
 };
 
 const uploadLabel = {
   display: "inline-block",
   background: "#2a2a2a",
   color: "white",
-  padding: "10px 12px",
+  padding: "10px 14px",
   borderRadius: 12,
   cursor: "pointer",
   fontSize: 13,
+  fontWeight: "bold",
+  border: "1px solid rgba(255,255,255,0.08)",
 };
 
 const name = {
@@ -586,4 +613,8 @@ const linkBtn = {
   padding: "12px 16px",
   borderRadius: 12,
 };
+
+  
+
+
 
