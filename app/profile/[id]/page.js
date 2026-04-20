@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
 
 export default function ProfilePage({ params }) {
@@ -23,6 +24,12 @@ export default function ProfilePage({ params }) {
     garmin_url: "",
     suunto_url: "",
   });
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageSrc, setImageSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
   useEffect(() => {
     const init = async () => {
@@ -98,58 +105,133 @@ export default function ProfilePage({ params }) {
     setMijnProfiel(data);
   };
 
-const handleAvatarUpload = async (e) => {
+const isEigenProfiel = user?.id === profiel?.id;
+  const isModerator = mijnProfiel?.role === "moderator";
+
+  const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels);
+  }, []);
+
+  const readFile = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(reader.result));
+      reader.addEventListener("error", reject);
+      reader.readAsDataURL(file);
+    });
+
+  const createImage = (url) =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener("load", () => resolve(image));
+      image.addEventListener("error", reject);
+      image.setAttribute("crossOrigin", "anonymous");
+      image.src = url;
+    });
+
+  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+    const image = await createImage(imageSrcValue);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(blob),
+        "image/jpeg",
+        0.92
+      );
+    });
+  };
+
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const isEigenProfiel = user?.id === profiel?.id;
-    const isModerator = mijnProfiel?.role === "moderator";
 
     if (!isEigenProfiel && !isModerator) {
       alert("Je mag deze profielfoto niet wijzigen.");
       return;
     }
 
-    const fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    const safeExt = fileExt.replace(/[^a-z0-9]/g, "") || "jpg";
-    const filePath = `${profiel.id}/avatar.${safeExt}`;
+    const imageDataUrl = await readFile(file);
+    setImageSrc(imageDataUrl);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCropModalOpen(true);
+    e.target.value = "";
+  };
+
+  const uploadCroppedAvatar = async () => {
+    if (!imageSrc || !croppedAreaPixels || !profiel?.id) return;
 
     setUploadingAvatar(true);
 
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: true,
-        contentType: file.type || "image/jpeg",
-      });
+    try {
+      const croppedBlob = await getCroppedImgBlob(imageSrc, croppedAreaPixels);
 
-    if (uploadError) {
-      setUploadingAvatar(false);
-      alert(`Upload mislukt: ${uploadError.message}`);
-      return;
+      if (!croppedBlob) {
+        setUploadingAvatar(false);
+        alert("Kon de afbeelding niet verwerken.");
+        return;
+      }
+
+      const filePath = `${profiel.id}/avatar.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, croppedBlob, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: "image/jpeg",
+        });
+
+      if (uploadError) {
+        setUploadingAvatar(false);
+        alert(`Upload mislukt: ${uploadError.message}`);
+        return;
+      }
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", profiel.id);
+
+      if (updateError) {
+        setUploadingAvatar(false);
+        alert(`Opslaan profielfoto mislukt: ${updateError.message}`);
+        return;
+      }
+
+      setCropModalOpen(false);
+      setImageSrc(null);
+      await laadProfiel();
+      await laadMijnProfiel();
+      alert("Profielfoto bijgewerkt");
+    } catch (err) {
+      console.error(err);
+      alert("Er ging iets mis bij het bijsnijden van de foto.");
     }
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
-    const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
-
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ avatar_url: publicUrl })
-      .eq("id", profiel.id);
 
     setUploadingAvatar(false);
-
-    if (updateError) {
-      alert(`Opslaan profielfoto mislukt: ${updateError.message}`);
-      return;
-    }
-
-    await laadProfiel();
-    await laadMijnProfiel();
-
-    alert("Profielfoto bijgewerkt");
   };
+
 
   const opslaanProfiel = async (e) => {
     e.preventDefault();
@@ -178,9 +260,6 @@ const handleAvatarUpload = async (e) => {
     await laadMijnProfiel();
   };
 
-  const isEigenProfiel = user?.id === profiel?.id;
-  const isModerator = mijnProfiel?.role === "moderator";
-
   if (loading) {
     return (
       <main style={app}>
@@ -197,7 +276,7 @@ const handleAvatarUpload = async (e) => {
     );
   }
 
-return (
+  return (
     <main style={app}>
       <div style={topBar}>
         <a href="/" style={linkBtn}>
@@ -229,7 +308,7 @@ return (
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={handleAvatarUpload}
+                    onChange={handleFileSelect}
                     style={{ display: "none" }}
                     disabled={uploadingAvatar}
                   />
@@ -260,43 +339,26 @@ return (
           <div style={sectionTitle}>Sportprofielen</div>
 
           {profiel.strava_url ? (
-            <a
-              href={profiel.strava_url}
-              target="_blank"
-              rel="noreferrer"
-              style={sportLink}
-            >
+            <a href={profiel.strava_url} target="_blank" rel="noreferrer" style={sportLink}>
               Strava
             </a>
           ) : null}
 
           {profiel.garmin_url ? (
-            <a
-              href={profiel.garmin_url}
-              target="_blank"
-              rel="noreferrer"
-              style={sportLink}
-            >
+            <a href={profiel.garmin_url} target="_blank" rel="noreferrer" style={sportLink}>
               Garmin
             </a>
           ) : null}
 
           {profiel.suunto_url ? (
-            <a
-              href={profiel.suunto_url}
-              target="_blank"
-              rel="noreferrer"
-              style={sportLink}
-            >
+            <a href={profiel.suunto_url} target="_blank" rel="noreferrer" style={sportLink}>
               Suunto
             </a>
           ) : null}
 
-          {!profiel.strava_url &&
-            !profiel.garmin_url &&
-            !profiel.suunto_url && (
-              <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
-            )}
+          {!profiel.strava_url && !profiel.garmin_url && !profiel.suunto_url && (
+            <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
+          )}
         </div>
 
 {(isEigenProfiel || isModerator) && !editing && (
@@ -323,9 +385,7 @@ return (
                 <div style={label}>Woonplaats</div>
                 <input
                   value={form.woonplaats}
-                  onChange={(e) =>
-                    setForm({ ...form, woonplaats: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, woonplaats: e.target.value })}
                   style={veld}
                 />
               </div>
@@ -343,9 +403,7 @@ return (
                 <div style={label}>Telefoonnummer</div>
                 <input
                   value={form.telefoonnummer}
-                  onChange={(e) =>
-                    setForm({ ...form, telefoonnummer: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, telefoonnummer: e.target.value })}
                   style={veld}
                 />
               </div>
@@ -354,9 +412,7 @@ return (
                 <div style={label}>Strava link</div>
                 <input
                   value={form.strava_url}
-                  onChange={(e) =>
-                    setForm({ ...form, strava_url: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, strava_url: e.target.value })}
                   style={veld}
                 />
               </div>
@@ -365,9 +421,7 @@ return (
                 <div style={label}>Garmin link</div>
                 <input
                   value={form.garmin_url}
-                  onChange={(e) =>
-                    setForm({ ...form, garmin_url: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, garmin_url: e.target.value })}
                   style={veld}
                 />
               </div>
@@ -376,9 +430,7 @@ return (
                 <div style={label}>Suunto link</div>
                 <input
                   value={form.suunto_url}
-                  onChange={(e) =>
-                    setForm({ ...form, suunto_url: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, suunto_url: e.target.value })}
                   style={veld}
                 />
               </div>
@@ -411,11 +463,68 @@ return (
           </form>
         )}
       </section>
+
+      {cropModalOpen && imageSrc && (
+        <div style={cropOverlay}>
+          <div style={cropModal}>
+            <div style={cropTitle}>Profielfoto bijsnijden</div>
+
+            <div style={cropAreaWrap}>
+              <Cropper
+                image={imageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="rect"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <div style={zoomWrap}>
+              <div style={label}>Zoom</div>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={btnRow}>
+              <button
+                type="button"
+                onClick={uploadCroppedAvatar}
+                style={primaryBtn}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? "Opslaan..." : "Gebruik deze foto"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                  setImageSrc(null);
+                  setZoom(1);
+                  setCrop({ x: 0, y: 0 });
+                }}
+                style={secondaryBtn}
+              >
+                Annuleren
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
-                    }
-
-
+  }
 
 const app = {
   minHeight: "100vh",
@@ -614,7 +723,42 @@ const linkBtn = {
   borderRadius: 12,
 };
 
+const cropOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.8)",
+  zIndex: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const cropModal = {
+  width: "100%",
+  maxWidth: 420,
+  background: "#111",
+  borderRadius: 24,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const cropTitle = {
+  fontSize: 20,
+  fontWeight: 700,
+  marginBottom: 12,
+};
+
+const cropAreaWrap = {
+  position: "relative",
+  width: "100%",
+  height: 320,
+  background: "#000",
+  borderRadius: 18,
+  overflow: "hidden",
+};
+
+const zoomWrap = {
+  marginTop: 16,
+};
   
-
-
-
