@@ -11,6 +11,7 @@ export default function ProfilePage({ params }) {
   const [mijnProfiel, setMijnProfiel] = useState(null);
   const [profiel, setProfiel] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
@@ -18,7 +19,6 @@ export default function ProfilePage({ params }) {
     woonplaats: "",
     email: "",
     telefoonnummer: "",
-    avatar_url: "",
     strava_url: "",
     garmin_url: "",
     suunto_url: "",
@@ -59,7 +59,7 @@ export default function ProfilePage({ params }) {
     }
   }, [user?.id]);
 
-const laadProfiel = async () => {
+  const laadProfiel = async () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -77,7 +77,6 @@ const laadProfiel = async () => {
       woonplaats: data.woonplaats || "",
       email: data.email || "",
       telefoonnummer: data.telefoonnummer || "",
-      avatar_url: data.avatar_url || "",
       strava_url: data.strava_url || "",
       garmin_url: data.garmin_url || "",
       suunto_url: data.suunto_url || "",
@@ -99,6 +98,59 @@ const laadProfiel = async () => {
     setMijnProfiel(data);
   };
 
+const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isEigenProfiel = user?.id === profiel?.id;
+    const isModerator = mijnProfiel?.role === "moderator";
+
+    if (!isEigenProfiel && !isModerator) {
+      alert("Je mag deze profielfoto niet wijzigen.");
+      return;
+    }
+
+    const fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const safeExt = fileExt.replace(/[^a-z0-9]/g, "") || "jpg";
+    const filePath = `${profiel.id}/avatar.${safeExt}`;
+
+    setUploadingAvatar(true);
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || "image/jpeg",
+      });
+
+    if (uploadError) {
+      setUploadingAvatar(false);
+      alert(`Upload mislukt: ${uploadError.message}`);
+      return;
+    }
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+    const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", profiel.id);
+
+    setUploadingAvatar(false);
+
+    if (updateError) {
+      alert(`Opslaan profielfoto mislukt: ${updateError.message}`);
+      return;
+    }
+
+    await laadProfiel();
+    await laadMijnProfiel();
+
+    alert("Profielfoto bijgewerkt");
+  };
+
   const opslaanProfiel = async (e) => {
     e.preventDefault();
 
@@ -109,7 +161,6 @@ const laadProfiel = async () => {
         woonplaats: form.woonplaats,
         email: form.email,
         telefoonnummer: form.telefoonnummer,
-        avatar_url: form.avatar_url,
         strava_url: form.strava_url,
         garmin_url: form.garmin_url,
         suunto_url: form.suunto_url,
@@ -130,9 +181,7 @@ const laadProfiel = async () => {
   const isEigenProfiel = user?.id === profiel?.id;
   const isModerator = mijnProfiel?.role === "moderator";
 
-
-
-if (loading) {
+  if (loading) {
     return (
       <main style={app}>
         <div style={card}>Laden...</div>
@@ -170,6 +219,21 @@ if (loading) {
                 {(profiel.naam || "?").charAt(0).toUpperCase()}
               </div>
             )}
+
+            {(isEigenProfiel || isModerator) && (
+              <div style={uploadWrap}>
+                <label style={uploadLabel}>
+                  {uploadingAvatar ? "Uploaden..." : "Foto kiezen"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    style={{ display: "none" }}
+                    disabled={uploadingAvatar}
+                  />
+                </label>
+              </div>
+            )}
           </div>
 
           <div style={{ flex: 1 }}>
@@ -194,29 +258,44 @@ if (loading) {
           <div style={sectionTitle}>Sportprofielen</div>
 
           {profiel.strava_url ? (
-            <a href={profiel.strava_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.strava_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Strava
             </a>
           ) : null}
 
           {profiel.garmin_url ? (
-            <a href={profiel.garmin_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.garmin_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Garmin
             </a>
           ) : null}
 
           {profiel.suunto_url ? (
-            <a href={profiel.suunto_url} target="_blank" rel="noreferrer" style={sportLink}>
+            <a
+              href={profiel.suunto_url}
+              target="_blank"
+              rel="noreferrer"
+              style={sportLink}
+            >
               Suunto
             </a>
           ) : null}
 
-          {!profiel.strava_url && !profiel.garmin_url && !profiel.suunto_url && (
-            <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
-          )}
+          {!profiel.strava_url &&
+            !profiel.garmin_url &&
+            !profiel.suunto_url && (
+              <div style={emptyText}>Nog geen sportprofielen toegevoegd.</div>
+            )}
         </div>
-
-
 
 
 {(isEigenProfiel || isModerator) && !editing && (
@@ -231,15 +310,6 @@ if (loading) {
           <form onSubmit={opslaanProfiel} style={editBox}>
             <div style={grid}>
               <div>
-                <div style={label}>Profielfoto URL</div>
-                <input
-                  value={form.avatar_url}
-                  onChange={(e) => setForm({ ...form, avatar_url: e.target.value })}
-                  style={veld}
-                />
-              </div>
-
-              <div>
                 <div style={label}>Naam</div>
                 <input
                   value={form.naam}
@@ -252,7 +322,9 @@ if (loading) {
                 <div style={label}>Woonplaats</div>
                 <input
                   value={form.woonplaats}
-                  onChange={(e) => setForm({ ...form, woonplaats: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, woonplaats: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
@@ -270,7 +342,9 @@ if (loading) {
                 <div style={label}>Telefoonnummer</div>
                 <input
                   value={form.telefoonnummer}
-                  onChange={(e) => setForm({ ...form, telefoonnummer: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, telefoonnummer: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
@@ -279,7 +353,9 @@ if (loading) {
                 <div style={label}>Strava link</div>
                 <input
                   value={form.strava_url}
-                  onChange={(e) => setForm({ ...form, strava_url: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, strava_url: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
@@ -288,7 +364,9 @@ if (loading) {
                 <div style={label}>Garmin link</div>
                 <input
                   value={form.garmin_url}
-                  onChange={(e) => setForm({ ...form, garmin_url: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, garmin_url: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
@@ -297,7 +375,9 @@ if (loading) {
                 <div style={label}>Suunto link</div>
                 <input
                   value={form.suunto_url}
-                  onChange={(e) => setForm({ ...form, suunto_url: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, suunto_url: e.target.value })
+                  }
                   style={veld}
                 />
               </div>
@@ -317,7 +397,6 @@ if (loading) {
                     woonplaats: profiel.woonplaats || "",
                     email: profiel.email || "",
                     telefoonnummer: profiel.telefoonnummer || "",
-                    avatar_url: profiel.avatar_url || "",
                     strava_url: profiel.strava_url || "",
                     garmin_url: profiel.garmin_url || "",
                     suunto_url: profiel.suunto_url || "",
@@ -333,8 +412,7 @@ if (loading) {
       </section>
     </main>
   );
-            }
-
+          }
 
 
 const app = {
@@ -385,6 +463,20 @@ const avatarPlaceholder = {
   fontSize: 32,
   fontWeight: "bold",
   color: "#e4ef16",
+};
+
+const uploadWrap = {
+  marginTop: 10,
+};
+
+const uploadLabel = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  padding: "10px 12px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontSize: 13,
 };
 
 const name = {
@@ -495,7 +587,3 @@ const linkBtn = {
   borderRadius: 12,
 };
 
-
-
-
-  
