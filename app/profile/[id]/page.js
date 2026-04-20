@@ -114,11 +114,15 @@ export default function ProfilePage({ params }) {
       geboortedatum: data.geboortedatum || "",
     });
 
-    const { data: visData } = await supabase
+    const { data: visData, error: visError } = await supabase
       .from("profile_visibility_settings")
       .select("*")
       .eq("user_id", profileId)
       .single();
+
+    if (visError && visError.code !== "PGRST116") {
+      console.error("visibility laden fout", visError);
+    }
 
     setVisibility(visData || null);
 
@@ -150,9 +154,6 @@ export default function ProfilePage({ params }) {
 
     setMijnProfiel(data);
   };
-
-
-
 
 
 
@@ -248,19 +249,29 @@ const laadPartnerStatus = async () => {
   };
 
   const opslaanVisibility = async () => {
-    const { error } = await supabase
+    if (!profiel?.id) {
+      alert("Profiel niet gevonden.");
+      return;
+    }
+
+    const payload = {
+      user_id: profiel.id,
+      avatar_visibility: visibilityForm.avatar_visibility,
+      woonplaats_visibility: visibilityForm.woonplaats_visibility,
+      email_visibility: visibilityForm.email_visibility,
+      telefoon_visibility: visibilityForm.telefoon_visibility,
+      strava_visibility: visibilityForm.strava_visibility,
+      garmin_visibility: visibilityForm.garmin_visibility,
+      suunto_visibility: visibilityForm.suunto_visibility,
+      leeftijd_visibility: visibilityForm.leeftijd_visibility,
+    };
+
+    const { data, error } = await supabase
       .from("profile_visibility_settings")
-      .update({
-        avatar_visibility: visibilityForm.avatar_visibility,
-        woonplaats_visibility: visibilityForm.woonplaats_visibility,
-        email_visibility: visibilityForm.email_visibility,
-        telefoon_visibility: visibilityForm.telefoon_visibility,
-        strava_visibility: visibilityForm.strava_visibility,
-        garmin_visibility: visibilityForm.garmin_visibility,
-        suunto_visibility: visibilityForm.suunto_visibility,
-        leeftijd_visibility: visibilityForm.leeftijd_visibility,
-      })
-      .eq("user_id", profiel.id);
+      .upsert(payload, { onConflict: "user_id" })
+      .select();
+
+    console.log("visibility save", { payload, data, error });
 
     if (error) {
       alert(`Privacy opslaan mislukt: ${error.message}`);
@@ -292,6 +303,7 @@ const laadPartnerStatus = async () => {
       image.src = url;
     });
 
+
   const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
     const canvas = document.createElement("canvas");
@@ -317,12 +329,7 @@ const laadPartnerStatus = async () => {
     });
   };
 
-
-
-
-
-
-const isEigenProfiel = user?.id === profiel?.id;
+  const isEigenProfiel = user?.id === profiel?.id;
   const isModerator = mijnProfiel?.role === "moderator";
   const isPartner =
     partnerRow?.status === "accepted" &&
@@ -432,6 +439,7 @@ const isEigenProfiel = user?.id === profiel?.id;
     setUploadingAvatar(false);
   };
 
+
   const opslaanProfiel = async (e) => {
     e.preventDefault();
 
@@ -476,8 +484,7 @@ const isEigenProfiel = user?.id === profiel?.id;
     );
   }
 
-
-return (
+  return (
     <main style={app}>
       <div style={topBar}>
         <a href="/" style={linkBtn}>
@@ -582,7 +589,6 @@ return (
             )}
           </div>
         )}
-  
 
 
 {(isEigenProfiel || isModerator) && (
@@ -792,7 +798,7 @@ return (
 
 
 
-       {(isEigenProfiel || isModerator) && !editing && (
+      {(isEigenProfiel || isModerator) && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Profiel bewerken
@@ -996,6 +1002,9 @@ const cropOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)"
 const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadius: 24, padding: 16, border: "1px solid rgba(255,255,255,0.08)" };
 const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
 const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
-const zoomWrap = { marginTop: 16 };    
+const zoomWrap = { marginTop: 16 };
 
-  
+
+
+
+
