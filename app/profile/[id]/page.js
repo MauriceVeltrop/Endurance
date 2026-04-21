@@ -18,9 +18,9 @@ const DEFAULT_VISIBILITY = {
 
 const SPORTS = [
   "Running",
+  "Road Cycling",
   "Trail Running",
-  "Cycling",
-  "MTB",
+  "Mountain Biking",
   "Walking",
   "CrossFit",
   "HYROX",
