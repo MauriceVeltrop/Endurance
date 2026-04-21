@@ -6,13 +6,13 @@ import { supabase } from "../../../lib/supabase";
 
 const DEFAULT_VISIBILITY = {
   avatar_visibility: "all",
-  woonplaats_visibility: "partners",
+  location_visibility: "partners",
   email_visibility: "private",
-  telefoon_visibility: "private",
+  phone_visibility: "private",
   strava_visibility: "partners",
   garmin_visibility: "partners",
   suunto_visibility: "partners",
-  leeftijd_visibility: "partners",
+  age_visibility: "partners",
 };
 
 export default function ProfilePage({ params }) {
@@ -20,8 +20,8 @@ export default function ProfilePage({ params }) {
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
-  const [mijnProfiel, setMijnProfiel] = useState(null);
-  const [profiel, setProfiel] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [editing, setEditing] = useState(false);
@@ -29,14 +29,14 @@ export default function ProfilePage({ params }) {
   const [partnerLoading, setPartnerLoading] = useState(false);
 
   const [form, setForm] = useState({
-    naam: "",
-    woonplaats: "",
+    name: "",
+    location: "",
     email: "",
-    telefoonnummer: "",
+    phone: "",
     strava_url: "",
     garmin_url: "",
     suunto_url: "",
-    geboortedatum: "",
+    birth_date: "",
   });
 
   const [visibility, setVisibility] = useState(DEFAULT_VISIBILITY);
@@ -74,26 +74,26 @@ export default function ProfilePage({ params }) {
   }, []);
 
   useEffect(() => {
-    laadProfiel();
+    loadProfile();
   }, [profileId]);
 
   useEffect(() => {
     if (user?.id) {
-      laadMijnProfiel();
+      loadMyProfile();
     } else {
-      setMijnProfiel(null);
+      setMyProfile(null);
     }
   }, [user?.id]);
 
   useEffect(() => {
     if (user?.id && profileId && user.id !== profileId) {
-      laadPartnerStatus();
+      loadPartnerStatus();
     } else {
       setPartnerRow(null);
     }
   }, [user?.id, profileId]);
 
-  const laadProfiel = async () => {
+  const loadProfile = async () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -101,20 +101,20 @@ export default function ProfilePage({ params }) {
       .single();
 
     if (error) {
-      console.error("profiel laden fout", error);
+      console.error("profile load error", error);
       return;
     }
 
-    setProfiel(data);
+    setProfile(data);
     setForm({
-      naam: data.naam || "",
-      woonplaats: data.woonplaats || "",
+      name: data.name || "",
+      location: data.location || "",
       email: data.email || "",
-      telefoonnummer: data.telefoonnummer || "",
+      phone: data.phone || "",
       strava_url: data.strava_url || "",
       garmin_url: data.garmin_url || "",
       suunto_url: data.suunto_url || "",
-      geboortedatum: data.geboortedatum || "",
+      birth_date: data.birth_date || "",
     });
 
     const { data: visData, error: visError } = await supabase
@@ -124,29 +124,27 @@ export default function ProfilePage({ params }) {
       .maybeSingle();
 
     if (visError) {
-      console.error("visibility laden fout", visError);
+      console.error("visibility load error", visError);
     }
 
     const nextVisibility = visData
       ? {
           avatar_visibility:
             visData.avatar_visibility || DEFAULT_VISIBILITY.avatar_visibility,
-          woonplaats_visibility:
-            visData.woonplaats_visibility ||
-            DEFAULT_VISIBILITY.woonplaats_visibility,
+          location_visibility:
+            visData.location_visibility || DEFAULT_VISIBILITY.location_visibility,
           email_visibility:
             visData.email_visibility || DEFAULT_VISIBILITY.email_visibility,
-          telefoon_visibility:
-            visData.telefoon_visibility ||
-            DEFAULT_VISIBILITY.telefoon_visibility,
+          phone_visibility:
+            visData.phone_visibility || DEFAULT_VISIBILITY.phone_visibility,
           strava_visibility:
             visData.strava_visibility || DEFAULT_VISIBILITY.strava_visibility,
           garmin_visibility:
             visData.garmin_visibility || DEFAULT_VISIBILITY.garmin_visibility,
           suunto_visibility:
             visData.suunto_visibility || DEFAULT_VISIBILITY.suunto_visibility,
-          leeftijd_visibility:
-            visData.leeftijd_visibility || DEFAULT_VISIBILITY.leeftijd_visibility,
+          age_visibility:
+            visData.age_visibility || DEFAULT_VISIBILITY.age_visibility,
         }
       : DEFAULT_VISIBILITY;
 
@@ -154,7 +152,7 @@ export default function ProfilePage({ params }) {
     setVisibilityForm(nextVisibility);
   };
 
-  const laadMijnProfiel = async () => {
+  const loadMyProfile = async () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -162,17 +160,18 @@ export default function ProfilePage({ params }) {
       .single();
 
     if (error) {
-      console.error("eigen profiel laden fout", error);
+      console.error("my profile load error", error);
       return;
     }
 
-    setMijnProfiel(data);
+    setMyProfile(data);
   };
 
 
 
 
-const laadPartnerStatus = async () => {
+
+const loadPartnerStatus = async () => {
     setPartnerLoading(true);
 
     const { data, error } = await supabase
@@ -186,14 +185,14 @@ const laadPartnerStatus = async () => {
     setPartnerLoading(false);
 
     if (error) {
-      console.error("partner status laden fout", error);
+      console.error("partner status load error", error);
       return;
     }
 
     setPartnerRow(data || null);
   };
 
-  const stuurPartnerVerzoek = async () => {
+  const sendPartnerRequest = async () => {
     const { error } = await supabase.from("training_partners").insert({
       requester_id: user.id,
       addressee_id: profileId,
@@ -201,14 +200,14 @@ const laadPartnerStatus = async () => {
     });
 
     if (error) {
-      alert(`Verzoek sturen mislukt: ${error.message}`);
+      alert(`Sending request failed: ${error.message}`);
       return;
     }
 
-    await laadPartnerStatus();
+    await loadPartnerStatus();
   };
 
-  const accepteerPartnerVerzoek = async () => {
+  const acceptPartnerRequest = async () => {
     if (!partnerRow?.id) return;
 
     const { error } = await supabase
@@ -220,14 +219,14 @@ const laadPartnerStatus = async () => {
       .eq("id", partnerRow.id);
 
     if (error) {
-      alert(`Accepteren mislukt: ${error.message}`);
+      alert(`Accept failed: ${error.message}`);
       return;
     }
 
-    await laadPartnerStatus();
+    await loadPartnerStatus();
   };
 
-  const weigerPartnerVerzoek = async () => {
+  const rejectPartnerRequest = async () => {
     if (!partnerRow?.id) return;
 
     const { error } = await supabase
@@ -239,16 +238,16 @@ const laadPartnerStatus = async () => {
       .eq("id", partnerRow.id);
 
     if (error) {
-      alert(`Weigeren mislukt: ${error.message}`);
+      alert(`Reject failed: ${error.message}`);
       return;
     }
 
-    await laadPartnerStatus();
+    await loadPartnerStatus();
   };
 
-  const verwijderTrainingPartner = async () => {
+  const removePartner = async () => {
     if (!partnerRow?.id) return;
-    if (!confirm("Training Partner verwijderen?")) return;
+    if (!confirm("Remove Training Partner?")) return;
 
     const { error } = await supabase
       .from("training_partners")
@@ -256,29 +255,29 @@ const laadPartnerStatus = async () => {
       .eq("id", partnerRow.id);
 
     if (error) {
-      alert(`Verwijderen mislukt: ${error.message}`);
+      alert(`Remove failed: ${error.message}`);
       return;
     }
 
-    await laadPartnerStatus();
+    await loadPartnerStatus();
   };
 
-  const opslaanVisibility = async () => {
-    if (!profiel?.id) {
-      alert("Profiel niet gevonden.");
+  const saveVisibility = async () => {
+    if (!profile?.id) {
+      alert("Profile not found.");
       return;
     }
 
     const payload = {
-      user_id: profiel.id,
+      user_id: profile.id,
       avatar_visibility: visibilityForm.avatar_visibility,
-      woonplaats_visibility: visibilityForm.woonplaats_visibility,
+      location_visibility: visibilityForm.location_visibility,
       email_visibility: visibilityForm.email_visibility,
-      telefoon_visibility: visibilityForm.telefoon_visibility,
+      phone_visibility: visibilityForm.phone_visibility,
       strava_visibility: visibilityForm.strava_visibility,
       garmin_visibility: visibilityForm.garmin_visibility,
       suunto_visibility: visibilityForm.suunto_visibility,
-      leeftijd_visibility: visibilityForm.leeftijd_visibility,
+      age_visibility: visibilityForm.age_visibility,
     };
 
     const { error } = await supabase
@@ -286,12 +285,12 @@ const laadPartnerStatus = async () => {
       .upsert(payload, { onConflict: "user_id" });
 
     if (error) {
-      alert(`Privacy opslaan mislukt: ${error.message}`);
+      alert(`Saving privacy settings failed: ${error.message}`);
       return;
     }
 
-    alert("Privacy-instellingen opgeslagen");
-    await laadProfiel();
+    alert("Privacy settings saved");
+    await loadProfile();
   };
 
   const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
@@ -317,7 +316,7 @@ const laadPartnerStatus = async () => {
 
 
 
-const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -342,15 +341,15 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     });
   };
 
-  const isEigenProfiel = user?.id === profiel?.id;
-  const isModerator = mijnProfiel?.role === "moderator";
+  const isOwnProfile = user?.id === profile?.id;
+  const isModerator = myProfile?.role === "moderator";
   const isPartner =
     partnerRow?.status === "accepted" &&
     (partnerRow?.requester_id === user?.id ||
       partnerRow?.addressee_id === user?.id);
 
-  const magVeldZien = (visibilityValue) => {
-    if (isEigenProfiel) return true;
+  const canSeeField = (visibilityValue) => {
+    if (isOwnProfile) return true;
     if (isModerator) return true;
     if (!visibilityValue) return false;
     if (visibilityValue === "all") return true;
@@ -358,33 +357,33 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     return false;
   };
 
-  const berekenLeeftijd = (geboortedatum) => {
-    if (!geboortedatum) return null;
+  const calculateAge = (birthDate) => {
+    if (!birthDate) return null;
 
-    const vandaag = new Date();
-    const geboorte = new Date(geboortedatum);
+    const today = new Date();
+    const birth = new Date(birthDate);
 
-    let leeftijd = vandaag.getFullYear() - geboorte.getFullYear();
-    const maandVerschil = vandaag.getMonth() - geboorte.getMonth();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
 
     if (
-      maandVerschil < 0 ||
-      (maandVerschil === 0 && vandaag.getDate() < geboorte.getDate())
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birth.getDate())
     ) {
-      leeftijd--;
+      age--;
     }
 
-    return leeftijd;
+    return age;
   };
 
-  const leeftijd = berekenLeeftijd(profiel?.geboortedatum);
+  const age = calculateAge(profile?.birth_date);
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!isEigenProfiel) {
-      alert("Je mag alleen je eigen profielfoto wijzigen.");
+    if (!isOwnProfile) {
+      alert("You can only change your own profile photo.");
       return;
     }
 
@@ -397,7 +396,7 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
   };
 
   const uploadCroppedAvatar = async () => {
-    if (!imageSrc || !croppedAreaPixels || !profiel?.id) return;
+    if (!imageSrc || !croppedAreaPixels || !profile?.id) return;
 
     setUploadingAvatar(true);
 
@@ -406,11 +405,11 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
 
       if (!croppedBlob) {
         setUploadingAvatar(false);
-        alert("Kon de afbeelding niet verwerken.");
+        alert("Could not process the image.");
         return;
       }
 
-      const filePath = `${profiel.id}/avatar.jpg`;
+      const filePath = `${profile.id}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -422,7 +421,7 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
 
       if (uploadError) {
         setUploadingAvatar(false);
-        alert(`Upload mislukt: ${uploadError.message}`);
+        alert(`Upload failed: ${uploadError.message}`);
         return;
       }
 
@@ -432,68 +431,69 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({ avatar_url: publicUrl })
-        .eq("id", profiel.id);
+        .eq("id", profile.id);
 
       if (updateError) {
         setUploadingAvatar(false);
-        alert(`Opslaan profielfoto mislukt: ${updateError.message}`);
+        alert(`Saving profile photo failed: ${updateError.message}`);
         return;
       }
 
       setCropModalOpen(false);
       setImageSrc(null);
-      await laadProfiel();
-      await laadMijnProfiel();
-      alert("Profielfoto bijgewerkt");
+      await loadProfile();
+      await loadMyProfile();
+      alert("Profile photo updated");
     } catch (err) {
       console.error(err);
-      alert("Er ging iets mis bij het bijsnijden van de foto.");
+      alert("Something went wrong while cropping the image.");
     }
 
     setUploadingAvatar(false);
   };
 
 
-const opslaanProfiel = async (e) => {
+
+const saveProfile = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase
       .from("profiles")
       .update({
-        naam: form.naam,
-        woonplaats: form.woonplaats,
+        name: form.name,
+        location: form.location,
         email: form.email,
-        telefoonnummer: form.telefoonnummer,
+        phone: form.phone,
         strava_url: form.strava_url,
         garmin_url: form.garmin_url,
         suunto_url: form.suunto_url,
-        geboortedatum: form.geboortedatum || null,
+        birth_date: form.birth_date || null,
       })
-      .eq("id", profiel.id);
+      .eq("id", profile.id);
 
     if (error) {
-      alert(`Opslaan mislukt: ${error.message}`);
+      alert(`Saving failed: ${error.message}`);
       return;
     }
 
-    alert("Profiel opgeslagen");
+    alert("Profile saved");
     setEditing(false);
-    await laadProfiel();
-    await laadMijnProfiel();
+    await loadProfile();
+    await loadMyProfile();
   };
 
   if (loading) {
     return (
       <main style={app}>
-        <div style={card}>Laden...</div>
+        <div style={card}>Loading...</div>
       </main>
     );
   }
 
-  if (!profiel) {
+  if (!profile) {
     return (
       <main style={app}>
-        <div style={card}>Profiel niet gevonden.</div>
+        <div style={card}>Profile not found.</div>
       </main>
     );
   }
@@ -502,7 +502,7 @@ const opslaanProfiel = async (e) => {
     <main style={app}>
       <div style={topBar}>
         <a href="/" style={linkBtn}>
-          Terug naar app
+          Back to app
         </a>
       </div>
 
@@ -510,23 +510,23 @@ const opslaanProfiel = async (e) => {
         <div style={profileHeader}>
           <div style={avatarWrap}>
             <div style={avatarRing}>
-              {profiel.avatar_url && magVeldZien(visibility?.avatar_visibility) ? (
+              {profile.avatar_url && canSeeField(visibility?.avatar_visibility) ? (
                 <img
-                  src={profiel.avatar_url}
-                  alt={profiel.naam}
+                  src={profile.avatar_url}
+                  alt={profile.name}
                   style={avatar}
                 />
               ) : (
                 <div style={avatarPlaceholder}>
-                  {(profiel.naam || "?").charAt(0).toUpperCase()}
+                  {(profile.name || "?").charAt(0).toUpperCase()}
                 </div>
               )}
             </div>
 
-            {isEigenProfiel && (
+            {isOwnProfile && (
               <div style={uploadWrap}>
                 <label style={uploadLabel}>
-                  {uploadingAvatar ? "Uploaden..." : "Foto kiezen"}
+                  {uploadingAvatar ? "Uploading..." : "Choose photo"}
                   <input
                     type="file"
                     accept="image/*"
@@ -540,66 +540,62 @@ const opslaanProfiel = async (e) => {
           </div>
 
           <div style={{ flex: 1 }}>
-            <h1 style={name}>{profiel.naam || "Onbekend"}</h1>
-            <div style={roleBadge}>{profiel.role || "gebruiker"}</div>
+            <h1 style={nameStyle}>{profile.name || "Unknown"}</h1>
+            <div style={roleBadge}>{profile.role || "user"}</div>
 
-            {leeftijd !== null && magVeldZien(visibility?.leeftijd_visibility) && (
-              <div style={metaLine}>🎂 {leeftijd} jaar</div>
+            {age !== null && canSeeField(visibility?.age_visibility) && (
+              <div style={metaLine}>🎂 {age} years old</div>
             )}
 
-            {profiel.woonplaats &&
-              magVeldZien(visibility?.woonplaats_visibility) && (
-                <div style={metaLine}>📍 {profiel.woonplaats}</div>
+            {profile.location &&
+              canSeeField(visibility?.location_visibility) && (
+                <div style={metaLine}>📍 {profile.location}</div>
               )}
 
-            {profiel.email && magVeldZien(visibility?.email_visibility) && (
-              <div style={metaLine}>✉️ {profiel.email}</div>
+            {profile.email && canSeeField(visibility?.email_visibility) && (
+              <div style={metaLine}>✉️ {profile.email}</div>
             )}
 
-            {profiel.telefoonnummer &&
-              magVeldZien(visibility?.telefoon_visibility) && (
-                <div style={metaLine}>📞 {profiel.telefoonnummer}</div>
-              )}
+            {profile.phone && canSeeField(visibility?.phone_visibility) && (
+              <div style={metaLine}>📞 {profile.phone}</div>
+            )}
           </div>
         </div>
 
-        {!isEigenProfiel && session && (
+        {!isOwnProfile && session && (
           <div style={partnerBox}>
             {partnerLoading ? (
-              <div style={emptyText}>Status laden...</div>
+              <div style={emptyText}>Loading status...</div>
             ) : !partnerRow ? (
-              <button onClick={stuurPartnerVerzoek} style={primaryBtn}>
-                Word Training Partner
+              <button onClick={sendPartnerRequest} style={teamUpBtn}>
+                🤝 Team Up
               </button>
             ) : partnerRow.status === "pending" &&
               partnerRow.requester_id === user.id ? (
-              <div style={statusPill}>Training Partner verzoek verzonden</div>
+              <div style={statusPill}>⏳ Request Sent</div>
             ) : partnerRow.status === "pending" &&
               partnerRow.addressee_id === user.id ? (
               <div style={btnRow}>
-                <button onClick={accepteerPartnerVerzoek} style={primaryBtn}>
-                  Accepteren
+                <button onClick={acceptPartnerRequest} style={teamAcceptBtn}>
+                  ⚡ Accept Team Up
                 </button>
-                <button onClick={weigerPartnerVerzoek} style={secondaryBtn}>
-                  Weigeren
+                <button onClick={rejectPartnerRequest} style={secondaryBtn}>
+                  Reject
                 </button>
               </div>
             ) : partnerRow.status === "accepted" ? (
               <div style={btnRow}>
-                <div style={statusPill}>Jullie zijn Training Partners</div>
-                <button
-                  onClick={verwijderTrainingPartner}
-                  style={secondaryBtn}
-                >
-                  Verwijder
+                <div style={statusPill}>🤝 Training Partners</div>
+                <button onClick={removePartner} style={secondaryBtn}>
+                  Remove
                 </button>
               </div>
             ) : partnerRow.status === "rejected" ? (
-              <button onClick={stuurPartnerVerzoek} style={primaryBtn}>
-                Nieuw verzoek sturen
+              <button onClick={sendPartnerRequest} style={teamUpBtn}>
+                🤝 Team Up Again
               </button>
             ) : (
-              <div style={emptyText}>Geen actie beschikbaar.</div>
+              <div style={emptyText}>No action available.</div>
             )}
           </div>
         )}
@@ -607,13 +603,13 @@ const opslaanProfiel = async (e) => {
 
 
 
-{isEigenProfiel && (
+{isOwnProfile && (
           <div style={privacyBox}>
-            <div style={sectionTitle}>Privacy-instellingen</div>
+            <div style={sectionTitle}>Privacy Settings</div>
 
             <div style={privacyGrid}>
               <div>
-                <div style={label}>Profielfoto</div>
+                <div style={label}>Profile Photo</div>
                 <select
                   value={visibilityForm.avatar_visibility}
                   onChange={(e) =>
@@ -622,52 +618,52 @@ const opslaanProfiel = async (e) => {
                       avatar_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
               <div>
-                <div style={label}>Leeftijd</div>
+                <div style={label}>Age</div>
                 <select
-                  value={visibilityForm.leeftijd_visibility}
+                  value={visibilityForm.age_visibility}
                   onChange={(e) =>
                     setVisibilityForm({
                       ...visibilityForm,
-                      leeftijd_visibility: e.target.value,
+                      age_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
               <div>
-                <div style={label}>Woonplaats</div>
+                <div style={label}>Location</div>
                 <select
-                  value={visibilityForm.woonplaats_visibility}
+                  value={visibilityForm.location_visibility}
                   onChange={(e) =>
                     setVisibilityForm({
                       ...visibilityForm,
-                      woonplaats_visibility: e.target.value,
+                      location_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
               <div>
-                <div style={label}>Mailadres</div>
+                <div style={label}>Email Address</div>
                 <select
                   value={visibilityForm.email_visibility}
                   onChange={(e) =>
@@ -676,29 +672,29 @@ const opslaanProfiel = async (e) => {
                       email_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
               <div>
-                <div style={label}>Telefoonnummer</div>
+                <div style={label}>Phone Number</div>
                 <select
-                  value={visibilityForm.telefoon_visibility}
+                  value={visibilityForm.phone_visibility}
                   onChange={(e) =>
                     setVisibilityForm({
                       ...visibilityForm,
-                      telefoon_visibility: e.target.value,
+                      phone_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
@@ -712,11 +708,11 @@ const opslaanProfiel = async (e) => {
                       strava_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
@@ -730,11 +726,11 @@ const opslaanProfiel = async (e) => {
                       garmin_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
 
@@ -748,33 +744,29 @@ const opslaanProfiel = async (e) => {
                       suunto_visibility: e.target.value,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  <option value="private">Alleen ik</option>
+                  <option value="private">Only Me</option>
                   <option value="partners">Training Partners</option>
-                  <option value="all">Alle gebruikers</option>
+                  <option value="all">All Users</option>
                 </select>
               </div>
             </div>
 
             <div style={btnRow}>
-              <button
-                type="button"
-                onClick={opslaanVisibility}
-                style={primaryBtn}
-              >
-                Privacy opslaan
+              <button type="button" onClick={saveVisibility} style={primaryBtn}>
+                Save Privacy Settings
               </button>
             </div>
           </div>
         )}
 
         <div style={linksBox}>
-          <div style={sectionTitle}>Sportprofielen</div>
+          <div style={sectionTitle}>Sport Profiles</div>
 
-          {profiel.strava_url && magVeldZien(visibility?.strava_visibility) ? (
+          {profile.strava_url && canSeeField(visibility?.strava_visibility) ? (
             <a
-              href={profiel.strava_url}
+              href={profile.strava_url}
               target="_blank"
               rel="noreferrer"
               style={sportLink}
@@ -783,9 +775,9 @@ const opslaanProfiel = async (e) => {
             </a>
           ) : null}
 
-          {profiel.garmin_url && magVeldZien(visibility?.garmin_visibility) ? (
+          {profile.garmin_url && canSeeField(visibility?.garmin_visibility) ? (
             <a
-              href={profiel.garmin_url}
+              href={profile.garmin_url}
               target="_blank"
               rel="noreferrer"
               style={sportLink}
@@ -794,9 +786,9 @@ const opslaanProfiel = async (e) => {
             </a>
           ) : null}
 
-          {profiel.suunto_url && magVeldZien(visibility?.suunto_visibility) ? (
+          {profile.suunto_url && canSeeField(visibility?.suunto_visibility) ? (
             <a
-              href={profiel.suunto_url}
+              href={profile.suunto_url}
               target="_blank"
               rel="noreferrer"
               style={sportLink}
@@ -806,127 +798,125 @@ const opslaanProfiel = async (e) => {
           ) : null}
 
           {!(
-            (profiel.strava_url && magVeldZien(visibility?.strava_visibility)) ||
-            (profiel.garmin_url && magVeldZien(visibility?.garmin_visibility)) ||
-            (profiel.suunto_url && magVeldZien(visibility?.suunto_visibility))
-          ) && <div style={emptyText}>Geen zichtbare sportprofielen.</div>}
+            (profile.strava_url && canSeeField(visibility?.strava_visibility)) ||
+            (profile.garmin_url && canSeeField(visibility?.garmin_visibility)) ||
+            (profile.suunto_url && canSeeField(visibility?.suunto_visibility))
+          ) && <div style={emptyText}>No visible sport profiles.</div>}
         </div>
 
 
 
-
-           
-{isEigenProfiel && !editing && (
+           {isOwnProfile && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
-              Profiel bewerken
+              Edit Profile
             </button>
           </div>
         )}
 
         {editing && (
-          <form onSubmit={opslaanProfiel} style={editBox}>
+          <form onSubmit={saveProfile} style={editBox}>
             <div style={grid}>
               <div>
-                <div style={label}>Naam</div>
+                <div style={label}>Name</div>
                 <input
-                  value={form.naam}
+                  value={form.name}
                   onChange={(e) =>
-                    setForm({ ...form, naam: e.target.value })
+                    setForm({ ...form, name: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Geboortedatum</div>
+                <div style={label}>Birth Date</div>
                 <input
                   type="date"
-                  value={form.geboortedatum}
+                  value={form.birth_date}
                   onChange={(e) =>
-                    setForm({ ...form, geboortedatum: e.target.value })
+                    setForm({ ...form, birth_date: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Woonplaats</div>
+                <div style={label}>Location</div>
                 <input
-                  value={form.woonplaats}
+                  value={form.location}
                   onChange={(e) =>
-                    setForm({ ...form, woonplaats: e.target.value })
+                    setForm({ ...form, location: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Mailadres</div>
+                <div style={label}>Email Address</div>
                 <input
                   value={form.email}
                   onChange={(e) =>
                     setForm({ ...form, email: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Telefoonnummer</div>
+                <div style={label}>Phone Number</div>
                 <input
-                  value={form.telefoonnummer}
+                  value={form.phone}
                   onChange={(e) =>
-                    setForm({ ...form, telefoonnummer: e.target.value })
+                    setForm({ ...form, phone: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Strava link</div>
+                <div style={label}>Strava Link</div>
                 <input
                   value={form.strava_url}
                   onChange={(e) =>
                     setForm({ ...form, strava_url: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Garmin link</div>
+                <div style={label}>Garmin Link</div>
                 <input
                   value={form.garmin_url}
                   onChange={(e) =>
                     setForm({ ...form, garmin_url: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Suunto link</div>
+                <div style={label}>Suunto Link</div>
                 <input
                   value={form.suunto_url}
                   onChange={(e) =>
                     setForm({ ...form, suunto_url: e.target.value })
                   }
-                  style={veld}
+                  style={field}
                 />
               </div>
             </div>
 
             <div style={btnRow}>
               <button type="submit" style={primaryBtn}>
-                Opslaan
+                Save
               </button>
               <button
                 type="button"
                 onClick={() => setEditing(false)}
                 style={secondaryBtn}
               >
-                Annuleren
+                Cancel
               </button>
             </div>
           </form>
@@ -936,7 +926,7 @@ const opslaanProfiel = async (e) => {
       {cropModalOpen && imageSrc && (
         <div style={cropOverlay}>
           <div style={cropModal}>
-            <div style={cropTitle}>Profielfoto bijsnijden</div>
+            <div style={cropTitle}>Crop Profile Photo</div>
 
             <div style={cropAreaWrap}>
               <Cropper
@@ -971,7 +961,7 @@ const opslaanProfiel = async (e) => {
                 onClick={uploadCroppedAvatar}
                 style={primaryBtn}
               >
-                {uploadingAvatar ? "Opslaan..." : "Gebruik deze foto"}
+                {uploadingAvatar ? "Saving..." : "Use This Photo"}
               </button>
               <button
                 type="button"
@@ -983,7 +973,7 @@ const opslaanProfiel = async (e) => {
                 }}
                 style={secondaryBtn}
               >
-                Annuleren
+                Cancel
               </button>
             </div>
           </div>
@@ -1082,7 +1072,7 @@ const uploadLabel = {
   border: "1px solid rgba(255,255,255,0.08)",
 };
 
-const name = {
+const nameStyle = {
   margin: 0,
   fontSize: 28,
 };
@@ -1180,7 +1170,7 @@ const label = {
   opacity: 0.75,
 };
 
-const veld = {
+const field = {
   width: "100%",
   background: "#1b1b1b",
   color: "white",
@@ -1223,6 +1213,26 @@ const linkBtn = {
   borderRadius: 12,
 };
 
+const teamUpBtn = {
+  background: "linear-gradient(135deg,#2563eb,#06b6d4)",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 14,
+  fontWeight: "bold",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+};
+
+const teamAcceptBtn = {
+  background: "linear-gradient(135deg,#2563eb,#06b6d4)",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 14,
+  fontWeight: "bold",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+};
+
 const cropOverlay = {
   position: "fixed",
   inset: 0,
@@ -1263,3 +1273,9 @@ const zoomWrap = {
 };
 
 
+
+
+
+
+
+  
