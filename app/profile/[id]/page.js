@@ -4,6 +4,17 @@ import { useEffect, useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
 
+const DEFAULT_VISIBILITY = {
+  avatar_visibility: "all",
+  woonplaats_visibility: "partners",
+  email_visibility: "private",
+  telefoon_visibility: "private",
+  strava_visibility: "partners",
+  garmin_visibility: "partners",
+  suunto_visibility: "partners",
+  leeftijd_visibility: "partners",
+};
+
 export default function ProfilePage({ params }) {
   const profileId = params.id;
 
@@ -12,9 +23,11 @@ export default function ProfilePage({ params }) {
   const [mijnProfiel, setMijnProfiel] = useState(null);
   const [profiel, setProfiel] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [editing, setEditing] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [partnerLoading, setPartnerLoading] = useState(false);
+
   const [form, setForm] = useState({
     naam: "",
     woonplaats: "",
@@ -26,20 +39,10 @@ export default function ProfilePage({ params }) {
     geboortedatum: "",
   });
 
-  const [visibility, setVisibility] = useState(null);
-  const [visibilityForm, setVisibilityForm] = useState({
-    avatar_visibility: "all",
-    woonplaats_visibility: "partners",
-    email_visibility: "private",
-    telefoon_visibility: "private",
-    strava_visibility: "partners",
-    garmin_visibility: "partners",
-    suunto_visibility: "partners",
-    leeftijd_visibility: "partners",
-  });
+  const [visibility, setVisibility] = useState(DEFAULT_VISIBILITY);
+  const [visibilityForm, setVisibilityForm] = useState(DEFAULT_VISIBILITY);
 
   const [partnerRow, setPartnerRow] = useState(null);
-  const [partnerLoading, setPartnerLoading] = useState(false);
 
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
@@ -50,11 +53,11 @@ export default function ProfilePage({ params }) {
   useEffect(() => {
     const init = async () => {
       const {
-        data: { session },
+        data: { session: currentSession },
       } = await supabase.auth.getSession();
 
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
       setLoading(false);
     };
 
@@ -118,26 +121,37 @@ export default function ProfilePage({ params }) {
       .from("profile_visibility_settings")
       .select("*")
       .eq("user_id", profileId)
-      .single();
+      .maybeSingle();
 
-    if (visError && visError.code !== "PGRST116") {
+    if (visError) {
       console.error("visibility laden fout", visError);
     }
 
-    setVisibility(visData || null);
+    const nextVisibility = visData
+      ? {
+          avatar_visibility:
+            visData.avatar_visibility || DEFAULT_VISIBILITY.avatar_visibility,
+          woonplaats_visibility:
+            visData.woonplaats_visibility ||
+            DEFAULT_VISIBILITY.woonplaats_visibility,
+          email_visibility:
+            visData.email_visibility || DEFAULT_VISIBILITY.email_visibility,
+          telefoon_visibility:
+            visData.telefoon_visibility ||
+            DEFAULT_VISIBILITY.telefoon_visibility,
+          strava_visibility:
+            visData.strava_visibility || DEFAULT_VISIBILITY.strava_visibility,
+          garmin_visibility:
+            visData.garmin_visibility || DEFAULT_VISIBILITY.garmin_visibility,
+          suunto_visibility:
+            visData.suunto_visibility || DEFAULT_VISIBILITY.suunto_visibility,
+          leeftijd_visibility:
+            visData.leeftijd_visibility || DEFAULT_VISIBILITY.leeftijd_visibility,
+        }
+      : DEFAULT_VISIBILITY;
 
-    if (visData) {
-      setVisibilityForm({
-        avatar_visibility: visData.avatar_visibility || "all",
-        woonplaats_visibility: visData.woonplaats_visibility || "partners",
-        email_visibility: visData.email_visibility || "private",
-        telefoon_visibility: visData.telefoon_visibility || "private",
-        strava_visibility: visData.strava_visibility || "partners",
-        garmin_visibility: visData.garmin_visibility || "partners",
-        suunto_visibility: visData.suunto_visibility || "partners",
-        leeftijd_visibility: visData.leeftijd_visibility || "partners",
-      });
-    }
+    setVisibility(nextVisibility);
+    setVisibilityForm(nextVisibility);
   };
 
   const laadMijnProfiel = async () => {
@@ -154,6 +168,7 @@ export default function ProfilePage({ params }) {
 
     setMijnProfiel(data);
   };
+
 
 
 
@@ -266,12 +281,9 @@ const laadPartnerStatus = async () => {
       leeftijd_visibility: visibilityForm.leeftijd_visibility,
     };
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("profile_visibility_settings")
-      .upsert(payload, { onConflict: "user_id" })
-      .select();
-
-    console.log("visibility save", { payload, data, error });
+      .upsert(payload, { onConflict: "user_id" });
 
     if (error) {
       alert(`Privacy opslaan mislukt: ${error.message}`);
@@ -304,7 +316,8 @@ const laadPartnerStatus = async () => {
     });
 
 
-  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+
+const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -337,7 +350,8 @@ const laadPartnerStatus = async () => {
       partnerRow?.addressee_id === user?.id);
 
   const magVeldZien = (visibilityValue) => {
-    if (isEigenProfiel || isModerator) return true;
+    if (isEigenProfiel) return true;
+    if (isModerator) return true;
     if (!visibilityValue) return false;
     if (visibilityValue === "all") return true;
     if (visibilityValue === "partners" && isPartner) return true;
@@ -369,8 +383,8 @@ const laadPartnerStatus = async () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!isEigenProfiel && !isModerator) {
-      alert("Je mag deze profielfoto niet wijzigen.");
+    if (!isEigenProfiel) {
+      alert("Je mag alleen je eigen profielfoto wijzigen.");
       return;
     }
 
@@ -440,7 +454,7 @@ const laadPartnerStatus = async () => {
   };
 
 
-  const opslaanProfiel = async (e) => {
+const opslaanProfiel = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase
@@ -509,7 +523,7 @@ const laadPartnerStatus = async () => {
               )}
             </div>
 
-            {(isEigenProfiel || isModerator) && (
+            {isEigenProfiel && (
               <div style={uploadWrap}>
                 <label style={uploadLabel}>
                   {uploadingAvatar ? "Uploaden..." : "Foto kiezen"}
@@ -591,7 +605,9 @@ const laadPartnerStatus = async () => {
         )}
 
 
-{(isEigenProfiel || isModerator) && (
+
+
+{isEigenProfiel && (
           <div style={privacyBox}>
             <div style={sectionTitle}>Privacy-instellingen</div>
 
@@ -798,7 +814,9 @@ const laadPartnerStatus = async () => {
 
 
 
-      {(isEigenProfiel || isModerator) && !editing && (
+
+           
+{isEigenProfiel && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Profiel bewerken
@@ -919,6 +937,7 @@ const laadPartnerStatus = async () => {
         <div style={cropOverlay}>
           <div style={cropModal}>
             <div style={cropTitle}>Profielfoto bijsnijden</div>
+
             <div style={cropAreaWrap}>
               <Cropper
                 image={imageSrc}
@@ -956,7 +975,12 @@ const laadPartnerStatus = async () => {
               </button>
               <button
                 type="button"
-                onClick={() => setCropModalOpen(false)}
+                onClick={() => {
+                  setCropModalOpen(false);
+                  setImageSrc(null);
+                  setZoom(1);
+                  setCrop({ x: 0, y: 0 });
+                }}
                 style={secondaryBtn}
               >
                 Annuleren
@@ -969,42 +993,273 @@ const laadPartnerStatus = async () => {
   );
 }
 
-const app = { minHeight: "100vh", background: "#050505", color: "white", padding: 16, fontFamily: "sans-serif" };
-const topBar = { marginBottom: 16 };
-const card = { background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 24, padding: 20 };
-const profileHeader = { display: "flex", gap: 20, alignItems: "center", marginBottom: 24 };
-const avatarWrap = { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 };
-const avatarRing = { width: 118, height: 118, borderRadius: "50%", padding: 4, background: "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))", display: "flex", alignItems: "center", justifyContent: "center" };
-const avatar = { width: 110, height: 110, borderRadius: "50%", objectFit: "cover", objectPosition: "center", display: "block", border: "3px solid rgba(228,239,22,0.35)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", background: "#111" };
-const avatarPlaceholder = { width: 110, height: 110, borderRadius: "50%", background: "#1f1f1f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, fontWeight: "bold", color: "#e4ef16", border: "3px solid rgba(228,239,22,0.18)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)" };
-const uploadWrap = { marginTop: 2 };
-const uploadLabel = { display: "inline-block", background: "#2a2a2a", color: "white", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontSize: 13, fontWeight: "bold", border: "1px solid rgba(255,255,255,0.08)" };
-const name = { margin: 0, fontSize: 28 };
-const roleBadge = { marginTop: 8, display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
-const metaLine = { marginTop: 8, opacity: 0.8 };
-const partnerBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
-const statusPill = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "10px 14px", borderRadius: 12, fontWeight: "bold" };
-const privacyBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
-const privacyGrid = { display: "grid", gap: 12, marginTop: 12 };
-const linksBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, display: "grid", gap: 10 };
-const sectionTitle = { fontSize: 16, fontWeight: 700 };
-const sportLink = { display: "inline-block", color: "#e4ef16", textDecoration: "none" };
-const emptyText = { opacity: 0.65 };
-const editBox = { marginTop: 20, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
-const grid = { display: "grid", gap: 12 };
-const label = { marginBottom: 6, fontSize: 13, opacity: 0.75 };
-const veld = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box" };
-const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
-const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
-const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
-const linkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
-const cropOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
-const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadius: 24, padding: 16, border: "1px solid rgba(255,255,255,0.08)" };
-const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
-const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
-const zoomWrap = { marginTop: 16 };
+const app = {
+  minHeight: "100vh",
+  background: "#050505",
+  color: "white",
+  padding: 16,
+  fontFamily: "sans-serif",
+};
 
+const topBar = {
+  marginBottom: 16,
+};
 
+const card = {
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 24,
+  padding: 20,
+};
 
+const profileHeader = {
+  display: "flex",
+  gap: 20,
+  alignItems: "center",
+  marginBottom: 24,
+};
+
+const avatarWrap = {
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 10,
+};
+
+const avatarRing = {
+  width: 118,
+  height: 118,
+  borderRadius: "50%",
+  padding: 4,
+  background:
+    "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const avatar = {
+  width: 110,
+  height: 110,
+  borderRadius: "50%",
+  objectFit: "cover",
+  objectPosition: "center",
+  display: "block",
+  border: "3px solid rgba(228,239,22,0.35)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+  background: "#111",
+};
+
+const avatarPlaceholder = {
+  width: 110,
+  height: 110,
+  borderRadius: "50%",
+  background: "#1f1f1f",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 42,
+  fontWeight: "bold",
+  color: "#e4ef16",
+  border: "3px solid rgba(228,239,22,0.18)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+};
+
+const uploadWrap = {
+  marginTop: 2,
+};
+
+const uploadLabel = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: "bold",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const name = {
+  margin: 0,
+  fontSize: 28,
+};
+
+const roleBadge = {
+  marginTop: 8,
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const metaLine = {
+  marginTop: 8,
+  opacity: 0.8,
+};
+
+const partnerBox = {
+  marginTop: 18,
+  marginBottom: 18,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const statusPill = {
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "10px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const privacyBox = {
+  marginTop: 18,
+  marginBottom: 18,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const privacyGrid = {
+  display: "grid",
+  gap: 12,
+  marginTop: 12,
+};
+
+const linksBox = {
+  marginTop: 18,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+  display: "grid",
+  gap: 10,
+};
+
+const sectionTitle = {
+  fontSize: 16,
+  fontWeight: 700,
+};
+
+const sportLink = {
+  display: "inline-block",
+  color: "#e4ef16",
+  textDecoration: "none",
+};
+
+const emptyText = {
+  opacity: 0.65,
+};
+
+const editBox = {
+  marginTop: 20,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const grid = {
+  display: "grid",
+  gap: 12,
+};
+
+const label = {
+  marginBottom: 6,
+  fontSize: 13,
+  opacity: 0.75,
+};
+
+const veld = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "12px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+};
+
+const btnRow = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 16,
+};
+
+const primaryBtn = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const secondaryBtn = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const linkBtn = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const cropOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.8)",
+  zIndex: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const cropModal = {
+  width: "100%",
+  maxWidth: 420,
+  background: "#111",
+  borderRadius: 24,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const cropTitle = {
+  fontSize: 20,
+  fontWeight: 700,
+  marginBottom: 12,
+};
+
+const cropAreaWrap = {
+  position: "relative",
+  width: "100%",
+  height: 320,
+  background: "#000",
+  borderRadius: 18,
+  overflow: "hidden",
+};
+
+const zoomWrap = {
+  marginTop: 16,
+};
 
 
