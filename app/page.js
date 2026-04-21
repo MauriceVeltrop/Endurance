@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import TeamRequestsPanel from "../components/TeamRequestsPanel";
+import { SPORTS, SPORTS_WITH_DISTANCE } from "../lib/sports";
 
 export default function Home() {
   const emptyEvent = {
@@ -16,20 +17,16 @@ export default function Home() {
     description: "",
   };
 
-  const sports = [
-    "Running",
-    "Road Cycling",
-    "Trail Running",
-    "Mountain Biking",
-    "Walking",
-  ];
-
   const distanceRanges = {
     Running: { min: 1, max: 50 },
     "Road Cycling": { min: 10, max: 250 },
     "Trail Running": { min: 1, max: 50 },
     "Mountain Biking": { min: 5, max: 120 },
     Walking: { min: 1, max: 40 },
+    Swimming: { min: 1, max: 10 },
+    CrossFit: { min: 1, max: 1 },
+    HYROX: { min: 1, max: 1 },
+    "Strength Training": { min: 1, max: 1 },
   };
 
   const [session, setSession] = useState(null);
@@ -40,6 +37,7 @@ export default function Home() {
   const [likes, setLikes] = useState([]);
   const [comments, setComments] = useState([]);
   const [participants, setParticipants] = useState([]);
+  const [userSports, setUserSports] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [savingEvent, setSavingEvent] = useState(false);
@@ -70,6 +68,11 @@ export default function Home() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  const formatTime = (value) => {
+    if (!value) return "";
+    return value.slice(0, 5);
   };
 
   const makeEventDateTime = (event) => {
@@ -103,10 +106,17 @@ export default function Home() {
     setForm(emptyEvent);
   };
 
-  const eventCards = useMemo(() => {
+
+
+const eventCards = useMemo(() => {
     const now = new Date();
 
-    return [...events]
+    const filteredEvents =
+      userSports.length > 0
+        ? events.filter((event) => userSports.includes(event.sport))
+        : events;
+
+    return [...filteredEvents]
       .filter((event) => makeEventDateTime(event) >= now)
       .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
       .map((event) => {
@@ -130,11 +140,9 @@ export default function Home() {
           ),
         };
       });
-  }, [events, likes, comments, participants, user]);
+  }, [events, likes, comments, participants, user, userSports]);
 
-
-
-useEffect(() => {
+  useEffect(() => {
     const init = async () => {
       const {
         data: { session: currentSession },
@@ -164,6 +172,7 @@ useEffect(() => {
       setLikes([]);
       setComments([]);
       setParticipants([]);
+      setUserSports([]);
       return;
     }
 
@@ -197,6 +206,7 @@ useEffect(() => {
       loadLikes(),
       loadComments(),
       loadParticipants(),
+      loadUserSports(),
     ]);
   };
 
@@ -275,7 +285,9 @@ useEffect(() => {
     setComments(data || []);
   };
 
-  const loadParticipants = async () => {
+
+
+const loadParticipants = async () => {
     const { data, error } = await supabase
       .from("event_participants")
       .select(`
@@ -300,10 +312,23 @@ useEffect(() => {
     setParticipants(data || []);
   };
 
+  const loadUserSports = async () => {
+    if (!user?.id) return;
 
+    const { data, error } = await supabase
+      .from("user_sports")
+      .select("sport")
+      .eq("user_id", user.id);
 
+    if (error) {
+      console.error("user sports load error", error);
+      return;
+    }
 
-const handleSignUp = async (e) => {
+    setUserSports((data || []).map((row) => row.sport));
+  };
+
+  const handleSignUp = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase.auth.signUp({
@@ -358,18 +383,20 @@ const handleSignUp = async (e) => {
 
     setSavingEvent(true);
 
+    const payload = {
+      title: form.title,
+      sport: form.sport,
+      distance: SPORTS_WITH_DISTANCE.includes(form.sport) ? form.distance : null,
+      date: form.date,
+      time: form.time,
+      location: form.location,
+      description: form.description,
+    };
+
     if (editId) {
       const { error } = await supabase
         .from("events")
-        .update({
-          title: form.title,
-          sport: form.sport,
-          distance: form.distance,
-          date: form.date,
-          time: form.time,
-          location: form.location,
-          description: form.description,
-        })
+        .update(payload)
         .eq("id", editId);
 
       if (error) {
@@ -380,13 +407,7 @@ const handleSignUp = async (e) => {
     } else {
       const { error } = await supabase.from("events").insert({
         creator_id: user.id,
-        title: form.title,
-        sport: form.sport,
-        distance: form.distance,
-        date: form.date,
-        time: form.time,
-        location: form.location,
-        description: form.description,
+        ...payload,
       });
 
       if (error) {
@@ -413,8 +434,8 @@ const handleSignUp = async (e) => {
 
     await loadEverything();
   };
-
-  const toggleParticipation = async (event) => {
+  
+const toggleParticipation = async (event) => {
     if (!user?.id) {
       alert("You must be signed in.");
       return;
@@ -478,9 +499,7 @@ const handleSignUp = async (e) => {
     await loadLikes();
   };
 
-
-
-const postComment = async (eventId) => {
+  const postComment = async (eventId) => {
     if (!user?.id) {
       alert("You must be signed in.");
       return;
@@ -557,7 +576,8 @@ const postComment = async (eventId) => {
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
-  if (loading) {
+
+if (loading) {
     return (
       <main style={app}>
         <div style={emptyCard}>Loading...</div>
@@ -628,12 +648,9 @@ const postComment = async (eventId) => {
         </div>
       </main>
     );
-            }
+  }
 
-
-
-
-return (
+  return (
     <main style={app}>
       <header style={header}>
         <img
@@ -702,12 +719,12 @@ return (
                     setForm({
                       ...form,
                       sport: e.target.value,
-                      distance: distanceRanges[e.target.value].min,
+                      distance: distanceRanges[e.target.value]?.min || 1,
                     })
                   }
                   style={field}
                 >
-                  {sports.map((sport) => (
+                  {SPORTS.map((sport) => (
                     <option key={sport} value={sport}>
                       {sport}
                     </option>
@@ -715,26 +732,30 @@ return (
                 </select>
               </div>
 
-              <div>
-                <div style={label}>Distance: {form.distance} km</div>
-                <input
-                  type="range"
-                  min={range.min}
-                  max={range.max}
-                  step="1"
-                  value={form.distance}
-                  onChange={(e) =>
-                    setForm({ ...form, distance: Number(e.target.value) })
-                  }
-                  style={{ width: "100%" }}
-                />
-                <div style={rangeRow}>
-                  <span>{range.min} km</span>
-                  <span>{range.max} km</span>
+              {SPORTS_WITH_DISTANCE.includes(form.sport) && (
+                <div>
+                  <div style={label}>Distance: {form.distance} km</div>
+                  <input
+                    type="range"
+                    min={range.min}
+                    max={range.max}
+                    step="1"
+                    value={form.distance}
+                    onChange={(e) =>
+                      setForm({ ...form, distance: Number(e.target.value) })
+                    }
+                    style={{ width: "100%" }}
+                  />
+                  <div style={rangeRow}>
+                    <span>{range.min} km</span>
+                    <span>{range.max} km</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div>
+
+
+<div>
                 <div style={label}>Date</div>
                 <input
                   type="date"
@@ -787,15 +808,16 @@ return (
         </div>
       )}
 
-
-<section style={eventsSection}>
+      <section style={eventsSection}>
         {eventCards.length === 0 ? (
           <div style={emptyCard}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
               No upcoming events
             </div>
             <div style={{ opacity: 0.7 }}>
-              As soon as events are added, they will appear here.
+              {userSports.length > 0
+                ? "No upcoming events match your preferred sports yet."
+                : "As soon as events are added, they will appear here."}
             </div>
           </div>
         ) : (
@@ -805,17 +827,16 @@ return (
                 <div style={sportTag}>{event.sport}</div>
                 <h2 style={cardTitle}>{event.title}</h2>
 
-                <div style={distanceText}>{event.distance} km</div>
+                {event.distance ? (
+                  <div style={distanceText}>{event.distance} km</div>
+                ) : null}
 
                 <div style={meta}>
                   <div>📅 {formatDate(event.date)}</div>
-                  <div>⏰ {event.time}</div>
+                  <div>⏰ {formatTime(event.time)}</div>
                   <div style={creatorText}>
                     👤 Created by{" "}
-                    <Link
-                      href={`/profile/${event.creator_id}`}
-                      style={profileLink}
-                    >
+                    <Link href={`/profile/${event.creator_id}`} style={profileLink}>
                       {event.creator_profile?.name ||
                         event.creator_profile?.email ||
                         "Unknown"}
@@ -865,10 +886,7 @@ return (
                       <div style={likeUsers}>
                         {event.likes.map((like, index) => (
                           <span key={like.id}>
-                            <Link
-                              href={`/profile/${like.user_id}`}
-                              style={inlineProfileLink}
-                            >
+                            <Link href={`/profile/${like.user_id}`} style={inlineProfileLink}>
                               {like.user_profile?.name || "Unknown"}
                             </Link>
                             {index < event.likes.length - 1 ? ", " : ""}
@@ -1035,6 +1053,3 @@ const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "no
 const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
 
 
-  
-
-  
