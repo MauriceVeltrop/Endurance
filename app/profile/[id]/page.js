@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
+import { SPORTS } from "../../../lib/sports";
 
 const DEFAULT_VISIBILITY = {
   avatar_visibility: "all",
@@ -15,18 +16,6 @@ const DEFAULT_VISIBILITY = {
   suunto_visibility: "partners",
   age_visibility: "partners",
 };
-
-const SPORTS = [
-  "Running",
-  "Road Cycling",
-  "Trail Running",
-  "Mountain Biking",
-  "Walking",
-  "CrossFit",
-  "HYROX",
-  "Strength Training",
-  "Swimming",
-];
 
 export default function ProfilePage({ params }) {
   const profileId = params.id;
@@ -194,6 +183,7 @@ export default function ProfilePage({ params }) {
 
 
 
+
 const loadPartnerStatus = async () => {
     setPartnerLoading(true);
 
@@ -277,9 +267,7 @@ const loadPartnerStatus = async () => {
   };
 
   const togglePreferredSport = async (sport) => {
-    if (!isOwnProfile || !user?.id) {
-      return;
-    }
+    if (!isOwnProfile || !user?.id) return;
 
     if (preferredSports.includes(sport)) {
       const { error } = await supabase
@@ -347,7 +335,7 @@ const loadPartnerStatus = async () => {
 
 
 
-  const rejectPartnerRequest = async () => {
+const rejectPartnerRequest = async () => {
     if (!partnerRow?.id) return;
 
     const { error } = await supabase
@@ -483,7 +471,6 @@ const loadPartnerStatus = async () => {
     setCropModalOpen(true);
     e.target.value = "";
   };
-
 
 
 const uploadCroppedAvatar = async () => {
@@ -655,7 +642,6 @@ const uploadCroppedAvatar = async () => {
 
 
 
-
 {!isOwnProfile && session && (
           <div style={partnerBox}>
             {partnerLoading ? (
@@ -811,6 +797,7 @@ const uploadCroppedAvatar = async () => {
             (profile.suunto_url && canSeeField(visibility?.suunto_visibility))
           ) && <div style={emptyText}>No visible sport profiles.</div>}
         </div>
+
 
 
 
@@ -1035,7 +1022,6 @@ const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadi
 const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
 const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
 const zoomWrap = { marginTop: 16 };
-
            
 
 
@@ -1043,3 +1029,5 @@ const zoomWrap = { marginTop: 16 };
 
 
   
+
+
