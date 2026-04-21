@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "../lib/supabase";
 
 export default function TeamRequestsPanel({ userId }) {
@@ -11,10 +12,10 @@ export default function TeamRequestsPanel({ userId }) {
 
   useEffect(() => {
     if (!userId) return;
-    laadRequests();
+    loadRequests();
   }, [userId]);
 
-  const laadRequests = async () => {
+  const loadRequests = async () => {
     setLoading(true);
 
     const { data, error } = await supabase
@@ -25,7 +26,7 @@ export default function TeamRequestsPanel({ userId }) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("team requests laden fout", error);
+      console.error("team requests load error", error);
       setLoading(false);
       return;
     }
@@ -33,7 +34,7 @@ export default function TeamRequestsPanel({ userId }) {
     const rows = data || [];
     setRequests(rows);
 
-    const requesterIds = [...new Set(rows.map((r) => r.requester_id))];
+    const requesterIds = [...new Set(rows.map((row) => row.requester_id))];
 
     if (requesterIds.length === 0) {
       setProfilesMap({});
@@ -43,25 +44,25 @@ export default function TeamRequestsPanel({ userId }) {
 
     const { data: profileRows, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, naam, avatar_url")
+      .select("id, name, avatar_url")
       .in("id", requesterIds);
 
     if (profilesError) {
-      console.error("requester profiles laden fout", profilesError);
+      console.error("requester profiles load error", profilesError);
       setLoading(false);
       return;
     }
 
     const nextMap = {};
-    (profileRows || []).forEach((p) => {
-      nextMap[p.id] = p;
+    (profileRows || []).forEach((profile) => {
+      nextMap[profile.id] = profile;
     });
 
     setProfilesMap(nextMap);
     setLoading(false);
   };
 
-  const accepteer = async (requestId) => {
+  const acceptRequest = async (requestId) => {
     setWorkingId(requestId);
 
     const { error } = await supabase
@@ -79,10 +80,10 @@ export default function TeamRequestsPanel({ userId }) {
       return;
     }
 
-    await laadRequests();
+    await loadRequests();
   };
 
-  const weiger = async (requestId) => {
+  const rejectRequest = async (requestId) => {
     setWorkingId(requestId);
 
     const { error } = await supabase
@@ -100,7 +101,7 @@ export default function TeamRequestsPanel({ userId }) {
       return;
     }
 
-    await laadRequests();
+    await loadRequests();
   };
 
   if (!userId) return null;
@@ -137,24 +138,31 @@ export default function TeamRequestsPanel({ userId }) {
                 {requester?.avatar_url ? (
                   <img
                     src={requester.avatar_url}
-                    alt={requester?.naam || "User"}
+                    alt={requester?.name || "User"}
                     style={avatar}
                   />
                 ) : (
                   <div style={avatarPlaceholder}>
-                    {(requester?.naam || "?").charAt(0).toUpperCase()}
+                    {(requester?.name || "?").charAt(0).toUpperCase()}
                   </div>
                 )}
 
                 <div style={{ flex: 1 }}>
-                  <div style={name}>{requester?.naam || "Unknown user"}</div>
+                  <div style={nameRow}>
+                    <Link
+                      href={`/profile/${request.requester_id}`}
+                      style={nameLink}
+                    >
+                      {requester?.name || "Unknown user"}
+                    </Link>
+                  </div>
                   <div style={sub}>wants to team up with you</div>
                 </div>
               </div>
 
               <div style={actions}>
                 <button
-                  onClick={() => accepteer(request.id)}
+                  onClick={() => acceptRequest(request.id)}
                   style={acceptBtn}
                   disabled={workingId === request.id}
                 >
@@ -162,7 +170,7 @@ export default function TeamRequestsPanel({ userId }) {
                 </button>
 
                 <button
-                  onClick={() => weiger(request.id)}
+                  onClick={() => rejectRequest(request.id)}
                   style={rejectBtn}
                   disabled={workingId === request.id}
                 >
@@ -235,6 +243,7 @@ const avatar = {
   height: 48,
   borderRadius: "50%",
   objectFit: "cover",
+  objectPosition: "center",
 };
 
 const avatarPlaceholder = {
@@ -249,9 +258,14 @@ const avatarPlaceholder = {
   fontWeight: "bold",
 };
 
-const name = {
+const nameRow = {
   fontWeight: 700,
   fontSize: 15,
+};
+
+const nameLink = {
+  color: "white",
+  textDecoration: "none",
 };
 
 const sub = {
