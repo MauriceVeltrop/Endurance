@@ -16,6 +16,18 @@ const DEFAULT_VISIBILITY = {
   age_visibility: "partners",
 };
 
+const SPORTS = [
+  "Running",
+  "Trail Running",
+  "Cycling",
+  "MTB",
+  "Walking",
+  "CrossFit",
+  "HYROX",
+  "Strength Training",
+  "Swimming",
+];
+
 export default function ProfilePage({ params }) {
   const profileId = params.id;
 
@@ -29,6 +41,7 @@ export default function ProfilePage({ params }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [partnerLoading, setPartnerLoading] = useState(false);
   const [teamLoading, setTeamLoading] = useState(false);
+  const [sportsLoading, setSportsLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -44,6 +57,7 @@ export default function ProfilePage({ params }) {
   const [visibility, setVisibility] = useState(DEFAULT_VISIBILITY);
   const [partnerRow, setPartnerRow] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [preferredSports, setPreferredSports] = useState([]);
 
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
@@ -97,8 +111,10 @@ export default function ProfilePage({ params }) {
   useEffect(() => {
     if (profileId) {
       loadTeamMembers();
+      loadPreferredSports();
     } else {
       setTeamMembers([]);
+      setPreferredSports([]);
     }
   }, [profileId]);
 
@@ -177,6 +193,7 @@ export default function ProfilePage({ params }) {
   };
 
 
+
 const loadPartnerStatus = async () => {
     setPartnerLoading(true);
 
@@ -239,6 +256,60 @@ const loadPartnerStatus = async () => {
     setTeamLoading(false);
   };
 
+  const loadPreferredSports = async () => {
+    setSportsLoading(true);
+
+    const { data, error } = await supabase
+      .from("user_sports")
+      .select("sport")
+      .eq("user_id", profileId)
+      .order("sport", { ascending: true });
+
+    if (error) {
+      console.error("preferred sports load error", error);
+      setPreferredSports([]);
+      setSportsLoading(false);
+      return;
+    }
+
+    setPreferredSports((data || []).map((row) => row.sport));
+    setSportsLoading(false);
+  };
+
+  const togglePreferredSport = async (sport) => {
+    if (!isOwnProfile || !user?.id) {
+      return;
+    }
+
+    if (preferredSports.includes(sport)) {
+      const { error } = await supabase
+        .from("user_sports")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("sport", sport);
+
+      if (error) {
+        alert(`Removing sport failed: ${error.message}`);
+        return;
+      }
+
+      setPreferredSports((prev) => prev.filter((item) => item !== sport));
+      return;
+    }
+
+    const { error } = await supabase.from("user_sports").insert({
+      user_id: user.id,
+      sport,
+    });
+
+    if (error) {
+      alert(`Adding sport failed: ${error.message}`);
+      return;
+    }
+
+    setPreferredSports((prev) => [...prev, sport]);
+  };
+
   const sendPartnerRequest = async () => {
     const { error } = await supabase.from("training_partners").insert({
       requester_id: user.id,
@@ -273,6 +344,8 @@ const loadPartnerStatus = async () => {
     await loadPartnerStatus();
     await loadTeamMembers();
   };
+
+
 
   const rejectPartnerRequest = async () => {
     if (!partnerRow?.id) return;
@@ -332,8 +405,7 @@ const loadPartnerStatus = async () => {
       image.src = url;
     });
 
-
-const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -412,7 +484,9 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     e.target.value = "";
   };
 
-  const uploadCroppedAvatar = async () => {
+
+
+const uploadCroppedAvatar = async () => {
     if (!imageSrc || !croppedAreaPixels || !profile?.id) return;
 
     setUploadingAvatar(true);
@@ -470,9 +544,7 @@ const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     setUploadingAvatar(false);
   };
 
-
-
-const saveProfile = async (e) => {
+  const saveProfile = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase
@@ -581,7 +653,10 @@ const saveProfile = async (e) => {
           </div>
         </div>
 
-        {!isOwnProfile && session && (
+
+
+
+{!isOwnProfile && session && (
           <div style={partnerBox}>
             {partnerLoading ? (
               <div style={emptyText}>Loading status...</div>
@@ -619,9 +694,82 @@ const saveProfile = async (e) => {
           </div>
         )}
 
+        <div style={sportsBox}>
+          <div style={sectionTitle}>Preferred Sports</div>
 
+          {sportsLoading ? (
+            <div style={emptyText}>Loading preferred sports...</div>
+          ) : (
+            <div style={sportsGrid}>
+              {SPORTS.map((sport) => {
+                const selected = preferredSports.includes(sport);
 
-<div style={linksBox}>
+                if (isOwnProfile) {
+                  return (
+                    <button
+                      key={sport}
+                      type="button"
+                      onClick={() => togglePreferredSport(sport)}
+                      style={selected ? sportSelected : sportBtn}
+                    >
+                      {sport}
+                    </button>
+                  );
+                }
+
+                if (!selected) return null;
+
+                return (
+                  <div key={sport} style={sportSelectedStatic}>
+                    {sport}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!sportsLoading && !isOwnProfile && preferredSports.length === 0 ? (
+            <div style={{ ...emptyText, marginTop: 12 }}>
+              No preferred sports selected.
+            </div>
+          ) : null}
+        </div>
+
+        <div style={teamBox}>
+          <div style={sectionTitle}>My Team</div>
+
+          {teamLoading ? (
+            <div style={emptyText}>Loading team...</div>
+          ) : teamMembers.length === 0 ? (
+            <div style={emptyText}>No training partners yet.</div>
+          ) : (
+            <div style={teamGrid}>
+              {teamMembers.map((member) => (
+                <Link
+                  key={member.id}
+                  href={`/profile/${member.id}`}
+                  style={teamCard}
+                >
+                  {member.avatar_url ? (
+                    <img
+                      src={member.avatar_url}
+                      alt={member.name || "User"}
+                      style={teamAvatar}
+                    />
+                  ) : (
+                    <div style={teamAvatarPlaceholder}>
+                      {(member.name || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  <div style={teamName}>{member.name || "Unknown user"}</div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={linksBox}>
           <div style={sectionTitle}>Sport Profiles</div>
 
           {profile.strava_url && canSeeField(visibility?.strava_visibility) ? (
@@ -664,41 +812,9 @@ const saveProfile = async (e) => {
           ) && <div style={emptyText}>No visible sport profiles.</div>}
         </div>
 
-        <div style={teamBox}>
-          <div style={sectionTitle}>My Team</div>
 
-          {teamLoading ? (
-            <div style={emptyText}>Loading team...</div>
-          ) : teamMembers.length === 0 ? (
-            <div style={emptyText}>No training partners yet.</div>
-          ) : (
-            <div style={teamGrid}>
-              {teamMembers.map((member) => (
-                <Link
-                  key={member.id}
-                  href={`/profile/${member.id}`}
-                  style={teamCard}
-                >
-                  {member.avatar_url ? (
-                    <img
-                      src={member.avatar_url}
-                      alt={member.name || "User"}
-                      style={teamAvatar}
-                    />
-                  ) : (
-                    <div style={teamAvatarPlaceholder}>
-                      {(member.name || "?").charAt(0).toUpperCase()}
-                    </div>
-                  )}
 
-                  <div style={teamName}>{member.name || "Unknown user"}</div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {isOwnProfile && !editing && (
+{isOwnProfile && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Edit Profile
@@ -717,9 +833,7 @@ const saveProfile = async (e) => {
                 <div style={label}>Name</div>
                 <input
                   value={form.name}
-                  onChange={(e) =>
-                    setForm({ ...form, name: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   style={field}
                 />
               </div>
@@ -751,9 +865,7 @@ const saveProfile = async (e) => {
                 <div style={label}>Email Address</div>
                 <input
                   value={form.email}
-                  onChange={(e) =>
-                    setForm({ ...form, email: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                   style={field}
                 />
               </div>
@@ -762,9 +874,7 @@ const saveProfile = async (e) => {
                 <div style={label}>Phone Number</div>
                 <input
                   value={form.phone}
-                  onChange={(e) =>
-                    setForm({ ...form, phone: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   style={field}
                 />
               </div>
@@ -803,8 +913,7 @@ const saveProfile = async (e) => {
               </div>
             </div>
 
-
-<div style={btnRow}>
+            <div style={btnRow}>
               <button type="submit" style={primaryBtn}>
                 Save
               </button>
@@ -895,6 +1004,11 @@ const roleBadge = { marginTop: 8, display: "inline-block", background: "rgba(228
 const metaLine = { marginTop: 8, opacity: 0.8 };
 const partnerBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
 const statusPill = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "10px 14px", borderRadius: 12, fontWeight: "bold" };
+const sportsBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const sportsGrid = { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 };
+const sportBtn = { background: "#222", border: "1px solid #333", color: "white", padding: "8px 14px", borderRadius: 999, cursor: "pointer" };
+const sportSelected = { background: "#e4ef16", color: "black", border: "1px solid #e4ef16", padding: "8px 14px", borderRadius: 999, fontWeight: "bold", cursor: "pointer" };
+const sportSelectedStatic = { background: "#e4ef16", color: "black", border: "1px solid #e4ef16", padding: "8px 14px", borderRadius: 999, fontWeight: "bold" };
 const linksBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, display: "grid", gap: 10 };
 const teamBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
 const teamGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12, marginTop: 12 };
@@ -922,10 +1036,10 @@ const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
 const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
 const zoomWrap = { marginTop: 16 };
 
-
+           
 
 
   
+
+
   
-
-
