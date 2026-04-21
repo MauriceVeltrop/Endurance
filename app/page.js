@@ -3,37 +3,38 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import TeamRequestsPanel from "../components/TeamRequestsPanel";
 
 export default function Home() {
-  const leegEvent = {
-    titel: "",
-    sport: "Hardlopen",
-    afstand: 10,
-    datum: "",
-    tijd: "",
-    locatie: "",
-    toelichting: "",
+  const emptyEvent = {
+    title: "",
+    sport: "Running",
+    distance: 10,
+    date: "",
+    time: "",
+    location: "",
+    description: "",
   };
 
-  const sporten = [
-    "Hardlopen",
-    "Wielrennen",
-    "Trailrun",
-    "Mountainbike",
-    "Wandelen",
+  const sports = [
+    "Running",
+    "Road Cycling",
+    "Trail Running",
+    "Mountain Biking",
+    "Walking",
   ];
 
-  const afstandRanges = {
-    Hardlopen: { min: 1, max: 50 },
-    Wielrennen: { min: 10, max: 250 },
-    Trailrun: { min: 1, max: 50 },
-    Mountainbike: { min: 5, max: 120 },
-    Wandelen: { min: 1, max: 40 },
+  const distanceRanges = {
+    Running: { min: 1, max: 50 },
+    "Road Cycling": { min: 10, max: 250 },
+    "Trail Running": { min: 1, max: 50 },
+    "Mountain Biking": { min: 5, max: 120 },
+    Walking: { min: 1, max: 40 },
   };
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
-  const [profiel, setProfiel] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   const [events, setEvents] = useState([]);
   const [likes, setLikes] = useState([]);
@@ -45,65 +46,65 @@ export default function Home() {
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [f, setF] = useState(leegEvent);
+  const [form, setForm] = useState(emptyEvent);
 
-  const [reactieTekst, setReactieTekst] = useState({});
+  const [commentText, setCommentText] = useState({});
 
   const [authMode, setAuthMode] = useState("signin");
-  const [authNaam, setAuthNaam] = useState("");
+  const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
 
-  const range = afstandRanges[f.sport] || { min: 1, max: 50 };
+  const range = distanceRanges[form.sport] || { min: 1, max: 50 };
 
-  const isModerator = profiel?.role === "moderator";
-  const isOrganisator = profiel?.role === "organisator";
-  const magEventsBeheren = isModerator || isOrganisator;
+  const isModerator = profile?.role === "moderator";
+  const isOrganizer = profile?.role === "organisator";
+  const canManageEvents = isModerator || isOrganizer;
 
-  const fmtDatum = (d) => {
+  const formatDate = (d) => {
     if (!d) return "";
     const x = new Date(d);
-    return x.toLocaleDateString("nl-NL", {
+    return x.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
     });
   };
 
-  const fmtDateTime = (datum, tijd) => new Date(`${datum}T${tijd}`);
+  const formatDateTime = (date, time) => new Date(`${date}T${time}`);
 
-  const openNieuw = () => {
+  const openNew = () => {
     setEditId(null);
-    setF(leegEvent);
+    setForm(emptyEvent);
     setOpen(true);
   };
 
-  const openBewerk = (event) => {
+  const openEdit = (event) => {
     setEditId(event.id);
-    setF({
-      titel: event.titel,
+    setForm({
+      title: event.title,
       sport: event.sport,
-      afstand: event.afstand,
-      datum: event.datum,
-      tijd: event.tijd,
-      locatie: event.locatie,
-      toelichting: event.toelichting || "",
+      distance: event.distance,
+      date: event.date,
+      time: event.time,
+      location: event.location,
+      description: event.description || "",
     });
     setOpen(true);
   };
 
-  const sluitModal = () => {
+  const closeModal = () => {
     setOpen(false);
     setEditId(null);
-    setF(leegEvent);
+    setForm(emptyEvent);
   };
 
-  const eventKaartData = useMemo(() => {
+  const eventCards = useMemo(() => {
     const now = new Date();
 
     return [...events]
-      .filter((e) => fmtDateTime(e.datum, e.tijd) >= now)
-      .sort((a, b) => fmtDateTime(a.datum, a.tijd) - fmtDateTime(b.datum, b.tijd))
+      .filter((e) => formatDateTime(e.date, e.time) >= now)
+      .sort((a, b) => formatDateTime(a.date, a.time) - formatDateTime(b.date, b.time))
       .map((e) => {
         const eventLikes = likes.filter((l) => l.event_id === e.id);
         const eventComments = comments.filter((c) => c.event_id === e.id);
@@ -112,8 +113,8 @@ export default function Home() {
         return {
           ...e,
           likes: eventLikes,
-          reacties: eventComments,
-          deelnemers: eventParticipants,
+          comments: eventComments,
+          participants: eventParticipants,
           isOwner: user?.id === e.creator_id,
           likedByMe: !!eventLikes.find((l) => l.user_id === user?.id),
           joinedByMe: !!eventParticipants.find((p) => p.user_id === user?.id),
@@ -122,8 +123,7 @@ export default function Home() {
   }, [events, likes, comments, participants, user]);
 
 
-
-  useEffect(() => {
+useEffect(() => {
     const init = async () => {
       const {
         data: { session },
@@ -148,7 +148,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!user?.id) {
-      setProfiel(null);
+      setProfile(null);
       setEvents([]);
       setLikes([]);
       setComments([]);
@@ -156,11 +156,11 @@ export default function Home() {
       return;
     }
 
-    laadProfiel();
-    laadAlles();
+    loadProfile();
+    loadEverything();
   }, [user?.id]);
 
-  const laadProfiel = async () => {
+  const loadProfile = async () => {
     if (!user?.id) return;
 
     const { data, error } = await supabase
@@ -170,23 +170,23 @@ export default function Home() {
       .single();
 
     if (error) {
-      console.error("profiel laden fout", error);
+      console.error("profile load error", error);
       return;
     }
 
-    setProfiel(data);
+    setProfile(data);
   };
 
-  const laadAlles = async () => {
+  const loadEverything = async () => {
     await Promise.all([
-      laadEvents(),
-      laadLikes(),
-      laadComments(),
-      laadParticipants(),
+      loadEvents(),
+      loadLikes(),
+      loadComments(),
+      loadParticipants(),
     ]);
   };
 
-  const laadEvents = async () => {
+  const loadEvents = async () => {
     const { data, error } = await supabase
       .from("events")
       .select(`
@@ -195,21 +195,22 @@ export default function Home() {
           id,
           naam,
           email,
-          role
+          role,
+          avatar_url
         )
       `)
-      .order("datum", { ascending: true })
-      .order("tijd", { ascending: true });
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
 
     if (error) {
-      console.error("events laden fout", error);
+      console.error("events load error", error);
       return;
     }
 
     setEvents(data || []);
   };
 
-  const laadLikes = async () => {
+  const loadLikes = async () => {
     const { data, error } = await supabase
       .from("event_likes")
       .select(`
@@ -220,19 +221,20 @@ export default function Home() {
         user_profile:profiles!event_likes_user_id_fkey (
           id,
           naam,
-          role
+          role,
+          avatar_url
         )
       `);
 
     if (error) {
-      console.error("likes laden fout", error);
+      console.error("likes load error", error);
       return;
     }
 
     setLikes(data || []);
   };
 
-  const laadComments = async () => {
+  const loadComments = async () => {
     const { data, error } = await supabase
       .from("event_comments")
       .select(`
@@ -244,20 +246,21 @@ export default function Home() {
         user_profile:profiles!event_comments_user_id_fkey (
           id,
           naam,
-          role
+          role,
+          avatar_url
         )
       `)
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("comments laden fout", error);
+      console.error("comments load error", error);
       return;
     }
 
     setComments(data || []);
   };
 
-  const laadParticipants = async () => {
+  const loadParticipants = async () => {
     const { data, error } = await supabase
       .from("event_participants")
       .select(`
@@ -268,13 +271,14 @@ export default function Home() {
         user_profile:profiles!event_participants_user_id_fkey (
           id,
           naam,
-          role
+          role,
+          avatar_url
         )
       `)
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("participants laden fout", error);
+      console.error("participants load error", error);
       return;
     }
 
@@ -289,17 +293,17 @@ export default function Home() {
       password: authPassword,
       options: {
         data: {
-          naam: authNaam || authEmail.split("@")[0],
+          naam: authName || authEmail.split("@")[0],
         },
       },
     });
 
     if (error) {
-      alert(`Signup fout: ${error.message}`);
+      alert(`Sign up failed: ${error.message}`);
       return;
     }
 
-    alert("Account aangemaakt. Je kunt nu inloggen.");
+    alert("Account created. You can now sign in.");
     setAuthMode("signin");
   };
 
@@ -312,7 +316,7 @@ export default function Home() {
     });
 
     if (error) {
-      alert(`Signin fout: ${error.message}`);
+      alert(`Sign in failed: ${error.message}`);
       return;
     }
   };
@@ -322,16 +326,17 @@ export default function Home() {
   };
 
 
+
 const saveEvent = async (e) => {
     e.preventDefault();
 
-    if (!f.titel || !f.datum || !f.tijd || !f.locatie) {
-      alert("Vul alle verplichte velden in.");
+    if (!form.title || !form.date || !form.time || !form.location) {
+      alert("Please fill in all required fields.");
       return;
     }
 
     if (!user?.id) {
-      alert("Je moet ingelogd zijn.");
+      alert("You must be signed in.");
       return;
     }
 
@@ -341,61 +346,61 @@ const saveEvent = async (e) => {
       const { error } = await supabase
         .from("events")
         .update({
-          titel: f.titel,
-          sport: f.sport,
-          afstand: f.afstand,
-          datum: f.datum,
-          tijd: f.tijd,
-          locatie: f.locatie,
-          toelichting: f.toelichting,
+          title: form.title,
+          sport: form.sport,
+          distance: form.distance,
+          date: form.date,
+          time: form.time,
+          location: form.location,
+          description: form.description,
         })
         .eq("id", editId);
 
       if (error) {
         setSavingEvent(false);
-        alert(`Opslaan mislukt: ${error.message}`);
+        alert(`Saving failed: ${error.message}`);
         return;
       }
     } else {
       const { error } = await supabase.from("events").insert({
         creator_id: user.id,
-        titel: f.titel,
-        sport: f.sport,
-        afstand: f.afstand,
-        datum: f.datum,
-        tijd: f.tijd,
-        locatie: f.locatie,
-        toelichting: f.toelichting,
+        title: form.title,
+        sport: form.sport,
+        distance: form.distance,
+        date: form.date,
+        time: form.time,
+        location: form.location,
+        description: form.description,
       });
 
       if (error) {
         setSavingEvent(false);
-        alert(`Aanmaken mislukt: ${error.message}`);
+        alert(`Creating event failed: ${error.message}`);
         return;
       }
     }
 
-    await laadEvents();
+    await loadEvents();
     setSavingEvent(false);
-    sluitModal();
+    closeModal();
   };
 
   const deleteEvent = async (id) => {
-    if (!confirm("Training verwijderen?")) return;
+    if (!confirm("Delete this event?")) return;
 
     const { error } = await supabase.from("events").delete().eq("id", id);
 
     if (error) {
-      alert(`Verwijderen mislukt: ${error.message}`);
+      alert(`Delete failed: ${error.message}`);
       return;
     }
 
-    await laadAlles();
+    await loadEverything();
   };
 
-  const toggleDeelname = async (event) => {
+  const toggleParticipation = async (event) => {
     if (!user?.id) {
-      alert("Je moet ingelogd zijn.");
+      alert("You must be signed in.");
       return;
     }
 
@@ -407,7 +412,7 @@ const saveEvent = async (e) => {
         .eq("user_id", user.id);
 
       if (error) {
-        alert(`Afmelden mislukt: ${error.message}`);
+        alert(`Leaving event failed: ${error.message}`);
         return;
       }
     } else {
@@ -417,17 +422,17 @@ const saveEvent = async (e) => {
       });
 
       if (error) {
-        alert(`Aanmelden mislukt: ${error.message}`);
+        alert(`Joining event failed: ${error.message}`);
         return;
       }
     }
 
-    await laadParticipants();
+    await loadParticipants();
   };
 
   const toggleLike = async (event) => {
     if (!user?.id) {
-      alert("Je moet ingelogd zijn.");
+      alert("You must be signed in.");
       return;
     }
 
@@ -439,7 +444,7 @@ const saveEvent = async (e) => {
         .eq("user_id", user.id);
 
       if (error) {
-        alert(`Unlike mislukt: ${error.message}`);
+        alert(`Removing like failed: ${error.message}`);
         return;
       }
     } else {
@@ -449,72 +454,72 @@ const saveEvent = async (e) => {
       });
 
       if (error) {
-        alert(`Like mislukt: ${error.message}`);
+        alert(`Liking event failed: ${error.message}`);
         return;
       }
     }
 
-    await laadLikes();
+    await loadLikes();
   };
 
-  const plaatsReactie = async (eventId) => {
+  const postComment = async (eventId) => {
     if (!user?.id) {
-      alert("Je moet ingelogd zijn.");
+      alert("You must be signed in.");
       return;
     }
 
-    const tekst = (reactieTekst[eventId] || "").trim();
-    if (!tekst) return;
+    const text = (commentText[eventId] || "").trim();
+    if (!text) return;
 
     const { error } = await supabase.from("event_comments").insert({
       event_id: eventId,
       user_id: user.id,
-      tekst,
+      tekst: text,
     });
 
     if (error) {
-      alert(`Reactie plaatsen mislukt: ${error.message}`);
+      alert(`Posting comment failed: ${error.message}`);
       return;
     }
 
-    setReactieTekst((prev) => ({ ...prev, [eventId]: "" }));
-    await laadComments();
+    setCommentText((prev) => ({ ...prev, [eventId]: "" }));
+    await loadComments();
   };
 
-  const deleteReactie = async (reactieId) => {
+  const deleteComment = async (commentId) => {
     const { error } = await supabase
       .from("event_comments")
       .delete()
-      .eq("id", reactieId);
+      .eq("id", commentId);
 
     if (error) {
-      alert(`Reactie verwijderen mislukt: ${error.message}`);
+      alert(`Deleting comment failed: ${error.message}`);
       return;
     }
 
-    await laadComments();
+    await loadComments();
   };
 
-  const agenda = (event) => {
-    const start = `${event.datum.replaceAll("-", "")}T${event.tijd.replace(":", "")}00`;
-    const eindDate = new Date(`${event.datum}T${event.tijd}:00`);
-    eindDate.setHours(eindDate.getHours() + 1);
+  const downloadIcs = (event) => {
+    const start = `${event.date.replaceAll("-", "")}T${event.time.replace(":", "")}00`;
+    const endDate = new Date(`${event.date}T${event.time}:00`);
+    endDate.setHours(endDate.getHours() + 1);
 
-    const yyyy = eindDate.getFullYear();
-    const mm = String(eindDate.getMonth() + 1).padStart(2, "0");
-    const dd = String(eindDate.getDate()).padStart(2, "0");
-    const hh = String(eindDate.getHours()).padStart(2, "0");
-    const mi = String(eindDate.getMinutes()).padStart(2, "0");
+    const yyyy = endDate.getFullYear();
+    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(endDate.getDate()).padStart(2, "0");
+    const hh = String(endDate.getHours()).padStart(2, "0");
+    const mi = String(endDate.getMinutes()).padStart(2, "0");
     const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
 
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "BEGIN:VEVENT",
-      `SUMMARY:${event.titel}`,
+      `SUMMARY:${event.title}`,
       `DTSTART:${start}`,
       `DTEND:${end}`,
-      `LOCATION:${event.locatie}`,
+      `LOCATION:${event.location}`,
       `DESCRIPTION:${event.sport} training via Endurance`,
       "END:VEVENT",
       "END:VCALENDAR",
@@ -524,26 +529,26 @@ const saveEvent = async (e) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${event.titel.replace(/\s+/g, "-").toLowerCase()}.ics`;
+    a.download = `${event.title.replace(/\s+/g, "-").toLowerCase()}.ics`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const maps = (locatie) => {
-    const q = encodeURIComponent(locatie);
+  const openMaps = (location) => {
+    const q = encodeURIComponent(location);
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
   if (loading) {
     return (
       <main style={app}>
-        <div style={emptyCard}>Laden...</div>
+        <div style={emptyCard}>Loading...</div>
       </main>
     );
-  }
+        }
 
 
-  if (!session) {
+if (!session) {
     return (
       <main style={app}>
         <header style={header}>
@@ -561,7 +566,7 @@ const saveEvent = async (e) => {
               onClick={() => setAuthMode("signin")}
               type="button"
             >
-              Inloggen
+              Sign In
             </button>
 
             <button
@@ -569,38 +574,38 @@ const saveEvent = async (e) => {
               onClick={() => setAuthMode("signup")}
               type="button"
             >
-              Account maken
+              Create Account
             </button>
           </div>
 
           <form onSubmit={authMode === "signup" ? handleSignUp : handleSignIn} style={grid}>
             {authMode === "signup" && (
               <input
-                value={authNaam}
-                onChange={(e) => setAuthNaam(e.target.value)}
-                placeholder="Naam"
-                style={veld}
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+                placeholder="Name"
+                style={field}
               />
             )}
 
             <input
               value={authEmail}
               onChange={(e) => setAuthEmail(e.target.value)}
-              placeholder="E-mailadres"
+              placeholder="Email address"
               type="email"
-              style={veld}
+              style={field}
             />
 
             <input
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
-              placeholder="Wachtwoord"
+              placeholder="Password"
               type="password"
-              style={veld}
+              style={field}
             />
 
             <button type="submit" style={primaryBtn}>
-              {authMode === "signup" ? "Registreren" : "Inloggen"}
+              {authMode === "signup" ? "Register" : "Sign In"}
             </button>
           </form>
         </div>
@@ -620,61 +625,63 @@ const saveEvent = async (e) => {
 
       <section style={loginBar}>
         <div style={loginInfo}>
-          Ingelogd als <strong>{profiel?.naam || user?.email}</strong>
-          <div style={roleBadge}>{profiel?.role || "gebruiker"}</div>
+          Signed in as <strong>{profile?.naam || user?.email}</strong>
+          <div style={roleBadge}>{profile?.role || "user"}</div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link href={`/profile/${user.id}`} style={adminLinkBtn}>
-            Mijn profiel
+          <Link href={`/profile/${user.id}`} style={actionLinkBtn}>
+            My Profile
           </Link>
 
           {isModerator && (
-            <Link href="/admin" style={adminLinkBtn}>
+            <Link href="/admin" style={actionLinkBtn}>
               Admin
             </Link>
           )}
 
           <button onClick={handleSignOut} style={secondaryBtn}>
-            Uitloggen
+            Sign Out
           </button>
         </div>
       </section>
+
+      {user?.id && <TeamRequestsPanel userId={user.id} />}
 
       {open && (
         <div style={overlay}>
           <form onSubmit={saveEvent} style={modal}>
             <div style={modalTop}>
               <h2 style={{ margin: 0, fontSize: 24 }}>
-                {editId ? "Training bewerken" : "Training toevoegen"}
+                {editId ? "Edit Event" : "Add Event"}
               </h2>
-              <button type="button" onClick={sluitModal} style={closeBtn}>
+              <button type="button" onClick={closeModal} style={closeBtn}>
                 ✕
               </button>
             </div>
 
             <div style={grid}>
               <input
-                value={f.titel}
-                onChange={(e) => setF({ ...f, titel: e.target.value })}
-                placeholder="Titel"
-                style={veld}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="Title"
+                style={field}
               />
 
               <div>
-                <div style={label}>Kies sport</div>
+                <div style={label}>Choose sport</div>
                 <select
-                  value={f.sport}
+                  value={form.sport}
                   onChange={(e) =>
-                    setF({
-                      ...f,
+                    setForm({
+                      ...form,
                       sport: e.target.value,
-                      afstand: afstandRanges[e.target.value].min,
+                      distance: distanceRanges[e.target.value].min,
                     })
                   }
-                  style={veld}
+                  style={field}
                 >
-                  {sporten.map((sport) => (
+                  {sports.map((sport) => (
                     <option key={sport} value={sport}>
                       {sport}
                     </option>
@@ -683,14 +690,14 @@ const saveEvent = async (e) => {
               </div>
 
               <div>
-                <div style={label}>Afstand: {f.afstand} km</div>
+                <div style={label}>Distance: {form.distance} km</div>
                 <input
                   type="range"
                   min={range.min}
                   max={range.max}
                   step="1"
-                  value={f.afstand}
-                  onChange={(e) => setF({ ...f, afstand: Number(e.target.value) })}
+                  value={form.distance}
+                  onChange={(e) => setForm({ ...form, distance: Number(e.target.value) })}
                   style={{ width: "100%" }}
                 />
                 <div style={rangeRow}>
@@ -700,49 +707,49 @@ const saveEvent = async (e) => {
               </div>
 
               <div>
-                <div style={label}>Datum</div>
+                <div style={label}>Date</div>
                 <input
                   type="date"
-                  value={f.datum}
-                  onChange={(e) => setF({ ...f, datum: e.target.value })}
-                  style={veld}
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  style={field}
                 />
               </div>
 
               <div>
-                <div style={label}>Tijd</div>
+                <div style={label}>Time</div>
                 <input
                   type="time"
-                  value={f.tijd}
-                  onChange={(e) => setF({ ...f, tijd: e.target.value })}
-                  style={veld}
+                  value={form.time}
+                  onChange={(e) => setForm({ ...form, time: e.target.value })}
+                  style={field}
                 />
               </div>
 
               <input
-                value={f.locatie}
-                onChange={(e) => setF({ ...f, locatie: e.target.value })}
-                placeholder="Locatie"
-                style={veld}
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="Location"
+                style={field}
               />
 
               <div>
-                <div style={label}>Toelichting</div>
+                <div style={label}>Description</div>
                 <textarea
-                  value={f.toelichting}
-                  onChange={(e) => setF({ ...f, toelichting: e.target.value })}
-                  placeholder="Extra info over de training"
-                  style={{ ...veld, minHeight: 110, resize: "vertical" }}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Extra information about the training"
+                  style={{ ...field, minHeight: 110, resize: "vertical" }}
                 />
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button type="submit" style={primaryBtn}>
-                  {savingEvent ? "Opslaan..." : "Opslaan"}
+                  {savingEvent ? "Saving..." : "Save"}
                 </button>
 
-                <button type="button" onClick={sluitModal} style={secondaryBtn}>
-                  Annuleren
+                <button type="button" onClick={closeModal} style={secondaryBtn}>
+                  Cancel
                 </button>
               </div>
             </div>
@@ -752,72 +759,72 @@ const saveEvent = async (e) => {
 
 
 <section style={eventsSection}>
-        {eventKaartData.length === 0 ? (
+        {eventCards.length === 0 ? (
           <div style={emptyCard}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-              Nog geen trainingen gepland
+              No upcoming events
             </div>
             <div style={{ opacity: 0.7 }}>
-              Zodra er trainingen zijn toegevoegd, verschijnen ze hier.
+              As soon as events are added, they will appear here.
             </div>
           </div>
         ) : (
-          <div style={hScroll}>
-            {eventKaartData.map((event) => (
+          <div style={horizontalScroll}>
+            {eventCards.map((event) => (
               <div key={event.id} style={card}>
                 <div style={sportTag}>{event.sport}</div>
-                <h2 style={cardTitle}>{event.titel}</h2>
+                <h2 style={cardTitle}>{event.title}</h2>
 
-                <div style={afstandText}>{event.afstand} km</div>
+                <div style={distanceText}>{event.distance} km</div>
 
                 <div style={meta}>
-                  <div>📅 {fmtDatum(event.datum)}</div>
-                  <div>⏰ {event.tijd}</div>
+                  <div>📅 {formatDate(event.date)}</div>
+                  <div>⏰ {event.time}</div>
                   <div style={creatorText}>
-                    👤 Aangemaakt door:{" "}
+                    👤 Created by{" "}
                     <Link
                       href={`/profile/${event.creator_id}`}
                       style={profileLink}
                     >
                       {event.creator_profile?.naam ||
                         event.creator_profile?.email ||
-                        "Onbekend"}
+                        "Unknown"}
                     </Link>
                   </div>
 
-                  <button onClick={() => maps(event.locatie)} style={mapBtn}>
-                    📍 {event.locatie}
+                  <button onClick={() => openMaps(event.location)} style={mapBtn}>
+                    📍 {event.location}
                   </button>
 
                   <div style={{ opacity: 0.75 }}>
-                    Deelnemers: {event.deelnemers.length}
+                    Participants: {event.participants.length}
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                    {event.deelnemers.map((d) => (
+                    {event.participants.map((p) => (
                       <Link
-                        key={d.id}
-                        href={`/profile/${d.user_id}`}
+                        key={p.id}
+                        href={`/profile/${p.user_id}`}
                         style={chipLink}
                       >
-                        {d.user_profile?.naam || "Onbekend"}
+                        {p.user_profile?.naam || "Unknown"}
                       </Link>
                     ))}
                   </div>
                 </div>
 
                 <div style={communityBox}>
-                  <div style={communityTitle}>Toelichting</div>
+                  <div style={communityTitle}>Description</div>
 
                   <div style={communityText}>
-                    {event.toelichting?.trim()
-                      ? event.toelichting
-                      : "Nog geen toelichting toegevoegd."}
+                    {event.description?.trim()
+                      ? event.description
+                      : "No description added yet."}
                   </div>
 
                   <div style={likeRow}>
                     <button onClick={() => toggleLike(event)} style={likeBtn}>
-                      {event.likedByMe ? "❤️ Geliket" : "🤍 Like"}
+                      {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
                     </button>
 
                     <div style={likeCount}>
@@ -832,7 +839,7 @@ const saveEvent = async (e) => {
                               href={`/profile/${l.user_id}`}
                               style={inlineProfileLink}
                             >
-                              {l.user_profile?.naam || "Onbekend"}
+                              {l.user_profile?.naam || "Unknown"}
                             </Link>
                             {index < event.likes.length - 1 ? ", " : ""}
                           </span>
@@ -841,88 +848,88 @@ const saveEvent = async (e) => {
                     )}
                   </div>
 
-                  <div style={reactiesWrap}>
-                    <div style={communityTitle}>Reacties</div>
+                  <div style={commentsWrap}>
+                    <div style={communityTitle}>Comments</div>
 
-                    {event.reacties.length ? (
-                      <div style={reactieLijst}>
-                        {event.reacties.map((r) => (
-                          <div key={r.id} style={reactieItem}>
-                            <div style={reactieKop}>
-                              <div style={reactieNaam}>
+                    {event.comments.length ? (
+                      <div style={commentList}>
+                        {event.comments.map((c) => (
+                          <div key={c.id} style={commentItem}>
+                            <div style={commentHeader}>
+                              <div style={commentName}>
                                 <Link
-                                  href={`/profile/${r.user_id}`}
+                                  href={`/profile/${c.user_id}`}
                                   style={inlineProfileLink}
                                 >
-                                  {r.user_profile?.naam || "Onbekend"}
+                                  {c.user_profile?.naam || "Unknown"}
                                 </Link>
                               </div>
 
-                              {(r.user_id === user?.id || isModerator) && (
+                              {(c.user_id === user?.id || isModerator) && (
                                 <button
                                   type="button"
-                                  onClick={() => deleteReactie(r.id)}
+                                  onClick={() => deleteComment(c.id)}
                                   style={miniDeleteBtn}
                                 >
-                                  Verwijder
+                                  Delete
                                 </button>
                               )}
                             </div>
 
-                            <div style={reactieTekstStyle}>{r.tekst}</div>
+                            <div style={commentTextStyle}>{c.tekst}</div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div style={communityMuted}>Nog geen reacties.</div>
+                      <div style={communityMuted}>No comments yet.</div>
                     )}
 
-                    <div style={reactieForm}>
-                      <div style={reactionUserLabel}>
-                        Reageren als <strong>{profiel?.naam || user?.email}</strong>
+                    <div style={commentForm}>
+                      <div style={commentUserLabel}>
+                        Commenting as <strong>{profile?.naam || user?.email}</strong>
                       </div>
 
                       <textarea
-                        value={reactieTekst[event.id] || ""}
+                        value={commentText[event.id] || ""}
                         onChange={(e) =>
-                          setReactieTekst((prev) => ({
+                          setCommentText((prev) => ({
                             ...prev,
                             [event.id]: e.target.value,
                           }))
                         }
-                        placeholder="Plaats een reactie..."
-                        style={reactieVeld}
+                        placeholder="Write a comment..."
+                        style={commentField}
                       />
 
                       <button
                         type="button"
-                        onClick={() => plaatsReactie(event.id)}
+                        onClick={() => postComment(event.id)}
                         style={primaryBtnSmall}
                       >
-                        Reageer
+                        Post Comment
                       </button>
                     </div>
                   </div>
                 </div>
 
                 <div style={btnRow}>
-                  <button onClick={() => toggleDeelname(event)} style={primaryBtnSmall}>
-                    {event.joinedByMe ? "Afmelden" : "Ik doe mee"}
+                  <button onClick={() => toggleParticipation(event)} style={primaryBtnSmall}>
+                    {event.joinedByMe ? "Leave Event" : "Join Event"}
                   </button>
 
-                  <button onClick={() => agenda(event)} style={secondaryBtnSmall}>
-                    Zet in agenda
+                  <button onClick={() => downloadIcs(event)} style={secondaryBtnSmall}>
+                    Add to Calendar
                   </button>
 
                   {(event.isOwner || isModerator) && (
-                    <button onClick={() => openBewerk(event)} style={secondaryBtnSmall}>
-                      Bewerk
+                    <button onClick={() => openEdit(event)} style={secondaryBtnSmall}>
+                      Edit
                     </button>
                   )}
 
                   {(event.isOwner || isModerator) && (
                     <button onClick={() => deleteEvent(event.id)} style={dangerBtnSmall}>
-                      Verwijder
+                      Delete
                     </button>
                   )}
                 </div>
@@ -932,14 +939,16 @@ const saveEvent = async (e) => {
         )}
       </section>
 
-      {magEventsBeheren && (
-        <button onClick={openNieuw} style={fab}>
+      {canManageEvents && (
+        <button onClick={openNew} style={fab}>
           +
         </button>
       )}
     </main>
   );
-}
+                  }
+
+
 
 const app = {
   background: "#050505",
@@ -1002,7 +1011,7 @@ const roleBadge = {
   fontWeight: "bold",
 };
 
-const adminLinkBtn = {
+const actionLinkBtn = {
   display: "inline-block",
   background: "#2a2a2a",
   color: "white",
@@ -1015,7 +1024,7 @@ const eventsSection = {
   paddingBottom: 110,
 };
 
-const hScroll = {
+const horizontalScroll = {
   display: "flex",
   gap: 16,
   overflowX: "auto",
@@ -1078,7 +1087,7 @@ const grid = {
   gap: 12,
 };
 
-const veld = {
+const field = {
   width: "100%",
   background: "#1b1b1b",
   color: "white",
@@ -1124,7 +1133,7 @@ const cardTitle = {
   marginBottom: 6,
 };
 
-const afstandText = {
+const distanceText = {
   fontSize: 16,
   fontWeight: "600",
   color: "#cfd3d6",
@@ -1223,24 +1232,24 @@ const likeUsers = {
   opacity: 0.6,
 };
 
-const reactiesWrap = {
+const commentsWrap = {
   display: "grid",
   gap: 10,
 };
 
-const reactieLijst = {
+const commentList = {
   display: "grid",
   gap: 10,
 };
 
-const reactieItem = {
+const commentItem = {
   background: "#151515",
   border: "1px solid rgba(255,255,255,0.05)",
   borderRadius: 14,
   padding: 12,
 };
 
-const reactieKop = {
+const commentHeader = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
@@ -1248,13 +1257,13 @@ const reactieKop = {
   marginBottom: 4,
 };
 
-const reactieNaam = {
+const commentName = {
   fontSize: 13,
   fontWeight: 700,
   color: "#e4ef16",
 };
 
-const reactieTekstStyle = {
+const commentTextStyle = {
   fontSize: 14,
   lineHeight: 1.45,
   color: "#e3e3e3",
@@ -1266,18 +1275,18 @@ const communityMuted = {
   opacity: 0.6,
 };
 
-const reactionUserLabel = {
+const commentUserLabel = {
   fontSize: 13,
   opacity: 0.75,
 };
 
-const reactieForm = {
+const commentForm = {
   display: "grid",
   gap: 10,
   marginTop: 6,
 };
 
-const reactieVeld = {
+const commentField = {
   width: "100%",
   background: "#1b1b1b",
   color: "white",
@@ -1361,4 +1370,7 @@ const fab = {
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
+  
 
+
+  
