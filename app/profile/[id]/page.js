@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
@@ -132,7 +133,8 @@ export default function ProfilePage({ params }) {
           avatar_visibility:
             visData.avatar_visibility || DEFAULT_VISIBILITY.avatar_visibility,
           location_visibility:
-            visData.location_visibility || DEFAULT_VISIBILITY.location_visibility,
+            visData.location_visibility ||
+            DEFAULT_VISIBILITY.location_visibility,
           email_visibility:
             visData.email_visibility || DEFAULT_VISIBILITY.email_visibility,
           phone_visibility:
@@ -166,7 +168,6 @@ export default function ProfilePage({ params }) {
 
     setMyProfile(data);
   };
-
 
 
 
@@ -262,37 +263,6 @@ const loadPartnerStatus = async () => {
     await loadPartnerStatus();
   };
 
-  const saveVisibility = async () => {
-    if (!profile?.id) {
-      alert("Profile not found.");
-      return;
-    }
-
-    const payload = {
-      user_id: profile.id,
-      avatar_visibility: visibilityForm.avatar_visibility,
-      location_visibility: visibilityForm.location_visibility,
-      email_visibility: visibilityForm.email_visibility,
-      phone_visibility: visibilityForm.phone_visibility,
-      strava_visibility: visibilityForm.strava_visibility,
-      garmin_visibility: visibilityForm.garmin_visibility,
-      suunto_visibility: visibilityForm.suunto_visibility,
-      age_visibility: visibilityForm.age_visibility,
-    };
-
-    const { error } = await supabase
-      .from("profile_visibility_settings")
-      .upsert(payload, { onConflict: "user_id" });
-
-    if (error) {
-      alert(`Saving privacy settings failed: ${error.message}`);
-      return;
-    }
-
-    alert("Privacy settings saved");
-    await loadProfile();
-  };
-
   const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
     setCroppedAreaPixels(croppedPixels);
   }, []);
@@ -313,8 +283,6 @@ const loadPartnerStatus = async () => {
       image.setAttribute("crossOrigin", "anonymous");
       image.src = url;
     });
-
-
 
   const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
@@ -341,7 +309,8 @@ const loadPartnerStatus = async () => {
     });
   };
 
-  const isOwnProfile = user?.id === profile?.id;
+
+const isOwnProfile = user?.id === profile?.id;
   const isModerator = myProfile?.role === "moderator";
   const isPartner =
     partnerRow?.status === "accepted" &&
@@ -452,9 +421,7 @@ const loadPartnerStatus = async () => {
     setUploadingAvatar(false);
   };
 
-
-
-const saveProfile = async (e) => {
+  const saveProfile = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase
@@ -482,7 +449,9 @@ const saveProfile = async (e) => {
     await loadMyProfile();
   };
 
-  if (loading) {
+
+
+if (loading) {
     return (
       <main style={app}>
         <div style={card}>Loading...</div>
@@ -600,167 +569,6 @@ const saveProfile = async (e) => {
           </div>
         )}
 
-
-
-
-{isOwnProfile && (
-          <div style={privacyBox}>
-            <div style={sectionTitle}>Privacy Settings</div>
-
-            <div style={privacyGrid}>
-              <div>
-                <div style={label}>Profile Photo</div>
-                <select
-                  value={visibilityForm.avatar_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      avatar_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Age</div>
-                <select
-                  value={visibilityForm.age_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      age_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Location</div>
-                <select
-                  value={visibilityForm.location_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      location_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Email Address</div>
-                <select
-                  value={visibilityForm.email_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      email_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Phone Number</div>
-                <select
-                  value={visibilityForm.phone_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      phone_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Strava</div>
-                <select
-                  value={visibilityForm.strava_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      strava_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Garmin</div>
-                <select
-                  value={visibilityForm.garmin_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      garmin_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-
-              <div>
-                <div style={label}>Suunto</div>
-                <select
-                  value={visibilityForm.suunto_visibility}
-                  onChange={(e) =>
-                    setVisibilityForm({
-                      ...visibilityForm,
-                      suunto_visibility: e.target.value,
-                    })
-                  }
-                  style={field}
-                >
-                  <option value="private">Only Me</option>
-                  <option value="partners">Training Partners</option>
-                  <option value="all">All Users</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={btnRow}>
-              <button type="button" onClick={saveVisibility} style={primaryBtn}>
-                Save Privacy Settings
-              </button>
-            </div>
-          </div>
-        )}
-
         <div style={linksBox}>
           <div style={sectionTitle}>Sport Profiles</div>
 
@@ -806,11 +614,16 @@ const saveProfile = async (e) => {
 
 
 
-           {isOwnProfile && !editing && (
+
+{isOwnProfile && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Edit Profile
             </button>
+
+            <Link href="/settings/privacy" style={secondaryLinkBtn}>
+              Privacy Settings
+            </Link>
           </div>
         )}
 
@@ -955,7 +768,9 @@ const saveProfile = async (e) => {
               />
             </div>
 
-            <div style={btnRow}>
+
+
+<div style={btnRow}>
               <button
                 type="button"
                 onClick={uploadCroppedAvatar}
@@ -1111,21 +926,6 @@ const statusPill = {
   fontWeight: "bold",
 };
 
-const privacyBox = {
-  marginTop: 18,
-  marginBottom: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const privacyGrid = {
-  display: "grid",
-  gap: 12,
-  marginTop: 12,
-};
-
 const linksBox = {
   marginTop: 18,
   padding: 16,
@@ -1204,6 +1004,15 @@ const secondaryBtn = {
   borderRadius: 12,
 };
 
+const secondaryLinkBtn = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
 const linkBtn = {
   display: "inline-block",
   background: "#2a2a2a",
@@ -1273,9 +1082,6 @@ const zoomWrap = {
 };
 
 
-
-
-
-
-
+           
   
+
