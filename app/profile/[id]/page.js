@@ -28,6 +28,7 @@ export default function ProfilePage({ params }) {
   const [editing, setEditing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [partnerLoading, setPartnerLoading] = useState(false);
+  const [teamLoading, setTeamLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -41,9 +42,8 @@ export default function ProfilePage({ params }) {
   });
 
   const [visibility, setVisibility] = useState(DEFAULT_VISIBILITY);
-  const [visibilityForm, setVisibilityForm] = useState(DEFAULT_VISIBILITY);
-
   const [partnerRow, setPartnerRow] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
 
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
@@ -93,6 +93,14 @@ export default function ProfilePage({ params }) {
       setPartnerRow(null);
     }
   }, [user?.id, profileId]);
+
+  useEffect(() => {
+    if (profileId) {
+      loadTeamMembers();
+    } else {
+      setTeamMembers([]);
+    }
+  }, [profileId]);
 
   const loadProfile = async () => {
     const { data, error } = await supabase
@@ -151,7 +159,6 @@ export default function ProfilePage({ params }) {
       : DEFAULT_VISIBILITY;
 
     setVisibility(nextVisibility);
-    setVisibilityForm(nextVisibility);
   };
 
   const loadMyProfile = async () => {
@@ -168,8 +175,6 @@ export default function ProfilePage({ params }) {
 
     setMyProfile(data);
   };
-
-
 
 
 const loadPartnerStatus = async () => {
@@ -191,6 +196,47 @@ const loadPartnerStatus = async () => {
     }
 
     setPartnerRow(data || null);
+  };
+
+  const loadTeamMembers = async () => {
+    setTeamLoading(true);
+
+    const { data, error } = await supabase
+      .from("training_partners")
+      .select("*")
+      .eq("status", "accepted")
+      .or(`requester_id.eq.${profileId},addressee_id.eq.${profileId}`);
+
+    if (error) {
+      console.error("team members load error", error);
+      setTeamLoading(false);
+      return;
+    }
+
+    const rows = data || [];
+    const otherUserIds = rows.map((row) =>
+      row.requester_id === profileId ? row.addressee_id : row.requester_id
+    );
+
+    if (!otherUserIds.length) {
+      setTeamMembers([]);
+      setTeamLoading(false);
+      return;
+    }
+
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, name, avatar_url")
+      .in("id", otherUserIds);
+
+    if (profilesError) {
+      console.error("team member profiles load error", profilesError);
+      setTeamLoading(false);
+      return;
+    }
+
+    setTeamMembers(profilesData || []);
+    setTeamLoading(false);
   };
 
   const sendPartnerRequest = async () => {
@@ -225,6 +271,7 @@ const loadPartnerStatus = async () => {
     }
 
     await loadPartnerStatus();
+    await loadTeamMembers();
   };
 
   const rejectPartnerRequest = async () => {
@@ -261,6 +308,7 @@ const loadPartnerStatus = async () => {
     }
 
     await loadPartnerStatus();
+    await loadTeamMembers();
   };
 
   const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
@@ -284,7 +332,8 @@ const loadPartnerStatus = async () => {
       image.src = url;
     });
 
-  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+
+const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
     const image = await createImage(imageSrcValue);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -309,8 +358,7 @@ const loadPartnerStatus = async () => {
     });
   };
 
-
-const isOwnProfile = user?.id === profile?.id;
+  const isOwnProfile = user?.id === profile?.id;
   const isModerator = myProfile?.role === "moderator";
   const isPartner =
     partnerRow?.status === "accepted" &&
@@ -412,6 +460,7 @@ const isOwnProfile = user?.id === profile?.id;
       setImageSrc(null);
       await loadProfile();
       await loadMyProfile();
+      await loadTeamMembers();
       alert("Profile photo updated");
     } catch (err) {
       console.error(err);
@@ -421,7 +470,9 @@ const isOwnProfile = user?.id === profile?.id;
     setUploadingAvatar(false);
   };
 
-  const saveProfile = async (e) => {
+
+
+const saveProfile = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase
@@ -447,11 +498,10 @@ const isOwnProfile = user?.id === profile?.id;
     setEditing(false);
     await loadProfile();
     await loadMyProfile();
+    await loadTeamMembers();
   };
 
-
-
-if (loading) {
+  if (loading) {
     return (
       <main style={app}>
         <div style={card}>Loading...</div>
@@ -569,7 +619,9 @@ if (loading) {
           </div>
         )}
 
-        <div style={linksBox}>
+
+
+<div style={linksBox}>
           <div style={sectionTitle}>Sport Profiles</div>
 
           {profile.strava_url && canSeeField(visibility?.strava_visibility) ? (
@@ -612,10 +664,41 @@ if (loading) {
           ) && <div style={emptyText}>No visible sport profiles.</div>}
         </div>
 
+        <div style={teamBox}>
+          <div style={sectionTitle}>My Team</div>
 
+          {teamLoading ? (
+            <div style={emptyText}>Loading team...</div>
+          ) : teamMembers.length === 0 ? (
+            <div style={emptyText}>No training partners yet.</div>
+          ) : (
+            <div style={teamGrid}>
+              {teamMembers.map((member) => (
+                <Link
+                  key={member.id}
+                  href={`/profile/${member.id}`}
+                  style={teamCard}
+                >
+                  {member.avatar_url ? (
+                    <img
+                      src={member.avatar_url}
+                      alt={member.name || "User"}
+                      style={teamAvatar}
+                    />
+                  ) : (
+                    <div style={teamAvatarPlaceholder}>
+                      {(member.name || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
 
+                  <div style={teamName}>{member.name || "Unknown user"}</div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
 
-{isOwnProfile && !editing && (
+        {isOwnProfile && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Edit Profile
@@ -720,7 +803,8 @@ if (loading) {
               </div>
             </div>
 
-            <div style={btnRow}>
+
+<div style={btnRow}>
               <button type="submit" style={primaryBtn}>
                 Save
               </button>
@@ -768,9 +852,7 @@ if (loading) {
               />
             </div>
 
-
-
-<div style={btnRow}>
+            <div style={btnRow}>
               <button
                 type="button"
                 onClick={uploadCroppedAvatar}
@@ -798,290 +880,52 @@ if (loading) {
   );
 }
 
-const app = {
-  minHeight: "100vh",
-  background: "#050505",
-  color: "white",
-  padding: 16,
-  fontFamily: "sans-serif",
-};
-
-const topBar = {
-  marginBottom: 16,
-};
-
-const card = {
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 24,
-  padding: 20,
-};
-
-const profileHeader = {
-  display: "flex",
-  gap: 20,
-  alignItems: "center",
-  marginBottom: 24,
-};
-
-const avatarWrap = {
-  flexShrink: 0,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 10,
-};
-
-const avatarRing = {
-  width: 118,
-  height: 118,
-  borderRadius: "50%",
-  padding: 4,
-  background:
-    "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const avatar = {
-  width: 110,
-  height: 110,
-  borderRadius: "50%",
-  objectFit: "cover",
-  objectPosition: "center",
-  display: "block",
-  border: "3px solid rgba(228,239,22,0.35)",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-  background: "#111",
-};
-
-const avatarPlaceholder = {
-  width: 110,
-  height: 110,
-  borderRadius: "50%",
-  background: "#1f1f1f",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 42,
-  fontWeight: "bold",
-  color: "#e4ef16",
-  border: "3px solid rgba(228,239,22,0.18)",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-};
-
-const uploadWrap = {
-  marginTop: 2,
-};
-
-const uploadLabel = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 12,
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: "bold",
-  border: "1px solid rgba(255,255,255,0.08)",
-};
-
-const nameStyle = {
-  margin: 0,
-  fontSize: 28,
-};
-
-const roleBadge = {
-  marginTop: 8,
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const metaLine = {
-  marginTop: 8,
-  opacity: 0.8,
-};
-
-const partnerBox = {
-  marginTop: 18,
-  marginBottom: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const statusPill = {
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "10px 14px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const linksBox = {
-  marginTop: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  display: "grid",
-  gap: 10,
-};
-
-const sectionTitle = {
-  fontSize: 16,
-  fontWeight: 700,
-};
-
-const sportLink = {
-  display: "inline-block",
-  color: "#e4ef16",
-  textDecoration: "none",
-};
-
-const emptyText = {
-  opacity: 0.65,
-};
-
-const editBox = {
-  marginTop: 20,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const grid = {
-  display: "grid",
-  gap: 12,
-};
-
-const label = {
-  marginBottom: 6,
-  fontSize: 13,
-  opacity: 0.75,
-};
-
-const field = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "12px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-};
-
-const btnRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 16,
-};
-
-const primaryBtn = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const secondaryBtn = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const secondaryLinkBtn = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const linkBtn = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const teamUpBtn = {
-  background: "linear-gradient(135deg,#2563eb,#06b6d4)",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 14,
-  fontWeight: "bold",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-};
-
-const teamAcceptBtn = {
-  background: "linear-gradient(135deg,#2563eb,#06b6d4)",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 14,
-  fontWeight: "bold",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-};
-
-const cropOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.8)",
-  zIndex: 50,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-};
-
-const cropModal = {
-  width: "100%",
-  maxWidth: 420,
-  background: "#111",
-  borderRadius: 24,
-  padding: 16,
-  border: "1px solid rgba(255,255,255,0.08)",
-};
-
-const cropTitle = {
-  fontSize: 20,
-  fontWeight: 700,
-  marginBottom: 12,
-};
-
-const cropAreaWrap = {
-  position: "relative",
-  width: "100%",
-  height: 320,
-  background: "#000",
-  borderRadius: 18,
-  overflow: "hidden",
-};
-
-const zoomWrap = {
-  marginTop: 16,
-};
+const app = { minHeight: "100vh", background: "#050505", color: "white", padding: 16, fontFamily: "sans-serif" };
+const topBar = { marginBottom: 16 };
+const card = { background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 24, padding: 20 };
+const profileHeader = { display: "flex", gap: 20, alignItems: "center", marginBottom: 24 };
+const avatarWrap = { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 };
+const avatarRing = { width: 118, height: 118, borderRadius: "50%", padding: 4, background: "linear-gradient(135deg, rgba(228,239,22,0.55), rgba(228,239,22,0.12))", display: "flex", alignItems: "center", justifyContent: "center" };
+const avatar = { width: 110, height: 110, borderRadius: "50%", objectFit: "cover", objectPosition: "center", display: "block", border: "3px solid rgba(228,239,22,0.35)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", background: "#111" };
+const avatarPlaceholder = { width: 110, height: 110, borderRadius: "50%", background: "#1f1f1f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, fontWeight: "bold", color: "#e4ef16", border: "3px solid rgba(228,239,22,0.18)", boxShadow: "0 8px 24px rgba(0,0,0,0.35)" };
+const uploadWrap = { marginTop: 2 };
+const uploadLabel = { display: "inline-block", background: "#2a2a2a", color: "white", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontSize: 13, fontWeight: "bold", border: "1px solid rgba(255,255,255,0.08)" };
+const nameStyle = { margin: 0, fontSize: 28 };
+const roleBadge = { marginTop: 8, display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
+const metaLine = { marginTop: 8, opacity: 0.8 };
+const partnerBox = { marginTop: 18, marginBottom: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const statusPill = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "10px 14px", borderRadius: 12, fontWeight: "bold" };
+const linksBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, display: "grid", gap: 10 };
+const teamBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const teamGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12, marginTop: 12 };
+const teamCard = { background: "#151515", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 16, padding: 12, textDecoration: "none", color: "white", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 };
+const teamAvatar = { width: 64, height: 64, borderRadius: "50%", objectFit: "cover", objectPosition: "center", display: "block" };
+const teamAvatarPlaceholder = { width: 64, height: 64, borderRadius: "50%", background: "#1f1f1f", color: "#e4ef16", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: 22 };
+const teamName = { textAlign: "center", fontSize: 14, fontWeight: 600, lineHeight: 1.3 };
+const sectionTitle = { fontSize: 16, fontWeight: 700 };
+const sportLink = { display: "inline-block", color: "#e4ef16", textDecoration: "none" };
+const emptyText = { opacity: 0.65 };
+const editBox = { marginTop: 20, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const grid = { display: "grid", gap: 12 };
+const label = { marginBottom: 6, fontSize: 13, opacity: 0.75 };
+const field = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box" };
+const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
+const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
+const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
+const secondaryLinkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
+const linkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
+const teamUpBtn = { background: "linear-gradient(135deg,#2563eb,#06b6d4)", color: "white", border: "none", padding: "12px 18px", borderRadius: 14, fontWeight: "bold", boxShadow: "0 8px 24px rgba(0,0,0,0.25)" };
+const teamAcceptBtn = { background: "linear-gradient(135deg,#2563eb,#06b6d4)", color: "white", border: "none", padding: "12px 18px", borderRadius: 14, fontWeight: "bold", boxShadow: "0 8px 24px rgba(0,0,0,0.25)" };
+const cropOverlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+const cropModal = { width: "100%", maxWidth: 420, background: "#111", borderRadius: 24, padding: 16, border: "1px solid rgba(255,255,255,0.08)" };
+const cropTitle = { fontSize: 20, fontWeight: 700, marginBottom: 12 };
+const cropAreaWrap = { position: "relative", width: "100%", height: 320, background: "#000", borderRadius: 18, overflow: "hidden" };
+const zoomWrap = { marginTop: 16 };
 
 
-           
+
+
   
+  
+
 
