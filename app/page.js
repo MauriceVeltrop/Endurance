@@ -49,6 +49,7 @@ export default function Home() {
   const [form, setForm] = useState(emptyEvent);
 
   const [commentText, setCommentText] = useState({});
+  const [pageError, setPageError] = useState("");
 
   const [authMode, setAuthMode] = useState("signin");
   const [authName, setAuthName] = useState("");
@@ -58,20 +59,23 @@ export default function Home() {
   const range = distanceRanges[form.sport] || { min: 1, max: 50 };
 
   const isModerator = profile?.role === "moderator";
-  const isOrganizer = profile?.role === "organisator";
+  const isOrganizer = profile?.role === "organizer";
   const canManageEvents = isModerator || isOrganizer;
 
-  const formatDate = (d) => {
-    if (!d) return "";
-    const x = new Date(d);
-    return x.toLocaleDateString("en-GB", {
+  const formatDate = (value) => {
+    if (!value) return "";
+    const d = new Date(`${value}T00:00:00`);
+    return d.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
     });
   };
 
-  const formatDateTime = (date, time) => new Date(`${date}T${time}`);
+  const makeEventDateTime = (event) => {
+    const timeValue = event?.time || "23:59";
+    return new Date(`${event.date}T${timeValue}`);
+  };
 
   const openNew = () => {
     setEditId(null);
@@ -82,12 +86,12 @@ export default function Home() {
   const openEdit = (event) => {
     setEditId(event.id);
     setForm({
-      title: event.title,
-      sport: event.sport,
-      distance: event.distance,
-      date: event.date,
-      time: event.time,
-      location: event.location,
+      title: event.title || "",
+      sport: event.sport || "Running",
+      distance: event.distance || 10,
+      date: event.date || "",
+      time: event.time || "",
+      location: event.location || "",
       description: event.description || "",
     });
     setOpen(true);
@@ -103,34 +107,41 @@ export default function Home() {
     const now = new Date();
 
     return [...events]
-      .filter((e) => formatDateTime(e.date, e.time) >= now)
-      .sort((a, b) => formatDateTime(a.date, a.time) - formatDateTime(b.date, b.time))
-      .map((e) => {
-        const eventLikes = likes.filter((l) => l.event_id === e.id);
-        const eventComments = comments.filter((c) => c.event_id === e.id);
-        const eventParticipants = participants.filter((p) => p.event_id === e.id);
+      .filter((event) => makeEventDateTime(event) >= now)
+      .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
+      .map((event) => {
+        const eventLikes = likes.filter((like) => like.event_id === event.id);
+        const eventComments = comments.filter(
+          (comment) => comment.event_id === event.id
+        );
+        const eventParticipants = participants.filter(
+          (participant) => participant.event_id === event.id
+        );
 
         return {
-          ...e,
+          ...event,
           likes: eventLikes,
           comments: eventComments,
           participants: eventParticipants,
-          isOwner: user?.id === e.creator_id,
-          likedByMe: !!eventLikes.find((l) => l.user_id === user?.id),
-          joinedByMe: !!eventParticipants.find((p) => p.user_id === user?.id),
+          isOwner: user?.id === event.creator_id,
+          likedByMe: !!eventLikes.find((like) => like.user_id === user?.id),
+          joinedByMe: !!eventParticipants.find(
+            (participant) => participant.user_id === user?.id
+          ),
         };
       });
   }, [events, likes, comments, participants, user]);
 
 
+
 useEffect(() => {
     const init = async () => {
       const {
-        data: { session },
+        data: { session: currentSession },
       } = await supabase.auth.getSession();
 
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
       setLoading(false);
     };
 
@@ -171,6 +182,7 @@ useEffect(() => {
 
     if (error) {
       console.error("profile load error", error);
+      setPageError(error.message);
       return;
     }
 
@@ -178,6 +190,8 @@ useEffect(() => {
   };
 
   const loadEverything = async () => {
+    setPageError("");
+
     await Promise.all([
       loadEvents(),
       loadLikes(),
@@ -193,7 +207,7 @@ useEffect(() => {
         *,
         creator_profile:profiles!events_creator_id_fkey (
           id,
-          naam,
+          name,
           email,
           role,
           avatar_url
@@ -204,6 +218,7 @@ useEffect(() => {
 
     if (error) {
       console.error("events load error", error);
+      setPageError(error.message);
       return;
     }
 
@@ -220,7 +235,7 @@ useEffect(() => {
         created_at,
         user_profile:profiles!event_likes_user_id_fkey (
           id,
-          naam,
+          name,
           role,
           avatar_url
         )
@@ -241,11 +256,11 @@ useEffect(() => {
         id,
         event_id,
         user_id,
-        tekst,
+        text,
         created_at,
         user_profile:profiles!event_comments_user_id_fkey (
           id,
-          naam,
+          name,
           role,
           avatar_url
         )
@@ -270,7 +285,7 @@ useEffect(() => {
         created_at,
         user_profile:profiles!event_participants_user_id_fkey (
           id,
-          naam,
+          name,
           role,
           avatar_url
         )
@@ -285,7 +300,10 @@ useEffect(() => {
     setParticipants(data || []);
   };
 
-  const handleSignUp = async (e) => {
+
+
+
+const handleSignUp = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase.auth.signUp({
@@ -293,7 +311,7 @@ useEffect(() => {
       password: authPassword,
       options: {
         data: {
-          naam: authName || authEmail.split("@")[0],
+          name: authName || authEmail.split("@")[0],
         },
       },
     });
@@ -325,9 +343,7 @@ useEffect(() => {
     await supabase.auth.signOut();
   };
 
-
-
-const saveEvent = async (e) => {
+  const saveEvent = async (e) => {
     e.preventDefault();
 
     if (!form.title || !form.date || !form.time || !form.location) {
@@ -462,7 +478,9 @@ const saveEvent = async (e) => {
     await loadLikes();
   };
 
-  const postComment = async (eventId) => {
+
+
+const postComment = async (eventId) => {
     if (!user?.id) {
       alert("You must be signed in.");
       return;
@@ -474,7 +492,7 @@ const saveEvent = async (e) => {
     const { error } = await supabase.from("event_comments").insert({
       event_id: eventId,
       user_id: user.id,
-      tekst: text,
+      text,
     });
 
     if (error) {
@@ -545,10 +563,9 @@ const saveEvent = async (e) => {
         <div style={emptyCard}>Loading...</div>
       </main>
     );
-        }
+  }
 
-
-if (!session) {
+  if (!session) {
     return (
       <main style={app}>
         <header style={header}>
@@ -611,9 +628,12 @@ if (!session) {
         </div>
       </main>
     );
-  }
+            }
 
-  return (
+
+
+
+return (
     <main style={app}>
       <header style={header}>
         <img
@@ -625,7 +645,7 @@ if (!session) {
 
       <section style={loginBar}>
         <div style={loginInfo}>
-          Signed in as <strong>{profile?.naam || user?.email}</strong>
+          Signed in as <strong>{profile?.name || user?.email}</strong>
           <div style={roleBadge}>{profile?.role || "user"}</div>
         </div>
 
@@ -647,6 +667,12 @@ if (!session) {
       </section>
 
       {user?.id && <TeamRequestsPanel userId={user.id} />}
+
+      {pageError ? (
+        <div style={errorCard}>
+          Could not load part of the app: {pageError}
+        </div>
+      ) : null}
 
       {open && (
         <div style={overlay}>
@@ -697,7 +723,9 @@ if (!session) {
                   max={range.max}
                   step="1"
                   value={form.distance}
-                  onChange={(e) => setForm({ ...form, distance: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setForm({ ...form, distance: Number(e.target.value) })
+                  }
                   style={{ width: "100%" }}
                 />
                 <div style={rangeRow}>
@@ -737,7 +765,9 @@ if (!session) {
                 <div style={label}>Description</div>
                 <textarea
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
                   placeholder="Extra information about the training"
                   style={{ ...field, minHeight: 110, resize: "vertical" }}
                 />
@@ -786,7 +816,7 @@ if (!session) {
                       href={`/profile/${event.creator_id}`}
                       style={profileLink}
                     >
-                      {event.creator_profile?.naam ||
+                      {event.creator_profile?.name ||
                         event.creator_profile?.email ||
                         "Unknown"}
                     </Link>
@@ -801,13 +831,13 @@ if (!session) {
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                    {event.participants.map((p) => (
+                    {event.participants.map((participant) => (
                       <Link
-                        key={p.id}
-                        href={`/profile/${p.user_id}`}
+                        key={participant.id}
+                        href={`/profile/${participant.user_id}`}
                         style={chipLink}
                       >
-                        {p.user_profile?.naam || "Unknown"}
+                        {participant.user_profile?.name || "Unknown"}
                       </Link>
                     ))}
                   </div>
@@ -833,13 +863,13 @@ if (!session) {
 
                     {!!event.likes.length && (
                       <div style={likeUsers}>
-                        {event.likes.map((l, index) => (
-                          <span key={l.id}>
+                        {event.likes.map((like, index) => (
+                          <span key={like.id}>
                             <Link
-                              href={`/profile/${l.user_id}`}
+                              href={`/profile/${like.user_id}`}
                               style={inlineProfileLink}
                             >
-                              {l.user_profile?.naam || "Unknown"}
+                              {like.user_profile?.name || "Unknown"}
                             </Link>
                             {index < event.likes.length - 1 ? ", " : ""}
                           </span>
@@ -853,22 +883,22 @@ if (!session) {
 
                     {event.comments.length ? (
                       <div style={commentList}>
-                        {event.comments.map((c) => (
-                          <div key={c.id} style={commentItem}>
+                        {event.comments.map((comment) => (
+                          <div key={comment.id} style={commentItem}>
                             <div style={commentHeader}>
                               <div style={commentName}>
                                 <Link
-                                  href={`/profile/${c.user_id}`}
+                                  href={`/profile/${comment.user_id}`}
                                   style={inlineProfileLink}
                                 >
-                                  {c.user_profile?.naam || "Unknown"}
+                                  {comment.user_profile?.name || "Unknown"}
                                 </Link>
                               </div>
 
-                              {(c.user_id === user?.id || isModerator) && (
+                              {(comment.user_id === user?.id || isModerator) && (
                                 <button
                                   type="button"
-                                  onClick={() => deleteComment(c.id)}
+                                  onClick={() => deleteComment(comment.id)}
                                   style={miniDeleteBtn}
                                 >
                                   Delete
@@ -876,7 +906,7 @@ if (!session) {
                               )}
                             </div>
 
-                            <div style={commentTextStyle}>{c.tekst}</div>
+                            <div style={commentTextStyle}>{comment.text}</div>
                           </div>
                         ))}
                       </div>
@@ -886,7 +916,7 @@ if (!session) {
 
                     <div style={commentForm}>
                       <div style={commentUserLabel}>
-                        Commenting as <strong>{profile?.naam || user?.email}</strong>
+                        Commenting as <strong>{profile?.name || user?.email}</strong>
                       </div>
 
                       <textarea
@@ -946,431 +976,65 @@ if (!session) {
       )}
     </main>
   );
-                  }
+}
 
+const app = { background: "#050505", color: "white", minHeight: "100vh", padding: 16, fontFamily: "sans-serif" };
+const header = { position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "center", padding: "12px 0 18px", background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))" };
+const authCard = { background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 24, padding: 20 };
+const authTabs = { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 };
+const loginBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, padding: "14px 16px", marginBottom: 18 };
+const loginInfo = { fontSize: 14, color: "#ddd" };
+const roleBadge = { marginTop: 6, display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
+const actionLinkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
+const eventsSection = { paddingBottom: 110 };
+const horizontalScroll = { display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8, scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" };
+const emptyCard = { background: "#111", padding: 24, borderRadius: 24, border: "1px solid rgba(255,255,255,0.05)" };
+const errorCard = { background: "#3a1616", color: "#ffd2d2", padding: 16, borderRadius: 18, border: "1px solid rgba(255,255,255,0.05)", marginBottom: 18 };
+const label = { marginBottom: 6, opacity: 0.82, fontSize: 14 };
+const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 20, padding: 16, display: "flex", alignItems: "center" };
+const modal = { width: "100%", background: "#111", borderRadius: 24, padding: 18, border: "1px solid rgba(255,255,255,0.08)", maxHeight: "90vh", overflowY: "auto" };
+const modalTop = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 };
+const closeBtn = { background: "#1d1d1d", color: "white", border: "none", width: 36, height: 36, borderRadius: 999 };
+const grid = { display: "grid", gap: 12 };
+const field = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "14px 12px", borderRadius: 12, boxSizing: "border-box" };
+const rangeRow = { display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.6, marginTop: 4 };
+const card = { background: "#111", padding: 20, borderRadius: 24, border: "1px solid rgba(255,255,255,0.05)", minWidth: "85vw", maxWidth: "85vw", scrollSnapAlign: "start", flexShrink: 0 };
+const sportTag = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold", marginBottom: 10 };
+const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 6 };
+const distanceText = { fontSize: 16, fontWeight: "600", color: "#cfd3d6", marginBottom: 14 };
+const creatorText = { fontSize: 14, opacity: 0.85 };
+const profileLink = { color: "#e4ef16", textDecoration: "none", fontWeight: "bold" };
+const inlineProfileLink = { color: "#e4ef16", textDecoration: "none" };
+const chipLink = { background: "#1f1f1f", border: "1px solid rgba(255,255,255,0.08)", padding: "6px 10px", borderRadius: 999, fontSize: 13, color: "white", textDecoration: "none" };
+const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
+const mapBtn = { background: "transparent", color: "white", border: "none", padding: 0, textAlign: "left", fontSize: 16, cursor: "pointer" };
+const communityBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
+const communityTitle = { fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#f3f3f3" };
+const communityText = { fontSize: 14, lineHeight: 1.5, color: "#d6d6d6", marginBottom: 14, whiteSpace: "pre-wrap" };
+const likeRow = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 };
+const likeBtn = { background: "#1d1d1d", color: "white", border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px", borderRadius: 12 };
+const likeCount = { fontSize: 14, opacity: 0.75 };
+const likeUsers = { fontSize: 13, opacity: 0.6 };
+const commentsWrap = { display: "grid", gap: 10 };
+const commentList = { display: "grid", gap: 10 };
+const commentItem = { background: "#151515", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 14, padding: 12 };
+const commentHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4 };
+const commentName = { fontSize: 13, fontWeight: 700, color: "#e4ef16" };
+const commentTextStyle = { fontSize: 14, lineHeight: 1.45, color: "#e3e3e3", whiteSpace: "pre-wrap" };
+const communityMuted = { fontSize: 14, opacity: 0.6 };
+const commentUserLabel = { fontSize: 13, opacity: 0.75 };
+const commentForm = { display: "grid", gap: 10, marginTop: 6 };
+const commentField = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box", minHeight: 90, resize: "vertical" };
+const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
+const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
+const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
+const primaryBtnSmall = { background: "#e4ef16", color: "black", border: "none", padding: "10px 14px", borderRadius: 10, fontWeight: "bold" };
+const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
+const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
+const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
+const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
 
-
-const app = {
-  background: "#050505",
-  color: "white",
-  minHeight: "100vh",
-  padding: 16,
-  fontFamily: "sans-serif",
-};
-
-const header = {
-  position: "sticky",
-  top: 0,
-  zIndex: 5,
-  display: "flex",
-  justifyContent: "center",
-  padding: "12px 0 18px",
-  background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
-};
-
-const authCard = {
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 24,
-  padding: 20,
-};
-
-const authTabs = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginBottom: 16,
-};
-
-const loginBar = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap",
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  padding: "14px 16px",
-  marginBottom: 18,
-};
-
-const loginInfo = {
-  fontSize: 14,
-  color: "#ddd",
-};
-
-const roleBadge = {
-  marginTop: 6,
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const actionLinkBtn = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const eventsSection = {
-  paddingBottom: 110,
-};
-
-const horizontalScroll = {
-  display: "flex",
-  gap: 16,
-  overflowX: "auto",
-  paddingBottom: 8,
-  scrollSnapType: "x mandatory",
-  WebkitOverflowScrolling: "touch",
-};
-
-const emptyCard = {
-  background: "#111",
-  padding: 24,
-  borderRadius: 24,
-  border: "1px solid rgba(255,255,255,0.05)",
-};
-
-const label = {
-  marginBottom: 6,
-  opacity: 0.82,
-  fontSize: 14,
-};
-
-const overlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.72)",
-  zIndex: 20,
-  padding: 16,
-  display: "flex",
-  alignItems: "center",
-};
-
-const modal = {
-  width: "100%",
-  background: "#111",
-  borderRadius: 24,
-  padding: 18,
-  border: "1px solid rgba(255,255,255,0.08)",
-  maxHeight: "90vh",
-  overflowY: "auto",
-};
-
-const modalTop = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 14,
-};
-
-const closeBtn = {
-  background: "#1d1d1d",
-  color: "white",
-  border: "none",
-  width: 36,
-  height: 36,
-  borderRadius: 999,
-};
-
-const grid = {
-  display: "grid",
-  gap: 12,
-};
-
-const field = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "14px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-};
-
-const rangeRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  fontSize: 12,
-  opacity: 0.6,
-  marginTop: 4,
-};
-
-const card = {
-  background: "#111",
-  padding: 20,
-  borderRadius: 24,
-  border: "1px solid rgba(255,255,255,0.05)",
-  minWidth: "85vw",
-  maxWidth: "85vw",
-  scrollSnapAlign: "start",
-  flexShrink: 0,
-};
-
-const sportTag = {
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "7px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-  marginBottom: 10,
-};
-
-const cardTitle = {
-  fontSize: 26,
-  marginTop: 0,
-  marginBottom: 6,
-};
-
-const distanceText = {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#cfd3d6",
-  marginBottom: 14,
-};
-
-const creatorText = {
-  fontSize: 14,
-  opacity: 0.85,
-};
-
-const profileLink = {
-  color: "#e4ef16",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const inlineProfileLink = {
-  color: "#e4ef16",
-  textDecoration: "none",
-};
-
-const chipLink = {
-  background: "#1f1f1f",
-  border: "1px solid rgba(255,255,255,0.08)",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 13,
-  color: "white",
-  textDecoration: "none",
-};
-
-const meta = {
-  display: "grid",
-  gap: 8,
-  marginBottom: 16,
-  opacity: 0.95,
-};
-
-const mapBtn = {
-  background: "transparent",
-  color: "white",
-  border: "none",
-  padding: 0,
-  textAlign: "left",
-  fontSize: 16,
-  cursor: "pointer",
-};
-
-const communityBox = {
-  marginTop: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const communityTitle = {
-  fontSize: 15,
-  fontWeight: 700,
-  marginBottom: 8,
-  color: "#f3f3f3",
-};
-
-const communityText = {
-  fontSize: 14,
-  lineHeight: 1.5,
-  color: "#d6d6d6",
-  marginBottom: 14,
-  whiteSpace: "pre-wrap",
-};
-
-const likeRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-  marginBottom: 16,
-};
-
-const likeBtn = {
-  background: "#1d1d1d",
-  color: "white",
-  border: "1px solid rgba(255,255,255,0.08)",
-  padding: "10px 14px",
-  borderRadius: 12,
-};
-
-const likeCount = {
-  fontSize: 14,
-  opacity: 0.75,
-};
-
-const likeUsers = {
-  fontSize: 13,
-  opacity: 0.6,
-};
-
-const commentsWrap = {
-  display: "grid",
-  gap: 10,
-};
-
-const commentList = {
-  display: "grid",
-  gap: 10,
-};
-
-const commentItem = {
-  background: "#151515",
-  border: "1px solid rgba(255,255,255,0.05)",
-  borderRadius: 14,
-  padding: 12,
-};
-
-const commentHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 4,
-};
-
-const commentName = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#e4ef16",
-};
-
-const commentTextStyle = {
-  fontSize: 14,
-  lineHeight: 1.45,
-  color: "#e3e3e3",
-  whiteSpace: "pre-wrap",
-};
-
-const communityMuted = {
-  fontSize: 14,
-  opacity: 0.6,
-};
-
-const commentUserLabel = {
-  fontSize: 13,
-  opacity: 0.75,
-};
-
-const commentForm = {
-  display: "grid",
-  gap: 10,
-  marginTop: 6,
-};
-
-const commentField = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "12px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-  minHeight: 90,
-  resize: "vertical",
-};
-
-const btnRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 16,
-};
-
-const primaryBtn = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const secondaryBtn = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const primaryBtnSmall = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-  fontWeight: "bold",
-};
-
-const secondaryBtnSmall = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-};
-
-const dangerBtnSmall = {
-  background: "#5a1f1f",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-};
-
-const miniDeleteBtn = {
-  background: "transparent",
-  color: "#ff8d8d",
-  border: "none",
-  padding: 0,
-  fontSize: 12,
-};
-
-const fab = {
-  position: "fixed",
-  right: 18,
-  bottom: 22,
-  width: 62,
-  height: 62,
-  borderRadius: 999,
-  border: "none",
-  background: "#e4ef16",
-  color: "black",
-  fontSize: 34,
-  fontWeight: "bold",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-};
 
   
-
 
   
