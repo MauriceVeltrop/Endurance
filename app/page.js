@@ -83,7 +83,6 @@ export default function Home() {
 
   const currentDistanceSportIds = getDistanceSportIds(form.sports);
   const showDistance = currentDistanceSportIds.length > 0;
-
   const activeDistanceRange =
     distanceRanges[currentDistanceSportIds[0]] || { min: 1, max: 50 };
 
@@ -270,6 +269,7 @@ const eventCards = useMemo(() => {
   };
 
 
+
 const loadComments = async () => {
     const { data, error } = await supabase
       .from("event_comments")
@@ -402,8 +402,7 @@ const loadComments = async () => {
     setForm({
       ...form,
       sports: nextSports,
-      distance:
-        form.distance < nextRange.min ? nextRange.min : form.distance,
+      distance: form.distance < nextRange.min ? nextRange.min : form.distance,
     });
   };
 
@@ -436,6 +435,7 @@ const loadComments = async () => {
       location: form.location,
       description: form.description,
     };
+
 
 
 
@@ -585,7 +585,8 @@ if (editId) {
 
 
 
-const downloadIcs = (event) => {
+
+  const downloadIcs = (event) => {
     const start = `${event.date.replaceAll("-", "")}T${event.time.replace(":", "")}00`;
     const endDate = new Date(`${event.date}T${event.time}:00`);
     endDate.setHours(endDate.getHours() + 1);
@@ -768,6 +769,7 @@ const downloadIcs = (event) => {
                 <div style={sportsPicker}>
                   {SPORTS.map((sport) => {
                     const selected = form.sports.includes(sport.id);
+
                     return (
                       <button
                         key={sport.id}
@@ -873,6 +875,7 @@ const downloadIcs = (event) => {
           <div style={horizontalScroll}>
             {eventCards.map((event) => {
               const sportLabels = getSportLabels(event.sports || []);
+
               return (
                 <div key={event.id} style={card}>
                   <div style={sportTag}>{sportLabels.join(" • ")}</div>
@@ -1105,7 +1108,5 @@ const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none
 const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
 const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
 const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
-  
     
-
   
