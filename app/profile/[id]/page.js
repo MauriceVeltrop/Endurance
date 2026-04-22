@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
-import { getSportLabels } from "../../../lib/sports";
+import { SPORTS, getSportLabels } from "../../../lib/sports";
 
 const DEFAULT_VISIBILITY = {
   avatar_visibility: "all",
@@ -33,6 +33,7 @@ export default function ProfilePage() {
   const [errorText, setErrorText] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingSports, setSavingSports] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -245,6 +246,42 @@ export default function ProfilePage() {
     }
   };
 
+  const togglePreferredSport = async (sportId) => {
+    if (!isOwnProfile || savingSports) return;
+
+    try {
+      setSavingSports(true);
+
+      const alreadySelected = preferredSports.includes(sportId);
+
+      if (alreadySelected) {
+        const { error } = await supabase
+          .from("user_sports")
+          .delete()
+          .eq("user_id", profileId)
+          .eq("sport", sportId);
+
+        if (error) throw error;
+
+        setPreferredSports((prev) => prev.filter((id) => id !== sportId));
+      } else {
+        const { error } = await supabase.from("user_sports").insert({
+          user_id: profileId,
+          sport: sportId,
+        });
+
+        if (error) throw error;
+
+        setPreferredSports((prev) => [...prev, sportId]);
+      }
+    } catch (err) {
+      console.error("toggle preferred sport error", err);
+      alert(err?.message || "Could not update preferred sports.");
+    } finally {
+      setSavingSports(false);
+    }
+  };
+
   const isOwnProfile = user?.id === profile?.id;
   const isModerator = myProfile?.role === "moderator";
 
@@ -364,7 +401,32 @@ export default function ProfilePage() {
         <div style={box}>
           <div style={sectionTitle}>Preferred Sports</div>
 
-          {sportLabels.length === 0 ? (
+          {isOwnProfile ? (
+            <>
+              <div style={sportsPicker}>
+                {SPORTS.map((sport) => {
+                  const selected = preferredSports.includes(sport.id);
+
+                  return (
+                    <button
+                      key={sport.id}
+                      type="button"
+                      onClick={() => togglePreferredSport(sport.id)}
+                      disabled={savingSports}
+                      style={selected ? sportChipSelected : sportChipButton}
+                    >
+                      <span style={{ marginRight: 6 }}>{sport.icon}</span>
+                      {sport.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {savingSports ? (
+                <div style={helperText}>Saving preferred sports...</div>
+              ) : null}
+            </>
+          ) : sportLabels.length === 0 ? (
             <div style={emptyText}>No preferred sports selected.</div>
           ) : (
             <div style={sportsGrid}>
@@ -670,7 +732,20 @@ const emptyText = {
   opacity: 0.65,
 };
 
+const helperText = {
+  fontSize: 13,
+  opacity: 0.7,
+  marginTop: 4,
+};
+
 const sportsGrid = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 4,
+};
+
+const sportsPicker = {
   display: "flex",
   flexWrap: "wrap",
   gap: 10,
@@ -684,6 +759,25 @@ const sportChip = {
   padding: "8px 14px",
   borderRadius: 999,
   fontWeight: "bold",
+};
+
+const sportChipButton = {
+  background: "#222",
+  border: "1px solid #333",
+  color: "white",
+  padding: "8px 14px",
+  borderRadius: 999,
+  cursor: "pointer",
+};
+
+const sportChipSelected = {
+  background: "#e4ef16",
+  color: "black",
+  border: "1px solid #e4ef16",
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontWeight: "bold",
+  cursor: "pointer",
 };
 
 const teamGrid = {
