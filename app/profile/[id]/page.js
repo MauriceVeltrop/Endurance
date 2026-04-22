@@ -27,6 +27,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [preferredSports, setPreferredSports] = useState([]);
   const [visibility, setVisibility] = useState(DEFAULT_VISIBILITY);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
 
@@ -129,11 +131,58 @@ export default function ProfilePage() {
         .eq("user_id", profileId);
 
       setPreferredSports((sportsData || []).map((row) => row.sport));
+
+      await loadTeam(profileId);
     } catch (err) {
       console.error("profile page load error", err);
       setErrorText(err?.message || "Could not load profile.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTeam = async (currentProfileId) => {
+    try {
+      setLoadingTeam(true);
+
+      const { data: partnerRows, error: partnerError } = await supabase
+        .from("training_partners")
+        .select("*")
+        .eq("status", "accepted")
+        .or(
+          `requester_id.eq.${currentProfileId},addressee_id.eq.${currentProfileId}`
+        );
+
+      if (partnerError) {
+        throw partnerError;
+      }
+
+      const otherIds = (partnerRows || []).map((row) =>
+        row.requester_id === currentProfileId ? row.addressee_id : row.requester_id
+      );
+
+      if (!otherIds.length) {
+        setTeamMembers([]);
+        return;
+      }
+
+      const uniqueIds = [...new Set(otherIds)];
+
+      const { data: teamProfiles, error: teamError } = await supabase
+        .from("profiles")
+        .select("id, name, avatar_url")
+        .in("id", uniqueIds);
+
+      if (teamError) {
+        throw teamError;
+      }
+
+      setTeamMembers(teamProfiles || []);
+    } catch (err) {
+      console.error("team load error", err);
+      setTeamMembers([]);
+    } finally {
+      setLoadingTeam(false);
     }
   };
 
@@ -218,9 +267,17 @@ export default function ProfilePage() {
 
       <section style={card}>
         <div style={profileHeader}>
-          <div style={avatarPlaceholder}>
-            {(profile.name || "?").charAt(0).toUpperCase()}
-          </div>
+          {profile.avatar_url && canSeeField(visibility.avatar_visibility) ? (
+            <img
+              src={profile.avatar_url}
+              alt={profile.name || "User"}
+              style={avatar}
+            />
+          ) : (
+            <div style={avatarPlaceholder}>
+              {(profile.name || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
 
           <div style={{ flex: 1 }}>
             <h1 style={nameStyle}>{profile.name || "Unknown user"}</h1>
@@ -256,6 +313,40 @@ export default function ProfilePage() {
                 <div key={label} style={sportChip}>
                   {label}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={box}>
+          <div style={sectionTitle}>My Team</div>
+
+          {loadingTeam ? (
+            <div style={emptyText}>Loading team...</div>
+          ) : teamMembers.length === 0 ? (
+            <div style={emptyText}>No team members yet.</div>
+          ) : (
+            <div style={teamGrid}>
+              {teamMembers.map((member) => (
+                <Link
+                  key={member.id}
+                  href={`/profile/${member.id}`}
+                  style={teamCard}
+                >
+                  {member.avatar_url ? (
+                    <img
+                      src={member.avatar_url}
+                      alt={member.name || "User"}
+                      style={teamAvatar}
+                    />
+                  ) : (
+                    <div style={teamAvatarPlaceholder}>
+                      {(member.name || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  <div style={teamName}>{member.name || "Unknown user"}</div>
+                </Link>
               ))}
             </div>
           )}
@@ -349,6 +440,16 @@ const profileHeader = {
   marginBottom: 24,
 };
 
+const avatar = {
+  width: 110,
+  height: 110,
+  borderRadius: "50%",
+  objectFit: "cover",
+  objectPosition: "center",
+  display: "block",
+  border: "3px solid rgba(228,239,22,0.18)",
+};
+
 const avatarPlaceholder = {
   width: 110,
   height: 110,
@@ -417,6 +518,55 @@ const sportChip = {
   padding: "8px 14px",
   borderRadius: 999,
   fontWeight: "bold",
+};
+
+const teamGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+  gap: 12,
+  marginTop: 4,
+};
+
+const teamCard = {
+  background: "#151515",
+  border: "1px solid rgba(255,255,255,0.05)",
+  borderRadius: 16,
+  padding: 12,
+  textDecoration: "none",
+  color: "white",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 10,
+};
+
+const teamAvatar = {
+  width: 64,
+  height: 64,
+  borderRadius: "50%",
+  objectFit: "cover",
+  objectPosition: "center",
+  display: "block",
+};
+
+const teamAvatarPlaceholder = {
+  width: 64,
+  height: 64,
+  borderRadius: "50%",
+  background: "#1f1f1f",
+  color: "#e4ef16",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: "bold",
+  fontSize: 22,
+};
+
+const teamName = {
+  textAlign: "center",
+  fontSize: 14,
+  fontWeight: 600,
+  lineHeight: 1.3,
 };
 
 const sportLink = {
