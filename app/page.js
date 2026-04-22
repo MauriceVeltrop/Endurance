@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import TeamRequestsPanel from "../components/TeamRequestsPanel";
-import { SPORTS, SPORTS_WITH_DISTANCE } from "../lib/sports";
+import { SPORTS, getSportLabels } from "../lib/sports";
 
 export default function Home() {
   const emptyEvent = {
     title: "",
-    sport: "Running",
+    sports: [],
     distance: 10,
     date: "",
     time: "",
@@ -18,15 +18,14 @@ export default function Home() {
   };
 
   const distanceRanges = {
-    Running: { min: 1, max: 50 },
-    "Road Cycling": { min: 10, max: 250 },
-    "Trail Running": { min: 1, max: 50 },
-    "Mountain Biking": { min: 5, max: 120 },
-    Walking: { min: 1, max: 40 },
-    Swimming: { min: 1, max: 10 },
-    CrossFit: { min: 1, max: 1 },
-    HYROX: { min: 1, max: 1 },
-    "Strength Training": { min: 1, max: 1 },
+    running: { min: 1, max: 50 },
+    "trail-running": { min: 1, max: 50 },
+    "road-cycling": { min: 10, max: 250 },
+    "mountain-biking": { min: 5, max: 120 },
+    "gravel-cycling": { min: 10, max: 250 },
+    walking: { min: 1, max: 40 },
+    swimming: { min: 1, max: 10 },
+    kayaking: { min: 1, max: 50 },
   };
 
   const [session, setSession] = useState(null);
@@ -54,8 +53,6 @@ export default function Home() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
 
-  const range = distanceRanges[form.sport] || { min: 1, max: 50 };
-
   const isModerator = profile?.role === "moderator";
   const isOrganizer = profile?.role === "organizer";
   const canManageEvents = isModerator || isOrganizer;
@@ -80,6 +77,16 @@ export default function Home() {
     return new Date(`${event.date}T${timeValue}`);
   };
 
+  const getDistanceSportIds = (sports = []) => {
+    return sports.filter((sportId) => distanceRanges[sportId]);
+  };
+
+  const currentDistanceSportIds = getDistanceSportIds(form.sports);
+  const showDistance = currentDistanceSportIds.length > 0;
+
+  const activeDistanceRange =
+    distanceRanges[currentDistanceSportIds[0]] || { min: 1, max: 50 };
+
   const openNew = () => {
     setEditId(null);
     setForm(emptyEvent);
@@ -90,7 +97,7 @@ export default function Home() {
     setEditId(event.id);
     setForm({
       title: event.title || "",
-      sport: event.sport || "Running",
+      sports: Array.isArray(event.sports) ? event.sports : [],
       distance: event.distance || 10,
       date: event.date || "",
       time: event.time || "",
@@ -113,7 +120,10 @@ const eventCards = useMemo(() => {
 
     const filteredEvents =
       userSports.length > 0
-        ? events.filter((event) => userSports.includes(event.sport))
+        ? events.filter((event) => {
+            const eventSports = Array.isArray(event.sports) ? event.sports : [];
+            return eventSports.some((sportId) => userSports.includes(sportId));
+          })
         : events;
 
     return [...filteredEvents]
@@ -259,7 +269,8 @@ const eventCards = useMemo(() => {
     setLikes(data || []);
   };
 
-  const loadComments = async () => {
+
+const loadComments = async () => {
     const { data, error } = await supabase
       .from("event_comments")
       .select(`
@@ -285,9 +296,7 @@ const eventCards = useMemo(() => {
     setComments(data || []);
   };
 
-
-
-const loadParticipants = async () => {
+  const loadParticipants = async () => {
     const { data, error } = await supabase
       .from("event_participants")
       .select(`
@@ -368,11 +377,46 @@ const loadParticipants = async () => {
     await supabase.auth.signOut();
   };
 
+  const toggleSportInForm = (sportId) => {
+    const alreadySelected = form.sports.includes(sportId);
+
+    if (alreadySelected) {
+      const nextSports = form.sports.filter((id) => id !== sportId);
+      const nextDistanceSports = getDistanceSportIds(nextSports);
+      const nextRange =
+        distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
+
+      setForm({
+        ...form,
+        sports: nextSports,
+        distance: Math.min(form.distance, nextRange.max),
+      });
+      return;
+    }
+
+    const nextSports = [...form.sports, sportId];
+    const nextDistanceSports = getDistanceSportIds(nextSports);
+    const nextRange =
+      distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
+
+    setForm({
+      ...form,
+      sports: nextSports,
+      distance:
+        form.distance < nextRange.min ? nextRange.min : form.distance,
+    });
+  };
+
   const saveEvent = async (e) => {
     e.preventDefault();
 
     if (!form.title || !form.date || !form.time || !form.location) {
       alert("Please fill in all required fields.");
+      return;
+    }
+
+    if (form.sports.length === 0) {
+      alert("Please select at least one sport.");
       return;
     }
 
@@ -385,15 +429,17 @@ const loadParticipants = async () => {
 
     const payload = {
       title: form.title,
-      sport: form.sport,
-      distance: SPORTS_WITH_DISTANCE.includes(form.sport) ? form.distance : null,
+      sports: form.sports,
+      distance: showDistance ? form.distance : null,
       date: form.date,
       time: form.time,
       location: form.location,
       description: form.description,
     };
 
-    if (editId) {
+
+
+if (editId) {
       const { error } = await supabase
         .from("events")
         .update(payload)
@@ -434,8 +480,8 @@ const loadParticipants = async () => {
 
     await loadEverything();
   };
-  
-const toggleParticipation = async (event) => {
+
+  const toggleParticipation = async (event) => {
     if (!user?.id) {
       alert("You must be signed in.");
       return;
@@ -537,7 +583,9 @@ const toggleParticipation = async (event) => {
     await loadComments();
   };
 
-  const downloadIcs = (event) => {
+
+
+const downloadIcs = (event) => {
     const start = `${event.date.replaceAll("-", "")}T${event.time.replace(":", "")}00`;
     const endDate = new Date(`${event.date}T${event.time}:00`);
     endDate.setHours(endDate.getHours() + 1);
@@ -549,6 +597,8 @@ const toggleParticipation = async (event) => {
     const mi = String(endDate.getMinutes()).padStart(2, "0");
     const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
 
+    const sportText = getSportLabels(event.sports || []).join(" • ");
+
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
@@ -557,7 +607,7 @@ const toggleParticipation = async (event) => {
       `DTSTART:${start}`,
       `DTEND:${end}`,
       `LOCATION:${event.location}`,
-      `DESCRIPTION:${event.sport} training via Endurance`,
+      `DESCRIPTION:${sportText} training via Endurance`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\n");
@@ -576,8 +626,7 @@ const toggleParticipation = async (event) => {
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
-
-if (loading) {
+  if (loading) {
     return (
       <main style={app}>
         <div style={emptyCard}>Loading...</div>
@@ -691,7 +740,10 @@ if (loading) {
         </div>
       ) : null}
 
-      {open && (
+
+
+
+{open && (
         <div style={overlay}>
           <form onSubmit={saveEvent} style={modal}>
             <div style={modalTop}>
@@ -712,33 +764,32 @@ if (loading) {
               />
 
               <div>
-                <div style={label}>Choose sport</div>
-                <select
-                  value={form.sport}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      sport: e.target.value,
-                      distance: distanceRanges[e.target.value]?.min || 1,
-                    })
-                  }
-                  style={field}
-                >
-                  {SPORTS.map((sport) => (
-                    <option key={sport} value={sport}>
-                      {sport}
-                    </option>
-                  ))}
-                </select>
+                <div style={label}>Choose sports</div>
+                <div style={sportsPicker}>
+                  {SPORTS.map((sport) => {
+                    const selected = form.sports.includes(sport.id);
+                    return (
+                      <button
+                        key={sport.id}
+                        type="button"
+                        onClick={() => toggleSportInForm(sport.id)}
+                        style={selected ? sportChipSelected : sportChip}
+                      >
+                        <span style={{ marginRight: 6 }}>{sport.icon}</span>
+                        {sport.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {SPORTS_WITH_DISTANCE.includes(form.sport) && (
+              {showDistance && (
                 <div>
                   <div style={label}>Distance: {form.distance} km</div>
                   <input
                     type="range"
-                    min={range.min}
-                    max={range.max}
+                    min={activeDistanceRange.min}
+                    max={activeDistanceRange.max}
                     step="1"
                     value={form.distance}
                     onChange={(e) =>
@@ -747,15 +798,13 @@ if (loading) {
                     style={{ width: "100%" }}
                   />
                   <div style={rangeRow}>
-                    <span>{range.min} km</span>
-                    <span>{range.max} km</span>
+                    <span>{activeDistanceRange.min} km</span>
+                    <span>{activeDistanceRange.max} km</span>
                   </div>
                 </div>
               )}
 
-
-
-<div>
+              <div>
                 <div style={label}>Date</div>
                 <input
                   type="date"
@@ -822,167 +871,169 @@ if (loading) {
           </div>
         ) : (
           <div style={horizontalScroll}>
-            {eventCards.map((event) => (
-              <div key={event.id} style={card}>
-                <div style={sportTag}>{event.sport}</div>
-                <h2 style={cardTitle}>{event.title}</h2>
+            {eventCards.map((event) => {
+              const sportLabels = getSportLabels(event.sports || []);
+              return (
+                <div key={event.id} style={card}>
+                  <div style={sportTag}>{sportLabels.join(" • ")}</div>
+                  <h2 style={cardTitle}>{event.title}</h2>
 
-                {event.distance ? (
-                  <div style={distanceText}>{event.distance} km</div>
-                ) : null}
+                  {event.distance ? (
+                    <div style={distanceText}>{event.distance} km</div>
+                  ) : null}
 
-                <div style={meta}>
-                  <div>📅 {formatDate(event.date)}</div>
-                  <div>⏰ {formatTime(event.time)}</div>
-                  <div style={creatorText}>
-                    👤 Created by{" "}
-                    <Link href={`/profile/${event.creator_id}`} style={profileLink}>
-                      {event.creator_profile?.name ||
-                        event.creator_profile?.email ||
-                        "Unknown"}
-                    </Link>
-                  </div>
-
-                  <button onClick={() => openMaps(event.location)} style={mapBtn}>
-                    📍 {event.location}
-                  </button>
-
-                  <div style={{ opacity: 0.75 }}>
-                    Participants: {event.participants.length}
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                    {event.participants.map((participant) => (
-                      <Link
-                        key={participant.id}
-                        href={`/profile/${participant.user_id}`}
-                        style={chipLink}
-                      >
-                        {participant.user_profile?.name || "Unknown"}
+                  <div style={meta}>
+                    <div>📅 {formatDate(event.date)}</div>
+                    <div>⏰ {formatTime(event.time)}</div>
+                    <div style={creatorText}>
+                      👤 Created by{" "}
+                      <Link href={`/profile/${event.creator_id}`} style={profileLink}>
+                        {event.creator_profile?.name ||
+                          event.creator_profile?.email ||
+                          "Unknown"}
                       </Link>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={communityBox}>
-                  <div style={communityTitle}>Description</div>
-
-                  <div style={communityText}>
-                    {event.description?.trim()
-                      ? event.description
-                      : "No description added yet."}
-                  </div>
-
-                  <div style={likeRow}>
-                    <button onClick={() => toggleLike(event)} style={likeBtn}>
-                      {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
-                    </button>
-
-                    <div style={likeCount}>
-                      {event.likes.length} like{event.likes.length === 1 ? "" : "s"}
                     </div>
 
-                    {!!event.likes.length && (
-                      <div style={likeUsers}>
-                        {event.likes.map((like, index) => (
-                          <span key={like.id}>
-                            <Link href={`/profile/${like.user_id}`} style={inlineProfileLink}>
-                              {like.user_profile?.name || "Unknown"}
-                            </Link>
-                            {index < event.likes.length - 1 ? ", " : ""}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <button onClick={() => openMaps(event.location)} style={mapBtn}>
+                      📍 {event.location}
+                    </button>
+
+                    <div style={{ opacity: 0.75 }}>
+                      Participants: {event.participants.length}
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                      {event.participants.map((participant) => (
+                        <Link
+                          key={participant.id}
+                          href={`/profile/${participant.user_id}`}
+                          style={chipLink}
+                        >
+                          {participant.user_profile?.name || "Unknown"}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
 
-                  <div style={commentsWrap}>
-                    <div style={communityTitle}>Comments</div>
+                  <div style={communityBox}>
+                    <div style={communityTitle}>Description</div>
+                    <div style={communityText}>
+                      {event.description?.trim()
+                        ? event.description
+                        : "No description added yet."}
+                    </div>
 
-                    {event.comments.length ? (
-                      <div style={commentList}>
-                        {event.comments.map((comment) => (
-                          <div key={comment.id} style={commentItem}>
-                            <div style={commentHeader}>
-                              <div style={commentName}>
-                                <Link
-                                  href={`/profile/${comment.user_id}`}
-                                  style={inlineProfileLink}
-                                >
-                                  {comment.user_profile?.name || "Unknown"}
-                                </Link>
+                    <div style={likeRow}>
+                      <button onClick={() => toggleLike(event)} style={likeBtn}>
+                        {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
+                      </button>
+
+                      <div style={likeCount}>
+                        {event.likes.length} like{event.likes.length === 1 ? "" : "s"}
+                      </div>
+
+                      {!!event.likes.length && (
+                        <div style={likeUsers}>
+                          {event.likes.map((like, index) => (
+                            <span key={like.id}>
+                              <Link href={`/profile/${like.user_id}`} style={inlineProfileLink}>
+                                {like.user_profile?.name || "Unknown"}
+                              </Link>
+                              {index < event.likes.length - 1 ? ", " : ""}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={commentsWrap}>
+                      <div style={communityTitle}>Comments</div>
+
+                      {event.comments.length ? (
+                        <div style={commentList}>
+                          {event.comments.map((comment) => (
+                            <div key={comment.id} style={commentItem}>
+                              <div style={commentHeader}>
+                                <div style={commentName}>
+                                  <Link
+                                    href={`/profile/${comment.user_id}`}
+                                    style={inlineProfileLink}
+                                  >
+                                    {comment.user_profile?.name || "Unknown"}
+                                  </Link>
+                                </div>
+
+                                {(comment.user_id === user?.id || isModerator) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteComment(comment.id)}
+                                    style={miniDeleteBtn}
+                                  >
+                                    Delete
+                                  </button>
+                                )}
                               </div>
 
-                              {(comment.user_id === user?.id || isModerator) && (
-                                <button
-                                  type="button"
-                                  onClick={() => deleteComment(comment.id)}
-                                  style={miniDeleteBtn}
-                                >
-                                  Delete
-                                </button>
-                              )}
+                              <div style={commentTextStyle}>{comment.text}</div>
                             </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={communityMuted}>No comments yet.</div>
+                      )}
 
-                            <div style={commentTextStyle}>{comment.text}</div>
-                          </div>
-                        ))}
+                      <div style={commentForm}>
+                        <div style={commentUserLabel}>
+                          Commenting as <strong>{profile?.name || user?.email}</strong>
+                        </div>
+
+                        <textarea
+                          value={commentText[event.id] || ""}
+                          onChange={(e) =>
+                            setCommentText((prev) => ({
+                              ...prev,
+                              [event.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Write a comment..."
+                          style={commentField}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => postComment(event.id)}
+                          style={primaryBtnSmall}
+                        >
+                          Post Comment
+                        </button>
                       </div>
-                    ) : (
-                      <div style={communityMuted}>No comments yet.</div>
-                    )}
-
-                    <div style={commentForm}>
-                      <div style={commentUserLabel}>
-                        Commenting as <strong>{profile?.name || user?.email}</strong>
-                      </div>
-
-                      <textarea
-                        value={commentText[event.id] || ""}
-                        onChange={(e) =>
-                          setCommentText((prev) => ({
-                            ...prev,
-                            [event.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="Write a comment..."
-                        style={commentField}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => postComment(event.id)}
-                        style={primaryBtnSmall}
-                      >
-                        Post Comment
-                      </button>
                     </div>
                   </div>
-                </div>
 
-                <div style={btnRow}>
-                  <button onClick={() => toggleParticipation(event)} style={primaryBtnSmall}>
-                    {event.joinedByMe ? "Leave Event" : "Join Event"}
-                  </button>
-
-                  <button onClick={() => downloadIcs(event)} style={secondaryBtnSmall}>
-                    Add to Calendar
-                  </button>
-
-                  {(event.isOwner || isModerator) && (
-                    <button onClick={() => openEdit(event)} style={secondaryBtnSmall}>
-                      Edit
+                  <div style={btnRow}>
+                    <button onClick={() => toggleParticipation(event)} style={primaryBtnSmall}>
+                      {event.joinedByMe ? "Leave Event" : "Join Event"}
                     </button>
-                  )}
 
-                  {(event.isOwner || isModerator) && (
-                    <button onClick={() => deleteEvent(event.id)} style={dangerBtnSmall}>
-                      Delete
+                    <button onClick={() => downloadIcs(event)} style={secondaryBtnSmall}>
+                      Add to Calendar
                     </button>
-                  )}
+
+                    {(event.isOwner || isModerator) && (
+                      <button onClick={() => openEdit(event)} style={secondaryBtnSmall}>
+                        Edit
+                      </button>
+                    )}
+
+                    {(event.isOwner || isModerator) && (
+                      <button onClick={() => deleteEvent(event.id)} style={dangerBtnSmall}>
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -1016,6 +1067,9 @@ const closeBtn = { background: "#1d1d1d", color: "white", border: "none", width:
 const grid = { display: "grid", gap: 12 };
 const field = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "14px 12px", borderRadius: 12, boxSizing: "border-box" };
 const rangeRow = { display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.6, marginTop: 4 };
+const sportsPicker = { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 };
+const sportChip = { background: "#222", border: "1px solid #333", color: "white", padding: "8px 14px", borderRadius: 999, cursor: "pointer" };
+const sportChipSelected = { background: "#e4ef16", color: "black", border: "1px solid #e4ef16", padding: "8px 14px", borderRadius: 999, fontWeight: "bold", cursor: "pointer" };
 const card = { background: "#111", padding: 20, borderRadius: 24, border: "1px solid rgba(255,255,255,0.05)", minWidth: "85vw", maxWidth: "85vw", scrollSnapAlign: "start", flexShrink: 0 };
 const sportTag = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold", marginBottom: 10 };
 const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 6 };
@@ -1051,5 +1105,7 @@ const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none
 const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
 const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
 const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
+  
+    
 
-
+  
