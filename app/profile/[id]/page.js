@@ -34,6 +34,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingSports, setSavingSports] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -282,6 +283,56 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !isOwnProfile || !profile?.id) return;
+
+    try {
+      setUploadingAvatar(true);
+
+      const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const safeExtension = ["jpg", "jpeg", "png", "webp"].includes(extension)
+        ? extension
+        : "jpg";
+
+      const filePath = `${profile.id}/avatar.${safeExtension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const publicUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", profile.id);
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      await loadProfilePage();
+    } catch (err) {
+      console.error("avatar upload error", err);
+      alert(err?.message || "Avatar upload failed.");
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = "";
+    }
+  };
+
   const isOwnProfile = user?.id === profile?.id;
   const isModerator = myProfile?.role === "moderator";
 
@@ -363,17 +414,32 @@ export default function ProfilePage() {
 
       <section style={card}>
         <div style={profileHeader}>
-          {profile.avatar_url && canSeeField(visibility.avatar_visibility) ? (
-            <img
-              src={profile.avatar_url}
-              alt={profile.name || "User"}
-              style={avatar}
-            />
-          ) : (
-            <div style={avatarPlaceholder}>
-              {(profile.name || "?").charAt(0).toUpperCase()}
-            </div>
-          )}
+          <div style={avatarWrap}>
+            {profile.avatar_url && canSeeField(visibility.avatar_visibility) ? (
+              <img
+                src={profile.avatar_url}
+                alt={profile.name || "User"}
+                style={avatar}
+              />
+            ) : (
+              <div style={avatarPlaceholder}>
+                {(profile.name || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+
+            {isOwnProfile && (
+              <label style={uploadLabel}>
+                {uploadingAvatar ? "Uploading..." : "Choose Photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  style={{ display: "none" }}
+                  disabled={uploadingAvatar}
+                />
+              </label>
+            )}
+          </div>
 
           <div style={{ flex: 1 }}>
             <h1 style={nameStyle}>{profile.name || "Unknown user"}</h1>
@@ -668,6 +734,13 @@ const profileHeader = {
   marginBottom: 24,
 };
 
+const avatarWrap = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 10,
+};
+
 const avatar = {
   width: 110,
   height: 110,
@@ -690,6 +763,18 @@ const avatarPlaceholder = {
   fontWeight: "bold",
   color: "#e4ef16",
   border: "3px solid rgba(228,239,22,0.18)",
+};
+
+const uploadLabel = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: "bold",
+  border: "1px solid rgba(255,255,255,0.08)",
 };
 
 const nameStyle = {
