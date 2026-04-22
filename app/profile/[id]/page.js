@@ -31,6 +31,19 @@ export default function ProfilePage() {
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    location: "",
+    email: "",
+    phone: "",
+    strava_url: "",
+    garmin_url: "",
+    suunto_url: "",
+    birth_date: "",
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -87,6 +100,16 @@ export default function ProfilePage() {
       }
 
       setProfile(profileData);
+      setForm({
+        name: profileData.name || "",
+        location: profileData.location || "",
+        email: profileData.email || "",
+        phone: profileData.phone || "",
+        strava_url: profileData.strava_url || "",
+        garmin_url: profileData.garmin_url || "",
+        suunto_url: profileData.suunto_url || "",
+        birth_date: profileData.birth_date || "",
+      });
 
       const { data: visibilityData } = await supabase
         .from("profile_visibility_settings")
@@ -183,6 +206,42 @@ export default function ProfilePage() {
       setTeamMembers([]);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+
+    if (!profile?.id) return;
+
+    try {
+      setSaving(true);
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          name: form.name,
+          location: form.location,
+          email: form.email,
+          phone: form.phone,
+          strava_url: form.strava_url,
+          garmin_url: form.garmin_url,
+          suunto_url: form.suunto_url,
+          birth_date: form.birth_date || null,
+        })
+        .eq("id", profile.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setEditing(false);
+      await loadProfilePage();
+    } catch (err) {
+      console.error("save profile error", err);
+      alert(err?.message || "Saving failed.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -393,12 +452,119 @@ export default function ProfilePage() {
           ) : null}
         </div>
 
-        {isOwnProfile && (
+        {isOwnProfile && !editing && (
           <div style={btnRow}>
+            <button onClick={() => setEditing(true)} style={primaryBtn}>
+              Edit Profile
+            </button>
+
             <Link href="/settings/privacy" style={secondaryLinkBtn}>
               Privacy Settings
             </Link>
           </div>
+        )}
+
+        {isOwnProfile && editing && (
+          <form onSubmit={saveProfile} style={editBox}>
+            <div style={grid}>
+              <div>
+                <div style={label}>Name</div>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Birth Date</div>
+                <input
+                  type="date"
+                  value={form.birth_date}
+                  onChange={(e) =>
+                    setForm({ ...form, birth_date: e.target.value })
+                  }
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Location</div>
+                <input
+                  value={form.location}
+                  onChange={(e) =>
+                    setForm({ ...form, location: e.target.value })
+                  }
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Email Address</div>
+                <input
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Phone Number</div>
+                <input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Strava Link</div>
+                <input
+                  value={form.strava_url}
+                  onChange={(e) =>
+                    setForm({ ...form, strava_url: e.target.value })
+                  }
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Garmin Link</div>
+                <input
+                  value={form.garmin_url}
+                  onChange={(e) =>
+                    setForm({ ...form, garmin_url: e.target.value })
+                  }
+                  style={field}
+                />
+              </div>
+
+              <div>
+                <div style={label}>Suunto Link</div>
+                <input
+                  value={form.suunto_url}
+                  onChange={(e) =>
+                    setForm({ ...form, suunto_url: e.target.value })
+                  }
+                  style={field}
+                />
+              </div>
+            </div>
+
+            <div style={btnRow}>
+              <button type="submit" style={primaryBtn} disabled={saving}>
+                {saving ? "Saving..." : "Save"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                style={secondaryBtn}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
       </section>
     </main>
@@ -582,6 +748,23 @@ const btnRow = {
   marginTop: 18,
 };
 
+const primaryBtn = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const secondaryBtn = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
 const secondaryLinkBtn = {
   display: "inline-block",
   background: "#2a2a2a",
@@ -589,4 +772,33 @@ const secondaryLinkBtn = {
   textDecoration: "none",
   padding: "12px 16px",
   borderRadius: 12,
+};
+
+const editBox = {
+  marginTop: 20,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const grid = {
+  display: "grid",
+  gap: 12,
+};
+
+const label = {
+  marginBottom: 6,
+  fontSize: 13,
+  opacity: 0.75,
+};
+
+const field = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "12px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
 };
