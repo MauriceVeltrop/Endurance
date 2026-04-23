@@ -707,7 +707,7 @@ if (!session) {
         </div>
       </header>
 
-      <TeamRequestsPanel user={user} />
+      {user?.id && <TeamRequestsPanel userId={user.id} />}
 
       {pageError && <div style={errorBox}>{pageError}</div>}
 
