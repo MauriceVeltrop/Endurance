@@ -36,6 +36,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [savingSports, setSavingSports] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [relationLoading, setRelationLoading] = useState(false);
+  const [relationActionLoading, setRelationActionLoading] = useState(false);
+
+  const [relationship, setRelationship] = useState(null);
 
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
@@ -87,12 +91,14 @@ export default function ProfilePage() {
       setErrorText("");
 
       if (user?.id) {
-        const { data: myData } = await supabase
+        const { data: myData, error: myError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", user.id)
+          .limit(1)
           .maybeSingle();
 
+        if (myError) throw myError;
         setMyProfile(myData || null);
       } else {
         setMyProfile(null);
@@ -102,9 +108,11 @@ export default function ProfilePage() {
         .from("profiles")
         .select("*")
         .eq("id", profileId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (profileError) throw profileError;
+      if (!profileData) throw new Error("Profile not found.");
 
       setProfile(profileData);
       setForm({
@@ -118,11 +126,14 @@ export default function ProfilePage() {
         birth_date: profileData.birth_date || "",
       });
 
-      const { data: visibilityData } = await supabase
+      const { data: visibilityData, error: visibilityError } = await supabase
         .from("profile_visibility_settings")
         .select("*")
         .eq("user_id", profileId)
+        .limit(1)
         .maybeSingle();
+
+      if (visibilityError) throw visibilityError;
 
       setVisibility(
         visibilityData
@@ -155,14 +166,19 @@ export default function ProfilePage() {
           : DEFAULT_VISIBILITY
       );
 
-      const { data: sportsData } = await supabase
+      const { data: sportsData, error: sportsError } = await supabase
         .from("user_sports")
         .select("sport")
         .eq("user_id", profileId);
 
+      if (sportsError) throw sportsError;
+
       setPreferredSports((sportsData || []).map((row) => row.sport));
 
-      await loadTeam(profileId);
+      await Promise.all([
+        loadTeam(profileId),
+        loadRelationship(profileId, user?.id),
+      ]);
     } catch (err) {
       console.error("profile page load error", err);
       setErrorText(err?.message || "Could not load profile.");
@@ -171,7 +187,8 @@ export default function ProfilePage() {
     }
   };
 
-  const loadTeam = async (currentProfileId) => {
+
+const loadTeam = async (currentProfileId) => {
     try {
       setLoadingTeam(true);
 
@@ -186,7 +203,9 @@ export default function ProfilePage() {
       if (partnerError) throw partnerError;
 
       const otherIds = (partnerRows || []).map((row) =>
-        row.requester_id === currentProfileId ? row.addressee_id : row.requester_id
+        row.requester_id === currentProfileId
+          ? row.addressee_id
+          : row.requester_id
       );
 
       if (!otherIds.length) {
@@ -209,6 +228,160 @@ export default function ProfilePage() {
       setTeamMembers([]);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const loadRelationship = async (viewedProfileId, currentUserId) => {
+    if (!currentUserId || !viewedProfileId || currentUserId === viewedProfileId) {
+      setRelationship(null);
+      return;
+    }
+
+    try {
+      setRelationLoading(true);
+
+      const { data, error } = await supabase
+        .from("training_partners")
+        .select("*")
+        .or(
+          `and(requester_id.eq.${currentUserId},addressee_id.eq.${viewedProfileId}),and(requester_id.eq.${viewedProfileId},addressee_id.eq.${currentUserId})`
+        )
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      setRelationship(data?.[0] || null);
+    } catch (err) {
+      console.error("relationship load error", err);
+      setRelationship(null);
+    } finally {
+      setRelationLoading(false);
+    }
+  };
+
+  const refreshRelationshipArea = async () => {
+    await Promise.all([
+      loadRelationship(profileId, user?.id),
+      loadTeam(profileId),
+    ]);
+  };
+
+  const sendTeamRequest = async () => {
+    if (!user?.id || !profile?.id || relationActionLoading) return;
+
+    try {
+      setRelationActionLoading(true);
+
+      const { error } = await supabase.from("training_partners").insert({
+        requester_id: user.id,
+        addressee_id: profile.id,
+        status: "pending",
+      });
+
+      if (error) throw error;
+
+      await refreshRelationshipArea();
+    } catch (err) {
+      console.error("send team request error", err);
+      alert(err?.message || "Could not send team request.");
+    } finally {
+      setRelationActionLoading(false);
+    }
+  };
+
+  const cancelTeamRequest = async () => {
+    if (!relationship?.id || relationActionLoading) return;
+
+    try {
+      setRelationActionLoading(true);
+
+      const { error } = await supabase
+        .from("training_partners")
+        .delete()
+        .eq("id", relationship.id);
+
+      if (error) throw error;
+
+      await refreshRelationshipArea();
+    } catch (err) {
+      console.error("cancel team request error", err);
+      alert(err?.message || "Could not cancel request.");
+    } finally {
+      setRelationActionLoading(false);
+    }
+  };
+
+  const acceptTeamRequest = async () => {
+    if (!relationship?.id || relationActionLoading) return;
+
+    try {
+      setRelationActionLoading(true);
+
+      const { error } = await supabase
+        .from("training_partners")
+        .update({
+          status: "accepted",
+          responded_at: new Date().toISOString(),
+        })
+        .eq("id", relationship.id);
+
+      if (error) throw error;
+
+      await refreshRelationshipArea();
+    } catch (err) {
+      console.error("accept team request error", err);
+      alert(err?.message || "Could not accept request.");
+    } finally {
+      setRelationActionLoading(false);
+    }
+  };
+
+
+const rejectTeamRequest = async () => {
+    if (!relationship?.id || relationActionLoading) return;
+
+    try {
+      setRelationActionLoading(true);
+
+      const { error } = await supabase
+        .from("training_partners")
+        .update({
+          status: "rejected",
+          responded_at: new Date().toISOString(),
+        })
+        .eq("id", relationship.id);
+
+      if (error) throw error;
+
+      await refreshRelationshipArea();
+    } catch (err) {
+      console.error("reject team request error", err);
+      alert(err?.message || "Could not reject request.");
+    } finally {
+      setRelationActionLoading(false);
+    }
+  };
+
+  const removeTeamPartner = async () => {
+    if (!relationship?.id || relationActionLoading) return;
+
+    try {
+      setRelationActionLoading(true);
+
+      const { error } = await supabase
+        .from("training_partners")
+        .delete()
+        .eq("id", relationship.id);
+
+      if (error) throw error;
+
+      await refreshRelationshipArea();
+    } catch (err) {
+      console.error("remove team partner error", err);
+      alert(err?.message || "Could not remove team partner.");
+    } finally {
+      setRelationActionLoading(false);
     }
   };
 
@@ -327,7 +500,9 @@ export default function ProfilePage() {
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
-  const handleAvatarSelect = async (e) => {
+
+
+const handleAvatarSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !isOwnProfile || !profile?.id) return;
 
@@ -396,6 +571,14 @@ export default function ProfilePage() {
 
   const isOwnProfile = user?.id === profile?.id;
   const isModerator = myProfile?.role === "moderator";
+
+  const isOutgoingPending =
+    relationship?.status === "pending" && relationship?.requester_id === user?.id;
+
+  const isIncomingPending =
+    relationship?.status === "pending" && relationship?.addressee_id === user?.id;
+
+  const isAccepted = relationship?.status === "accepted";
 
   const canSeeField = (visibilityValue) => {
     if (isOwnProfile) return true;
@@ -525,6 +708,70 @@ export default function ProfilePage() {
           </div>
         </div>
 
+
+
+{!isOwnProfile && (
+          <div style={box}>
+            <div style={sectionTitle}>Team Up</div>
+
+            {relationLoading ? (
+              <div style={emptyText}>Loading relationship...</div>
+            ) : isAccepted ? (
+              <div style={relationshipRow}>
+                <div style={statusText}>You are already in the same team.</div>
+                <button
+                  type="button"
+                  onClick={removeTeamPartner}
+                  style={secondaryBtn}
+                  disabled={relationActionLoading}
+                >
+                  {relationActionLoading ? "Working..." : "Remove from Team"}
+                </button>
+              </div>
+            ) : isOutgoingPending ? (
+              <div style={relationshipRow}>
+                <div style={statusText}>Team request sent.</div>
+                <button
+                  type="button"
+                  onClick={cancelTeamRequest}
+                  style={secondaryBtn}
+                  disabled={relationActionLoading}
+                >
+                  {relationActionLoading ? "Working..." : "Cancel Request"}
+                </button>
+              </div>
+            ) : isIncomingPending ? (
+              <div style={relationshipButtons}>
+                <button
+                  type="button"
+                  onClick={acceptTeamRequest}
+                  style={primaryBtn}
+                  disabled={relationActionLoading}
+                >
+                  {relationActionLoading ? "Working..." : "Accept Team Request"}
+                </button>
+                <button
+                  type="button"
+                  onClick={rejectTeamRequest}
+                  style={secondaryBtn}
+                  disabled={relationActionLoading}
+                >
+                  Reject
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={sendTeamRequest}
+                style={primaryBtn}
+                disabled={relationActionLoading}
+              >
+                {relationActionLoading ? "Working..." : "Team Up"}
+              </button>
+            )}
+          </div>
+        )}
+
         <div style={box}>
           <div style={sectionTitle}>Preferred Sports</div>
 
@@ -566,7 +813,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-<div style={box}>
+        <div style={box}>
           <div style={sectionTitle}>My Team</div>
 
           {loadingTeam ? (
@@ -641,7 +888,8 @@ export default function ProfilePage() {
           ) : null}
         </div>
 
-        {isOwnProfile && !editing && (
+
+{isOwnProfile && !editing && (
           <div style={btnRow}>
             <button onClick={() => setEditing(true)} style={primaryBtn}>
               Edit Profile
@@ -943,6 +1191,22 @@ const helperText = {
   marginTop: 4,
 };
 
+const relationshipRow = {
+  display: "grid",
+  gap: 10,
+};
+
+const relationshipButtons = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const statusText = {
+  opacity: 0.8,
+  fontSize: 14,
+};
+
 const sportsGrid = {
   display: "flex",
   flexWrap: "wrap",
@@ -1141,4 +1405,14 @@ const zoomWrap = {
   marginTop: 16,
 };
 
+
+
+
+
+
+  
+
+
+
+  
 
