@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
 import { SPORTS, getSportLabels } from "../../../lib/sports";
 
@@ -35,6 +36,12 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [savingSports, setSavingSports] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageSrc, setImageSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -97,9 +104,7 @@ export default function ProfilePage() {
         .eq("id", profileId)
         .single();
 
-      if (profileError) {
-        throw profileError;
-      }
+      if (profileError) throw profileError;
 
       setProfile(profileData);
       setForm({
@@ -178,9 +183,7 @@ export default function ProfilePage() {
           `requester_id.eq.${currentProfileId},addressee_id.eq.${currentProfileId}`
         );
 
-      if (partnerError) {
-        throw partnerError;
-      }
+      if (partnerError) throw partnerError;
 
       const otherIds = (partnerRows || []).map((row) =>
         row.requester_id === currentProfileId ? row.addressee_id : row.requester_id
@@ -198,9 +201,7 @@ export default function ProfilePage() {
         .select("id, name, avatar_url")
         .in("id", uniqueIds);
 
-      if (teamError) {
-        throw teamError;
-      }
+      if (teamError) throw teamError;
 
       setTeamMembers(teamProfiles || []);
     } catch (err) {
@@ -213,7 +214,6 @@ export default function ProfilePage() {
 
   const saveProfile = async (e) => {
     e.preventDefault();
-
     if (!profile?.id) return;
 
     try {
@@ -233,9 +233,7 @@ export default function ProfilePage() {
         })
         .eq("id", profile.id);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       setEditing(false);
       await loadProfilePage();
@@ -283,30 +281,94 @@ export default function ProfilePage() {
     }
   };
 
-  const handleAvatarUpload = async (e) => {
+  const readFile = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(reader.result));
+      reader.addEventListener("error", reject);
+      reader.readAsDataURL(file);
+    });
+
+  const createImage = (url) =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener("load", () => resolve(image));
+      image.addEventListener("error", reject);
+      image.setAttribute("crossOrigin", "anonymous");
+      image.src = url;
+    });
+
+  const getCroppedImgBlob = async (imageSrcValue, pixelCrop) => {
+    const image = await createImage(imageSrcValue);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
+    });
+  };
+
+  const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels);
+  }, []);
+
+  const handleAvatarSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !isOwnProfile || !profile?.id) return;
 
     try {
+      const imageDataUrl = await readFile(file);
+      setImageSrc(imageDataUrl);
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCropModalOpen(true);
+    } catch (err) {
+      console.error("avatar read error", err);
+      alert("Could not read selected image.");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const uploadCroppedAvatar = async () => {
+    if (!imageSrc || !croppedAreaPixels || !profile?.id) return;
+
+    try {
       setUploadingAvatar(true);
 
-      const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const safeExtension = ["jpg", "jpeg", "png", "webp"].includes(extension)
-        ? extension
-        : "jpg";
+      const croppedBlob = await getCroppedImgBlob(imageSrc, croppedAreaPixels);
 
-      const filePath = `${profile.id}/avatar.${safeExtension}`;
+      if (!croppedBlob) {
+        alert("Could not process the image.");
+        return;
+      }
+
+      const filePath = `${profile.id}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, file, {
+        .upload(filePath, croppedBlob, {
           cacheControl: "3600",
           upsert: true,
+          contentType: "image/jpeg",
         });
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       const { data: publicData } = supabase.storage
         .from("avatars")
@@ -319,17 +381,16 @@ export default function ProfilePage() {
         .update({ avatar_url: publicUrl })
         .eq("id", profile.id);
 
-      if (profileError) {
-        throw profileError;
-      }
+      if (profileError) throw profileError;
 
+      setCropModalOpen(false);
+      setImageSrc(null);
       await loadProfilePage();
     } catch (err) {
       console.error("avatar upload error", err);
       alert(err?.message || "Avatar upload failed.");
     } finally {
       setUploadingAvatar(false);
-      e.target.value = "";
     }
   };
 
@@ -433,7 +494,7 @@ export default function ProfilePage() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleAvatarUpload}
+                  onChange={handleAvatarSelect}
                   style={{ display: "none" }}
                   disabled={uploadingAvatar}
                 />
@@ -505,7 +566,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        <div style={box}>
+<div style={box}>
           <div style={sectionTitle}>My Team</div>
 
           {loadingTeam ? (
@@ -695,6 +756,65 @@ export default function ProfilePage() {
           </form>
         )}
       </section>
+
+      {cropModalOpen && imageSrc && (
+        <div style={cropOverlay}>
+          <div style={cropModal}>
+            <div style={cropTitle}>Crop Profile Photo</div>
+
+            <div style={cropAreaWrap}>
+              <Cropper
+                image={imageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="rect"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <div style={zoomWrap}>
+              <div style={label}>Zoom</div>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div style={btnRow}>
+              <button
+                type="button"
+                onClick={uploadCroppedAvatar}
+                style={primaryBtn}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? "Saving..." : "Use This Photo"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                  setImageSrc(null);
+                  setZoom(1);
+                  setCrop({ x: 0, y: 0 });
+                }}
+                style={secondaryBtn}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -981,3 +1101,44 @@ const field = {
   borderRadius: 12,
   boxSizing: "border-box",
 };
+
+const cropOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.8)",
+  zIndex: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const cropModal = {
+  width: "100%",
+  maxWidth: 420,
+  background: "#111",
+  borderRadius: 24,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const cropTitle = {
+  fontSize: 20,
+  fontWeight: 700,
+  marginBottom: 12,
+};
+
+const cropAreaWrap = {
+  position: "relative",
+  width: "100%",
+  height: 320,
+  background: "#000",
+  borderRadius: 18,
+  overflow: "hidden",
+};
+
+const zoomWrap = {
+  marginTop: 16,
+};
+
+
