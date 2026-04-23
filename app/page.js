@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import TeamRequestsPanel from "../components/TeamRequestsPanel";
 import { SPORTS, getSportLabels } from "../lib/sports";
 
 export default function Home() {
@@ -115,6 +114,8 @@ export default function Home() {
 
 
 
+
+
 const eventCards = useMemo(() => {
     const now = new Date();
 
@@ -197,7 +198,8 @@ const eventCards = useMemo(() => {
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       console.error("profile load error", error);
@@ -269,7 +271,9 @@ const eventCards = useMemo(() => {
     setLikes(data || []);
   };
 
-  const loadComments = async () => {
+
+
+const loadComments = async () => {
     const { data, error } = await supabase
       .from("event_comments")
       .select(`
@@ -295,9 +299,7 @@ const eventCards = useMemo(() => {
     setComments(data || []);
   };
 
-
-
-const loadParticipants = async () => {
+  const loadParticipants = async () => {
     const { data, error } = await supabase
       .from("event_participants")
       .select(`
@@ -378,50 +380,42 @@ const loadParticipants = async () => {
     await supabase.auth.signOut();
   };
 
-  const toggleSportInForm = (sportId) => {
-    const alreadySelected = form.sports.includes(sportId);
+  const toggleSport = (sportId) => {
+    setForm((prev) => {
+      const alreadySelected = prev.sports.includes(sportId);
 
-    if (alreadySelected) {
-      const nextSports = form.sports.filter((id) => id !== sportId);
+      if (alreadySelected) {
+        const nextSports = prev.sports.filter((id) => id !== sportId);
+        const nextDistanceSports = getDistanceSportIds(nextSports);
+        const nextRange =
+          distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
+
+        return {
+          ...prev,
+          sports: nextSports,
+          distance: Math.min(prev.distance, nextRange.max),
+        };
+      }
+
+      const nextSports = [...prev.sports, sportId];
       const nextDistanceSports = getDistanceSportIds(nextSports);
       const nextRange =
         distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
 
-      setForm({
-        ...form,
+      return {
+        ...prev,
         sports: nextSports,
-        distance: Math.min(form.distance, nextRange.max),
-      });
-      return;
-    }
-
-    const nextSports = [...form.sports, sportId];
-    const nextDistanceSports = getDistanceSportIds(nextSports);
-    const nextRange =
-      distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
-
-    setForm({
-      ...form,
-      sports: nextSports,
-      distance: form.distance < nextRange.min ? nextRange.min : form.distance,
+        distance:
+          prev.distance < nextRange.min ? nextRange.min : prev.distance,
+      };
     });
   };
 
-  const saveEvent = async (e) => {
-    e.preventDefault();
+  const saveEvent = async () => {
+    if (!user?.id) return;
 
-    if (!form.title || !form.date || !form.time || !form.location) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-
-    if (form.sports.length === 0) {
-      alert("Please select at least one sport.");
-      return;
-    }
-
-    if (!user?.id) {
-      alert("You must be signed in.");
+    if (!form.title || !form.date) {
+      alert("Title and date are required");
       return;
     }
 
@@ -430,127 +424,88 @@ const loadParticipants = async () => {
     const payload = {
       title: form.title,
       sports: form.sports,
-      distance: showDistance ? form.distance : null,
+      distance: showDistance ? Number(form.distance) : null,
       date: form.date,
-      time: form.time,
-      location: form.location,
-      description: form.description,
+      time: form.time || null,
+      location: form.location || null,
+      description: form.description || null,
+      creator_id: user.id,
     };
 
+    let result;
+
     if (editId) {
-      const { error } = await supabase
-        .from("events")
-        .update(payload)
-        .eq("id", editId);
-
-      if (error) {
-        setSavingEvent(false);
-        alert(`Saving failed: ${error.message}`);
-        return;
-      }
+      result = await supabase.from("events").update(payload).eq("id", editId);
     } else {
-      const { error } = await supabase.from("events").insert({
-        creator_id: user.id,
-        ...payload,
-      });
-
-      if (error) {
-        setSavingEvent(false);
-        alert(`Creating event failed: ${error.message}`);
-        return;
-      }
+      result = await supabase.from("events").insert(payload);
     }
 
-    await loadEvents();
     setSavingEvent(false);
+
+    if (result.error) {
+      console.error("event save error", result.error);
+      alert(result.error.message);
+      return;
+    }
+
     closeModal();
+    loadEvents();
   };
 
 
 
 
-const deleteEvent = async (id) => {
-    if (!confirm("Delete this event?")) return;
 
-    const { error } = await supabase.from("events").delete().eq("id", id);
+  const toggleLike = async (eventId) => {
+    if (!user?.id) return;
 
-    if (error) {
-      alert(`Delete failed: ${error.message}`);
-      return;
-    }
+    const existing = likes.find(
+      (like) => like.event_id === eventId && like.user_id === user.id
+    );
 
-    await loadEverything();
-  };
-
-  const toggleParticipation = async (event) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    if (event.joinedByMe) {
-      const { error } = await supabase
-        .from("event_participants")
-        .delete()
-        .eq("event_id", event.id)
-        .eq("user_id", user.id);
-
-      if (error) {
-        alert(`Leaving event failed: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("event_participants").insert({
-        event_id: event.id,
-        user_id: user.id,
-      });
-
-      if (error) {
-        alert(`Joining event failed: ${error.message}`);
-        return;
-      }
-    }
-
-    await loadParticipants();
-  };
-
-  const toggleLike = async (event) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    if (event.likedByMe) {
+    if (existing) {
       const { error } = await supabase
         .from("event_likes")
         .delete()
-        .eq("event_id", event.id)
-        .eq("user_id", user.id);
+        .eq("id", existing.id);
 
-      if (error) {
-        alert(`Removing like failed: ${error.message}`);
-        return;
-      }
+      if (!error) loadLikes();
     } else {
       const { error } = await supabase.from("event_likes").insert({
-        event_id: event.id,
+        event_id: eventId,
         user_id: user.id,
       });
 
-      if (error) {
-        alert(`Liking event failed: ${error.message}`);
-        return;
-      }
+      if (!error) loadLikes();
     }
-
-    await loadLikes();
   };
 
-  const postComment = async (eventId) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
+  const toggleJoin = async (eventId) => {
+    if (!user?.id) return;
+
+    const existing = participants.find(
+      (p) => p.event_id === eventId && p.user_id === user.id
+    );
+
+    if (existing) {
+      const { error } = await supabase
+        .from("event_participants")
+        .delete()
+        .eq("id", existing.id);
+
+      if (!error) loadParticipants();
+    } else {
+      const { error } = await supabase.from("event_participants").insert({
+        event_id: eventId,
+        user_id: user.id,
+      });
+
+      if (!error) loadParticipants();
     }
+  };
+
+  const submitComment = async (eventId) => {
+    if (!user?.id) return;
 
     const text = (commentText[eventId] || "").trim();
     if (!text) return;
@@ -562,12 +517,16 @@ const deleteEvent = async (id) => {
     });
 
     if (error) {
-      alert(`Posting comment failed: ${error.message}`);
+      console.error(error);
       return;
     }
 
-    setCommentText((prev) => ({ ...prev, [eventId]: "" }));
-    await loadComments();
+    setCommentText((prev) => ({
+      ...prev,
+      [eventId]: "",
+    }));
+
+    loadComments();
   };
 
   const deleteComment = async (commentId) => {
@@ -577,16 +536,30 @@ const deleteEvent = async (id) => {
       .eq("id", commentId);
 
     if (error) {
-      alert(`Deleting comment failed: ${error.message}`);
+      console.error("delete comment error", error);
       return;
     }
 
-    await loadComments();
+    loadComments();
+  };
+
+  const deleteEvent = async (eventId) => {
+    if (!confirm("Delete this event?")) return;
+
+    const { error } = await supabase.from("events").delete().eq("id", eventId);
+
+    if (error) {
+      console.error(error);
+      alert(error.message);
+      return;
+    }
+
+    loadEvents();
   };
 
   const downloadIcs = (event) => {
-    const start = `${event.date.replaceAll("-","")}T${event.time.replace(":", "")}00`;
-    const endDate = new Date(`${event.date}T${event.time}:00`);
+    const start = `${event.date.replaceAll("-", "")}T${(event.time || "12:00").replace(":", "")}00`;
+    const endDate = new Date(`${event.date}T${event.time || "12:00"}:00`);
     endDate.setHours(endDate.getHours() + 1);
 
     const yyyy = endDate.getFullYear();
@@ -605,7 +578,7 @@ const deleteEvent = async (id) => {
       `SUMMARY:${event.title}`,
       `DTSTART:${start}`,
       `DTEND:${end}`,
-      `LOCATION:${event.location}`,
+      `LOCATION:${event.location || ""}`,
       `DESCRIPTION:${sportText} training via Endurance`,
       "END:VEVENT",
       "END:VCALENDAR",
@@ -621,10 +594,17 @@ const deleteEvent = async (id) => {
   };
 
   const openMaps = (location) => {
-    const q = encodeURIComponent(location);
+    const q = encodeURIComponent(location || "");
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
+  if (loading) {
+    return (
+      <div style={{ padding: 40, color: "white", background: "#050505", minHeight: "100vh" }}>
+        Loading Endurance...
+      </div>
+    );
+                      }
 
 
 
@@ -634,35 +614,36 @@ if (!session) {
         <div style={authCard}>
           <h1 style={logo}>Endurance</h1>
 
-          <form onSubmit={authMode === "signin" ? handleSignIn : handleSignUp}>
-            {authMode === "signup" && (
-              <input
-                placeholder="Name"
-                value={authName}
-                onChange={(e) => setAuthName(e.target.value)}
-                style={input}
-              />
-            )}
-
+          {authMode === "signup" && (
             <input
-              placeholder="Email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
               style={input}
+              placeholder="Name"
+              value={authName}
+              onChange={(e) => setAuthName(e.target.value)}
             />
+          )}
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              style={input}
-            />
+          <input
+            style={input}
+            placeholder="Email"
+            value={authEmail}
+            onChange={(e) => setAuthEmail(e.target.value)}
+          />
 
-            <button style={primaryButton}>
-              {authMode === "signin" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
+          <input
+            style={input}
+            placeholder="Password"
+            type="password"
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+          />
+
+          <button
+            style={primaryButton}
+            onClick={authMode === "signin" ? handleSignIn : handleSignUp}
+          >
+            {authMode === "signin" ? "Sign In" : "Create Account"}
+          </button>
 
           <button
             style={secondaryButton}
@@ -670,9 +651,7 @@ if (!session) {
               setAuthMode(authMode === "signin" ? "signup" : "signin")
             }
           >
-            {authMode === "signin"
-              ? "Create new account"
-              : "Back to sign in"}
+            {authMode === "signin" ? "Need an account?" : "Back to sign in"}
           </button>
         </div>
       </main>
@@ -681,35 +660,27 @@ if (!session) {
 
   return (
     <main style={page}>
-      <header style={header}>
+      <div style={topBar}>
         <div style={logo}>Endurance</div>
 
-        <div style={headerRight}>
-          <Link href={`/profile/${user.id}`} style={headerButton}>
+        <div style={topBarButtons}>
+          <Link href={`/profile/${user.id}`} style={topButton}>
             My Profile
           </Link>
 
-          {isModerator && (
-            <Link href="/admin" style={headerButton}>
-              Admin
-            </Link>
-          )}
-
           {canManageEvents && (
-            <button style={headerButton} onClick={openNew}>
+            <button style={topButton} onClick={openNew}>
               + Event
             </button>
           )}
 
-          <button style={headerButton} onClick={handleSignOut}>
+          <button style={topButton} onClick={handleSignOut}>
             Sign Out
           </button>
         </div>
-      </header>
+      </div>
 
-      {user?.id && <TeamRequestsPanel userId={user.id} />}
-
-      {pageError && <div style={errorBox}>{pageError}</div>}
+      {pageError ? <div style={errorBox}>{pageError}</div> : null}
 
       <section style={eventsSection}>
         <div style={eventsHeader}>
@@ -717,155 +688,135 @@ if (!session) {
           <div style={eventsHint}>← Swipe to see more →</div>
         </div>
 
-        <div style={horizontalScroll}>
-          {eventCards.map((event) => (
-            <div key={event.id} style={card}>
-              <div style={cardTop}>
-                <div style={eventTitle}>{event.title}</div>
+        {eventCards.length === 0 ? (
+          <div style={emptyState}>No upcoming events found.</div>
+        ) : (
+          <div style={horizontalScroll}>
+            {eventCards.map((event) => {
+              const sportLabels = getSportLabels(event.sports || []);
+              const eventLikes = likes.filter((like) => like.event_id === event.id);
+              const eventComments = comments.filter(
+                (comment) => comment.event_id === event.id
+              );
+              const eventParticipants = participants.filter(
+                (participant) => participant.event_id === event.id
+              );
 
-                {(event.isOwner || isModerator) && (
-                  <div style={cardActions}>
-                    <button
-                      style={smallButton}
-                      onClick={() => openEdit(event)}
-                    >
-                      Edit
-                    </button>
+              const joinedByMe = eventParticipants.some(
+                (participant) => participant.user_id === user?.id
+              );
 
-                    <button
-                      style={smallButton}
-                      onClick={() => deleteEvent(event.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              return (
+                <div key={event.id} style={eventCard}>
+                  <div style={cardHeader}>
+                    <div>
+                      <div style={eventTitle}>{event.title}</div>
+                      <div style={cardMeta}>
+                        {formatDate(event.date)}
+                        {event.time ? ` • ${formatTime(event.time)}` : ""}
+                      </div>
+                    </div>
 
-              <div style={sportsRow}>
-                {(event.sports || []).map((sportId) => {
-                  const sport = SPORTS.find((s) => s.id === sportId);
-                  if (!sport) return null;
-
-                  return (
-                    <span key={sportId} style={sportBadge}>
-                      {sport.icon} {sport.label}
-                    </span>
-                  );
-                })}
-              </div>
-
-              {event.distance && (
-                <div style={distanceRow}>
-                  Distance: {event.distance} km
-                </div>
-              )}
-
-              <div style={metaRow}>
-                <span>{formatDate(event.date)}</span>
-                <span>{formatTime(event.time)}</span>
-              </div>
-
-              <div style={locationRow}>
-                📍 {event.location}
-              </div>
-
-              <div style={creatorRow}>
-                by{" "}
-                <Link
-                  href={`/profile/${event.creator_profile?.id}`}
-                  style={profileLink}
-                >
-                  {event.creator_profile?.name || "Unknown"}
-                </Link>
-              </div>
-
-              {event.description && (
-                <div style={description}>
-                  {event.description}
-                </div>
-              )}
-
-              <div style={actionsRow}>
-                <button
-                  style={likeButton}
-                  onClick={() => toggleLike(event)}
-                >
-                  ❤️ {event.likes.length}
-                </button>
-
-                <button
-                  style={joinButton}
-                  onClick={() => toggleParticipation(event)}
-                >
-                  {event.joinedByMe ? "Leave" : "Join"} (
-                  {event.participants.length})
-                </button>
-
-                <button
-                  style={mapButton}
-                  onClick={() => openMaps(event.location)}
-                >
-                  Map
-                </button>
-
-                <button
-                  style={calendarButton}
-                  onClick={() => downloadIcs(event)}
-                >
-                  Calendar
-                </button>
-              </div>
-
-              <div style={commentsBlock}>
-                {event.comments.map((comment) => (
-                  <div key={comment.id} style={commentRow}>
-                    <Link
-                      href={`/profile/${comment.user_profile?.id}`}
-                      style={profileLink}
-                    >
-                      {comment.user_profile?.name || "User"}
-                    </Link>
-
-                    <span style={commentText}>
-                      {comment.text}
-                    </span>
-
-                    {(comment.user_id === user.id || isModerator) && (
+                    {(event.creator_id === user?.id || isModerator) && (
                       <button
-                        style={deleteCommentButton}
-                        onClick={() => deleteComment(comment.id)}
+                        style={smallGhostButton}
+                        onClick={() => openEdit(event)}
                       >
-                        ✕
+                        Edit
                       </button>
                     )}
                   </div>
-                ))}
 
-                <div style={commentInputRow}>
-                  <input
-                    placeholder="Write a comment..."
-                    value={commentText[event.id] || ""}
-                    onChange={(e) =>
-                      setCommentText((prev) => ({
-                        ...prev,
-                        [event.id]: e.target.value,
-                      }))
-                    }
-                    style={commentInput}
-                  />
+                  <div style={sportsWrap}>
+                    {sportLabels.map((label) => (
+                      <span key={label} style={sportPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
 
-                  <button
-                    style={commentButton}
-                    onClick={() => postComment(event.id)}
-                  >
-                    Post
-                  </button>
+                  {event.distance ? (
+                    <div style={distanceText}>{event.distance} km</div>
+                  ) : null}
+
+                  <div style={locationText}>{event.location}</div>
+
+                  {event.description ? (
+                    <div style={descriptionText}>{event.description}</div>
+                  ) : null}
+
+                  <div style={buttonRow}>
+                    <button
+                      style={secondaryButtonSmall}
+                      onClick={() => toggleLike(event.id)}
+                    >
+                      ❤️ {eventLikes.length}
+                    </button>
+
+                    <button
+                      style={primaryButtonSmall}
+                      onClick={() => toggleJoin(event.id)}
+                    >
+                      {joinedByMe ? "Leave" : "Join"} ({eventParticipants.length})
+                    </button>
+
+                    <button
+                      style={secondaryButtonSmall}
+                      onClick={() => downloadIcs(event)}
+                    >
+                      Calendar
+                    </button>
+
+                    <button
+                      style={secondaryButtonSmall}
+                      onClick={() => openMaps(event.location)}
+                    >
+                      Maps
+                    </button>
+
+                    {(event.creator_id === user?.id || isModerator) && (
+                      <button
+                        style={dangerButtonSmall}
+                        onClick={() => deleteEvent(event.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={commentsSection}>
+                    {eventComments.map((comment) => (
+                      <div key={comment.id} style={commentItem}>
+                        <strong>{comment.user_profile?.name || "User"}:</strong>{" "}
+                        {comment.text}
+                      </div>
+                    ))}
+
+                    <div style={commentInputRow}>
+                      <input
+                        style={commentInput}
+                        placeholder="Write a comment..."
+                        value={commentText[event.id] || ""}
+                        onChange={(e) =>
+                          setCommentText((prev) => ({
+                            ...prev,
+                            [event.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        style={primaryButtonSmall}
+                        onClick={() => submitComment(event.id)}
+                      >
+                        Post
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
 
@@ -877,109 +828,98 @@ if (!session) {
               {editId ? "Edit Event" : "Create Event"}
             </h2>
 
-            <form onSubmit={saveEvent}>
-              <input
-                placeholder="Event title"
-                value={form.title}
-                onChange={(e) =>
-                  setForm({ ...form, title: e.target.value })
-                }
-                style={input}
-              />
+            <input
+              style={input}
+              placeholder="Event title"
+              value={form.title}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, title: e.target.value }))
+              }
+            />
 
-              <div style={sportsPicker}>
-                {SPORTS.map((sport) => (
+            <div style={sportsPicker}>
+              {SPORTS.map((sport) => {
+                const selected = form.sports.includes(sport.id);
+
+                return (
                   <button
-                    type="button"
                     key={sport.id}
-                    onClick={() => toggleSportInForm(sport.id)}
-                    style={{
-                      ...sportButton,
-                      background: form.sports.includes(sport.id)
-                        ? "#1f6feb"
-                        : "#111",
-                    }}
+                    type="button"
+                    onClick={() => toggleSport(sport.id)}
+                    style={selected ? sportChipSelected : sportChip}
                   >
-                    {sport.icon} {sport.label}
+                    <span style={{ marginRight: 6 }}>{sport.icon}</span>
+                    {sport.label}
                   </button>
-                ))}
-              </div>
+                );
+              })}
+            </div>
 
-              {showDistance && (
-                <div style={distanceBlock}>
-                  <div>
-                    Distance: {form.distance} km
-                  </div>
-
-                  <input
-                    type="range"
-                    min={activeDistanceRange.min}
-                    max={activeDistanceRange.max}
-                    value={form.distance}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        distance: Number(e.target.value),
-                      })
-                    }
-                    style={{ width: "100%" }}
-                  />
+            {showDistance && (
+              <div style={distanceBlock}>
+                <div style={distanceLabel}>
+                  Distance: {form.distance} km
                 </div>
-              )}
-
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) =>
-                  setForm({ ...form, date: e.target.value })
-                }
-                style={input}
-              />
-
-              <input
-                type="time"
-                value={form.time}
-                onChange={(e) =>
-                  setForm({ ...form, time: e.target.value })
-                }
-                style={input}
-              />
-
-              <input
-                placeholder="Location"
-                value={form.location}
-                onChange={(e) =>
-                  setForm({ ...form, location: e.target.value })
-                }
-                style={input}
-              />
-
-              <textarea
-                placeholder="Description"
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                style={textarea}
-              />
-
-              <div style={modalActions}>
-                <button
-                  type="button"
-                  style={secondaryButton}
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  style={primaryButton}
-                  disabled={savingEvent}
-                >
-                  {savingEvent ? "Saving..." : "Save Event"}
-                </button>
+                <input
+                  type="range"
+                  min={activeDistanceRange.min}
+                  max={activeDistanceRange.max}
+                  value={form.distance}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      distance: Number(e.target.value),
+                    }))
+                  }
+                  style={{ width: "100%" }}
+                />
               </div>
-            </form>
+            )}
+
+            <input
+              style={input}
+              type="date"
+              value={form.date}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, date: e.target.value }))
+              }
+            />
+
+            <input
+              style={input}
+              type="time"
+              value={form.time}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, time: e.target.value }))
+              }
+            />
+
+            <input
+              style={input}
+              placeholder="Location"
+              value={form.location}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, location: e.target.value }))
+              }
+            />
+
+            <textarea
+              style={textarea}
+              placeholder="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, description: e.target.value }))
+              }
+            />
+
+            <div style={modalButtons}>
+              <button style={secondaryButton} onClick={closeModal}>
+                Cancel
+              </button>
+              <button style={primaryButton} onClick={saveEvent}>
+                {savingEvent ? "Saving..." : "Save Event"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -987,47 +927,141 @@ if (!session) {
   );
 }
 
-
-/* =========================
-   STYLES
-========================= */
-
 const page = {
-  background: "#000",
   minHeight: "100vh",
+  background: "#050505",
   color: "white",
-  fontFamily: "system-ui",
+  padding: 16,
+  fontFamily: "sans-serif",
 };
 
-const header = {
+const authPage = {
+  minHeight: "100vh",
+  background: "#050505",
   display: "flex",
-  justifyContent: "space-between",
-  padding: 20,
-  borderBottom: "1px solid #222",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const authCard = {
+  width: "100%",
+  maxWidth: 380,
+  background: "#111",
+  borderRadius: 24,
+  padding: 24,
+  border: "1px solid rgba(255,255,255,0.06)",
 };
 
 const logo = {
-  fontSize: 24,
-  fontWeight: 700,
+  fontSize: 28,
+  fontWeight: 800,
+  marginBottom: 20,
 };
 
-const headerRight = {
+const topBar = {
   display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 18,
 };
 
-const headerButton = {
-  background: "#111",
-  border: "1px solid #333",
-  padding: "8px 14px",
-  borderRadius: 10,
-  cursor: "pointer",
-  textDecoration: "none",
+const topBarButtons = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const topButton = {
+  display: "inline-block",
+  background: "#2a2a2a",
   color: "white",
+  textDecoration: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  border: "none",
+};
+
+const input = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "14px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+  marginBottom: 12,
+};
+
+const textarea = {
+  ...input,
+  minHeight: 100,
+  resize: "vertical",
+};
+
+const primaryButton = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const secondaryButton = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const primaryButtonSmall = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const secondaryButtonSmall = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const smallGhostButton = {
+  background: "transparent",
+  color: "#e4ef16",
+  border: "1px solid rgba(228,239,22,0.3)",
+  padding: "8px 12px",
+  borderRadius: 10,
+};
+
+const dangerButtonSmall = {
+  background: "#5a1f1f",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const errorBox = {
+  background: "#3a1616",
+  color: "#ffd2d2",
+  padding: 16,
+  borderRadius: 18,
+  border: "1px solid rgba(255,255,255,0.05)",
+  marginBottom: 18,
 };
 
 const eventsSection = {
-  padding: 20,
+  paddingBottom: 110,
 };
 
 const eventsHeader = {
@@ -1035,6 +1069,7 @@ const eventsHeader = {
   justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 12,
+  paddingInline: 2,
 };
 
 const eventsTitle = {
@@ -1044,186 +1079,192 @@ const eventsTitle = {
 
 const eventsHint = {
   fontSize: 13,
-  opacity: 0.6,
+  opacity: 0.65,
 };
 
 const horizontalScroll = {
   display: "flex",
   gap: 16,
   overflowX: "auto",
+  paddingBottom: 8,
+  paddingRight: 24,
   scrollSnapType: "x mandatory",
   WebkitOverflowScrolling: "touch",
 };
 
-const card = {
+const emptyState = {
+  background: "#111",
+  padding: 24,
+  borderRadius: 24,
+  border: "1px solid rgba(255,255,255,0.05)",
+};
+
+const eventCard = {
   background: "#111",
   padding: 20,
-  borderRadius: 20,
+  borderRadius: 24,
+  border: "1px solid rgba(255,255,255,0.05)",
   minWidth: "82vw",
   maxWidth: "82vw",
   scrollSnapAlign: "start",
   flexShrink: 0,
-  border: "1px solid #222",
+};
+
+const cardHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  alignItems: "flex-start",
+  marginBottom: 10,
 };
 
 const eventTitle = {
-  fontSize: 18,
+  fontSize: 24,
   fontWeight: 700,
-  marginBottom: 6,
 };
 
-const sportsRow = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 6,
-  marginBottom: 10,
-};
-
-const sportBadge = {
-  background: "#222",
-  padding: "4px 8px",
-  borderRadius: 8,
-  fontSize: 12,
-};
-
-const metaRow = {
-  display: "flex",
-  gap: 10,
+const cardMeta = {
   fontSize: 14,
-  marginBottom: 4,
+  opacity: 0.7,
+  marginTop: 4,
 };
 
-const locationRow = {
-  fontSize: 14,
-  marginBottom: 8,
-};
-
-const description = {
-  fontSize: 14,
-  marginTop: 8,
-};
-
-const actionsRow = {
-  display: "flex",
-  gap: 8,
-  marginTop: 12,
-};
-
-const likeButton = {
-  background: "#111",
-  border: "1px solid #333",
-  padding: "6px 10px",
-  borderRadius: 8,
-  cursor: "pointer",
-  color: "white",
-};
-
-const joinButton = likeButton;
-const mapButton = likeButton;
-const calendarButton = likeButton;
-
-const modalOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.7)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-};
-
-const modal = {
-  background: "#111",
-  padding: 30,
-  borderRadius: 16,
-  width: 420,
-  maxWidth: "90%",
-};
-
-const modalTitle = {
-  marginBottom: 16,
-};
-
-const input = {
-  width: "100%",
-  marginBottom: 10,
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #333",
-  background: "#000",
-  color: "white",
-};
-
-const textarea = {
-  ...input,
-  minHeight: 80,
-};
-
-const primaryButton = {
-  background: "#1f6feb",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-  color: "white",
-  cursor: "pointer",
-};
-
-const secondaryButton = {
-  ...primaryButton,
-  background: "#333",
-};
-
-const modalActions = {
-  display: "flex",
-  justifyContent: "space-between",
-  marginTop: 12,
-};
-
-const sportsPicker = {
+const sportsWrap = {
   display: "flex",
   flexWrap: "wrap",
   gap: 8,
   marginBottom: 12,
 };
 
-const sportButton = {
-  border: "1px solid #333",
-  borderRadius: 10,
-  padding: "6px 10px",
+const sportPill = {
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "7px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const distanceText = {
+  fontSize: 16,
+  fontWeight: 600,
+  color: "#cfd3d6",
+  marginBottom: 8,
+};
+
+const locationText = {
+  fontSize: 15,
+  marginBottom: 8,
+};
+
+const descriptionText = {
+  fontSize: 14,
+  lineHeight: 1.5,
+  color: "#d6d6d6",
+  marginBottom: 14,
+};
+
+const buttonRow = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginBottom: 14,
+};
+
+const commentsSection = {
+  display: "grid",
+  gap: 10,
+};
+
+const commentItem = {
+  background: "#151515",
+  border: "1px solid rgba(255,255,255,0.05)",
+  borderRadius: 14,
+  padding: 12,
+  fontSize: 14,
+};
+
+const commentInputRow = {
+  display: "flex",
+  gap: 8,
+  marginTop: 4,
+};
+
+const commentInput = {
+  flex: 1,
+  background: "#1b1b1b",
   color: "white",
-  cursor: "pointer",
+  border: "1px solid #333",
+  padding: "12px 12px",
+  borderRadius: 12,
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.72)",
+  zIndex: 20,
+  padding: 16,
+  display: "flex",
+  alignItems: "center",
+};
+
+const modal = {
+  width: "100%",
+  background: "#111",
+  borderRadius: 24,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,0.08)",
+  maxHeight: "90vh",
+  overflowY: "auto",
+};
+
+const modalTitle = {
+  margin: 0,
+  marginBottom: 14,
+  fontSize: 24,
+};
+
+const sportsPicker = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const sportChip = {
+  background: "#222",
+  border: "1px solid #333",
+  color: "white",
+  padding: "8px 14px",
+  borderRadius: 999,
+};
+
+const sportChipSelected = {
+  background: "#e4ef16",
+  color: "black",
+  border: "1px solid #e4ef16",
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontWeight: "bold",
 };
 
 const distanceBlock = {
-  marginBottom: 10,
+  marginBottom: 12,
 };
 
-const authPage = {
-  minHeight: "100vh",
+const distanceLabel = {
+  marginBottom: 8,
+  fontSize: 14,
+};
+
+const modalButtons = {
   display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "#000",
-};
-
-const authCard = {
-  background: "#111",
-  padding: 30,
-  borderRadius: 16,
-  width: 320,
-};
-
-const errorBox = {
-  background: "#441",
-  padding: 12,
-  margin: 20,
-  borderRadius: 8,
+  gap: 10,
+  marginTop: 12,
 };
 
 
 
 
-
   
-  
-  
-
