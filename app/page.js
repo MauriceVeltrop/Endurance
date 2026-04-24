@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import TeamRequestsPanel from "../components/TeamRequestsPanel";
-import EventRouteMap from "../components/EventRouteMap";
 import { SPORTS, getSportLabels } from "../lib/sports";
 
 export default function Home() {
@@ -21,6 +20,8 @@ export default function Home() {
     gpx_file_url: null,
     route_points: null,
     gpx_uploaded_by: null,
+    route_distance_km: null,
+    elevation_gain_m: null,
   };
 
   const distanceRanges = {
@@ -108,7 +109,9 @@ export default function Home() {
 
   const showGpxUpload = eventCanHaveRoute(form.sports);
 
-  const openNew = () => {
+
+
+const openNew = () => {
     setEditId(null);
     setForm(emptyEvent);
     setOpen(true);
@@ -116,6 +119,7 @@ export default function Home() {
 
   const openEdit = (event) => {
     setEditId(event.id);
+
     setForm({
       title: event.title || "",
       sports: Array.isArray(event.sports) ? event.sports : [],
@@ -129,7 +133,10 @@ export default function Home() {
       gpx_file_url: event.gpx_file_url || null,
       route_points: event.route_points || null,
       gpx_uploaded_by: event.gpx_uploaded_by || null,
+      route_distance_km: event.route_distance_km || null,
+      elevation_gain_m: event.elevation_gain_m || null,
     });
+
     setOpen(true);
   };
 
@@ -139,9 +146,7 @@ export default function Home() {
     setForm(emptyEvent);
   };
 
-
-
-const eventCards = useMemo(() => {
+  const eventCards = useMemo(() => {
     const now = new Date();
 
     if (userSports.length === 0) {
@@ -151,16 +156,17 @@ const eventCards = useMemo(() => {
     return [...events]
       .filter((event) => {
         const eventSports = Array.isArray(event.sports) ? event.sports : [];
-
         return eventSports.some((sportId) => userSports.includes(sportId));
       })
       .filter((event) => makeEventDateTime(event) >= now)
       .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
       .map((event) => {
         const eventLikes = likes.filter((like) => like.event_id === event.id);
+
         const eventComments = comments.filter(
           (comment) => comment.event_id === event.id
         );
+
         const eventParticipants = participants.filter(
           (participant) => participant.event_id === event.id
         );
@@ -181,6 +187,147 @@ const eventCards = useMemo(() => {
         };
       });
   }, [events, likes, comments, participants, user, userSports, isModerator]);
+
+  const DetailRouteMap = ({ points }) => {
+    if (!points || points.length < 2) return null;
+
+    const width = 360;
+    const height = 230;
+    const padding = 24;
+
+    const validPoints = points.filter(
+      (p) =>
+        Number.isFinite(Number(p.lat)) &&
+        Number.isFinite(Number(p.lon))
+    );
+
+    if (validPoints.length < 2) return null;
+
+    const latValues = validPoints.map((p) => Number(p.lat));
+    const lonValues = validPoints.map((p) => Number(p.lon));
+    const eleValues = validPoints
+      .map((p) => Number(p.ele || 0))
+      .filter((v) => Number.isFinite(v));
+
+    const minLat = Math.min(...latValues);
+    const maxLat = Math.max(...latValues);
+    const minLon = Math.min(...lonValues);
+    const maxLon = Math.max(...lonValues);
+
+    const latRange = maxLat - minLat || 1;
+    const lonRange = maxLon - minLon || 1;
+
+    const toXY = (point) => {
+      const x =
+        padding +
+        ((Number(point.lon) - minLon) / lonRange) * (width - padding * 2);
+
+      const y =
+        height -
+        padding -
+        ((Number(point.lat) - minLat) / latRange) * (height - padding * 2);
+
+      return { x, y };
+    };
+
+    const step = Math.max(1, Math.floor(validPoints.length / 800));
+
+    const simplifiedPoints = validPoints.filter((_, index) => {
+      return index % step === 0 || index === validPoints.length - 1;
+    });
+
+    const routePath = simplifiedPoints
+      .map((point, index) => {
+        const { x, y } = toXY(point);
+        return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+      })
+      .join(" ");
+
+    const start = toXY(validPoints[0]);
+    const finish = toXY(validPoints[validPoints.length - 1]);
+
+    const minEle = eleValues.length ? Math.min(...eleValues) : null;
+    const maxEle = eleValues.length ? Math.max(...eleValues) : null;
+
+
+return (
+      <div style={routeMapWrap}>
+        <div style={routeMapTitle}>Route map</div>
+
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          style={routeSvg}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <rect
+            x="0"
+            y="0"
+            width={width}
+            height={height}
+            rx="18"
+            fill="#101010"
+          />
+
+          {[0.25, 0.5, 0.75].map((line) => (
+            <g key={line}>
+              <line
+                x1={padding}
+                x2={width - padding}
+                y1={padding + (height - padding * 2) * line}
+                y2={padding + (height - padding * 2) * line}
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth="1"
+              />
+
+              <line
+                x1={padding + (width - padding * 2) * line}
+                x2={padding + (width - padding * 2) * line}
+                y1={padding}
+                y2={height - padding}
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth="1"
+              />
+            </g>
+          ))}
+
+          <path
+            d={routePath}
+            fill="none"
+            stroke="rgba(228,239,22,0.18)"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          <path
+            d={routePath}
+            fill="none"
+            stroke="#e4ef16"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          <circle cx={start.x} cy={start.y} r="6" fill="#22c55e" />
+          <circle cx={finish.x} cy={finish.y} r="6" fill="#ef4444" />
+
+          <text x={start.x + 8} y={start.y - 8} fill="white" fontSize="10">
+            Start
+          </text>
+
+          <text x={finish.x + 8} y={finish.y - 8} fill="white" fontSize="10">
+            Finish
+          </text>
+        </svg>
+
+        {minEle !== null && maxEle !== null && (
+          <div style={routeMapMeta}>
+            Elevation range: {Math.round(minEle)} m - {Math.round(maxEle)} m
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -239,7 +386,9 @@ const eventCards = useMemo(() => {
     setProfile(data);
   };
 
-  const loadEverything = async () => {
+
+
+const loadEverything = async () => {
     setPageError("");
 
     await Promise.all([
@@ -300,9 +449,7 @@ const eventCards = useMemo(() => {
     setLikes(data || []);
   };
 
-
-
-const loadComments = async () => {
+  const loadComments = async () => {
     const { data, error } = await supabase
       .from("event_comments")
       .select(`
@@ -382,8 +529,55 @@ const loadComments = async () => {
       .map((pt) => ({
         lat: Number(pt.getAttribute("lat")),
         lon: Number(pt.getAttribute("lon")),
+        ele: Number(pt.getElementsByTagName("ele")[0]?.textContent || 0),
       }))
       .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+  };
+
+
+
+
+const calculateRouteStats = (points) => {
+    if (!points || points.length < 2) {
+      return { distanceKm: null, elevationGain: null };
+    }
+
+    const toRad = (deg) => (deg * Math.PI) / 180;
+
+    let distanceMeters = 0;
+    let elevationGain = 0;
+
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+
+      const R = 6371000;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+
+      const h =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) *
+          Math.cos(lat2) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+      distanceMeters += R * c;
+
+      const diff = (b.ele || 0) - (a.ele || 0);
+
+      if (diff > 0) {
+        elevationGain += diff;
+      }
+    }
+
+    return {
+      distanceKm: Number((distanceMeters / 1000).toFixed(2)),
+      elevationGain: Math.round(elevationGain),
+    };
   };
 
   const handleSignUp = async (e) => {
@@ -426,9 +620,7 @@ const loadComments = async () => {
     await supabase.auth.signOut();
   };
 
-
-
-const toggleSportInForm = (sportId) => {
+  const toggleSportInForm = (sportId) => {
     const alreadySelected = form.sports.includes(sportId);
 
     if (alreadySelected) {
@@ -442,6 +634,7 @@ const toggleSportInForm = (sportId) => {
         sports: nextSports,
         distance: Math.min(form.distance, nextRange.max),
       });
+
       return;
     }
 
@@ -474,8 +667,13 @@ const toggleSportInForm = (sportId) => {
         gpx_file_url: null,
         route_points: null,
         gpx_uploaded_by: null,
+        route_distance_km: null,
+        elevation_gain_m: null,
       })
       .eq("id", event.id);
+
+
+
 
     if (updateError) {
       alert(`Removing GPX failed: ${updateError.message}`);
@@ -513,6 +711,8 @@ const toggleSportInForm = (sportId) => {
     let gpxFileUrl = form.gpx_file_url || null;
     let routePoints = form.route_points || null;
     let gpxUploadedBy = form.gpx_uploaded_by || null;
+    let routeDistanceKm = form.route_distance_km || null;
+    let elevationGainM = form.elevation_gain_m || null;
 
     if (form.gpxFile) {
       const fileName = form.gpxFile.name.toLowerCase();
@@ -530,6 +730,8 @@ const toggleSportInForm = (sportId) => {
         alert("No route points found in this GPX file.");
         return;
       }
+
+      const routeStats = calculateRouteStats(routePoints);
 
       const safeFileName = form.gpxFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${user.id}/${Date.now()}-${safeFileName}`;
@@ -555,6 +757,8 @@ const toggleSportInForm = (sportId) => {
       gpxFilePath = filePath;
       gpxFileUrl = publicData.publicUrl;
       gpxUploadedBy = user.id;
+      routeDistanceKm = routeStats.distanceKm;
+      elevationGainM = routeStats.elevationGain;
     }
 
     const payload = {
@@ -569,32 +773,21 @@ const toggleSportInForm = (sportId) => {
       gpx_file_url: gpxFileUrl,
       route_points: routePoints,
       gpx_uploaded_by: gpxUploadedBy,
+      route_distance_km: routeDistanceKm,
+      elevation_gain_m: elevationGainM,
     };
 
+    const result = editId
+      ? await supabase.from("events").update(payload).eq("id", editId)
+      : await supabase.from("events").insert({
+          creator_id: user.id,
+          ...payload,
+        });
 
-
-if (editId) {
-      const { error } = await supabase
-        .from("events")
-        .update(payload)
-        .eq("id", editId);
-
-      if (error) {
-        setSavingEvent(false);
-        alert(`Saving failed: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("events").insert({
-        creator_id: user.id,
-        ...payload,
-      });
-
-      if (error) {
-        setSavingEvent(false);
-        alert(`Creating event failed: ${error.message}`);
-        return;
-      }
+    if (result.error) {
+      setSavingEvent(false);
+      alert(`Saving failed: ${result.error.message}`);
+      return;
     }
 
     await loadEverything();
@@ -602,7 +795,8 @@ if (editId) {
     closeModal();
   };
 
-  const deleteEvent = async (id) => {
+
+const deleteEvent = async (id) => {
     if (!confirm("Delete this event?")) return;
 
     const { error } = await supabase.from("events").delete().eq("id", id);
@@ -686,6 +880,7 @@ if (editId) {
     }
 
     const text = (commentText[eventId] || "").trim();
+
     if (!text) return;
 
     const { error } = await supabase.from("event_comments").insert({
@@ -703,9 +898,7 @@ if (editId) {
     await loadComments();
   };
 
-
-
-const deleteComment = async (commentId) => {
+  const deleteComment = async (commentId) => {
     const { error } = await supabase
       .from("event_comments")
       .delete()
@@ -728,7 +921,9 @@ const deleteComment = async (commentId) => {
     const endDate = new Date(`${event.date}T${event.time}:00`);
     endDate.setHours(endDate.getHours() + 1);
 
-    const yyyy = endDate.getFullYear();
+
+
+const yyyy = endDate.getFullYear();
     const mm = String(endDate.getMonth() + 1).padStart(2, "0");
     const dd = String(endDate.getDate()).padStart(2, "0");
     const hh = String(endDate.getHours()).padStart(2, "0");
@@ -843,12 +1038,9 @@ const deleteComment = async (commentId) => {
         </div>
       </main>
     );
-                }
+  }
 
-
-
-
-return (
+  return (
     <main style={app}>
       <header style={header}>
         <img
@@ -930,7 +1122,9 @@ return (
                 </div>
               </div>
 
-              {showDistance && (
+
+
+{showDistance && (
                 <div>
                   <div style={label}>Distance: {form.distance} km</div>
                   <input
@@ -1054,25 +1248,40 @@ return (
               return (
                 <div key={event.id} style={card}>
                   <div style={sportTag}>{sportLabels.join(" • ")}</div>
+
                   <h2 style={cardTitle}>{event.title}</h2>
 
                   {event.distance ? (
                     <div style={distanceText}>{event.distance} km</div>
                   ) : null}
 
+                  {event.elevation_gain_m !== null &&
+                    event.elevation_gain_m !== undefined && (
+                      <div style={elevationText}>
+                        ⛰ {event.elevation_gain_m} hoogtemeters
+                      </div>
+                    )}
+
                   <div style={meta}>
                     <div>📅 {formatDate(event.date)}</div>
                     <div>⏰ {formatTime(event.time)}</div>
+
                     <div style={creatorText}>
                       👤 Created by{" "}
-                      <Link href={`/profile/${event.creator_id}`} style={profileLink}>
+                      <Link
+                        href={`/profile/${event.creator_id}`}
+                        style={profileLink}
+                      >
                         {event.creator_profile?.name ||
                           event.creator_profile?.email ||
                           "Unknown"}
                       </Link>
                     </div>
 
-                    <button onClick={() => openMaps(event.location)} style={mapBtn}>
+                    <button
+                      onClick={() => openMaps(event.location)}
+                      style={mapBtn}
+                    >
                       📍 {event.location}
                     </button>
 
@@ -1080,9 +1289,7 @@ return (
                       Participants: {event.participants.length}
                     </div>
 
-
-
-<div
+                    <div
                       style={{
                         display: "flex",
                         gap: 8,
@@ -1103,7 +1310,7 @@ return (
                   </div>
 
                   {event.route_points && (
-                    <EventRouteMap points={event.route_points} />
+                    <DetailRouteMap points={event.route_points} />
                   )}
 
                   {event.gpx_file_url && (
@@ -1181,7 +1388,8 @@ return (
                                   </Link>
                                 </div>
 
-                                {(comment.user_id === user?.id || isModerator) && (
+                                {(comment.user_id === user?.id ||
+                                  isModerator) && (
                                   <button
                                     type="button"
                                     onClick={() => deleteComment(comment.id)}
@@ -1202,7 +1410,8 @@ return (
 
                       <div style={commentForm}>
                         <div style={commentUserLabel}>
-                          Commenting as <strong>{profile?.name || user?.email}</strong>
+                          Commenting as{" "}
+                          <strong>{profile?.name || user?.email}</strong>
                         </div>
 
                         <textarea
@@ -1277,74 +1486,525 @@ return (
   );
 }
 
-const app = { background: "#050505", color: "white", minHeight: "100vh", padding: 16, fontFamily: "sans-serif" };
-const header = { position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "center", padding: "12px 0 18px", background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))" };
-const authCard = { background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 24, padding: 20 };
-const authTabs = { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 };
-const loginBar = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, padding: "14px 16px", marginBottom: 18 };
-const loginInfo = { fontSize: 14, color: "#ddd" };
-const roleBadge = { marginTop: 6, display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
-const actionLinkBtn = { display: "inline-block", background: "#2a2a2a", color: "white", textDecoration: "none", padding: "12px 16px", borderRadius: 12 };
-const eventsSection = { paddingBottom: 110 };
-const horizontalScroll = { display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8, scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" };
-const emptyCard = { background: "#111", padding: 24, borderRadius: 24, border: "1px solid rgba(255,255,255,0.05)" };
-const errorCard = { background: "#3a1616", color: "#ffd2d2", padding: 16, borderRadius: 18, border: "1px solid rgba(255,255,255,0.05)", marginBottom: 18 };
-const label = { marginBottom: 6, opacity: 0.82, fontSize: 14 };
-const helperText = { fontSize: 13, opacity: 0.7, marginTop: 6 };
-const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 20, padding: 16, display: "flex", alignItems: "center" };
-const modal = { width: "100%", background: "#111", borderRadius: 24, padding: 18, border: "1px solid rgba(255,255,255,0.08)", maxHeight: "90vh", overflowY: "auto" };
-const modalTop = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 };
-const closeBtn = { background: "#1d1d1d", color: "white", border: "none", width: 36, height: 36, borderRadius: 999 };
-const grid = { display: "grid", gap: 12 };
-const field = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "14px 12px", borderRadius: 12, boxSizing: "border-box" };
-const rangeRow = { display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.6, marginTop: 4 };
-const sportsPicker = { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 };
-const sportChip = { background: "#222", border: "1px solid #333", color: "white", padding: "8px 14px", borderRadius: 999, cursor: "pointer" };
-const sportChipSelected = { background: "#e4ef16", color: "black", border: "1px solid #e4ef16", padding: "8px 14px", borderRadius: 999, fontWeight: "bold", cursor: "pointer" };
-const card = { background: "#111", padding: 20, borderRadius: 24, border: "1px solid rgba(255,255,255,0.05)", minWidth: "85vw", maxWidth: "85vw", scrollSnapAlign: "start", flexShrink: 0 };
-const sportTag = { display: "inline-block", background: "rgba(228,239,22,0.12)", color: "#e4ef16", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold", marginBottom: 10 };
-const cardTitle = { fontSize: 26, marginTop: 0, marginBottom: 6 };
-const distanceText = { fontSize: 16, fontWeight: "600", color: "#cfd3d6", marginBottom: 14 };
-const creatorText = { fontSize: 14, opacity: 0.85 };
-const profileLink = { color: "#e4ef16", textDecoration: "none", fontWeight: "bold" };
-const inlineProfileLink = { color: "#e4ef16", textDecoration: "none" };
-const chipLink = { background: "#1f1f1f", border: "1px solid rgba(255,255,255,0.08)", padding: "6px 10px", borderRadius: 999, fontSize: 13, color: "white", textDecoration: "none" };
-const meta = { display: "grid", gap: 8, marginBottom: 16, opacity: 0.95 };
-const mapBtn = { background: "transparent", color: "white", border: "none", padding: 0, textAlign: "left", fontSize: 16, cursor: "pointer" };
-const gpxActions = { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12, marginBottom: 12 };
-const gpxLink = { display: "inline-block", color: "#e4ef16", textDecoration: "none", fontWeight: "bold" };
-const communityBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18 };
-const communityTitle = { fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#f3f3f3" };
-const communityText = { fontSize: 14, lineHeight: 1.5, color: "#d6d6d6", marginBottom: 14, whiteSpace: "pre-wrap" };
-const likeRow = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 };
-const likeBtn = { background: "#1d1d1d", color: "white", border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px", borderRadius: 12 };
-const likeCount = { fontSize: 14, opacity: 0.75 };
-const likeUsers = { fontSize: 13, opacity: 0.6 };
-const commentsWrap = { display: "grid", gap: 10 };
-const commentList = { display: "grid", gap: 10 };
-const commentItem = { background: "#151515", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 14, padding: 12 };
-const commentHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4 };
-const commentName = { fontSize: 13, fontWeight: 700, color: "#e4ef16" };
-const commentTextStyle = { fontSize: 14, lineHeight: 1.45, color: "#e3e3e3", whiteSpace: "pre-wrap" };
-const communityMuted = { fontSize: 14, opacity: 0.6 };
-const commentUserLabel = { fontSize: 13, opacity: 0.75 };
-const commentForm = { display: "grid", gap: 10, marginTop: 6 };
-const commentField = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box", minHeight: 90, resize: "vertical" };
-const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
-const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
-const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
-const primaryBtnSmall = { background: "#e4ef16", color: "black", border: "none", padding: "10px 14px", borderRadius: 10, fontWeight: "bold" };
-const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
-const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
-const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
-const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
+const app = {
+  background: "#050505",
+  color: "white",
+  minHeight: "100vh",
+  padding: 16,
+  fontFamily: "sans-serif",
+};
 
+const header = {
+  position: "sticky",
+  top: 0,
+  zIndex: 5,
+  display: "flex",
+  justifyContent: "center",
+  padding: "12px 0 18px",
+  background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
+};
 
-  
+const authCard = {
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 24,
+  padding: 20,
+};
+
+const authTabs = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
+const loginBar = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+  padding: "14px 16px",
+  marginBottom: 18,
+};
+
+const loginInfo = {
+  fontSize: 14,
+  color: "#ddd",
+};
+
+const roleBadge = {
+  marginTop: 6,
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const actionLinkBtn = {
+  display: "inline-block",
+  background: "#2a2a2a",
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const eventsSection = {
+  paddingBottom: 110,
+};
+
+const horizontalScroll = {
+  display: "flex",
+  gap: 16,
+  overflowX: "auto",
+  paddingBottom: 8,
+  scrollSnapType: "x mandatory",
+  WebkitOverflowScrolling: "touch",
+};
+
+const emptyCard = {
+  background: "#111",
+  padding: 24,
+  borderRadius: 24,
+  border: "1px solid rgba(255,255,255,0.05)",
+};
+
+const errorCard = {
+  background: "#3a1616",
+  color: "#ffd2d2",
+  padding: 16,
+  borderRadius: 18,
+  border: "1px solid rgba(255,255,255,0.05)",
+  marginBottom: 18,
+};
+
+const label = {
+  marginBottom: 6,
+  opacity: 0.82,
+  fontSize: 14,
+};
+
+const helperText = {
+  fontSize: 13,
+  opacity: 0.7,
+  marginTop: 6,
+};
+
+const overlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.72)",
+  zIndex: 20,
+  padding: 16,
+  display: "flex",
+  alignItems: "center",
+};
+
+const modal = {
+  width: "100%",
+  background: "#111",
+  borderRadius: 24,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,0.08)",
+  maxHeight: "90vh",
+  overflowY: "auto",
+};
+
+const modalTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 14,
+};
+
+const closeBtn = {
+  background: "#1d1d1d",
+  color: "white",
+  border: "none",
+  width: 36,
+  height: 36,
+  borderRadius: 999,
+};
+
+const grid = {
+  display: "grid",
+  gap: 12,
+};
+
+const field = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "14px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+};
+
+const rangeRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 12,
+  opacity: 0.6,
+  marginTop: 4,
+};
+
+const sportsPicker = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 6,
+};
+
+const sportChip = {
+  background: "#222",
+  border: "1px solid #333",
+  color: "white",
+  padding: "8px 14px",
+  borderRadius: 999,
+  cursor: "pointer",
+};
+
+const sportChipSelected = {
+  background: "#e4ef16",
+  color: "black",
+  border: "1px solid #e4ef16",
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const card = {
+  background: "#111",
+  padding: 20,
+  borderRadius: 24,
+  border: "1px solid rgba(255,255,255,0.05)",
+  minWidth: "85vw",
+  maxWidth: "85vw",
+  scrollSnapAlign: "start",
+  flexShrink: 0,
+};
+
+const sportTag = {
+  display: "inline-block",
+  background: "rgba(228,239,22,0.12)",
+  color: "#e4ef16",
+  padding: "7px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+  marginBottom: 10,
+};
+
+const cardTitle = {
+  fontSize: 26,
+  marginTop: 0,
+  marginBottom: 6,
+};
+
+const distanceText = {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#cfd3d6",
+  marginBottom: 4,
+};
+
+const elevationText = {
+  fontSize: 14,
+  fontWeight: "600",
+  color: "#cfd3d6",
+  marginBottom: 14,
+};
+
+const creatorText = {
+  fontSize: 14,
+  opacity: 0.85,
+};
+
+const profileLink = {
+  color: "#e4ef16",
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const inlineProfileLink = {
+  color: "#e4ef16",
+  textDecoration: "none",
+};
+
+const chipLink = {
+  background: "#1f1f1f",
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 13,
+  color: "white",
+  textDecoration: "none",
+};
+
+const meta = {
+  display: "grid",
+  gap: 8,
+  marginBottom: 16,
+  opacity: 0.95,
+};
+
+const mapBtn = {
+  background: "transparent",
+  color: "white",
+  border: "none",
+  padding: 0,
+  textAlign: "left",
+  fontSize: 16,
+  cursor: "pointer",
+};
+
+const routeMapWrap = {
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 18,
+  padding: 12,
+  marginTop: 14,
+  marginBottom: 12,
+};
+
+const routeMapTitle = {
+  fontSize: 14,
+  fontWeight: 700,
+  marginBottom: 8,
+  color: "#e4ef16",
+};
+
+const routeSvg = {
+  width: "100%",
+  height: "auto",
+  display: "block",
+  borderRadius: 18,
+};
+
+const routeMapMeta = {
+  fontSize: 12,
+  opacity: 0.7,
+  marginTop: 8,
+};
+
+const gpxActions = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+  marginTop: 12,
+  marginBottom: 12,
+};
+
+const gpxLink = {
+  display: "inline-block",
+  color: "#e4ef16",
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const communityBox = {
+  marginTop: 18,
+  padding: 16,
+  background: "#0b0b0b",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 18,
+};
+
+const communityTitle = {
+  fontSize: 15,
+  fontWeight: 700,
+  marginBottom: 8,
+  color: "#f3f3f3",
+};
+
+const communityText = {
+  fontSize: 14,
+  lineHeight: 1.5,
+  color: "#d6d6d6",
+  marginBottom: 14,
+  whiteSpace: "pre-wrap",
+};
+
+const likeRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
+const likeBtn = {
+  background: "#1d1d1d",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "10px 14px",
+  borderRadius: 12,
+};
+
+const likeCount = {
+  fontSize: 14,
+  opacity: 0.75,
+};
+
+const likeUsers = {
+  fontSize: 13,
+  opacity: 0.6,
+};
+
+const commentsWrap = {
+  display: "grid",
+  gap: 10,
+};
+
+const commentList = {
+  display: "grid",
+  gap: 10,
+};
+
+const commentItem = {
+  background: "#151515",
+  border: "1px solid rgba(255,255,255,0.05)",
+  borderRadius: 14,
+  padding: 12,
+};
+
+const commentHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 4,
+};
+
+const commentName = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#e4ef16",
+};
+
+const commentTextStyle = {
+  fontSize: 14,
+  lineHeight: 1.45,
+  color: "#e3e3e3",
+  whiteSpace: "pre-wrap",
+};
+
+const communityMuted = {
+  fontSize: 14,
+  opacity: 0.6,
+};
+
+const commentUserLabel = {
+  fontSize: 13,
+  opacity: 0.75,
+};
+
+const commentForm = {
+  display: "grid",
+  gap: 10,
+  marginTop: 6,
+};
+
+const commentField = {
+  width: "100%",
+  background: "#1b1b1b",
+  color: "white",
+  border: "1px solid #333",
+  padding: "12px 12px",
+  borderRadius: 12,
+  boxSizing: "border-box",
+  minHeight: 90,
+  resize: "vertical",
+};
+
+const btnRow = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 16,
+};
+
+const primaryBtn = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+
+const secondaryBtn = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 12,
+};
+
+const primaryBtnSmall = {
+  background: "#e4ef16",
+  color: "black",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const secondaryBtnSmall = {
+  background: "#2a2a2a",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const dangerBtnSmall = {
+  background: "#5a1f1f",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+};
+
+const miniDeleteBtn = {
+  background: "transparent",
+  color: "#ff8d8d",
+  border: "none",
+  padding: 0,
+  fontSize: 12,
+};
+
+const fab = {
+  position: "fixed",
+  right: 18,
+  bottom: 22,
+  width: 62,
+  height: 62,
+  borderRadius: 999,
+  border: "none",
+  background: "#e4ef16",
+  color: "black",
+  fontSize: 34,
+  fontWeight: "bold",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+};
+
 
     
 
-  
 
-  
 
+
+
+
+    
