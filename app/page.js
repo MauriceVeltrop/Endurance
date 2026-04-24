@@ -1304,8 +1304,24 @@ const communityBox = { marginTop: 18, padding: 16, background: "#0b0b0b", border
 const communityTitle = { fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#f3f3f3" };
 const communityText = { fontSize: 14, lineHeight: 1.5, color: "#d6d6d6", marginBottom: 14, whiteSpace: "pre-wrap" };
 const likeRow = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 };
-const likeBtn = { background: "#1d1d1d", color: "white", border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px"
-
-
-  
-  
+const likeBtn = { background: "#1d1d1d", color: "white", border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px", borderRadius: 12 };
+const likeCount = { fontSize: 14, opacity: 0.75 };
+const likeUsers = { fontSize: 13, opacity: 0.6 };
+const commentsWrap = { display: "grid", gap: 10 };
+const commentList = { display: "grid", gap: 10 };
+const commentItem = { background: "#151515", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 14, padding: 12 };
+const commentHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 4 };
+const commentName = { fontSize: 13, fontWeight: 700, color: "#e4ef16" };
+const commentTextStyle = { fontSize: 14, lineHeight: 1.45, color: "#e3e3e3", whiteSpace: "pre-wrap" };
+const communityMuted = { fontSize: 14, opacity: 0.6 };
+const commentUserLabel = { fontSize: 13, opacity: 0.75 };
+const commentForm = { display: "grid", gap: 10, marginTop: 6 };
+const commentField = { width: "100%", background: "#1b1b1b", color: "white", border: "1px solid #333", padding: "12px 12px", borderRadius: 12, boxSizing: "border-box", minHeight: 90, resize: "vertical" };
+const btnRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
+const primaryBtn = { background: "#e4ef16", color: "black", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: "bold" };
+const secondaryBtn = { background: "#2a2a2a", color: "white", border: "none", padding: "12px 16px", borderRadius: 12 };
+const primaryBtnSmall = { background: "#e4ef16", color: "black", border: "none", padding: "10px 14px", borderRadius: 10, fontWeight: "bold" };
+const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
+const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
+const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
+const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
