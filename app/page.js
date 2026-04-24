@@ -141,7 +141,6 @@ export default function Home() {
 
 
 
-
 const eventCards = useMemo(() => {
     const now = new Date();
 
@@ -516,6 +515,14 @@ const toggleSportInForm = (sportId) => {
     let gpxUploadedBy = form.gpx_uploaded_by || null;
 
     if (form.gpxFile) {
+      const fileName = form.gpxFile.name.toLowerCase();
+
+      if (!fileName.endsWith(".gpx")) {
+        setSavingEvent(false);
+        alert("Only .gpx files are allowed.");
+        return;
+      }
+
       routePoints = await parseGpxFile(form.gpxFile);
 
       if (!routePoints.length) {
@@ -564,7 +571,9 @@ const toggleSportInForm = (sportId) => {
       gpx_uploaded_by: gpxUploadedBy,
     };
 
-    if (editId) {
+
+
+if (editId) {
       const { error } = await supabase
         .from("events")
         .update(payload)
@@ -593,8 +602,7 @@ const toggleSportInForm = (sportId) => {
     closeModal();
   };
 
-
-const deleteEvent = async (id) => {
+  const deleteEvent = async (id) => {
     if (!confirm("Delete this event?")) return;
 
     const { error } = await supabase.from("events").delete().eq("id", id);
@@ -695,7 +703,9 @@ const deleteEvent = async (id) => {
     await loadComments();
   };
 
-  const deleteComment = async (commentId) => {
+
+
+const deleteComment = async (commentId) => {
     const { error } = await supabase
       .from("event_comments")
       .delete()
@@ -833,7 +843,8 @@ const deleteEvent = async (id) => {
         </div>
       </main>
     );
-}
+                }
+
 
 
 
@@ -1069,7 +1080,9 @@ return (
                       Participants: {event.participants.length}
                     </div>
 
-                    <div
+
+
+<div
                       style={{
                         display: "flex",
                         gap: 8,
@@ -1325,3 +1338,13 @@ const secondaryBtnSmall = { background: "#2a2a2a", color: "white", border: "none
 const dangerBtnSmall = { background: "#5a1f1f", color: "white", border: "none", padding: "10px 14px", borderRadius: 10 };
 const miniDeleteBtn = { background: "transparent", color: "#ff8d8d", border: "none", padding: 0, fontSize: 12 };
 const fab = { position: "fixed", right: 18, bottom: 22, width: 62, height: 62, borderRadius: 999, border: "none", background: "#e4ef16", color: "black", fontSize: 34, fontWeight: "bold", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" };
+
+
+  
+
+    
+
+  
+
+  
+
