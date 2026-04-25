@@ -8,11 +8,8 @@ import {
   routeSvg,
 } from "../lib/enduranceStyles";
 
-const LEAFLET_CSS =
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-
-const LEAFLET_JS =
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
 function loadLeaflet() {
   return new Promise((resolve, reject) => {
@@ -93,8 +90,12 @@ export default function DetailRouteMap({ points }) {
         zoomControl: false,
         attributionControl: true,
         scrollWheelZoom: false,
-        dragging: true,
-        tap: true,
+        dragging: false,
+        tap: false,
+        touchZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
       });
 
       mapInstanceRef.current = map;
@@ -104,20 +105,20 @@ export default function DetailRouteMap({ points }) {
         attribution: "&copy; OpenStreetMap",
       }).addTo(map);
 
-      const route = L.polyline(latLngs, {
-        color: "#e4ef16",
-        weight: 5,
-        opacity: 0.95,
-      }).addTo(map);
-
       L.polyline(latLngs, {
         color: "#111",
-        weight: 9,
+        weight: 6,
         opacity: 0.35,
       }).addTo(map);
 
+      const route = L.polyline(latLngs, {
+        color: "#e4ef16",
+        weight: 3,
+        opacity: 0.95,
+      }).addTo(map);
+
       L.circleMarker(latLngs[0], {
-        radius: 7,
+        radius: 6,
         color: "#ffffff",
         weight: 2,
         fillColor: "#22c55e",
@@ -127,7 +128,7 @@ export default function DetailRouteMap({ points }) {
         .bindPopup("Start");
 
       L.circleMarker(latLngs[latLngs.length - 1], {
-        radius: 7,
+        radius: 6,
         color: "#ffffff",
         weight: 2,
         fillColor: "#ef4444",
@@ -207,6 +208,7 @@ export default function DetailRouteMap({ points }) {
           overflow: "hidden",
           background: "#101010",
           border: "1px solid rgba(255,255,255,0.08)",
+          touchAction: "pan-x",
         }}
       />
 
