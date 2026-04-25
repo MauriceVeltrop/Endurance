@@ -2,49 +2,99 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
 import TeamRequestsPanel from "../components/TeamRequestsPanel";
-import { SPORTS, getSportLabels } from "../lib/sports";
+import EventCard from "../components/EventCard";
+import EventFormModal from "../components/EventFormModal";
+import { supabase } from "../lib/supabase";
+import { getSportLabels } from "../lib/sports";
+import { parseGpxFile, calculateRouteStats } from "../lib/gpx";
+import {
+  actionLinkBtn,
+  app,
+  authCard,
+  authTabs,
+  emptyCard,
+  errorCard,
+  fab,
+  field,
+  grid,
+  header,
+  horizontalScroll,
+  loginBar,
+  loginInfo,
+  primaryBtn,
+  roleBadge,
+  secondaryBtn,
+  eventsSection,
+} from "../lib/enduranceStyles";
+
+const EMPTY_EVENT = {
+  title: "",
+  sports: [],
+  distance: 10,
+  date: "",
+  time: "",
+  location: "",
+  description: "",
+  gpxFile: null,
+  gpx_file_path: null,
+  gpx_file_url: null,
+  route_points: null,
+  gpx_uploaded_by: null,
+  route_distance_km: null,
+  elevation_gain_m: null,
+};
+
+const DISTANCE_RANGES = {
+  running: { min: 1, max: 50 },
+  "trail-running": { min: 1, max: 50 },
+  "road-cycling": { min: 10, max: 250 },
+  "mountain-biking": { min: 5, max: 120 },
+  "gravel-cycling": { min: 10, max: 250 },
+  walking: { min: 1, max: 40 },
+  swimming: { min: 1, max: 10 },
+  kayaking: { min: 1, max: 50 },
+};
+
+const ROUTE_SPORTS = [
+  "running",
+  "trail-running",
+  "road-cycling",
+  "mountain-biking",
+  "gravel-cycling",
+  "walking",
+  "kayaking",
+];
+
+function getDistanceSportIds(sports = []) {
+  return sports.filter((sportId) => DISTANCE_RANGES[sportId]);
+}
+
+function eventCanHaveRoute(sports = []) {
+  return sports.some((sportId) => ROUTE_SPORTS.includes(sportId));
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(`${value}T00:00:00`);
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  return value.slice(0, 5);
+}
+
+function makeEventDateTime(event) {
+  const timeValue = event?.time || "23:59";
+  return new Date(`${event.date}T${timeValue}`);
+}
 
 export default function Home() {
-  const emptyEvent = {
-    title: "",
-    sports: [],
-    distance: 10,
-    date: "",
-    time: "",
-    location: "",
-    description: "",
-    gpxFile: null,
-    gpx_file_path: null,
-    gpx_file_url: null,
-    route_points: null,
-    gpx_uploaded_by: null,
-    route_distance_km: null,
-    elevation_gain_m: null,
-  };
-
-  const distanceRanges = {
-    running: { min: 1, max: 50 },
-    "trail-running": { min: 1, max: 50 },
-    "road-cycling": { min: 10, max: 250 },
-    "mountain-biking": { min: 5, max: 120 },
-    "gravel-cycling": { min: 10, max: 250 },
-    walking: { min: 1, max: 40 },
-    swimming: { min: 1, max: 10 },
-    kayaking: { min: 1, max: 50 },
-  };
-
-  const routeSports = [
-    "running",
-    "trail-running",
-    "road-cycling",
-    "mountain-biking",
-    "gravel-cycling",
-    "walking",
-    "kayaking",
-  ];
-
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -60,7 +110,7 @@ export default function Home() {
 
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState(emptyEvent);
+  const [form, setForm] = useState(EMPTY_EVENT);
 
   const [commentText, setCommentText] = useState({});
   const [pageError, setPageError] = useState("");
@@ -74,76 +124,11 @@ export default function Home() {
   const isOrganizer = profile?.role === "organizer";
   const canManageEvents = isModerator || isOrganizer;
 
-  const formatDate = (value) => {
-    if (!value) return "";
-    const d = new Date(`${value}T00:00:00`);
-    return d.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
-
-  const formatTime = (value) => {
-    if (!value) return "";
-    return value.slice(0, 5);
-  };
-
-  const makeEventDateTime = (event) => {
-    const timeValue = event?.time || "23:59";
-    return new Date(`${event.date}T${timeValue}`);
-  };
-
-  const getDistanceSportIds = (sports = []) => {
-    return sports.filter((sportId) => distanceRanges[sportId]);
-  };
-
-  const eventCanHaveRoute = (sports = []) => {
-    return sports.some((sportId) => routeSports.includes(sportId));
-  };
-
   const currentDistanceSportIds = getDistanceSportIds(form.sports);
   const showDistance = currentDistanceSportIds.length > 0;
   const activeDistanceRange =
-    distanceRanges[currentDistanceSportIds[0]] || { min: 1, max: 50 };
-
+    DISTANCE_RANGES[currentDistanceSportIds[0]] || { min: 1, max: 50 };
   const showGpxUpload = eventCanHaveRoute(form.sports);
-
-
-            const openNew = () => {
-    setEditId(null);
-    setForm(emptyEvent);
-    setOpen(true);
-  };
-
-  const openEdit = (event) => {
-    setEditId(event.id);
-
-    setForm({
-      title: event.title || "",
-      sports: Array.isArray(event.sports) ? event.sports : [],
-      distance: event.distance || 10,
-      date: event.date || "",
-      time: event.time || "",
-      location: event.location || "",
-      description: event.description || "",
-      gpxFile: null,
-      gpx_file_path: event.gpx_file_path || null,
-      gpx_file_url: event.gpx_file_url || null,
-      route_points: event.route_points || null,
-      gpx_uploaded_by: event.gpx_uploaded_by || null,
-      route_distance_km: event.route_distance_km || null,
-      elevation_gain_m: event.elevation_gain_m || null,
-    });
-
-    setOpen(true);
-  };
-
-  const closeModal = () => {
-    setOpen(false);
-    setEditId(null);
-    setForm(emptyEvent);
-  };
 
   const eventCards = useMemo(() => {
     const now = new Date();
@@ -161,11 +146,9 @@ export default function Home() {
       .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
       .map((event) => {
         const eventLikes = likes.filter((like) => like.event_id === event.id);
-
         const eventComments = comments.filter(
           (comment) => comment.event_id === event.id
         );
-
         const eventParticipants = participants.filter(
           (participant) => participant.event_id === event.id
         );
@@ -186,147 +169,6 @@ export default function Home() {
         };
       });
   }, [events, likes, comments, participants, user, userSports, isModerator]);
-
-  const DetailRouteMap = ({ points }) => {
-    if (!points || points.length < 2) return null;
-
-    const width = 360;
-    const height = 230;
-    const padding = 24;
-
-    const validPoints = points.filter(
-      (p) =>
-        Number.isFinite(Number(p.lat)) &&
-        Number.isFinite(Number(p.lon))
-    );
-
-    if (validPoints.length < 2) return null;
-
-    const latValues = validPoints.map((p) => Number(p.lat));
-    const lonValues = validPoints.map((p) => Number(p.lon));
-    const eleValues = validPoints
-      .map((p) => Number(p.ele || 0))
-      .filter((v) => Number.isFinite(v));
-
-    const minLat = Math.min(...latValues);
-    const maxLat = Math.max(...latValues);
-    const minLon = Math.min(...lonValues);
-    const maxLon = Math.max(...lonValues);
-
-    const latRange = maxLat - minLat || 1;
-    const lonRange = maxLon - minLon || 1;
-
-    const toXY = (point) => {
-      const x =
-        padding +
-        ((Number(point.lon) - minLon) / lonRange) * (width - padding * 2);
-
-      const y =
-        height -
-        padding -
-        ((Number(point.lat) - minLat) / latRange) * (height - padding * 2);
-
-      return { x, y };
-    };
-
-    const step = Math.max(1, Math.floor(validPoints.length / 800));
-
-    const simplifiedPoints = validPoints.filter((_, index) => {
-      return index % step === 0 || index === validPoints.length - 1;
-    });
-
-    const routePath = simplifiedPoints
-      .map((point, index) => {
-        const { x, y } = toXY(point);
-        return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-      })
-      .join(" ");
-
-    const start = toXY(validPoints[0]);
-    const finish = toXY(validPoints[validPoints.length - 1]);
-
-    const minEle = eleValues.length ? Math.min(...eleValues) : null;
-    const maxEle = eleValues.length ? Math.max(...eleValues) : null;
-
-
-return (
-      <div style={routeMapWrap}>
-        <div style={routeMapTitle}>Route map</div>
-
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          style={routeSvg}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <rect
-            x="0"
-            y="0"
-            width={width}
-            height={height}
-            rx="18"
-            fill="#101010"
-          />
-
-          {[0.25, 0.5, 0.75].map((line) => (
-            <g key={line}>
-              <line
-                x1={padding}
-                x2={width - padding}
-                y1={padding + (height - padding * 2) * line}
-                y2={padding + (height - padding * 2) * line}
-                stroke="rgba(255,255,255,0.08)"
-                strokeWidth="1"
-              />
-
-                    <line
-                x1={padding + (width - padding * 2) * line}
-                x2={padding + (width - padding * 2) * line}
-                y1={padding}
-                y2={height - padding}
-                stroke="rgba(255,255,255,0.08)"
-                strokeWidth="1"
-              />
-            </g>
-          ))}
-
-          <path
-            d={routePath}
-            fill="none"
-            stroke="rgba(228,239,22,0.18)"
-            strokeWidth="9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          <path
-            d={routePath}
-            fill="none"
-            stroke="#e4ef16"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          <circle cx={start.x} cy={start.y} r="6" fill="#22c55e" />
-          <circle cx={finish.x} cy={finish.y} r="6" fill="#ef4444" />
-
-          <text x={start.x + 8} y={start.y - 8} fill="white" fontSize="10">
-            Start
-          </text>
-
-          <text x={finish.x + 8} y={finish.y - 8} fill="white" fontSize="10">
-            Finish
-          </text>
-        </svg>
-
-        {minEle !== null && maxEle !== null && (
-          <div style={routeMapMeta}>
-            Elevation range: {Math.round(minEle)} m - {Math.round(maxEle)} m
-          </div>
-        )}
-      </div>
-    );
-  };
 
   useEffect(() => {
     const init = async () => {
@@ -366,7 +208,19 @@ return (
     loadEverything();
   }, [user?.id]);
 
-  const loadProfile = async () => {
+  const loadEverything = async () => {
+    setPageError("");
+
+    await Promise.all([
+      loadEvents(),
+      loadLikes(),
+      loadComments(),
+      loadParticipants(),
+      loadUserSports(),
+    ]);
+  };
+
+const loadProfile = async () => {
     if (!user?.id) return;
 
     const { data, error } = await supabase
@@ -383,20 +237,6 @@ return (
     }
 
     setProfile(data);
-  };
-
-
-
-const loadEverything = async () => {
-    setPageError("");
-
-    await Promise.all([
-      loadEvents(),
-      loadLikes(),
-      loadComments(),
-      loadParticipants(),
-      loadUserSports(),
-    ]);
   };
 
   const loadEvents = async () => {
@@ -515,68 +355,6 @@ const loadEverything = async () => {
     setUserSports((data || []).map((row) => row.sport));
   };
 
-  const parseGpxFile = async (file) => {
-    const text = await file.text();
-    const xml = new DOMParser().parseFromString(text, "application/xml");
-
-    const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
-    const rtepts = Array.from(xml.getElementsByTagName("rtept"));
-
-    const points = trkpts.length > 0 ? trkpts : rtepts;
-
-    return points
-      .map((pt) => ({
-        lat: Number(pt.getAttribute("lat")),
-        lon: Number(pt.getAttribute("lon")),
-        ele: Number(pt.getElementsByTagName("ele")[0]?.textContent || 0),
-      }))
-      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
-  };
-
-
-      const calculateRouteStats = (points) => {
-    if (!points || points.length < 2) {
-      return { distanceKm: null, elevationGain: null };
-    }
-
-    const toRad = (deg) => (deg * Math.PI) / 180;
-
-    let distanceMeters = 0;
-    let elevationGain = 0;
-
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1];
-      const b = points[i];
-
-      const R = 6371000;
-      const dLat = toRad(b.lat - a.lat);
-      const dLon = toRad(b.lon - a.lon);
-      const lat1 = toRad(a.lat);
-      const lat2 = toRad(b.lat);
-
-      const h =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1) *
-          Math.cos(lat2) *
-          Math.sin(dLon / 2) *
-          Math.sin(dLon / 2);
-
-      const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-      distanceMeters += R * c;
-
-      const diff = (b.ele || 0) - (a.ele || 0);
-
-      if (diff > 0) {
-        elevationGain += diff;
-      }
-    }
-
-    return {
-      distanceKm: Number((distanceMeters / 1000).toFixed(2)),
-      elevationGain: Math.round(elevationGain),
-    };
-  };
-
   const handleSignUp = async (e) => {
     e.preventDefault();
 
@@ -609,7 +387,6 @@ const loadEverything = async () => {
 
     if (error) {
       alert(`Sign in failed: ${error.message}`);
-      return;
     }
   };
 
@@ -617,33 +394,62 @@ const loadEverything = async () => {
     await supabase.auth.signOut();
   };
 
+  const openNew = () => {
+    setEditId(null);
+    setForm(EMPTY_EVENT);
+    setOpen(true);
+  };
+
+  const openEdit = (event) => {
+    setEditId(event.id);
+
+    setForm({
+      title: event.title || "",
+      sports: Array.isArray(event.sports) ? event.sports : [],
+      distance: event.distance || 10,
+      date: event.date || "",
+      time: event.time || "",
+      location: event.location || "",
+      description: event.description || "",
+      gpxFile: null,
+      gpx_file_path: event.gpx_file_path || null,
+      gpx_file_url: event.gpx_file_url || null,
+      route_points: event.route_points || null,
+      gpx_uploaded_by: event.gpx_uploaded_by || null,
+      route_distance_km: event.route_distance_km || null,
+      elevation_gain_m: event.elevation_gain_m || null,
+    });
+
+    setOpen(true);
+  };
+
+
+const closeModal = () => {
+    setOpen(false);
+    setEditId(null);
+    setForm(EMPTY_EVENT);
+  };
+
   const toggleSportInForm = (sportId) => {
     const alreadySelected = form.sports.includes(sportId);
+    const nextSports = alreadySelected
+      ? form.sports.filter((id) => id !== sportId)
+      : [...form.sports, sportId];
 
-    if (alreadySelected) {
-      const nextSports = form.sports.filter((id) => id !== sportId);
-      const nextDistanceSports = getDistanceSportIds(nextSports);
-      const nextRange =
-        distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
-
-      setForm({
-        ...form,
-        sports: nextSports,
-        distance: Math.min(form.distance, nextRange.max),
-      });
-
-      return;
-    }
-
-    const nextSports = [...form.sports, sportId];
     const nextDistanceSports = getDistanceSportIds(nextSports);
-    const nextRange =
-      distanceRanges[nextDistanceSports[0]] || { min: 1, max: 50 };
+    const nextRange = DISTANCE_RANGES[nextDistanceSports[0]] || {
+      min: 1,
+      max: 50,
+    };
 
     setForm({
       ...form,
       sports: nextSports,
-      distance: form.distance < nextRange.min ? nextRange.min : form.distance,
+      distance: alreadySelected
+        ? Math.min(form.distance, nextRange.max)
+        : form.distance < nextRange.min
+        ? nextRange.min
+        : form.distance,
     });
   };
 
@@ -668,9 +474,6 @@ const loadEverything = async () => {
         elevation_gain_m: null,
       })
       .eq("id", event.id);
-
-
-
 
     if (updateError) {
       alert(`Removing GPX failed: ${updateError.message}`);
@@ -729,7 +532,6 @@ const loadEverything = async () => {
       }
 
       const routeStats = calculateRouteStats(routePoints);
-
       const safeFileName = form.gpxFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${user.id}/${Date.now()}-${safeFileName}`;
 
@@ -774,7 +576,7 @@ const loadEverything = async () => {
       elevation_gain_m: elevationGainM,
     };
 
-      const result = editId
+    const result = editId
       ? await supabase.from("events").update(payload).eq("id", editId)
       : await supabase.from("events").insert({
           creator_id: user.id,
@@ -792,8 +594,7 @@ const loadEverything = async () => {
     closeModal();
   };
 
-
-const deleteEvent = async (id) => {
+  const deleteEvent = async (id) => {
     if (!confirm("Delete this event?")) return;
 
     const { error } = await supabase.from("events").delete().eq("id", id);
@@ -918,9 +719,7 @@ const deleteEvent = async (id) => {
     const endDate = new Date(`${event.date}T${event.time}:00`);
     endDate.setHours(endDate.getHours() + 1);
 
-
-
-const yyyy = endDate.getFullYear();
+    const yyyy = endDate.getFullYear();
     const mm = String(endDate.getMonth() + 1).padStart(2, "0");
     const dd = String(endDate.getDate()).padStart(2, "0");
     const hh = String(endDate.getHours()).padStart(2, "0");
@@ -955,10 +754,7 @@ const yyyy = endDate.getFullYear();
 
   const openMaps = (location) => {
     const q = encodeURIComponent(location);
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${q}`,
-      "_blank"
-    );
+    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
   };
 
   if (loading) {
@@ -1073,156 +869,22 @@ const yyyy = endDate.getFullYear();
       {user?.id && <TeamRequestsPanel userId={user.id} />}
 
       {pageError ? (
-        <div style={errorCard}>
-          Could not load part of the app: {pageError}
-        </div>
+        <div style={errorCard}>Could not load part of the app: {pageError}</div>
       ) : null}
 
       {open && (
-        <div style={overlay}>
-          <form onSubmit={saveEvent} style={modal}>
-            <div style={modalTop}>
-              <h2 style={{ margin: 0, fontSize: 24 }}>
-                {editId ? "Edit Event" : "Add Event"}
-              </h2>
-              <button type="button" onClick={closeModal} style={closeBtn}>
-                ✕
-              </button>
-            </div>
-
-            <div style={grid}>
-              <input
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Title"
-                style={field}
-              />
-
-              <div>
-                <div style={label}>Choose sports</div>
-                <div style={sportsPicker}>
-                  {SPORTS.map((sport) => {
-                    const selected = form.sports.includes(sport.id);
-
-                    return (
-                      <button
-                        key={sport.id}
-                        type="button"
-                        onClick={() => toggleSportInForm(sport.id)}
-                        style={selected ? sportChipSelected : sportChip}
-                      >
-                        <span style={{ marginRight: 6 }}>{sport.icon}</span>
-                        {sport.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-
-
-{showDistance && (
-                <div>
-                  <div style={label}>Distance: {form.distance} km</div>
-                  <input
-                    type="range"
-                    min={activeDistanceRange.min}
-                    max={activeDistanceRange.max}
-                    step="1"
-                    value={form.distance}
-                    onChange={(e) =>
-                      setForm({ ...form, distance: Number(e.target.value) })
-                    }
-                    style={{ width: "100%" }}
-                  />
-                  <div style={rangeRow}>
-                    <span>{activeDistanceRange.min} km</span>
-                    <span>{activeDistanceRange.max} km</span>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div style={label}>Date</div>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  style={field}
-                />
-              </div>
-
-              <div>
-                <div style={label}>Time</div>
-                <input
-                  type="time"
-                  value={form.time}
-                  onChange={(e) => setForm({ ...form, time: e.target.value })}
-                  style={field}
-                />
-              </div>
-
-              <input
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="Location"
-                style={field}
-              />
-
-              {showGpxUpload && (
-                <div>
-                  <div style={label}>GPX route</div>
-
-                  <input
-                    type="file"
-                    accept=".gpx"
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        gpxFile: e.target.files?.[0] || null,
-                      })
-                    }
-                    style={field}
-                  />
-
-                  {form.gpxFile && (
-                    <div style={helperText}>
-                      Selected GPX: {form.gpxFile.name}
-                    </div>
-                  )}
-
-                  {form.gpx_file_url && !form.gpxFile && (
-                    <div style={helperText}>
-                      Current GPX file is already attached.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <div style={label}>Description</div>
-                <textarea
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
-                  placeholder="Extra information about the training"
-                  style={{ ...field, minHeight: 110, resize: "vertical" }}
-                />
-              </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button type="submit" style={primaryBtn}>
-                  {savingEvent ? "Saving..." : "Save"}
-                </button>
-
-                <button type="button" onClick={closeModal} style={secondaryBtn}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
+        <EventFormModal
+          editId={editId}
+          form={form}
+          setForm={setForm}
+          saveEvent={saveEvent}
+          closeModal={closeModal}
+          savingEvent={savingEvent}
+          showDistance={showDistance}
+          activeDistanceRange={activeDistanceRange}
+          showGpxUpload={showGpxUpload}
+          toggleSportInForm={toggleSportInForm}
+        />
       )}
 
       <section style={eventsSection}>
@@ -1239,237 +901,28 @@ const yyyy = endDate.getFullYear();
           </div>
         ) : (
           <div style={horizontalScroll}>
-            {eventCards.map((event) => {
-              const sportLabels = getSportLabels(event.sports || []);
-
-              return (
-                <div key={event.id} style={card}>
-                  <div style={sportTag}>{sportLabels.join(" • ")}</div>
-
-                  <h2 style={cardTitle}>{event.title}</h2>
-
-                  {event.distance ? (
-                    <div style={distanceText}>{event.distance} km</div>
-                  ) : null}
-
-                  {event.elevation_gain_m !== null &&
-                    event.elevation_gain_m !== undefined && (
-                      <div style={elevationText}>
-                        ⛰ {event.elevation_gain_m} hoogtemeters
-                      </div>
-                    )}
-
-                  <div style={meta}>
-                    <div>📅 {formatDate(event.date)}</div>
-                    <div>⏰ {formatTime(event.time)}</div>
-
-                    <div style={creatorText}>
-                      👤 Created by{" "}
-                      <Link
-                        href={`/profile/${event.creator_id}`}
-                        style={profileLink}
-                      >
-                        {event.creator_profile?.name ||
-                          event.creator_profile?.email ||
-                          "Unknown"}
-                      </Link>
-                    </div>
-
-                    <button
-                      onClick={() => openMaps(event.location)}
-                      style={mapBtn}
-                    >
-                      📍 {event.location}
-                    </button>
-
-                    <div style={{ opacity: 0.75 }}>
-                      Participants: {event.participants.length}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        marginTop: 6,
-                      }}
-                    >
-                      {event.participants.map((participant) => (
-                        <Link
-                          key={participant.id}
-                          href={`/profile/${participant.user_id}`}
-                          style={chipLink}
-                        >
-                          {participant.user_profile?.name || "Unknown"}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-
-                  {event.route_points && (
-                    <DetailRouteMap points={event.route_points} />
-                  )}
-
-                  {event.gpx_file_url && (
-                    <div style={gpxActions}>
-                      <a
-                        href={event.gpx_file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={gpxLink}
-                      >
-                        Download GPX
-                      </a>
-
-                      {event.canRemoveGpx && (
-                        <button
-                          type="button"
-                          onClick={() => removeGpxFromEvent(event)}
-                          style={dangerBtnSmall}
-                        >
-                          Remove GPX
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <div style={communityBox}>
-                    <div style={communityTitle}>Description</div>
-                    <div style={communityText}>
-                      {event.description?.trim()
-                        ? event.description
-                        : "No description added yet."}
-                    </div>
-
-                    <div style={likeRow}>
-                      <button onClick={() => toggleLike(event)} style={likeBtn}>
-                        {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
-                      </button>
-
-                      <div style={likeCount}>
-                        {event.likes.length} like
-                        {event.likes.length === 1 ? "" : "s"}
-                      </div>
-
-                      {!!event.likes.length && (
-                        <div style={likeUsers}>
-                          {event.likes.map((like, index) => (
-                            <span key={like.id}>
-                              <Link
-                                href={`/profile/${like.user_id}`}
-                                style={inlineProfileLink}
-                              >
-                                {like.user_profile?.name || "Unknown"}
-                              </Link>
-                              {index < event.likes.length - 1 ? ", " : ""}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={commentsWrap}>
-                      <div style={communityTitle}>Comments</div>
-
-                      {event.comments.length ? (
-                        <div style={commentList}>
-                          {event.comments.map((comment) => (
-                            <div key={comment.id} style={commentItem}>
-                              <div style={commentHeader}>
-                                <div style={commentName}>
-                                  <Link
-                                    href={`/profile/${comment.user_id}`}
-                                    style={inlineProfileLink}
-                                  >
-                                    {comment.user_profile?.name || "Unknown"}
-                                  </Link>
-                                </div>
-
-                                {(comment.user_id === user?.id ||
-                                  isModerator) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteComment(comment.id)}
-                                    style={miniDeleteBtn}
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-
-                              <div style={commentTextStyle}>{comment.text}</div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={communityMuted}>No comments yet.</div>
-                      )}
-
-                      <div style={commentForm}>
-                        <div style={commentUserLabel}>
-                          Commenting as{" "}
-                          <strong>{profile?.name || user?.email}</strong>
-                        </div>
-
-                        <textarea
-                          value={commentText[event.id] || ""}
-                          onChange={(e) =>
-                            setCommentText((prev) => ({
-                              ...prev,
-                              [event.id]: e.target.value,
-                            }))
-                          }
-                          placeholder="Write a comment..."
-                          style={commentField}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => postComment(event.id)}
-                          style={primaryBtnSmall}
-                        >
-                          Post Comment
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                         <div style={btnRow}>
-                    <button
-                      onClick={() => toggleParticipation(event)}
-                      style={primaryBtnSmall}
-                    >
-                      {event.joinedByMe ? "Leave Event" : "Join Event"}
-                    </button>
-
-                    <button
-                      onClick={() => downloadIcs(event)}
-                      style={secondaryBtnSmall}
-                    >
-                      Add to Calendar
-                    </button>
-
-                    {(event.isOwner || isModerator) && (
-                      <button
-                        onClick={() => openEdit(event)}
-                        style={secondaryBtnSmall}
-                      >
-                        Edit
-                      </button>
-                    )}
-
-                    {(event.isOwner || isModerator) && (
-                      <button
-                        onClick={() => deleteEvent(event.id)}
-                        style={dangerBtnSmall}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {eventCards.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                user={user}
+                profile={profile}
+                isModerator={isModerator}
+                commentText={commentText}
+                setCommentText={setCommentText}
+                formatDate={formatDate}
+                formatTime={formatTime}
+                openMaps={openMaps}
+                toggleLike={toggleLike}
+                toggleParticipation={toggleParticipation}
+                postComment={postComment}
+                deleteComment={deleteComment}
+                downloadIcs={downloadIcs}
+                openEdit={openEdit}
+                deleteEvent={deleteEvent}
+                removeGpxFromEvent={removeGpxFromEvent}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -1481,521 +934,7 @@ const yyyy = endDate.getFullYear();
       )}
     </main>
   );
-}
+      }
+      
+  
 
-const app = {
-  background: "#050505",
-  color: "white",
-  minHeight: "100vh",
-  padding: 16,
-  fontFamily: "sans-serif",
-};
-
-const header = {
-  position: "sticky",
-  top: 0,
-  zIndex: 5,
-  display: "flex",
-  justifyContent: "center",
-  padding: "12px 0 18px",
-  background: "linear-gradient(to bottom, #050505 85%, rgba(5,5,5,0))",
-};
-
-const authCard = {
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 24,
-  padding: 20,
-};
-
-const authTabs = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginBottom: 16,
-};
-
-const loginBar = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap",
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  padding: "14px 16px",
-  marginBottom: 18,
-};
-
-const loginInfo = {
-  fontSize: 14,
-  color: "#ddd",
-};
-
-const roleBadge = {
-  marginTop: 6,
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const actionLinkBtn = {
-  display: "inline-block",
-  background: "#2a2a2a",
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const eventsSection = {
-  paddingBottom: 110,
-};
-
-const horizontalScroll = {
-  display: "flex",
-  gap: 16,
-  overflowX: "auto",
-  paddingBottom: 8,
-  scrollSnapType: "x mandatory",
-  WebkitOverflowScrolling: "touch",
-};
-
-const emptyCard = {
-  background: "#111",
-  padding: 24,
-  borderRadius: 24,
-  border: "1px solid rgba(255,255,255,0.05)",
-};
-
-const errorCard = {
-  background: "#3a1616",
-  color: "#ffd2d2",
-  padding: 16,
-  borderRadius: 18,
-  border: "1px solid rgba(255,255,255,0.05)",
-  marginBottom: 18,
-};
-
-const label = {
-  marginBottom: 6,
-  opacity: 0.82,
-  fontSize: 14,
-};
-
-const helperText = {
-  fontSize: 13,
-  opacity: 0.7,
-  marginTop: 6,
-};
-
-const overlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.72)",
-  zIndex: 20,
-  padding: 16,
-  display: "flex",
-  alignItems: "center",
-};
-
-const modal = {
-  width: "100%",
-  background: "#111",
-  borderRadius: 24,
-  padding: 18,
-  border: "1px solid rgba(255,255,255,0.08)",
-  maxHeight: "90vh",
-  overflowY: "auto",
-};
-
-const modalTop = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 14,
-};
-
-const closeBtn = {
-  background: "#1d1d1d",
-  color: "white",
-  border: "none",
-  width: 36,
-  height: 36,
-  borderRadius: 999,
-};
-
-const grid = {
-  display: "grid",
-  gap: 12,
-};
-
-const field = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "14px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-};
-
-const rangeRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  fontSize: 12,
-  opacity: 0.6,
-  marginTop: 4,
-};
-
-const sportsPicker = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 10,
-  marginTop: 6,
-};
-
-const sportChip = {
-  background: "#222",
-  border: "1px solid #333",
-  color: "white",
-  padding: "8px 14px",
-  borderRadius: 999,
-  cursor: "pointer",
-};
-
-const sportChipSelected = {
-  background: "#e4ef16",
-  color: "black",
-  border: "1px solid #e4ef16",
-  padding: "8px 14px",
-  borderRadius: 999,
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const card = {
-  background: "#111",
-  padding: 20,
-  borderRadius: 24,
-  border: "1px solid rgba(255,255,255,0.05)",
-  minWidth: "85vw",
-  maxWidth: "85vw",
-  scrollSnapAlign: "start",
-  flexShrink: 0,
-};
-
-const sportTag = {
-  display: "inline-block",
-  background: "rgba(228,239,22,0.12)",
-  color: "#e4ef16",
-  padding: "7px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-  marginBottom: 10,
-};
-
-const cardTitle = {
-  fontSize: 26,
-  marginTop: 0,
-  marginBottom: 6,
-};
-
-const distanceText = {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#cfd3d6",
-  marginBottom: 4,
-};
-
-const elevationText = {
-  fontSize: 14,
-  fontWeight: "600",
-  color: "#cfd3d6",
-  marginBottom: 14,
-};
-
-const creatorText = {
-  fontSize: 14,
-  opacity: 0.85,
-};
-
-const profileLink = {
-  color: "#e4ef16",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const inlineProfileLink = {
-  color: "#e4ef16",
-  textDecoration: "none",
-};
-
-const chipLink = {
-  background: "#1f1f1f",
-  border: "1px solid rgba(255,255,255,0.08)",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 13,
-  color: "white",
-  textDecoration: "none",
-};
-
-const meta = {
-  display: "grid",
-  gap: 8,
-  marginBottom: 16,
-  opacity: 0.95,
-};
-
-const mapBtn = {
-  background: "transparent",
-  color: "white",
-  border: "none",
-  padding: 0,
-  textAlign: "left",
-  fontSize: 16,
-  cursor: "pointer",
-};
-
-const routeMapWrap = {
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 18,
-  padding: 12,
-  marginTop: 14,
-  marginBottom: 12,
-};
-
-const routeMapTitle = {
-  fontSize: 14,
-  fontWeight: 700,
-  marginBottom: 8,
-  color: "#e4ef16",
-};
-
-const routeSvg = {
-  width: "100%",
-  height: "auto",
-  display: "block",
-  borderRadius: 18,
-};
-
-const routeMapMeta = {
-  fontSize: 12,
-  opacity: 0.7,
-  marginTop: 8,
-};
-
-const gpxActions = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  alignItems: "center",
-  marginTop: 12,
-  marginBottom: 12,
-};
-
-const gpxLink = {
-  display: "inline-block",
-  color: "#e4ef16",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const communityBox = {
-  marginTop: 18,
-  padding: 16,
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-};
-
-const communityTitle = {
-  fontSize: 15,
-  fontWeight: 700,
-  marginBottom: 8,
-  color: "#f3f3f3",
-};
-
-const communityText = {
-  fontSize: 14,
-  lineHeight: 1.5,
-  color: "#d6d6d6",
-  marginBottom: 14,
-  whiteSpace: "pre-wrap",
-};
-
-const likeRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-  marginBottom: 16,
-};
-
-const likeBtn = {
-  background: "#1d1d1d",
-  color: "white",
-  border: "1px solid rgba(255,255,255,0.08)",
-  padding: "10px 14px",
-  borderRadius: 12,
-};
-
-const likeCount = {
-  fontSize: 14,
-  opacity: 0.75,
-};
-
-const likeUsers = {
-  fontSize: 13,
-  opacity: 0.6,
-};
-
-const commentsWrap = {
-  display: "grid",
-  gap: 10,
-};
-
-const commentList = {
-  display: "grid",
-  gap: 10,
-};
-
-const commentItem = {
-  background: "#151515",
-  border: "1px solid rgba(255,255,255,0.05)",
-  borderRadius: 14,
-  padding: 12,
-};
-
-const commentHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 4,
-};
-
-const commentName = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#e4ef16",
-};
-
-const commentTextStyle = {
-  fontSize: 14,
-  lineHeight: 1.45,
-  color: "#e3e3e3",
-  whiteSpace: "pre-wrap",
-};
-
-const communityMuted = {
-  fontSize: 14,
-  opacity: 0.6,
-};
-
-const commentUserLabel = {
-  fontSize: 13,
-  opacity: 0.75,
-};
-
-const commentForm = {
-  display: "grid",
-  gap: 10,
-  marginTop: 6,
-};
-
-const commentField = {
-  width: "100%",
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #333",
-  padding: "12px 12px",
-  borderRadius: 12,
-  boxSizing: "border-box",
-  minHeight: 90,
-  resize: "vertical",
-};
-
-const btnRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 16,
-};
-
-const primaryBtn = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const secondaryBtn = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 12,
-};
-
-const primaryBtnSmall = {
-  background: "#e4ef16",
-  color: "black",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-  fontWeight: "bold",
-};
-
-const secondaryBtnSmall = {
-  background: "#2a2a2a",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-};
-
-const dangerBtnSmall = {
-  background: "#5a1f1f",
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-};
-
-const miniDeleteBtn = {
-  background: "transparent",
-  color: "#ff8d8d",
-  border: "none",
-  padding: 0,
-  fontSize: 12,
-};
-
-const fab = {
-  position: "fixed",
-  right: 18,
-  bottom: 22,
-  width: 62,
-  height: 62,
-  borderRadius: 999,
-  border: "none",
-  background: "#e4ef16",
-  color: "black",
-  fontSize: 34,
-  fontWeight: "bold",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-};
-
-
-
-                      
