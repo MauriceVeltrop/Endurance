@@ -23,6 +23,7 @@ import {
   loginBar,
   loginInfo,
   primaryBtn,
+  logoImg,
   roleBadge,
   secondaryBtn,
   eventsSection,
@@ -220,7 +221,7 @@ export default function Home() {
     ]);
   };
 
-const loadProfile = async () => {
+  const loadProfile = async () => {
     if (!user?.id) return;
 
     const { data, error } = await supabase
@@ -355,7 +356,7 @@ const loadProfile = async () => {
     setUserSports((data || []).map((row) => row.sport));
   };
 
-  const handleSignUp = async (e) => {
+const handleSignUp = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase.auth.signUp({
@@ -387,6 +388,7 @@ const loadProfile = async () => {
 
     if (error) {
       alert(`Sign in failed: ${error.message}`);
+      return;
     }
   };
 
@@ -423,8 +425,7 @@ const loadProfile = async () => {
     setOpen(true);
   };
 
-
-const closeModal = () => {
+  const closeModal = () => {
     setOpen(false);
     setEditId(null);
     setForm(EMPTY_EVENT);
@@ -432,24 +433,34 @@ const closeModal = () => {
 
   const toggleSportInForm = (sportId) => {
     const alreadySelected = form.sports.includes(sportId);
-    const nextSports = alreadySelected
-      ? form.sports.filter((id) => id !== sportId)
-      : [...form.sports, sportId];
 
+    if (alreadySelected) {
+      const nextSports = form.sports.filter((id) => id !== sportId);
+      const nextDistanceSports = getDistanceSportIds(nextSports);
+      const nextRange =
+        DISTANCE_RANGES[nextDistanceSports[0]] || { min: 1, max: 50 };
+
+      setForm({
+        ...form,
+        sports: nextSports,
+        distance: Math.min(Number(form.distance || 0), nextRange.max),
+      });
+
+      return;
+    }
+
+    const nextSports = [...form.sports, sportId];
     const nextDistanceSports = getDistanceSportIds(nextSports);
-    const nextRange = DISTANCE_RANGES[nextDistanceSports[0]] || {
-      min: 1,
-      max: 50,
-    };
+    const nextRange =
+      DISTANCE_RANGES[nextDistanceSports[0]] || { min: 1, max: 50 };
 
     setForm({
       ...form,
       sports: nextSports,
-      distance: alreadySelected
-        ? Math.min(form.distance, nextRange.max)
-        : form.distance < nextRange.min
-        ? nextRange.min
-        : form.distance,
+      distance:
+        Number(form.distance || 0) < nextRange.min
+          ? nextRange.min
+          : Number(form.distance || 0),
     });
   };
 
@@ -484,7 +495,7 @@ const closeModal = () => {
       await supabase.storage.from("event-gpx").remove([event.gpx_file_path]);
     }
 
-    await loadEvents();
+    await loadEverything();
   };
 
   const saveEvent = async (e) => {
@@ -513,6 +524,7 @@ const closeModal = () => {
     let gpxUploadedBy = form.gpx_uploaded_by || null;
     let routeDistanceKm = form.route_distance_km || null;
     let elevationGainM = form.elevation_gain_m || null;
+    let finalDistance = showDistance ? Number(form.distance) : null;
 
     if (form.gpxFile) {
       const fileName = form.gpxFile.name.toLowerCase();
@@ -532,6 +544,8 @@ const closeModal = () => {
       }
 
       const routeStats = calculateRouteStats(routePoints);
+      const roundedRouteDistance = Number(routeStats.distanceKm.toFixed(2));
+
       const safeFileName = form.gpxFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${user.id}/${Date.now()}-${safeFileName}`;
 
@@ -556,14 +570,17 @@ const closeModal = () => {
       gpxFilePath = filePath;
       gpxFileUrl = publicData.publicUrl;
       gpxUploadedBy = user.id;
-      routeDistanceKm = routeStats.distanceKm;
+      routeDistanceKm = roundedRouteDistance;
       elevationGainM = routeStats.elevationGain;
+      finalDistance = roundedRouteDistance;
+    } else if (form.gpx_file_url && form.route_distance_km) {
+      finalDistance = Number(Number(form.route_distance_km).toFixed(2));
     }
 
     const payload = {
       title: form.title,
       sports: form.sports,
-      distance: showDistance ? form.distance : null,
+      distance: finalDistance,
       date: form.date,
       time: form.time,
       location: form.location,
@@ -710,7 +727,10 @@ const closeModal = () => {
     await loadComments();
   };
 
-  const downloadIcs = (event) => {
+
+
+
+const downloadIcs = (event) => {
     const start = `${event.date.replaceAll("-", "")}T${event.time.replace(
       ":",
       ""
@@ -754,7 +774,10 @@ const closeModal = () => {
 
   const openMaps = (location) => {
     const q = encodeURIComponent(location);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
+    window.open(
+      `https://www.google.com/maps/search/?api=1&query=${q}`,
+      "_blank"
+    );
   };
 
   if (loading) {
@@ -769,11 +792,7 @@ const closeModal = () => {
     return (
       <main style={app}>
         <header style={header}>
-          <img
-            src="/logo-endurance.png"
-            alt="Endurance"
-            style={{ height: 64, width: "auto", maxWidth: "82vw" }}
-          />
+          <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
         </header>
 
         <div style={authCard}>
@@ -836,11 +855,7 @@ const closeModal = () => {
   return (
     <main style={app}>
       <header style={header}>
-        <img
-          src="/logo-endurance.png"
-          alt="Endurance"
-          style={{ height: 64, width: "auto", maxWidth: "82vw" }}
-        />
+        <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
       </header>
 
       <section style={loginBar}>
@@ -849,7 +864,7 @@ const closeModal = () => {
           <div style={roleBadge}>{profile?.role || "user"}</div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href={`/profile/${user.id}`} style={actionLinkBtn}>
             My Profile
           </Link>
@@ -869,7 +884,9 @@ const closeModal = () => {
       {user?.id && <TeamRequestsPanel userId={user.id} />}
 
       {pageError ? (
-        <div style={errorCard}>Could not load part of the app: {pageError}</div>
+        <div style={errorCard}>
+          Could not load part of the app: {pageError}
+        </div>
       ) : null}
 
       {open && (
@@ -884,6 +901,12 @@ const closeModal = () => {
           activeDistanceRange={activeDistanceRange}
           showGpxUpload={showGpxUpload}
           toggleSportInForm={toggleSportInForm}
+          distanceLocked={!!form.gpxFile || !!form.gpx_file_url}
+          distanceLockText={
+            form.gpxFile || form.gpx_file_url
+              ? "Distance is calculated from the GPX route."
+              : ""
+          }
         />
       )}
 
@@ -908,19 +931,19 @@ const closeModal = () => {
                 user={user}
                 profile={profile}
                 isModerator={isModerator}
-                commentText={commentText}
-                setCommentText={setCommentText}
                 formatDate={formatDate}
                 formatTime={formatTime}
                 openMaps={openMaps}
+                removeGpxFromEvent={removeGpxFromEvent}
                 toggleLike={toggleLike}
-                toggleParticipation={toggleParticipation}
+                commentText={commentText}
+                setCommentText={setCommentText}
                 postComment={postComment}
                 deleteComment={deleteComment}
+                toggleParticipation={toggleParticipation}
                 downloadIcs={downloadIcs}
                 openEdit={openEdit}
                 deleteEvent={deleteEvent}
-                removeGpxFromEvent={removeGpxFromEvent}
               />
             ))}
           </div>
@@ -934,7 +957,10 @@ const closeModal = () => {
       )}
     </main>
   );
-      }
-      
+             }
+
   
+
+
+
 
