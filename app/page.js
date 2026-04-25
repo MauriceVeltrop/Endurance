@@ -127,16 +127,21 @@ export default function Home() {
 
   const currentDistanceSportIds = getDistanceSportIds(form.sports);
   const showDistance = currentDistanceSportIds.length > 0;
+
   const activeDistanceRange =
     DISTANCE_RANGES[currentDistanceSportIds[0]] || { min: 1, max: 50 };
+
   const showGpxUpload = eventCanHaveRoute(form.sports);
+
+  const routeDistanceLocked =
+    !!form.gpxFile ||
+    !!form.gpx_file_url ||
+    (!!form.route_points && !!form.route_distance_km);
 
   const eventCards = useMemo(() => {
     const now = new Date();
 
-    if (userSports.length === 0) {
-      return [];
-    }
+    if (userSports.length === 0) return [];
 
     return [...events]
       .filter((event) => {
@@ -146,12 +151,10 @@ export default function Home() {
       .filter((event) => makeEventDateTime(event) >= now)
       .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
       .map((event) => {
-        const eventLikes = likes.filter((like) => like.event_id === event.id);
-        const eventComments = comments.filter(
-          (comment) => comment.event_id === event.id
-        );
+        const eventLikes = likes.filter((l) => l.event_id === event.id);
+        const eventComments = comments.filter((c) => c.event_id === event.id);
         const eventParticipants = participants.filter(
-          (participant) => participant.event_id === event.id
+          (p) => p.event_id === event.id
         );
 
         return {
@@ -160,9 +163,9 @@ export default function Home() {
           comments: eventComments,
           participants: eventParticipants,
           isOwner: user?.id === event.creator_id,
-          likedByMe: !!eventLikes.find((like) => like.user_id === user?.id),
+          likedByMe: !!eventLikes.find((l) => l.user_id === user?.id),
           joinedByMe: !!eventParticipants.find(
-            (participant) => participant.user_id === user?.id
+            (p) => p.user_id === user?.id
           ),
           canRemoveGpx:
             !!event.gpx_file_url &&
@@ -170,6 +173,40 @@ export default function Home() {
         };
       });
   }, [events, likes, comments, participants, user, userSports, isModerator]);
+
+  const removeGpxFromEvent = async (event) => {
+    if (!event?.id) return;
+
+    if (!(isModerator || event.gpx_uploaded_by === user?.id)) {
+      alert("You are not allowed to remove this GPX file.");
+      return;
+    }
+
+    if (!confirm("Remove GPX route from this event?")) return;
+
+    const { error } = await supabase
+      .from("events")
+      .update({
+        gpx_file_path: null,
+        gpx_file_url: null,
+        route_points: null,
+        gpx_uploaded_by: null,
+        route_distance_km: null,
+        elevation_gain_m: null,
+      })
+      .eq("id", event.id);
+
+    if (error) {
+      alert(`Removing GPX failed: ${error.message}`);
+      return;
+    }
+
+    if (event.gpx_file_path) {
+      await supabase.storage.from("event-gpx").remove([event.gpx_file_path]);
+    }
+
+    await loadEverything();
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -356,7 +393,7 @@ export default function Home() {
     setUserSports((data || []).map((row) => row.sport));
   };
 
-const handleSignUp = async (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
 
     const { error } = await supabase.auth.signUp({
@@ -464,40 +501,6 @@ const handleSignUp = async (e) => {
     });
   };
 
-  const removeGpxFromEvent = async (event) => {
-    if (!event?.id) return;
-
-    if (!(isModerator || event.gpx_uploaded_by === user?.id)) {
-      alert("You are not allowed to remove this GPX file.");
-      return;
-    }
-
-    if (!confirm("Remove GPX route from this event?")) return;
-
-    const { error: updateError } = await supabase
-      .from("events")
-      .update({
-        gpx_file_path: null,
-        gpx_file_url: null,
-        route_points: null,
-        gpx_uploaded_by: null,
-        route_distance_km: null,
-        elevation_gain_m: null,
-      })
-      .eq("id", event.id);
-
-    if (updateError) {
-      alert(`Removing GPX failed: ${updateError.message}`);
-      return;
-    }
-
-    if (event.gpx_file_path) {
-      await supabase.storage.from("event-gpx").remove([event.gpx_file_path]);
-    }
-
-    await loadEverything();
-  };
-
   const saveEvent = async (e) => {
     e.preventDefault();
 
@@ -573,8 +576,9 @@ const handleSignUp = async (e) => {
       routeDistanceKm = roundedRouteDistance;
       elevationGainM = routeStats.elevationGain;
       finalDistance = roundedRouteDistance;
-    } else if (form.gpx_file_url && form.route_distance_km) {
+    } else if (form.route_points && form.route_distance_km) {
       finalDistance = Number(Number(form.route_distance_km).toFixed(2));
+      routeDistanceKm = Number(Number(form.route_distance_km).toFixed(2));
     }
 
     const payload = {
@@ -727,10 +731,7 @@ const handleSignUp = async (e) => {
     await loadComments();
   };
 
-
-
-
-const downloadIcs = (event) => {
+  const downloadIcs = (event) => {
     const start = `${event.date.replaceAll("-", "")}T${event.time.replace(
       ":",
       ""
@@ -901,12 +902,13 @@ const downloadIcs = (event) => {
           activeDistanceRange={activeDistanceRange}
           showGpxUpload={showGpxUpload}
           toggleSportInForm={toggleSportInForm}
-          distanceLocked={!!form.gpxFile || !!form.gpx_file_url}
+          distanceLocked={routeDistanceLocked}
           distanceLockText={
-            form.gpxFile || form.gpx_file_url
-              ? "Distance is calculated from the GPX route."
+            routeDistanceLocked
+              ? "Distance is calculated from the route."
               : ""
           }
+          userRole={profile?.role || "user"}
         />
       )}
 
@@ -957,10 +959,4 @@ const downloadIcs = (event) => {
       )}
     </main>
   );
-             }
-
-  
-
-
-
-
+  }
