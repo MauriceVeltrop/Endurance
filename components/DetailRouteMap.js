@@ -44,6 +44,16 @@ function loadLeaflet() {
   });
 }
 
+function simplifyPoints(points, maxPoints = 900) {
+  if (!points || points.length <= maxPoints) return points;
+
+  const step = Math.ceil(points.length / maxPoints);
+
+  return points.filter(
+    (_, index) => index % step === 0 || index === points.length - 1
+  );
+}
+
 export default function DetailRouteMap({ points }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -54,8 +64,15 @@ export default function DetailRouteMap({ points }) {
     );
   }, [points]);
 
+  const routePoints = useMemo(() => {
+    return simplifyPoints(validPoints, 900);
+  }, [validPoints]);
+
   const elevationPoints = useMemo(() => {
-    return validPoints.filter((p) => Number.isFinite(Number(p.ele)));
+    return simplifyPoints(
+      validPoints.filter((p) => Number.isFinite(Number(p.ele))),
+      700
+    );
   }, [validPoints]);
 
   const hasElevation = elevationPoints.length >= 2;
@@ -69,7 +86,7 @@ export default function DetailRouteMap({ points }) {
     : null;
 
   useEffect(() => {
-    if (!mapRef.current || validPoints.length < 2) return;
+    if (!mapRef.current || routePoints.length < 2) return;
 
     let cancelled = false;
 
@@ -81,7 +98,12 @@ export default function DetailRouteMap({ points }) {
         mapInstanceRef.current = null;
       }
 
-      const latLngs = validPoints.map((p) => [
+      const latLngs = routePoints.map((p) => [
+        Number(p.lat),
+        Number(p.lon),
+      ]);
+
+      const originalLatLngs = validPoints.map((p) => [
         Number(p.lat),
         Number(p.lon),
       ]);
@@ -109,33 +131,33 @@ export default function DetailRouteMap({ points }) {
         color: "#111",
         weight: 6,
         opacity: 0.35,
+        interactive: false,
       }).addTo(map);
 
       const route = L.polyline(latLngs, {
         color: "#e4ef16",
         weight: 3,
         opacity: 0.95,
+        interactive: false,
       }).addTo(map);
 
-      L.circleMarker(latLngs[0], {
+      L.circleMarker(originalLatLngs[0], {
         radius: 6,
         color: "#ffffff",
         weight: 2,
         fillColor: "#22c55e",
         fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindPopup("Start");
+        interactive: false,
+      }).addTo(map);
 
-      L.circleMarker(latLngs[latLngs.length - 1], {
+      L.circleMarker(originalLatLngs[originalLatLngs.length - 1], {
         radius: 6,
         color: "#ffffff",
         weight: 2,
         fillColor: "#ef4444",
         fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindPopup("Finish");
+        interactive: false,
+      }).addTo(map);
 
       map.fitBounds(route.getBounds(), {
         padding: [24, 24],
@@ -154,7 +176,7 @@ export default function DetailRouteMap({ points }) {
         mapInstanceRef.current = null;
       }
     };
-  }, [validPoints]);
+  }, [routePoints, validPoints]);
 
   if (validPoints.length < 2) return null;
 
@@ -163,19 +185,13 @@ export default function DetailRouteMap({ points }) {
   const padding = 24;
   const eleRange = hasElevation ? maxEle - minEle || 1 : 1;
 
-  const step = Math.max(1, Math.floor(elevationPoints.length / 600));
-
-  const simplifiedElevation = elevationPoints.filter(
-    (_, index) => index % step === 0 || index === elevationPoints.length - 1
-  );
-
   const elevationPath =
     hasElevation &&
-    simplifiedElevation
+    elevationPoints
       .map((point, index) => {
         const x =
           padding +
-          (index / Math.max(simplifiedElevation.length - 1, 1)) *
+          (index / Math.max(elevationPoints.length - 1, 1)) *
             (profileWidth - padding * 2);
 
         const y =
@@ -208,7 +224,8 @@ export default function DetailRouteMap({ points }) {
           overflow: "hidden",
           background: "#101010",
           border: "1px solid rgba(255,255,255,0.08)",
-          touchAction: "pan-x",
+          touchAction: "pan-y",
+          pointerEvents: "none",
         }}
       />
 
