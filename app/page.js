@@ -110,8 +110,7 @@ export default function Home() {
   const showGpxUpload = eventCanHaveRoute(form.sports);
 
 
-
-const openNew = () => {
+            const openNew = () => {
     setEditId(null);
     setForm(emptyEvent);
     setOpen(true);
@@ -279,7 +278,7 @@ return (
                 strokeWidth="1"
               />
 
-              <line
+                    <line
                 x1={padding + (width - padding * 2) * line}
                 x2={padding + (width - padding * 2) * line}
                 y1={padding}
@@ -535,9 +534,7 @@ const loadEverything = async () => {
   };
 
 
-
-
-const calculateRouteStats = (points) => {
+      const calculateRouteStats = (points) => {
     if (!points || points.length < 2) {
       return { distanceKm: null, elevationGain: null };
     }
@@ -777,7 +774,7 @@ const calculateRouteStats = (points) => {
       elevation_gain_m: elevationGainM,
     };
 
-    const result = editId
+      const result = editId
       ? await supabase.from("events").update(payload).eq("id", editId)
       : await supabase.from("events").insert({
           creator_id: user.id,
@@ -1437,7 +1434,7 @@ const yyyy = endDate.getFullYear();
                     </div>
                   </div>
 
-                  <div style={btnRow}>
+                         <div style={btnRow}>
                     <button
                       onClick={() => toggleParticipation(event)}
                       style={primaryBtnSmall}
@@ -1999,3 +1996,6 @@ const fab = {
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
+
+
+                      
