@@ -34,6 +34,7 @@ function DisableMapInteraction() {
     map.dragging.disable();
     map.touchZoom.disable();
     map.doubleClickZoom.disable();
+    map.doubleClickZoom.disable();
     map.scrollWheelZoom.disable();
     map.boxZoom.disable();
     map.keyboard.disable();
@@ -52,9 +53,13 @@ function parseGpx(gpxText) {
   try {
     const parser = new DOMParser();
     const xml = parser.parseFromString(gpxText, "application/xml");
-    const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
 
-    return trkpts
+    const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
+    const rtepts = Array.from(xml.getElementsByTagName("rtept"));
+
+    const sourcePoints = trkpts.length > 0 ? trkpts : rtepts;
+
+    return sourcePoints
       .map((pt) => {
         const lat = Number(pt.getAttribute("lat"));
         const lng = Number(pt.getAttribute("lon"));
@@ -82,22 +87,74 @@ function smoothPoints(points, maxPoints = 900) {
 export default function DetailRouteMapClient({
   gpxText,
   gpx,
+  gpxUrl,
+  gpx_url,
+  event,
   route,
   height = 245,
   showElevation = true,
 }) {
   const [mounted, setMounted] = useState(false);
+  const [remoteGpxText, setRemoteGpxText] = useState("");
+
+  const finalGpxUrl =
+    gpxUrl ||
+    gpx_url ||
+    event?.gpxUrl ||
+    event?.gpx_url ||
+    event?.gpx_file_url ||
+    "";
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRemoteGpx() {
+      if (!finalGpxUrl) return;
+      if (typeof gpxText === "string" && gpxText.trim()) return;
+      if (typeof gpx === "string" && gpx.trim().startsWith("<")) return;
+
+      try {
+        const response = await fetch(finalGpxUrl);
+        if (!response.ok) throw new Error("Could not fetch GPX");
+
+        const text = await response.text();
+
+        if (!cancelled) {
+          setRemoteGpxText(text);
+        }
+      } catch (error) {
+        console.error("GPX fetch error:", error);
+      }
+    }
+
+    loadRemoteGpx();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [finalGpxUrl, gpxText, gpx]);
+
   const rawPoints = useMemo(() => {
     if (Array.isArray(route)) return route;
-    if (typeof gpxText === "string") return parseGpx(gpxText);
-    if (typeof gpx === "string") return parseGpx(gpx);
+
+    if (typeof gpxText === "string" && gpxText.trim()) {
+      return parseGpx(gpxText);
+    }
+
+    if (typeof gpx === "string" && gpx.trim().startsWith("<")) {
+      return parseGpx(gpx);
+    }
+
+    if (typeof remoteGpxText === "string" && remoteGpxText.trim()) {
+      return parseGpx(remoteGpxText);
+    }
+
     return [];
-  }, [gpxText, gpx, route]);
+  }, [gpxText, gpx, remoteGpxText, route]);
 
   const points = useMemo(() => smoothPoints(rawPoints), [rawPoints]);
 
@@ -115,6 +172,30 @@ export default function DetailRouteMapClient({
   }, [points]);
 
   if (!mounted) return null;
+
+  if (finalGpxUrl && points.length < 2) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height,
+          borderRadius: 18,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "rgba(255,255,255,0.65)",
+          fontSize: 14,
+          marginTop: 12,
+          marginBottom: 14,
+        }}
+      >
+        Loading route…
+      </div>
+    );
+  }
+
   if (!points || points.length < 2) return null;
 
   return (
@@ -263,4 +344,4 @@ export default function DetailRouteMapClient({
       )}
     </div>
   );
-      }
+}
