@@ -1,4 +1,3 @@
-
 import { SPORTS } from "../lib/sports";
 import {
   closeBtn,
@@ -28,6 +27,8 @@ export default function EventFormModal({
   activeDistanceRange,
   showGpxUpload,
   toggleSportInForm,
+  distanceLocked = false,
+  distanceLockText = "",
 }) {
   return (
     <div style={overlay}>
@@ -36,6 +37,7 @@ export default function EventFormModal({
           <h2 style={{ margin: 0, fontSize: 24 }}>
             {editId ? "Edit Event" : "Add Event"}
           </h2>
+
           <button type="button" onClick={closeModal} style={closeBtn}>
             ✕
           </button>
@@ -51,6 +53,7 @@ export default function EventFormModal({
 
           <div>
             <div style={label}>Choose sports</div>
+
             <div style={sportsPicker}>
               {SPORTS.map((sport) => {
                 const selected = form.sports.includes(sport.id);
@@ -72,22 +75,34 @@ export default function EventFormModal({
 
           {showDistance && (
             <div>
-              <div style={label}>Distance: {form.distance} km</div>
+              <div style={label}>
+                Distance: {Number(form.distance || 0).toFixed(2)} km
+              </div>
+
               <input
                 type="range"
                 min={activeDistanceRange.min}
                 max={activeDistanceRange.max}
-                step="1"
-                value={form.distance}
+                step="0.01"
+                value={form.distance || activeDistanceRange.min}
+                disabled={distanceLocked}
                 onChange={(e) =>
                   setForm({ ...form, distance: Number(e.target.value) })
                 }
-                style={{ width: "100%" }}
+                style={{
+                  width: "100%",
+                  opacity: distanceLocked ? 0.45 : 1,
+                }}
               />
+
               <div style={rangeRow}>
                 <span>{activeDistanceRange.min} km</span>
                 <span>{activeDistanceRange.max} km</span>
               </div>
+
+              {distanceLocked && distanceLockText && (
+                <div style={helperText}>{distanceLockText}</div>
+              )}
             </div>
           )}
 
@@ -139,13 +154,21 @@ export default function EventFormModal({
               )}
 
               {form.gpx_file_url && !form.gpxFile && (
-                <div style={helperText}>Current GPX file is already attached.</div>
+                <div style={helperText}>
+                  Current GPX file is already attached.
+                </div>
               )}
+
+              <div style={helperText}>
+                When a GPX route is attached, distance is calculated from the
+                route and saved automatically.
+              </div>
             </div>
           )}
 
           <div>
             <div style={label}>Description</div>
+
             <textarea
               value={form.description}
               onChange={(e) =>
@@ -157,7 +180,7 @@ export default function EventFormModal({
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button type="submit" style={primaryBtn}>
+            <button type="submit" style={primaryBtn} disabled={savingEvent}>
               {savingEvent ? "Saving..." : "Save"}
             </button>
 
@@ -169,4 +192,4 @@ export default function EventFormModal({
       </form>
     </div>
   );
-}
+                            }
