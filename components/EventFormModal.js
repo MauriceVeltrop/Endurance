@@ -32,6 +32,9 @@ export default function EventFormModal({
   distanceLockText = "",
   userRole = "user",
 }) {
+  const canUseRouteBuilder =
+    userRole === "moderator" || userRole === "organizer";
+
   return (
     <div style={overlay}>
       <form onSubmit={saveEvent} style={modal}>
@@ -46,6 +49,7 @@ export default function EventFormModal({
         </div>
 
         <div style={grid}>
+          {/* TITLE */}
           <input
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -53,6 +57,7 @@ export default function EventFormModal({
             style={field}
           />
 
+          {/* SPORTS */}
           <div>
             <div style={label}>Choose sports</div>
 
@@ -75,6 +80,7 @@ export default function EventFormModal({
             </div>
           </div>
 
+          {/* DISTANCE */}
           {showDistance && (
             <div>
               <div style={label}>
@@ -89,7 +95,10 @@ export default function EventFormModal({
                 value={form.distance || activeDistanceRange.min}
                 disabled={distanceLocked}
                 onChange={(e) =>
-                  setForm({ ...form, distance: Number(e.target.value) })
+                  setForm({
+                    ...form,
+                    distance: Number(e.target.value),
+                  })
                 }
                 style={{
                   width: "100%",
@@ -108,33 +117,52 @@ export default function EventFormModal({
             </div>
           )}
 
+          {/* DATE */}
           <div>
             <div style={label}>Date</div>
             <input
               type="date"
               value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  date: e.target.value,
+                })
+              }
               style={field}
             />
           </div>
 
+          {/* TIME */}
           <div>
             <div style={label}>Time</div>
             <input
               type="time"
               value={form.time}
-              onChange={(e) => setForm({ ...form, time: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  time: e.target.value,
+                })
+              }
               style={field}
             />
           </div>
 
+          {/* LOCATION */}
           <input
             value={form.location}
-            onChange={(e) => setForm({ ...form, location: e.target.value })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                location: e.target.value,
+              })
+            }
             placeholder="Location"
             style={field}
           />
 
+          {/* GPX UPLOAD */}
           {showGpxUpload && (
             <div>
               <div style={label}>GPX route</div>
@@ -152,7 +180,9 @@ export default function EventFormModal({
               />
 
               {form.gpxFile && (
-                <div style={helperText}>Selected GPX: {form.gpxFile.name}</div>
+                <div style={helperText}>
+                  Selected GPX: {form.gpxFile.name}
+                </div>
               )}
 
               {form.gpx_file_url && !form.gpxFile && (
@@ -163,32 +193,54 @@ export default function EventFormModal({
 
               <div style={helperText}>
                 When a GPX route is attached, distance is calculated from the
-                route and saved automatically.
+                route automatically.
               </div>
             </div>
           )}
 
-          <RouteBuilder form={form} setForm={setForm} userRole={userRole} />
+          {/* ROUTE BUILDER */}
+          <RouteBuilder
+            form={form}
+            setForm={setForm}
+            canUseRouteBuilder={canUseRouteBuilder}
+          />
 
+          {/* DESCRIPTION */}
           <div>
             <div style={label}>Description</div>
 
             <textarea
               value={form.description}
               onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
+                setForm({
+                  ...form,
+                  description: e.target.value,
+                })
               }
               placeholder="Extra information about the training"
-              style={{ ...field, minHeight: 110, resize: "vertical" }}
+              style={{
+                ...field,
+                minHeight: 110,
+                resize: "vertical",
+              }}
             />
           </div>
 
+          {/* BUTTONS */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button type="submit" style={primaryBtn} disabled={savingEvent}>
+            <button
+              type="submit"
+              style={primaryBtn}
+              disabled={savingEvent}
+            >
               {savingEvent ? "Saving..." : "Save"}
             </button>
 
-            <button type="button" onClick={closeModal} style={secondaryBtn}>
+            <button
+              type="button"
+              onClick={closeModal}
+              style={secondaryBtn}
+            >
               Cancel
             </button>
           </div>
