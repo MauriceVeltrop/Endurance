@@ -1,4 +1,5 @@
 import { SPORTS } from "../lib/sports";
+import RouteBuilder from "./RouteBuilder";
 import {
   closeBtn,
   field,
@@ -29,6 +30,7 @@ export default function EventFormModal({
   toggleSportInForm,
   distanceLocked = false,
   distanceLockText = "",
+  userRole = "user",
 }) {
   return (
     <div style={overlay}>
@@ -166,6 +168,8 @@ export default function EventFormModal({
             </div>
           )}
 
+          <RouteBuilder form={form} setForm={setForm} userRole={userRole} />
+
           <div>
             <div style={label}>Description</div>
 
@@ -192,4 +196,4 @@ export default function EventFormModal({
       </form>
     </div>
   );
-                            }
+}
