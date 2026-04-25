@@ -66,12 +66,18 @@ export default function EventCard({
 
       <h2 style={cardTitle}>{event.title}</h2>
 
-      {event.distance ? <div style={distanceText}>{event.distance} km</div> : null}
+      {event.distance ? (
+        <div style={distanceText}>
+          {Number(event.distance).toFixed(2)} km
+        </div>
+      ) : null}
 
       {event.elevation_gain_m !== null &&
         event.elevation_gain_m !== undefined &&
         Number(event.elevation_gain_m) > 0 && (
-          <div style={elevationText}>⛰ {event.elevation_gain_m} hoogtemeters</div>
+          <div style={elevationText}>
+            ⛰ {Math.round(Number(event.elevation_gain_m))} m+
+          </div>
         )}
 
       <div style={meta}>
@@ -91,7 +97,9 @@ export default function EventCard({
           📍 {event.location}
         </button>
 
-        <div style={{ opacity: 0.75 }}>Participants: {event.participants.length}</div>
+        <div style={{ opacity: 0.75 }}>
+          Participants: {event.participants.length}
+        </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
           {event.participants.map((participant) => (
@@ -106,11 +114,23 @@ export default function EventCard({
         </div>
       </div>
 
-      {event.route_points && <DetailRouteMap points={event.route_points} />}
+      {event.gpx_file_url && (
+        <DetailRouteMap
+          event={event}
+          gpxUrl={event.gpx_file_url}
+          height={240}
+          showElevation={true}
+        />
+      )}
 
       {event.gpx_file_url && (
         <div style={gpxActions}>
-          <a href={event.gpx_file_url} target="_blank" rel="noreferrer" style={gpxLink}>
+          <a
+            href={event.gpx_file_url}
+            target="_blank"
+            rel="noreferrer"
+            style={gpxLink}
+          >
             Download GPX
           </a>
 
@@ -128,8 +148,11 @@ export default function EventCard({
 
       <div style={communityBox}>
         <div style={communityTitle}>Description</div>
+
         <div style={communityText}>
-          {event.description?.trim() ? event.description : "No description added yet."}
+          {event.description?.trim()
+            ? event.description
+            : "No description added yet."}
         </div>
 
         <div style={likeRow}>
@@ -145,7 +168,10 @@ export default function EventCard({
             <div style={likeUsers}>
               {event.likes.map((like, index) => (
                 <span key={like.id}>
-                  <Link href={`/profile/${like.user_id}`} style={inlineProfileLink}>
+                  <Link
+                    href={`/profile/${like.user_id}`}
+                    style={inlineProfileLink}
+                  >
                     {like.user_profile?.name || "Unknown"}
                   </Link>
                   {index < event.likes.length - 1 ? ", " : ""}
@@ -164,7 +190,10 @@ export default function EventCard({
                 <div key={comment.id} style={commentItem}>
                   <div style={commentHeader}>
                     <div style={commentName}>
-                      <Link href={`/profile/${comment.user_id}`} style={inlineProfileLink}>
+                      <Link
+                        href={`/profile/${comment.user_id}`}
+                        style={inlineProfileLink}
+                      >
                         {comment.user_profile?.name || "Unknown"}
                       </Link>
                     </div>
@@ -205,7 +234,11 @@ export default function EventCard({
               style={commentField}
             />
 
-            <button type="button" onClick={() => postComment(event.id)} style={primaryBtnSmall}>
+            <button
+              type="button"
+              onClick={() => postComment(event.id)}
+              style={primaryBtnSmall}
+            >
               Post Comment
             </button>
           </div>
@@ -213,7 +246,10 @@ export default function EventCard({
       </div>
 
       <div style={btnRow}>
-        <button onClick={() => toggleParticipation(event)} style={primaryBtnSmall}>
+        <button
+          onClick={() => toggleParticipation(event)}
+          style={primaryBtnSmall}
+        >
           {event.joinedByMe ? "Leave Event" : "Join Event"}
         </button>
 
@@ -235,5 +271,4 @@ export default function EventCard({
       </div>
     </div>
   );
-                           }
-        
+          }
