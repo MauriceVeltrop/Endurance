@@ -1,280 +1,270 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  routeMapMeta,
-  routeMapTitle,
-  routeMapWrap,
-  routeSvg,
-} from "../lib/enduranceStyles";
+  MapContainer,
+  TileLayer,
+  Polyline,
+  CircleMarker,
+  useMap,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
-const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+function FitRouteBounds({ points }) {
+  const map = useMap();
 
-function loadLeaflet() {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") return reject();
+  useEffect(() => {
+    if (!points || points.length < 2) return;
 
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
+    const bounds = points.map((p) => [p.lat, p.lng]);
+    map.fitBounds(bounds, {
+      padding: [24, 24],
+      maxZoom: 15,
+    });
+  }, [map, points]);
 
-    if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = LEAFLET_CSS;
-      document.head.appendChild(link);
-    }
-
-    const existingScript = document.querySelector(`script[src="${LEAFLET_JS}"]`);
-
-    if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(window.L));
-      existingScript.addEventListener("error", reject);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = LEAFLET_JS;
-    script.async = true;
-    script.onload = () => resolve(window.L);
-    script.onerror = reject;
-    document.body.appendChild(script);
-  });
+  return null;
 }
 
-function simplifyPoints(points, maxPoints = 900) {
+function DisableMapInteraction() {
+  const map = useMap();
+
+  useEffect(() => {
+    map.dragging.disable();
+    map.touchZoom.disable();
+    map.doubleClickZoom.disable();
+    map.scrollWheelZoom.disable();
+    map.boxZoom.disable();
+    map.keyboard.disable();
+
+    if (map.tap) {
+      map.tap.disable();
+    }
+  }, [map]);
+
+  return null;
+}
+
+function parseGpx(gpxText) {
+  if (!gpxText) return [];
+
+  try {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(gpxText, "application/xml");
+
+    const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
+
+    return trkpts
+      .map((pt) => {
+        const lat = Number(pt.getAttribute("lat"));
+        const lng = Number(pt.getAttribute("lon"));
+        const eleNode = pt.getElementsByTagName("ele")[0];
+        const ele = eleNode ? Number(eleNode.textContent) : null;
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+        return { lat, lng, ele };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error("GPX parse error:", error);
+    return [];
+  }
+}
+
+function smoothPoints(points, maxPoints = 900) {
   if (!points || points.length <= maxPoints) return points;
 
   const step = Math.ceil(points.length / maxPoints);
 
-  return points.filter(
-    (_, index) => index % step === 0 || index === points.length - 1
-  );
+  return points.filter((_, index) => index % step === 0);
 }
 
-export default function DetailRouteMap({ points }) {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-
-  const validPoints = useMemo(() => {
-    return (points || []).filter(
-      (p) => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon))
-    );
-  }, [points]);
-
-  const routePoints = useMemo(() => {
-    return simplifyPoints(validPoints, 900);
-  }, [validPoints]);
-
-  const elevationPoints = useMemo(() => {
-    return simplifyPoints(
-      validPoints.filter((p) => Number.isFinite(Number(p.ele))),
-      700
-    );
-  }, [validPoints]);
-
-  const hasElevation = elevationPoints.length >= 2;
-
-  const minEle = hasElevation
-    ? Math.min(...elevationPoints.map((p) => Number(p.ele)))
-    : null;
-
-  const maxEle = hasElevation
-    ? Math.max(...elevationPoints.map((p) => Number(p.ele)))
-    : null;
+export default function DetailRouteMap({
+  gpxText,
+  gpx,
+  route,
+  height = 245,
+  showElevation = true,
+}) {
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!mapRef.current || routePoints.length < 2) return;
+    setMounted(true);
+  }, []);
 
-    let cancelled = false;
+  const rawPoints = useMemo(() => {
+    if (Array.isArray(route)) return route;
+    if (typeof gpxText === "string") return parseGpx(gpxText);
+    if (typeof gpx === "string") return parseGpx(gpx);
+    return [];
+  }, [gpxText, gpx, route]);
 
-    loadLeaflet().then((L) => {
-      if (cancelled || !mapRef.current) return;
+  const points = useMemo(() => smoothPoints(rawPoints), [rawPoints]);
 
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
+  const polyline = useMemo(
+    () => points.map((p) => [p.lat, p.lng]),
+    [points]
+  );
 
-      const latLngs = routePoints.map((p) => [
-        Number(p.lat),
-        Number(p.lon),
-      ]);
+  const startPoint = points[0];
+  const endPoint = points[points.length - 1];
 
-      const originalLatLngs = validPoints.map((p) => [
-        Number(p.lat),
-        Number(p.lon),
-      ]);
+  const elevationData = useMemo(() => {
+    return points
+      .filter((p) => Number.isFinite(p.ele))
+      .map((p) => p.ele);
+  }, [points]);
 
-      const map = L.map(mapRef.current, {
-        zoomControl: false,
-        attributionControl: true,
-        scrollWheelZoom: false,
-        dragging: false,
-        tap: false,
-        touchZoom: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
-      });
+  if (!mounted) return null;
 
-      mapInstanceRef.current = map;
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(map);
-
-      L.polyline(latLngs, {
-        color: "#111",
-        weight: 6,
-        opacity: 0.35,
-        interactive: false,
-      }).addTo(map);
-
-      const route = L.polyline(latLngs, {
-        color: "#e4ef16",
-        weight: 3,
-        opacity: 0.95,
-        interactive: false,
-      }).addTo(map);
-
-      L.circleMarker(originalLatLngs[0], {
-        radius: 6,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: "#22c55e",
-        fillOpacity: 1,
-        interactive: false,
-      }).addTo(map);
-
-      L.circleMarker(originalLatLngs[originalLatLngs.length - 1], {
-        radius: 6,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: "#ef4444",
-        fillOpacity: 1,
-        interactive: false,
-      }).addTo(map);
-
-      map.fitBounds(route.getBounds(), {
-        padding: [24, 24],
-      });
-
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 250);
-    });
-
-    return () => {
-      cancelled = true;
-
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, [routePoints, validPoints]);
-
-  if (validPoints.length < 2) return null;
-
-  const profileWidth = 360;
-  const profileHeight = 76;
-  const padding = 24;
-  const eleRange = hasElevation ? maxEle - minEle || 1 : 1;
-
-  const elevationPath =
-    hasElevation &&
-    elevationPoints
-      .map((point, index) => {
-        const x =
-          padding +
-          (index / Math.max(elevationPoints.length - 1, 1)) *
-            (profileWidth - padding * 2);
-
-        const y =
-          profileHeight -
-          padding +
-          4 -
-          ((Number(point.ele) - minEle) / eleRange) *
-            (profileHeight - padding);
-
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-      })
-      .join(" ");
-
-  const elevationFillPath = elevationPath
-    ? `${elevationPath} L ${profileWidth - padding} ${
-        profileHeight - 10
-      } L ${padding} ${profileHeight - 10} Z`
-    : "";
+  if (!points || points.length < 2) {
+    return null;
+  }
 
   return (
-    <div style={routeMapWrap}>
-      <div style={routeMapTitle}>Route map</div>
-
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        marginTop: 12,
+        marginBottom: 14,
+        zIndex: 1,
+      }}
+    >
       <div
-        ref={mapRef}
         style={{
+          position: "relative",
           width: "100%",
-          height: 260,
+          height,
           borderRadius: 18,
           overflow: "hidden",
-          background: "#101010",
-          border: "1px solid rgba(255,255,255,0.08)",
+          background: "#1b1b1b",
+          border: "1px solid rgba(255,255,255,0.12)",
+          zIndex: 1,
           touchAction: "pan-y",
-          pointerEvents: "none",
         }}
-      />
+      >
+        <MapContainer
+          center={[startPoint.lat, startPoint.lng]}
+          zoom={13}
+          zoomControl={false}
+          attributionControl={true}
+          dragging={false}
+          scrollWheelZoom={false}
+          doubleClickZoom={false}
+          touchZoom={false}
+          boxZoom={false}
+          keyboard={false}
+          style={{
+            width: "100%",
+            height: "100%",
+            zIndex: 1,
+            pointerEvents: "none",
+            touchAction: "pan-y",
+          }}
+        >
+          <TileLayer
+            attribution='© OpenStreetMap'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
 
-      {hasElevation && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ ...routeMapTitle, marginBottom: 6 }}>
-            Elevation profile
-          </div>
+          <Polyline
+            positions={polyline}
+            pathOptions={{
+              color: "#dfff00",
+              weight: 5,
+              opacity: 0.95,
+            }}
+          />
 
+          <Polyline
+            positions={polyline}
+            pathOptions={{
+              color: "#2d3436",
+              weight: 8,
+              opacity: 0.35,
+            }}
+          />
+
+          <CircleMarker
+            center={[startPoint.lat, startPoint.lng]}
+            radius={7}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 2,
+              fillColor: "#33d17a",
+              fillOpacity: 1,
+            }}
+          />
+
+          <CircleMarker
+            center={[endPoint.lat, endPoint.lng]}
+            radius={7}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 2,
+              fillColor: "#ff4d4d",
+              fillOpacity: 1,
+            }}
+          />
+
+          <FitRouteBounds points={points} />
+          <DisableMapInteraction />
+        </MapContainer>
+      </div>
+
+      {showElevation && elevationData.length > 5 && (
+        <div
+          style={{
+            width: "100%",
+            height: 52,
+            marginTop: 8,
+            borderRadius: 14,
+            overflow: "hidden",
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
           <svg
-            viewBox={`0 0 ${profileWidth} ${profileHeight}`}
-            style={routeSvg}
+            viewBox="0 0 300 52"
             preserveAspectRatio="none"
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+            }}
           >
-            <rect
-              x="0"
-              y="0"
-              width={profileWidth}
-              height={profileHeight}
-              rx="14"
-              fill="#101010"
-            />
+            {(() => {
+              const min = Math.min(...elevationData);
+              const max = Math.max(...elevationData);
+              const range = max - min || 1;
 
-            <path d={elevationFillPath} fill="rgba(228,239,22,0.12)" />
+              const step = 300 / (elevationData.length - 1);
 
-            <path
-              d={elevationPath}
-              fill="none"
-              stroke="#e4ef16"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+              const path = elevationData
+                .map((ele, index) => {
+                  const x = index * step;
+                  const y = 44 - ((ele - min) / range) * 34;
+                  return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+                })
+                .join(" ");
 
-            <line
-              x1={padding}
-              x2={profileWidth - padding}
-              y1={profileHeight - 10}
-              y2={profileHeight - 10}
-              stroke="rgba(255,255,255,0.12)"
-              strokeWidth="1"
-            />
+              const fillPath = `${path} L 300 52 L 0 52 Z`;
+
+              return (
+                <>
+                  <path d={fillPath} fill="rgba(223,255,0,0.18)" />
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#dfff00"
+                    strokeWidth="2.5"
+                  />
+                </>
+              );
+            })()}
           </svg>
-        </div>
-      )}
-
-      {hasElevation && (
-        <div style={routeMapMeta}>
-          Elevation range: {Math.round(minEle)} m - {Math.round(maxEle)} m
         </div>
       )}
     </div>
