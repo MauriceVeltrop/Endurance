@@ -93,8 +93,16 @@ export default function EventCard({
           </Link>
         </div>
 
-        <button onClick={() => openMaps(event.location)} style={mapBtn}>
-          📍 {event.location}
+        <button
+          onClick={() => openMaps(event.location)}
+          style={{
+            ...mapBtn,
+            cursor: "pointer",
+            textDecoration: "underline",
+            textUnderlineOffset: "3px",
+          }}
+        >
+          📍 {event.location} ↗
         </button>
 
         <div style={{ opacity: 0.75 }}>
@@ -271,4 +279,4 @@ export default function EventCard({
       </div>
     </div>
   );
-          }
+                           }
