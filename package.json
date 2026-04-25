@@ -2,7 +2,7 @@
   "name": "endurance-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Endurance social training app built with Next.js and Supabase",
+  "description": "Endurance social training platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
