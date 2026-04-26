@@ -59,6 +59,8 @@ export default function EventCard({
   removeGpxFromEvent,
 }) {
   const sportLabels = getSportLabels(event.sports || []);
+  const hasRoutePoints =
+    Array.isArray(event.route_points) && event.route_points.length > 1;
 
   return (
     <div key={event.id} style={card}>
@@ -67,9 +69,7 @@ export default function EventCard({
       <h2 style={cardTitle}>{event.title}</h2>
 
       {event.distance ? (
-        <div style={distanceText}>
-          {Number(event.distance).toFixed(2)} km
-        </div>
+        <div style={distanceText}>{Number(event.distance).toFixed(2)} km</div>
       ) : null}
 
       {event.elevation_gain_m !== null &&
@@ -122,14 +122,7 @@ export default function EventCard({
         </div>
       </div>
 
-      {event.gpx_file_url && (
-        <DetailRouteMap
-          event={event}
-          gpxUrl={event.gpx_file_url}
-          height={240}
-          showElevation={true}
-        />
-      )}
+      {hasRoutePoints && <DetailRouteMap points={event.route_points} />}
 
       {event.gpx_file_url && (
         <div style={gpxActions}>
@@ -279,4 +272,4 @@ export default function EventCard({
       </div>
     </div>
   );
-                           }
+}
