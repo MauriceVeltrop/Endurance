@@ -137,7 +137,7 @@ export default function RouteBuilder({
             opacity: generating || !canGenerate ? 0.55 : 1,
           }}
         >
-          {generating ? "Building..." : "Build Route"}
+          {generating ? "Creating..." : "Create Route"}
         </button>
 
         {form.route_points && (
