@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SPORTS } from "../lib/sports";
 import RouteBuilder from "./RouteBuilder";
 import {
@@ -33,10 +33,53 @@ export default function EventFormModal({
   distanceLockText = "",
   userRole = "user",
 }) {
-  const [routeMode, setRouteMode] = useState(null);
+  const initialRouteMode =
+    form.gpxFile || form.gpx_file_url
+      ? "upload"
+      : form.route_points
+      ? "generate"
+      : null;
+
+  const [routeMode, setRouteMode] = useState(initialRouteMode);
+  const [locating, setLocating] = useState(false);
 
   const canUseRouteBuilder =
     userRole === "moderator" || userRole === "organizer";
+
+  useEffect(() => {
+    if (editId) return;
+    if (form.location) return;
+    if (!navigator.geolocation) return;
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lon = position.coords.longitude;
+        const lat = position.coords.latitude;
+
+        setForm((currentForm) => {
+          if (currentForm.location) return currentForm;
+
+          return {
+            ...currentForm,
+            location: "Current location",
+            startCoordinates: [lon, lat],
+          };
+        });
+
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 60000,
+      }
+    );
+  }, [editId, form.location, setForm]);
 
   const routeButtonBase = {
     border: "1px solid rgba(255,255,255,0.12)",
@@ -56,6 +99,39 @@ export default function EventFormModal({
     ...routeButtonBase,
     background: "#242424",
     color: "white",
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Current location is not supported by this browser.");
+      return;
+    }
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lon = position.coords.longitude;
+        const lat = position.coords.latitude;
+
+        setForm({
+          ...form,
+          location: "Current location",
+          startCoordinates: [lon, lat],
+        });
+
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+        alert("Could not access your current location.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 60000,
+      }
+    );
   };
 
   const selectGenerateRoute = () => {
@@ -205,17 +281,38 @@ export default function EventFormModal({
             />
           </div>
 
-          <input
-            value={form.location}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                location: e.target.value,
-              })
-            }
-            placeholder="Location"
-            style={field}
-          />
+          <div>
+            <div style={label}>Location / start point</div>
+
+            <input
+              value={form.location || ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  location: e.target.value,
+                  startCoordinates: null,
+                })
+              }
+              placeholder="Location"
+              style={field}
+            />
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={useCurrentLocation}
+                style={secondaryBtn}
+                disabled={locating}
+              >
+                {locating ? "Locating..." : "Use Current Location"}
+              </button>
+            </div>
+
+            <div style={helperText}>
+              This location is also used as the start point for generated routes.
+              You can overwrite it manually.
+            </div>
+          </div>
 
           {showGpxUpload && (
             <div
@@ -233,7 +330,7 @@ export default function EventFormModal({
                   Route
                 </div>
                 <div style={helperText}>
-                  Generate a route automatically or upload your own GPX file.
+                  Choose how you want to add a route to this event.
                 </div>
               </div>
 
@@ -264,13 +361,16 @@ export default function EventFormModal({
                   Upload Route
                 </button>
 
-                {(routeMode || form.gpxFile || form.route_points) && (
+                {(routeMode ||
+                  form.gpxFile ||
+                  form.route_points ||
+                  form.gpx_file_url) && (
                   <button
                     type="button"
                     onClick={clearRouteSelection}
                     style={secondaryBtn}
                   >
-                    Clear Route
+                    Clear
                   </button>
                 )}
               </div>
@@ -281,8 +381,25 @@ export default function EventFormModal({
                 </div>
               )}
 
+              {routeMode === "generate" && canUseRouteBuilder && (
+                <RouteBuilder
+                  form={form}
+                  setForm={setForm}
+                  canUseRouteBuilder={canUseRouteBuilder}
+                />
+              )}
+
               {routeMode === "upload" && (
-                <div>
+                <div
+                  style={{
+                    background: "#101010",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 16,
+                    padding: 14,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
                   <div style={label}>Upload GPX route</div>
 
                   <input
@@ -310,18 +427,9 @@ export default function EventFormModal({
                   )}
 
                   <div style={helperText}>
-                    When a GPX route is attached, distance is calculated from
-                    the route automatically.
+                    Distance is calculated from the GPX route automatically.
                   </div>
                 </div>
-              )}
-
-              {routeMode === "generate" && canUseRouteBuilder && (
-                <RouteBuilder
-                  form={form}
-                  setForm={setForm}
-                  canUseRouteBuilder={canUseRouteBuilder}
-                />
               )}
 
               {!routeMode && (form.gpx_file_url || form.route_points) && (
