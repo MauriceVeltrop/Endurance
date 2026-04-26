@@ -43,6 +43,7 @@ export default function EventFormModal({
   const [routeMode, setRouteMode] = useState(initialRouteMode);
   const [locating, setLocating] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [createRouteTrigger, setCreateRouteTrigger] = useState(0);
 
   const canUseRouteBuilder =
     userRole === "moderator" || userRole === "organizer";
@@ -110,7 +111,7 @@ export default function EventFormModal({
     );
   };
 
-  const selectGenerateRoute = () => {
+  const createRouteNow = () => {
     setRouteError("");
 
     if (!hasLocation) {
@@ -127,6 +128,8 @@ export default function EventFormModal({
       gpx_file_url: null,
       gpx_uploaded_by: null,
     });
+
+    setCreateRouteTrigger((value) => value + 1);
   };
 
   const selectUploadRoute = () => {
@@ -309,7 +312,7 @@ export default function EventFormModal({
                 {canUseRouteBuilder && (
                   <button
                     type="button"
-                    onClick={selectGenerateRoute}
+                    onClick={createRouteNow}
                     style={
                       !hasLocation
                         ? disabledRouteButton
@@ -370,6 +373,7 @@ export default function EventFormModal({
               form={form}
               setForm={setForm}
               canUseRouteBuilder={canUseRouteBuilder}
+              createRouteTrigger={createRouteTrigger}
             />
           )}
 
