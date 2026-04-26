@@ -59,8 +59,11 @@ export default function EventCard({
   removeGpxFromEvent,
 }) {
   const sportLabels = getSportLabels(event.sports || []);
+
   const hasRoutePoints =
     Array.isArray(event.route_points) && event.route_points.length > 1;
+
+  const hasRouteMap = !!event.gpx_file_url || hasRoutePoints;
 
   return (
     <div key={event.id} style={card}>
@@ -109,7 +112,14 @@ export default function EventCard({
           Participants: {event.participants.length}
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            marginTop: 6,
+          }}
+        >
           {event.participants.map((participant) => (
             <Link
               key={participant.id}
@@ -122,7 +132,12 @@ export default function EventCard({
         </div>
       </div>
 
-      {hasRoutePoints && <DetailRouteMap points={event.route_points} />}
+      {hasRouteMap && (
+        <DetailRouteMap
+          gpxUrl={event.gpx_file_url}
+          points={event.route_points}
+        />
+      )}
 
       {event.gpx_file_url && (
         <div style={gpxActions}>
