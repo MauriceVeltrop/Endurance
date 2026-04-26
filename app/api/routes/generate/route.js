@@ -37,14 +37,53 @@ export async function POST(request) {
     const orsProfile = profileMap[sport] || "foot-walking";
 
     let startCoords = null;
+    let resolvedLocation = startLocation || "";
 
-    if (
+    const hasCoordinateStart =
       Array.isArray(startCoordinates) &&
       startCoordinates.length === 2 &&
       Number.isFinite(Number(startCoordinates[0])) &&
-      Number.isFinite(Number(startCoordinates[1]))
-    ) {
+      Number.isFinite(Number(startCoordinates[1]));
+
+    if (hasCoordinateStart) {
       startCoords = [Number(startCoordinates[0]), Number(startCoordinates[1])];
+
+      try {
+        const reverseUrl = `https://api.openrouteservice.org/geocode/reverse?api_key=${apiKey}&point.lon=${startCoords[0]}&point.lat=${startCoords[1]}&size=1`;
+        const reverseRes = await fetch(reverseUrl);
+
+        if (reverseRes.ok) {
+          const reverseData = await reverseRes.json();
+          const props = reverseData?.features?.[0]?.properties || {};
+
+          const street =
+            props.street ||
+            props.name ||
+            props.label?.split(",")?.[0] ||
+            "";
+
+          const locality =
+            props.locality ||
+            props.localadmin ||
+            props.county ||
+            props.region ||
+            "";
+
+          if (street && locality) {
+            resolvedLocation = `${street}, ${locality}`;
+          } else if (locality) {
+            resolvedLocation = locality;
+          } else if (props.label) {
+            resolvedLocation = props.label;
+          } else {
+            resolvedLocation = "Current location";
+          }
+        } else {
+          resolvedLocation = "Current location";
+        }
+      } catch {
+        resolvedLocation = "Current location";
+      }
     }
 
     if (!startCoords) {
@@ -72,6 +111,7 @@ export async function POST(request) {
       }
 
       startCoords = firstResult.geometry.coordinates;
+      resolvedLocation = firstResult.properties?.label || startLocation;
     }
 
     const targetDistanceMeters = Math.round(Number(distanceKm) * 1000);
@@ -119,9 +159,7 @@ export async function POST(request) {
       return Response.json({ error: "No route returned" }, { status: 404 });
     }
 
-    const coordinates = feature.geometry.coordinates;
-
-    const routePoints = coordinates.map((coord) => ({
+    const routePoints = feature.geometry.coordinates.map((coord) => ({
       lon: coord[0],
       lat: coord[1],
       ele: coord[2] ?? 0,
@@ -139,7 +177,8 @@ export async function POST(request) {
       null;
 
     return Response.json({
-      startLocation: startLocation || "Current location",
+      startLocation: resolvedLocation,
+      resolvedLocation,
       startCoordinates: startCoords,
       sport,
       orsProfile,
