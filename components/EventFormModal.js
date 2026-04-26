@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SPORTS } from "../lib/sports";
 import RouteBuilder from "./RouteBuilder";
 import {
@@ -32,8 +33,68 @@ export default function EventFormModal({
   distanceLockText = "",
   userRole = "user",
 }) {
+  const [routeMode, setRouteMode] = useState(null);
+
   const canUseRouteBuilder =
     userRole === "moderator" || userRole === "organizer";
+
+  const routeButtonBase = {
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 12,
+    padding: "10px 14px",
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+
+  const activeRouteButton = {
+    ...routeButtonBase,
+    background: "#e4ef16",
+    color: "black",
+  };
+
+  const inactiveRouteButton = {
+    ...routeButtonBase,
+    background: "#242424",
+    color: "white",
+  };
+
+  const selectGenerateRoute = () => {
+    setRouteMode("generate");
+
+    setForm({
+      ...form,
+      gpxFile: null,
+      gpx_file_path: null,
+      gpx_file_url: null,
+      gpx_uploaded_by: null,
+    });
+  };
+
+  const selectUploadRoute = () => {
+    setRouteMode("upload");
+
+    setForm({
+      ...form,
+      route_points: null,
+      route_distance_km: null,
+      elevation_gain_m: null,
+    });
+  };
+
+  const clearRouteSelection = () => {
+    setRouteMode(null);
+
+    setForm({
+      ...form,
+      gpxFile: null,
+      gpx_file_path: null,
+      gpx_file_url: null,
+      route_points: null,
+      route_distance_km: null,
+      elevation_gain_m: null,
+      gpx_uploaded_by: null,
+    });
+  };
 
   return (
     <div style={overlay}>
@@ -49,7 +110,6 @@ export default function EventFormModal({
         </div>
 
         <div style={grid}>
-          {/* TITLE */}
           <input
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -57,7 +117,6 @@ export default function EventFormModal({
             style={field}
           />
 
-          {/* SPORTS */}
           <div>
             <div style={label}>Choose sports</div>
 
@@ -80,7 +139,6 @@ export default function EventFormModal({
             </div>
           </div>
 
-          {/* DISTANCE */}
           {showDistance && (
             <div>
               <div style={label}>
@@ -117,7 +175,6 @@ export default function EventFormModal({
             </div>
           )}
 
-          {/* DATE */}
           <div>
             <div style={label}>Date</div>
             <input
@@ -133,7 +190,6 @@ export default function EventFormModal({
             />
           </div>
 
-          {/* TIME */}
           <div>
             <div style={label}>Time</div>
             <input
@@ -149,7 +205,6 @@ export default function EventFormModal({
             />
           </div>
 
-          {/* LOCATION */}
           <input
             value={form.location}
             onChange={(e) =>
@@ -162,50 +217,121 @@ export default function EventFormModal({
             style={field}
           />
 
-          {/* GPX UPLOAD */}
           {showGpxUpload && (
-            <div>
-              <div style={label}>GPX route</div>
-
-              <input
-                type="file"
-                accept=".gpx"
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    gpxFile: e.target.files?.[0] || null,
-                  })
-                }
-                style={field}
-              />
-
-              {form.gpxFile && (
-                <div style={helperText}>
-                  Selected GPX: {form.gpxFile.name}
+            <div
+              style={{
+                background: "#0b0b0b",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 18,
+                padding: 14,
+                display: "grid",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ ...label, color: "#e4ef16", fontWeight: 700 }}>
+                  Route
                 </div>
-              )}
-
-              {form.gpx_file_url && !form.gpxFile && (
                 <div style={helperText}>
-                  Current GPX file is already attached.
+                  Generate a route automatically or upload your own GPX file.
                 </div>
-              )}
-
-              <div style={helperText}>
-                When a GPX route is attached, distance is calculated from the
-                route automatically.
               </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {canUseRouteBuilder && (
+                  <button
+                    type="button"
+                    onClick={selectGenerateRoute}
+                    style={
+                      routeMode === "generate"
+                        ? activeRouteButton
+                        : inactiveRouteButton
+                    }
+                  >
+                    Generate Route
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={selectUploadRoute}
+                  style={
+                    routeMode === "upload"
+                      ? activeRouteButton
+                      : inactiveRouteButton
+                  }
+                >
+                  Upload Route
+                </button>
+
+                {(routeMode || form.gpxFile || form.route_points) && (
+                  <button
+                    type="button"
+                    onClick={clearRouteSelection}
+                    style={secondaryBtn}
+                  >
+                    Clear Route
+                  </button>
+                )}
+              </div>
+
+              {!canUseRouteBuilder && (
+                <div style={helperText}>
+                  Route generation is available for moderators and organizers.
+                </div>
+              )}
+
+              {routeMode === "upload" && (
+                <div>
+                  <div style={label}>Upload GPX route</div>
+
+                  <input
+                    type="file"
+                    accept=".gpx"
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        gpxFile: e.target.files?.[0] || null,
+                      })
+                    }
+                    style={field}
+                  />
+
+                  {form.gpxFile && (
+                    <div style={helperText}>
+                      Selected GPX: {form.gpxFile.name}
+                    </div>
+                  )}
+
+                  {form.gpx_file_url && !form.gpxFile && (
+                    <div style={helperText}>
+                      Current GPX file is already attached.
+                    </div>
+                  )}
+
+                  <div style={helperText}>
+                    When a GPX route is attached, distance is calculated from
+                    the route automatically.
+                  </div>
+                </div>
+              )}
+
+              {routeMode === "generate" && canUseRouteBuilder && (
+                <RouteBuilder
+                  form={form}
+                  setForm={setForm}
+                  canUseRouteBuilder={canUseRouteBuilder}
+                />
+              )}
+
+              {!routeMode && (form.gpx_file_url || form.route_points) && (
+                <div style={helperText}>
+                  This event already has a route attached.
+                </div>
+              )}
             </div>
           )}
 
-          {/* ROUTE BUILDER */}
-          <RouteBuilder
-            form={form}
-            setForm={setForm}
-            canUseRouteBuilder={canUseRouteBuilder}
-          />
-
-          {/* DESCRIPTION */}
           <div>
             <div style={label}>Description</div>
 
@@ -226,21 +352,12 @@ export default function EventFormModal({
             />
           </div>
 
-          {/* BUTTONS */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              type="submit"
-              style={primaryBtn}
-              disabled={savingEvent}
-            >
+            <button type="submit" style={primaryBtn} disabled={savingEvent}>
               {savingEvent ? "Saving..." : "Save"}
             </button>
 
-            <button
-              type="button"
-              onClick={closeModal}
-              style={secondaryBtn}
-            >
+            <button type="button" onClick={closeModal} style={secondaryBtn}>
               Cancel
             </button>
           </div>
