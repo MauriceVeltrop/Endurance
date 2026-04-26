@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DetailRouteMap from "./DetailRouteMap";
 import {
   field,
@@ -17,7 +16,11 @@ export default function RouteBuilder({
   canUseRouteBuilder,
 }) {
   const [generating, setGenerating] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [routeError, setRouteError] = useState("");
+
+  const [startLocation, setStartLocation] = useState(form.location || "");
+  const [startCoordinates, setStartCoordinates] = useState(null);
 
   if (!canUseRouteBuilder) return null;
 
@@ -33,17 +36,73 @@ export default function RouteBuilder({
   ];
 
   const canGenerate =
-    form.location &&
     form.distance &&
     firstSport &&
-    supportedSports.includes(firstSport);
+    supportedSports.includes(firstSport) &&
+    (startLocation || startCoordinates);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lon = position.coords.longitude;
+        const lat = position.coords.latitude;
+
+        setStartCoordinates([lon, lat]);
+        setStartLocation("Current location");
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 60000,
+      }
+    );
+  }, []);
+
+  const useCurrentLocation = () => {
+    setRouteError("");
+
+    if (!navigator.geolocation) {
+      setRouteError("Current location is not supported by this browser.");
+      return;
+    }
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lon = position.coords.longitude;
+        const lat = position.coords.latitude;
+
+        setStartCoordinates([lon, lat]);
+        setStartLocation("Current location");
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+        setRouteError("Could not access your current location.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 60000,
+      }
+    );
+  };
 
   const generateRoute = async () => {
     setRouteError("");
 
     if (!canGenerate) {
       setRouteError(
-        "Choose a supported sport, location and distance before generating a route."
+        "Choose a supported sport, distance and start location before generating a route."
       );
       return;
     }
@@ -57,7 +116,11 @@ export default function RouteBuilder({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          startLocation: form.location,
+          startLocation:
+            startCoordinates && startLocation === "Current location"
+              ? null
+              : startLocation,
+          startCoordinates,
           distanceKm: Number(form.distance),
           sport: firstSport,
         }),
@@ -99,38 +162,41 @@ export default function RouteBuilder({
   return (
     <div
       style={{
-        background: "#0b0b0b",
+        background: "#101010",
         border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 18,
+        borderRadius: 16,
         padding: 14,
         display: "grid",
         gap: 12,
       }}
     >
       <div>
-        <div style={{ ...label, color: "#e4ef16", fontWeight: 700 }}>
-          Route Builder
-        </div>
-
-        <div style={helperText}>
-          Generate a route from the event location using OpenRouteService.
-          Available for moderators and organizers.
-        </div>
-      </div>
-
-      <div>
         <div style={label}>Start location</div>
+
         <input
-          value={form.location || ""}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              location: e.target.value,
-            })
-          }
+          value={startLocation}
+          onChange={(e) => {
+            setStartLocation(e.target.value);
+            setStartCoordinates(null);
+          }}
           placeholder="Example: Schanserweg 18, Landgraaf"
           style={field}
         />
+
+        <div style={helperText}>
+          Default: current location when permission is allowed.
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={useCurrentLocation}
+          style={secondaryBtnSmall}
+          disabled={locating}
+        >
+          {locating ? "Locating..." : "Use Current Location"}
+        </button>
       </div>
 
       <div style={helperText}>
@@ -153,7 +219,7 @@ export default function RouteBuilder({
             opacity: generating || !canGenerate ? 0.55 : 1,
           }}
         >
-          {generating ? "Generating..." : "Generate Route"}
+          {generating ? "Building..." : "Build Route"}
         </button>
 
         {form.route_points && (
@@ -162,7 +228,7 @@ export default function RouteBuilder({
             onClick={clearGeneratedRoute}
             style={secondaryBtnSmall}
           >
-            Clear Route
+            Clear
           </button>
         )}
       </div>
@@ -178,7 +244,8 @@ export default function RouteBuilder({
           <DetailRouteMap points={form.route_points} />
 
           <div style={helperText}>
-            Distance: {Number(form.route_distance_km || form.distance).toFixed(2)} km
+            Distance:{" "}
+            {Number(form.route_distance_km || form.distance).toFixed(2)} km
             {form.elevation_gain_m !== null &&
               form.elevation_gain_m !== undefined &&
               ` • ${form.elevation_gain_m} m+`}
