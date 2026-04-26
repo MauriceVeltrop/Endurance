@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SPORTS } from "../lib/sports";
 import RouteBuilder from "./RouteBuilder";
 import {
@@ -45,41 +45,6 @@ export default function EventFormModal({
 
   const canUseRouteBuilder =
     userRole === "moderator" || userRole === "organizer";
-
-  useEffect(() => {
-    if (editId) return;
-    if (form.location) return;
-    if (!navigator.geolocation) return;
-
-    setLocating(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lon = position.coords.longitude;
-        const lat = position.coords.latitude;
-
-        setForm((currentForm) => {
-          if (currentForm.location) return currentForm;
-
-          return {
-            ...currentForm,
-            location: "Current location",
-            startCoordinates: [lon, lat],
-          };
-        });
-
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 60000,
-      }
-    );
-  }, [editId, form.location, setForm]);
 
   const routeButtonBase = {
     border: "1px solid rgba(255,255,255,0.12)",
@@ -293,7 +258,7 @@ export default function EventFormModal({
                   startCoordinates: null,
                 })
               }
-              placeholder="Location"
+              placeholder="Example: Schanserweg 18, Landgraaf"
               style={field}
             />
 
@@ -309,8 +274,8 @@ export default function EventFormModal({
             </div>
 
             <div style={helperText}>
-              This location is also used as the start point for generated routes.
-              You can overwrite it manually.
+              Leave this empty and fill it manually, or use your current
+              location. The button overwrites this field.
             </div>
           </div>
 
