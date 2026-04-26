@@ -73,6 +73,8 @@ export default function RouteBuilder({
 
       setForm({
         ...form,
+        location: data.resolvedLocation || data.startLocation || form.location,
+        startCoordinates: data.startCoordinates || form.startCoordinates || null,
         distance: Number(data.distance).toFixed(2),
         route_distance_km: Number(data.route_distance_km).toFixed(2),
         elevation_gain_m: data.elevation_gain_m,
@@ -133,9 +135,7 @@ export default function RouteBuilder({
         </div>
       </div>
 
-      {generating && (
-        <div style={helperText}>Creating route...</div>
-      )}
+      {generating && <div style={helperText}>Creating route...</div>}
 
       {!supportedSports.includes(firstSport) && firstSport && (
         <div style={{ ...helperText, color: "#ffb4b4" }}>
