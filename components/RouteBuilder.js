@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DetailRouteMap from "./DetailRouteMap";
 import {
-  field,
   helperText,
   label,
   primaryBtnSmall,
@@ -16,11 +15,7 @@ export default function RouteBuilder({
   canUseRouteBuilder,
 }) {
   const [generating, setGenerating] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [routeError, setRouteError] = useState("");
-
-  const [startLocation, setStartLocation] = useState(form.location || "");
-  const [startCoordinates, setStartCoordinates] = useState(null);
 
   if (!canUseRouteBuilder) return null;
 
@@ -39,70 +34,14 @@ export default function RouteBuilder({
     form.distance &&
     firstSport &&
     supportedSports.includes(firstSport) &&
-    (startLocation || startCoordinates);
-
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    setLocating(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lon = position.coords.longitude;
-        const lat = position.coords.latitude;
-
-        setStartCoordinates([lon, lat]);
-        setStartLocation("Current location");
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 60000,
-      }
-    );
-  }, []);
-
-  const useCurrentLocation = () => {
-    setRouteError("");
-
-    if (!navigator.geolocation) {
-      setRouteError("Current location is not supported by this browser.");
-      return;
-    }
-
-    setLocating(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lon = position.coords.longitude;
-        const lat = position.coords.latitude;
-
-        setStartCoordinates([lon, lat]);
-        setStartLocation("Current location");
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-        setRouteError("Could not access your current location.");
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 60000,
-      }
-    );
-  };
+    (form.location || form.startCoordinates);
 
   const generateRoute = async () => {
     setRouteError("");
 
     if (!canGenerate) {
       setRouteError(
-        "Choose a supported sport, distance and start location before generating a route."
+        "Choose a supported sport, distance and location before generating a route."
       );
       return;
     }
@@ -117,10 +56,10 @@ export default function RouteBuilder({
         },
         body: JSON.stringify({
           startLocation:
-            startCoordinates && startLocation === "Current location"
+            form.startCoordinates && form.location === "Current location"
               ? null
-              : startLocation,
-          startCoordinates,
+              : form.location,
+          startCoordinates: form.startCoordinates || null,
           distanceKm: Number(form.distance),
           sport: firstSport,
         }),
@@ -171,36 +110,15 @@ export default function RouteBuilder({
       }}
     >
       <div>
-        <div style={label}>Start location</div>
-
-        <input
-          value={startLocation}
-          onChange={(e) => {
-            setStartLocation(e.target.value);
-            setStartCoordinates(null);
-          }}
-          placeholder="Example: Schanserweg 18, Landgraaf"
-          style={field}
-        />
+        <div style={label}>Route Builder</div>
 
         <div style={helperText}>
-          Default: current location when permission is allowed.
+          Start point: <strong>{form.location || "add a location first"}</strong>
         </div>
-      </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={useCurrentLocation}
-          style={secondaryBtnSmall}
-          disabled={locating}
-        >
-          {locating ? "Locating..." : "Use Current Location"}
-        </button>
-      </div>
-
-      <div style={helperText}>
-        Route type: <strong>{firstSport || "choose a sport first"}</strong>
+        <div style={helperText}>
+          Route type: <strong>{firstSport || "choose a sport first"}</strong>
+        </div>
       </div>
 
       {!supportedSports.includes(firstSport) && firstSport && (
