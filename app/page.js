@@ -95,6 +95,35 @@ function makeEventDateTime(event) {
   return new Date(`${event.date}T${timeValue}`);
 }
 
+function routePointsToGpx(points, title = "Endurance Route") {
+  const safeTitle = title.replace(/[<>&'"]/g, "");
+
+  const trkpts = points
+    .map((p) => {
+      const lat = Number(p.lat);
+      const lon = Number(p.lon);
+      const ele = Number.isFinite(Number(p.ele)) ? Number(p.ele) : 0;
+
+      return `      <trkpt lat="${lat}" lon="${lon}">
+        <ele>${ele}</ele>
+      </trkpt>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Endurance App" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${safeTitle}</name>
+  </metadata>
+  <trk>
+    <name>${safeTitle}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+}
+
 export default function Home() {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -208,7 +237,7 @@ export default function Home() {
     await loadEverything();
   };
 
-  useEffect(() => {
+useEffect(() => {
     const init = async () => {
       const {
         data: { session: currentSession },
@@ -579,9 +608,50 @@ export default function Home() {
     } else if (form.route_points && form.route_distance_km) {
       finalDistance = Number(Number(form.route_distance_km).toFixed(2));
       routeDistanceKm = Number(Number(form.route_distance_km).toFixed(2));
+
+      if (!gpxFileUrl && Array.isArray(form.route_points)) {
+        const gpxText = routePointsToGpx(
+          form.route_points,
+          form.title || "Endurance Route"
+        );
+
+        const safeTitle = (form.title || "endurance-route")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
+
+        const filePath = `${user.id}/${Date.now()}-${safeTitle}.gpx`;
+
+        const gpxBlob = new Blob([gpxText], {
+          type: "application/gpx+xml",
+        });
+
+        const { error: uploadError } = await supabase.storage
+          .from("event-gpx")
+          .upload(filePath, gpxBlob, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: "application/gpx+xml",
+          });
+
+        if (uploadError) {
+          setSavingEvent(false);
+          alert(`Generated GPX upload failed: ${uploadError.message}`);
+          return;
+        }
+
+        const { data: publicData } = supabase.storage
+          .from("event-gpx")
+          .getPublicUrl(filePath);
+
+        gpxFilePath = filePath;
+        gpxFileUrl = publicData.publicUrl;
+        gpxUploadedBy = user.id;
+      }
     }
 
-    const payload = {
+
+const payload = {
       title: form.title,
       sports: form.sports,
       distance: finalDistance,
@@ -959,4 +1029,11 @@ export default function Home() {
       )}
     </main>
   );
-  }
+            }
+
+
+
+    
+
+
+
