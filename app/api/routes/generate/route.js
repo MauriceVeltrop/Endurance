@@ -13,13 +13,14 @@ export async function POST(request) {
 
     const {
       startLocation,
+      startCoordinates,
       distanceKm = 5,
       sport = "running",
     } = body;
 
-    if (!startLocation) {
+    if (!startLocation && !startCoordinates) {
       return Response.json(
-        { error: "Start location is required" },
+        { error: "Start location or start coordinates are required" },
         { status: 400 }
       );
     }
@@ -35,30 +36,44 @@ export async function POST(request) {
 
     const orsProfile = profileMap[sport] || "foot-walking";
 
-    const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${apiKey}&text=${encodeURIComponent(
-      startLocation
-    )}&size=1`;
+    let startCoords = null;
 
-    const geocodeRes = await fetch(geocodeUrl);
-
-    if (!geocodeRes.ok) {
-      return Response.json(
-        { error: "Could not geocode start location" },
-        { status: 400 }
-      );
+    if (
+      Array.isArray(startCoordinates) &&
+      startCoordinates.length === 2 &&
+      Number.isFinite(Number(startCoordinates[0])) &&
+      Number.isFinite(Number(startCoordinates[1]))
+    ) {
+      startCoords = [Number(startCoordinates[0]), Number(startCoordinates[1])];
     }
 
-    const geocodeData = await geocodeRes.json();
-    const firstResult = geocodeData?.features?.[0];
+    if (!startCoords) {
+      const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${apiKey}&text=${encodeURIComponent(
+        startLocation
+      )}&size=1`;
 
-    if (!firstResult?.geometry?.coordinates) {
-      return Response.json(
-        { error: "No coordinates found for this location" },
-        { status: 404 }
-      );
+      const geocodeRes = await fetch(geocodeUrl);
+
+      if (!geocodeRes.ok) {
+        return Response.json(
+          { error: "Could not geocode start location" },
+          { status: 400 }
+        );
+      }
+
+      const geocodeData = await geocodeRes.json();
+      const firstResult = geocodeData?.features?.[0];
+
+      if (!firstResult?.geometry?.coordinates) {
+        return Response.json(
+          { error: "No coordinates found for this location" },
+          { status: 404 }
+        );
+      }
+
+      startCoords = firstResult.geometry.coordinates;
     }
 
-    const startCoordinates = firstResult.geometry.coordinates;
     const targetDistanceMeters = Math.round(Number(distanceKm) * 1000);
 
     const routeRes = await fetch(
@@ -70,7 +85,7 @@ export async function POST(request) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          coordinates: [startCoordinates],
+          coordinates: [startCoords],
           elevation: true,
           instructions: false,
           options: {
@@ -101,10 +116,7 @@ export async function POST(request) {
     const feature = routeData?.features?.[0];
 
     if (!feature?.geometry?.coordinates?.length) {
-      return Response.json(
-        { error: "No route returned" },
-        { status: 404 }
-      );
+      return Response.json({ error: "No route returned" }, { status: 404 });
     }
 
     const coordinates = feature.geometry.coordinates;
@@ -127,7 +139,8 @@ export async function POST(request) {
       null;
 
     return Response.json({
-      startLocation,
+      startLocation: startLocation || "Current location",
+      startCoordinates: startCoords,
       sport,
       orsProfile,
       distance,
