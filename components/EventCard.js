@@ -273,6 +273,11 @@ export default function EventCard({
           Add to Calendar
         </button>
 
+        {/* NIEUWE CHAT KNOP */}
+        <Link href={`/events/${event.id}/chat`} style={secondaryBtnSmall}>
+          💬 Event Chat
+        </Link>
+
         {(event.isOwner || isModerator) && (
           <button onClick={() => openEdit(event)} style={secondaryBtnSmall}>
             Edit
