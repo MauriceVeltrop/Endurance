@@ -208,7 +208,7 @@ function AutoFitLocation({ children }) {
           overflow: "hidden",
           whiteSpace: "normal",
           wordBreak: "normal",
-          overflowWrap: "anywhere",
+          overflowWrap: "break-word",
           fontSize,
           fontWeight: 650,
           lineHeight: 1.15,
@@ -235,12 +235,9 @@ function getEventSportBackground(event) {
 
   if (sports.includes("trail-running")) {
     return {
-      image: "/images/trailrunner-bg.svg",
-      right: "-18px",
-      top: "-10px",
-      width: "245px",
-      opacity: 0.92,
-      accent: "rgba(228,239,22,0.24)",
+      image: "/images/trailrunner-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.22)",
     };
   }
 
@@ -251,34 +248,25 @@ function getEventSportBackground(event) {
     sports.includes("gravel-bike")
   ) {
     return {
-      image: "/images/gravel-mtb-bg.svg",
-      right: "-30px",
-      top: "8px",
-      width: "270px",
-      opacity: 0.88,
-      accent: "rgba(228,239,22,0.22)",
+      image: "/images/gravel-mtb-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.20)",
     };
   }
 
   if (sports.includes("road-cycling") || sports.includes("cycling")) {
     return {
-      image: "/images/roadcycling-bg.svg",
-      right: "-30px",
-      top: "8px",
-      width: "270px",
-      opacity: 0.88,
-      accent: "rgba(228,239,22,0.22)",
+      image: "/images/roadcycling-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.20)",
     };
   }
 
   if (sports.includes("running")) {
     return {
-      image: "/images/runner-bg.svg",
-      right: "-14px",
-      top: "-8px",
-      width: "230px",
-      opacity: 0.94,
-      accent: "rgba(228,239,22,0.24)",
+      image: "/images/runner-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.22)",
     };
   }
 
@@ -494,7 +482,7 @@ export default function EventCard({
                 : "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
-            padding: "18px 18px 18px 16px",
+            padding: "16px 18px 16px 16px",
             overflow: "hidden",
             minWidth: 0,
             maxWidth: "100%",
@@ -503,23 +491,22 @@ export default function EventCard({
             isolation: "isolate",
           }}
         >
-{sportBackground && (
+          {sportBackground && (
             <>
-              <img
-                src={sportBackground.image}
-                alt=""
+              <div
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  right: sportBackground.right,
-                  top: sportBackground.top,
-                  width: sportBackground.width,
-                  height: "auto",
+                  inset: 0,
                   pointerEvents: "none",
                   zIndex: 0,
-                  opacity: sportBackground.opacity,
-                  filter:
-                    "drop-shadow(0 0 38px rgba(228,239,22,0.62)) saturate(1.35) contrast(1.18)",
+                  opacity: 1,
+                  backgroundImage: `url('${sportBackground.image}')`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "cover",
+                  backgroundPosition: sportBackground.position,
+                  filter: "saturate(1.12) contrast(1.08)",
+                  transform: "scale(1.01)",
                 }}
               />
 
@@ -531,7 +518,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    `linear-gradient(90deg, rgba(5,5,5,0.99) 0%, rgba(5,5,5,0.92) 42%, rgba(5,5,5,0.58) 74%, rgba(5,5,5,0.18) 100%), radial-gradient(circle at 86% 24%, ${sportBackground.accent}, transparent 34%)`,
+                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 40%, rgba(5,5,5,0.58) 70%, rgba(5,5,5,0.25) 100%), radial-gradient(circle at 82% 30%, ${sportBackground.accent}, transparent 38%)`,
                 }}
               />
             </>
