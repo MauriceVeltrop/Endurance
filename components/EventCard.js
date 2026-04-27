@@ -495,13 +495,28 @@ export default function EventCard({
                   inset: 0,
                   pointerEvents: "none",
                   zIndex: 0,
-                  opacity: 0.95,
-                  backgroundImage: `url('${sportBackground.image}')`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundSize: "cover",
-                  backgroundPosition: sportBackground.position,
-                  filter: "saturate(1.08) contrast(1.08)",
-                  transform: "scale(1.02)",
+                  background:
+                    `radial-gradient(circle at 84% 28%, ${sportBackground.accent}, transparent 42%)`,
+                }}
+              />
+
+              <img
+                src={sportBackground.image}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: "-78px",
+                  top: "18px",
+                  width: "118%",
+                  maxWidth: 520,
+                  height: "auto",
+                  opacity: 0.62,
+                  zIndex: 0,
+                  pointerEvents: "none",
+                  objectFit: "contain",
+                  filter:
+                    "saturate(1.15) contrast(1.15) drop-shadow(0 0 32px rgba(228,239,22,0.42))",
                 }}
               />
 
@@ -513,7 +528,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 38%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.12) 100%), radial-gradient(circle at 84% 30%, ${sportBackground.accent}, transparent 36%)`,
+                    "linear-gradient(90deg, rgba(5,5,5,0.97) 0%, rgba(5,5,5,0.86) 36%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.16) 100%)",
                 }}
               />
             </>
@@ -535,9 +550,13 @@ export default function EventCard({
                 fontSize: 14,
                 fontWeight: 900,
                 marginBottom: 8,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "3px 6px",
+                lineHeight: 1.15,
+                whiteSpace: "normal",
+                wordBreak: "normal",
+                overflowWrap: "normal",
                 maxWidth: "100%",
               }}
             >
