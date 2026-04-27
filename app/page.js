@@ -809,46 +809,41 @@ const payload = {
         .replaceAll(",", "\\,")
         .replaceAll(";", "\\;");
 
-    const toIcsDateTime = (date, time) => {
-      const safeDate = String(date || "").replaceAll("-", "");
-      const safeTime = String(time || "09:00").slice(0, 5).replace(":", "");
-      return `${safeDate}T${safeTime}00`;
-    };
+    const safeDate = String(event?.date || "").trim();
+    const safeTime = String(event?.time || "09:00").slice(0, 5);
 
-    const makeEndDateTime = (date, time) => {
-      const startDate = new Date(`${date}T${String(time || "09:00").slice(0, 5)}:00`);
-      startDate.setHours(startDate.getHours() + 1);
-
-      const yyyy = startDate.getFullYear();
-      const mm = String(startDate.getMonth() + 1).padStart(2, "0");
-      const dd = String(startDate.getDate()).padStart(2, "0");
-      const hh = String(startDate.getHours()).padStart(2, "0");
-      const mi = String(startDate.getMinutes()).padStart(2, "0");
-
-      return `${yyyy}${mm}${dd}T${hh}${mi}00`;
-    };
-
-    if (!event?.date) {
+    if (!safeDate) {
       alert("This event has no date.");
       return;
     }
 
-    const title = escapeIcsText(event.title || "Endurance Event");
-    const location = escapeIcsText(event.location || "");
-    const sportText = escapeIcsText(getSportLabels(event.sports || []).join(" • "));
-    const description = escapeIcsText(
-      `${sportText ? `${sportText} training via Endurance` : "Training via Endurance"}${
-        event.description ? `\\n\\n${event.description}` : ""
-      }`
-    );
+    const start = `${safeDate.replaceAll("-", "")}T${safeTime.replace(":", "")}00`;
 
-    const start = toIcsDateTime(event.date, event.time);
-    const end = makeEndDateTime(event.date, event.time);
+    const endDate = new Date(`${safeDate}T${safeTime}:00`);
+    endDate.setHours(endDate.getHours() + 1);
+
+    const yyyy = endDate.getFullYear();
+    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(endDate.getDate()).padStart(2, "0");
+    const hh = String(endDate.getHours()).padStart(2, "0");
+    const mi = String(endDate.getMinutes()).padStart(2, "0");
+    const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
+
+    const sportText = getSportLabels(event.sports || []).join(" • ");
+    const description = [
+      sportText ? `${sportText} training via Endurance` : "Training via Endurance",
+      event.description?.trim() ? event.description.trim() : "",
+    ]
+      .filter(Boolean)
+      .join("\\n\\n");
+
     const uid = `${event.id || Date.now()}@endurance-app`;
-    const fileName = `${String(event.title || "endurance-event")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "endurance-event"}.ics`;
+    const fileName = `${
+      String(event.title || "endurance-event")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "endurance-event"
+    }.ics`;
 
     const ics = [
       "BEGIN:VCALENDAR",
@@ -859,28 +854,33 @@ const payload = {
       "BEGIN:VEVENT",
       `UID:${uid}`,
       `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
-      `SUMMARY:${title}`,
+      `SUMMARY:${escapeIcsText(event.title || "Endurance Event")}`,
       `DTSTART:${start}`,
       `DTEND:${end}`,
-      `LOCATION:${location}`,
-      `DESCRIPTION:${description}`,
+      `LOCATION:${escapeIcsText(event.location || "")}`,
+      `DESCRIPTION:${escapeIcsText(description)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
 
-    const encodedIcs = encodeURIComponent(ics);
-    const dataUrl = `data:text/calendar;charset=utf-8,${encodedIcs}`;
+    const blob = new Blob([ics], {
+      type: "text/calendar;charset=utf-8",
+    });
 
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = fileName;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const openMaps  const openMaps = (location) => {
+  const openMaps = (location) => {
     const q = encodeURIComponent(location);
     window.open(
       `https://www.google.com/maps/search/?api=1&query=${q}`,
