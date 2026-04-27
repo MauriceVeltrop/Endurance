@@ -1,0 +1,17 @@
+<svg width="1200" height="620" viewBox="0 0 1200 620" xmlns="http://www.w3.org/2000/svg">
+  <defs><filter id="glow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <rect width="1200" height="620" fill="none"/>
+  <path d="M430 255h430M390 326h520M510 398h455" stroke="#e4ef16" stroke-width="8" stroke-linecap="round" opacity=".17"/>
+  <g transform="translate(705 164) scale(1.08)" stroke="#e4ef16" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".82" filter="url(#glow)">
+    <circle cx="110" cy="260" r="75" opacity=".42"/>
+    <circle cx="345" cy="260" r="75" opacity=".42"/>
+    <path d="M110 260l90-120 80 120H110l135-5 100-105"/>
+    <path d="M200 140l78-6 70 126"/>
+    <path d="M246 132l-34-58 64 2"/>
+    <path d="M345 150l46-8"/>
+  </g>
+  <g transform="translate(807 72) scale(1.03)" fill="#e4ef16" opacity=".82" filter="url(#glow)">
+    <circle cx="156" cy="44" r="22"/>
+    <path d="M130 78c29-18 70-11 94 17l44 51c8 10 7 24-2 32-10 8-25 7-33-3l-29-34-55 47 78 26c13 4 20 18 16 31-4 13-18 20-31 16l-104-35c-18-6-24-28-11-42l47-53-59 28-44 60c-8 11-23 13-34 5-11-8-13-23-5-34l52-71c4-5 8-9 14-12z"/>
+  </g>
+</svg>
