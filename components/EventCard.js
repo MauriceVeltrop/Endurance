@@ -1,500 +1,904 @@
-'use client';
+"use client";
 
-import React from 'react';
+import Link from "next/link";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getSportLabels } from "../lib/sports";
+import DetailRouteMap from "./DetailRouteMap";
+import {
+  btnRow,
+  card,
+  commentField,
+  commentForm,
+  commentHeader,
+  commentItem,
+  commentList,
+  commentName,
+  commentsWrap,
+  commentTextStyle,
+  commentUserLabel,
+  communityBox,
+  communityMuted,
+  communityText,
+  communityTitle,
+  dangerBtnSmall,
+  gpxActions,
+  gpxLink,
+  inlineProfileLink,
+  likeBtn,
+  likeCount,
+  likeRow,
+  likeUsers,
+  mapBtn,
+  miniDeleteBtn,
+  primaryBtnSmall,
+  profileLink,
+  secondaryBtnSmall,
+} from "../lib/enduranceStyles";
 
-const LIME = '#e6ff00';
+function initials(nameOrEmail = "?") {
+  const clean = String(nameOrEmail).trim();
 
-function normalizeSport(sport) {
-  const raw = String(sport || '').trim().toLowerCase();
+  if (!clean) return "?";
 
-  if (!raw) return null;
-  if (raw.includes('trail')) return 'Trail Running';
-  if (raw.includes('road') && raw.includes('cycling')) return 'Road Cycling';
-  if (raw.includes('gravel')) return 'Gravel Cycling';
-  if (raw.includes('mountain') || raw.includes('mtb')) return 'Mountain Biking';
-  if (raw.includes('cycling') || raw === 'bike' || raw === 'biking') return 'Road Cycling';
-  if (raw.includes('running') || raw === 'run') return 'Running';
-  if (raw.includes('walking') || raw === 'walk') return 'Walking';
-  if (raw.includes('swimming') || raw === 'swim') return 'Swimming';
-  if (raw.includes('padel')) return 'Padel';
-  if (raw.includes('kayak')) return 'Kayak';
+  const parts = clean
+    .replace(/@.*/, "")
+    .split(/\s+/)
+    .filter(Boolean);
 
-  return sport
-    .toString()
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-function cleanSports(sports = []) {
-  const list = Array.isArray(sports) ? sports : [sports];
+function AutoFitTitle({ children }) {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(32);
 
-  return [...new Set(list.map(normalizeSport).filter(Boolean))];
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+
+    if (!wrap || !text) return;
+
+    const maxWidth = Math.max(0, wrap.clientWidth - 18);
+    if (!maxWidth) return;
+
+    let size = 32;
+    const minSize = 13;
+
+    text.style.fontSize = `${size}px`;
+    text.style.letterSpacing = "-0.045em";
+
+    while (size > minSize && text.scrollWidth > maxWidth) {
+      size -= 0.5;
+      text.style.fontSize = `${size}px`;
+    }
+
+    setFontSize(size);
+  };
+
+  useLayoutEffect(() => {
+    fit();
+  }, [children]);
+
+  useEffect(() => {
+    fit();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => fit())
+        : null;
+
+    if (wrapRef.current && resizeObserver) {
+      resizeObserver.observe(wrapRef.current);
+    }
+
+    window.addEventListener("resize", fit);
+
+    return () => {
+      window.removeEventListener("resize", fit);
+      resizeObserver?.disconnect();
+    };
+  }, [children]);
+
+  return (
+    <div
+      ref={wrapRef}
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        overflow: "hidden",
+        paddingRight: 10,
+        boxSizing: "border-box",
+      }}
+    >
+      <h2
+        ref={textRef}
+        style={{
+          margin: "0 0 12px",
+          color: "white",
+          fontSize,
+          lineHeight: 1.05,
+          letterSpacing: "-0.045em",
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          overflow: "visible",
+          display: "inline-block",
+          fontWeight: 950,
+          maxWidth: "none",
+          transformOrigin: "left center",
+        }}
+      >
+        {children}
+      </h2>
+    </div>
+  );
 }
 
-function getSportBackground(sports = []) {
-  const clean = cleanSports(sports).join(' ').toLowerCase();
 
-  if (clean.includes('trail')) return '/images/trailrunner-bg.svg';
-  if (clean.includes('running')) return '/images/runner-bg.svg';
-  if (clean.includes('gravel') || clean.includes('mountain')) return '/images/gravel-mtb-bg.svg';
-  if (clean.includes('cycling')) return '/images/roadcycling-bg.svg';
+function AutoFitLocation({ children }) {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(17);
+
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+
+    if (!wrap || !text) return;
+
+    let size = 17;
+    const minSize = 11;
+
+    text.style.fontSize = `${size}px`;
+
+    const maxHeight = 42;
+
+    while (size > minSize && text.scrollHeight > maxHeight) {
+      size -= 0.5;
+      text.style.fontSize = `${size}px`;
+    }
+
+    setFontSize(size);
+  };
+
+  useLayoutEffect(() => {
+    fit();
+  }, [children]);
+
+  useEffect(() => {
+    fit();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => fit())
+        : null;
+
+    if (wrapRef.current && resizeObserver) {
+      resizeObserver.observe(wrapRef.current);
+    }
+
+    window.addEventListener("resize", fit);
+
+    return () => {
+      window.removeEventListener("resize", fit);
+      resizeObserver?.disconnect();
+    };
+  }, [children]);
+
+  return (
+    <span
+      ref={wrapRef}
+      style={{
+        minWidth: 0,
+        flex: "1 1 auto",
+        maxWidth: "100%",
+        overflow: "hidden",
+        textAlign: "left",
+        lineHeight: 1.15,
+      }}
+    >
+      <span
+        ref={textRef}
+        style={{
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          whiteSpace: "normal",
+          wordBreak: "normal",
+          overflowWrap: "anywhere",
+          fontSize,
+          fontWeight: 650,
+          lineHeight: 1.15,
+        }}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+
+
+function normalizeSportId(sport) {
+  return String(sport || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, "-");
+}
+
+function getEventSportBackground(event) {
+  const sports = Array.isArray(event.sports) ? event.sports.map(normalizeSportId) : [];
+
+  if (sports.includes("trail-running")) {
+    return {
+      image: "/images/trailrunner-bg.svg",
+      position: "right -72px center",
+      accent: "rgba(228,239,22,0.20)",
+    };
+  }
+
+  if (sports.includes("mountain-biking") || sports.includes("mtb") || sports.includes("gravel-cycling") || sports.includes("gravel-bike")) {
+    return {
+      image: "/images/gravel-mtb-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
+    };
+  }
+
+  if (sports.includes("road-cycling") || sports.includes("cycling")) {
+    return {
+      image: "/images/roadcycling-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
+    };
+  }
+
+  if (sports.includes("running")) {
+    return {
+      image: "/images/runner-bg.svg",
+      position: "right -68px center",
+      accent: "rgba(228,239,22,0.20)",
+    };
+  }
 
   return null;
 }
 
-function formatDate(date) {
-  if (!date) return '';
-  try {
-    return new Date(date).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return date;
+function Avatar({ src, name, size = 42, ring = false }) {
+  return (
+    <div
+      title={name}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        overflow: "hidden",
+        flex: "0 0 auto",
+        display: "grid",
+        placeItems: "center",
+        background:
+          "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.15))",
+        color: "#050505",
+        fontWeight: 950,
+        fontSize: Math.max(12, size * 0.32),
+        border: ring
+          ? "2px solid rgba(228,239,22,0.95)"
+          : "1px solid rgba(255,255,255,0.25)",
+        boxShadow: ring ? "0 0 18px rgba(228,239,22,0.22)" : "none",
+      }}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={name || "avatar"}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      ) : (
+        initials(name)
+      )}
+    </div>
+  );
+}
+
+function StatBadge({ icon, value, accent = false }) {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "9px 11px",
+        borderRadius: 18,
+        background: accent
+          ? "rgba(228,239,22,0.13)"
+          : "rgba(255,255,255,0.075)",
+        border: accent
+          ? "1px solid rgba(228,239,22,0.28)"
+          : "1px solid rgba(255,255,255,0.14)",
+        color: "white",
+        fontWeight: 900,
+        lineHeight: 1,
+        fontSize: 15,
+        whiteSpace: "nowrap",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      <span style={{ color: accent ? "#e4ef16" : "rgba(255,255,255,0.8)" }}>
+        {icon}
+      </span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function AvatarStack({ people = [], max = 5, size = 34 }) {
+  const visible = people.slice(0, max);
+  const remaining = Math.max(0, people.length - visible.length);
+
+  if (!people.length) {
+    return (
+      <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 14 }}>
+        No participants yet
+      </div>
+    );
   }
-}
 
-function formatTime(time) {
-  if (!time) return '';
-  return String(time).slice(0, 5);
-}
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        maxWidth: "100%",
+        overflow: "hidden",
+      }}
+    >
+      {visible.map((person, index) => {
+        const userProfile = person.user_profile || person;
+        const name = userProfile?.name || userProfile?.email || "Unknown";
+        const src = userProfile?.avatar_url || null;
+        const profileId = person.user_id || userProfile?.id;
 
-function formatDistance(event) {
-  const value = event?.route_distance_km ?? event?.distance;
-  if (value === undefined || value === null || value === '') return null;
+        return (
+          <Link
+            key={person.id || profileId || index}
+            href={`/profile/${profileId}`}
+            style={{
+              marginLeft: index === 0 ? 0 : -10,
+              textDecoration: "none",
+              position: "relative",
+              zIndex: visible.length - index,
+              flex: "0 0 auto",
+            }}
+          >
+            <Avatar src={src} name={name} size={size} ring={index === 0} />
+          </Link>
+        );
+      })}
 
-  const n = Number(value);
-  if (Number.isNaN(n)) return String(value);
-
-  return `${n.toFixed(n % 1 === 0 ? 0 : 2)} km`;
-}
-
-function openMaps(location) {
-  if (!location) return;
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+      {remaining > 0 && (
+        <div
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            marginLeft: -10,
+            background: "#242424",
+            border: "1px solid rgba(255,255,255,0.35)",
+            display: "grid",
+            placeItems: "center",
+            color: "white",
+            fontSize: 13,
+            fontWeight: 950,
+            flex: "0 0 auto",
+          }}
+        >
+          +{remaining}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function EventCard({
   event,
-  currentUser,
-  onLike,
-  onJoin,
-  onOpen,
-  onComment,
-  comments = [],
-  likesCount = 0,
-  participantsCount = 0,
+  user,
+  profile,
+  isModerator,
+  commentText,
+  setCommentText,
+  formatDate,
+  formatTime,
+  openMaps,
+  toggleLike,
+  toggleParticipation,
+  postComment,
+  deleteComment,
+  downloadIcs,
+  openEdit,
+  deleteEvent,
+  removeGpxFromEvent,
 }) {
-  const sports = cleanSports(event?.sports || []);
-  const sportBackground = getSportBackground(event?.sports || []);
-  const distance = formatDistance(event);
-  const elevation = event?.elevation_gain_m;
-  const organizerName =
-    event?.creator?.name ||
-    event?.profile?.name ||
-    event?.organizer_name ||
-    event?.creator_name ||
-    'Endurance';
-  const organizerAvatar =
-    event?.creator?.avatar_url ||
-    event?.profile?.avatar_url ||
-    event?.organizer_avatar_url ||
-    null;
+  const sportLabels = getSportLabels(event.sports || []);
 
-  const [commentText, setCommentText] = React.useState('');
+  const hasRoutePoints =
+    Array.isArray(event.route_points) && event.route_points.length > 1;
 
-  const submitComment = () => {
-    const text = commentText.trim();
-    if (!text || !onComment) return;
-    onComment(event, text);
-    setCommentText('');
-  };
+  const hasRouteMap = !!event.gpx_file_url || hasRoutePoints;
+
+  const creatorName =
+    event.creator_profile?.name || event.creator_profile?.email || "Unknown";
+
+  const creatorAvatar = event.creator_profile?.avatar_url || null;
+  const sportBackground = getEventSportBackground(event);
 
   return (
-    <article
-      onClick={onOpen ? () => onOpen(event) : undefined}
+    <div
+      key={event.id}
       style={{
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 30,
-        padding: 22,
-        minHeight: 430,
-        background:
-          'radial-gradient(circle at 82% 30%, rgba(230,255,0,0.22), transparent 38%), linear-gradient(180deg, rgba(22,22,22,0.98), rgba(4,4,4,0.98))',
-        border: '1px solid rgba(255,255,255,0.10)',
-        boxShadow: '0 24px 70px rgba(0,0,0,0.70)',
-        color: '#fff',
-        cursor: onOpen ? 'pointer' : 'default',
-        isolation: 'isolate',
+        ...card,
+        padding: 0,
+        overflow: "hidden",
+        position: "relative",
+        borderRadius: 28,
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 18px 55px rgba(0,0,0,0.38)",
+        scrollSnapAlign: "center",
+        boxSizing: "border-box",
       }}
     >
-      {sportBackground && (
-        <img
-          src={sportBackground}
-          alt=""
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            right: '-34px',
-            top: 30,
-            width: '118%',
-            maxWidth: 560,
-            height: 'auto',
-            opacity: 0.48,
-            zIndex: 0,
-            pointerEvents: 'none',
-            filter: 'drop-shadow(0 0 42px rgba(230,255,0,0.50))',
-          }}
-        />
-      )}
-
       <div
         style={{
-          position: 'absolute',
+          position: "absolute",
           inset: 0,
-          zIndex: 1,
+          pointerEvents: "none",
           background:
-            'linear-gradient(90deg, rgba(0,0,0,0.90) 0%, rgba(0,0,0,0.62) 48%, rgba(0,0,0,0.38) 100%)',
-          pointerEvents: 'none',
+            "radial-gradient(circle at 10% 0%, rgba(228,239,22,0.13), transparent 33%), radial-gradient(circle at 100% 10%, rgba(255,255,255,0.07), transparent 28%)",
         }}
       />
 
-      <div style={{ position: 'relative', zIndex: 2 }}>
-        <div
+      <div style={{ position: "relative", padding: 18, boxSizing: "border-box" }}>
+        <section
           style={{
-            color: LIME,
-            fontWeight: 900,
-            fontSize: 16,
-            lineHeight: 1.25,
-            marginBottom: 14,
-            textShadow: '0 0 20px rgba(230,255,0,0.35)',
-            wordBreak: 'normal',
-            overflowWrap: 'break-word',
+            display: "grid",
+            gap: 16,
+            background:
+              sportBackground
+                ? "linear-gradient(135deg, rgba(10,10,10,0.82), rgba(10,10,10,0.44))"
+                : "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 24,
+            padding: "16px 18px 16px 16px",
+            overflow: "hidden",
+            minWidth: 0,
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            position: "relative",
+            isolation: "isolate",
           }}
         >
-          {sports.length ? sports.join(' • ') : 'Endurance'}
-        </div>
+          {sportBackground && (
+            <>
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  opacity: 0.95,
+                  backgroundImage: `url('${sportBackground.image}')`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "cover",
+                  backgroundPosition: sportBackground.position,
+                  filter: "saturate(1.08) contrast(1.08)",
+                  transform: "scale(1.02)",
+                }}
+              />
 
-        <h2
-          style={{
-            margin: '0 0 18px 0',
-            fontSize: 'clamp(30px, 8vw, 46px)',
-            lineHeight: 0.98,
-            fontWeight: 950,
-            letterSpacing: '-1.6px',
-            maxWidth: 470,
-            textWrap: 'balance',
-          }}
-        >
-          {event?.title || 'Untitled Event'}
-        </h2>
-
-        {event?.location && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openMaps(event.location);
-            }}
-            style={{
-              width: '100%',
-              maxWidth: 470,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              textAlign: 'left',
-              color: '#fff',
-              padding: '14px 16px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.16)',
-              background: 'rgba(255,255,255,0.10)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-              fontSize: 18,
-              fontWeight: 800,
-              lineHeight: 1.15,
-              marginBottom: 18,
-              cursor: 'pointer',
-              backdropFilter: 'blur(10px)',
-              whiteSpace: 'normal',
-              overflowWrap: 'break-word',
-            }}
-          >
-            <span aria-hidden="true">📍</span>
-            <span style={{ flex: 1 }}>{event.location}</span>
-            <span aria-hidden="true">↗</span>
-          </button>
-        )}
-
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 12,
-            alignItems: 'center',
-            marginBottom: 24,
-          }}
-        >
-          {distance && (
-            <div
-              style={{
-                padding: '12px 18px',
-                borderRadius: 999,
-                background: 'rgba(255,255,255,0.10)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                fontSize: 22,
-                fontWeight: 950,
-                lineHeight: 1.05,
-              }}
-            >
-              {distance}
-            </div>
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  background:
+                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 38%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.12) 100%), radial-gradient(circle at 84% 30%, ${sportBackground.accent}, transparent 36%)`,
+                }}
+              />
+            </>
           )}
 
-          {!!elevation && Number(elevation) > 0 && (
-            <div
-              style={{
-                padding: '12px 18px',
-                borderRadius: 999,
-                background: 'rgba(230,255,0,0.12)',
-                border: '1px solid rgba(230,255,0,0.22)',
-                color: LIME,
-                fontSize: 18,
-                fontWeight: 900,
-                lineHeight: 1.05,
-              }}
-            >
-              ↗ {elevation} m
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-            padding: 14,
-            maxWidth: 470,
-            background: 'linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.12))',
-            borderRadius: 22,
-            marginBottom: 22,
-          }}
-        >
           <div
             style={{
-              width: 62,
-              height: 62,
-              borderRadius: '50%',
-              overflow: 'hidden',
-              background: LIME,
-              border: `3px solid ${LIME}`,
-              flex: '0 0 auto',
+              position: "relative",
+              zIndex: 1,
+              display: "grid",
+              gap: 16,
+              minWidth: 0,
             }}
           >
-            {organizerAvatar ? (
-              <img
-                src={organizerAvatar}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
+          <div style={{ textAlign: "left", minWidth: 0, maxWidth: "100%" }}>
+            <div
+              style={{
+                color: "#e4ef16",
+                fontSize: 14,
+                fontWeight: 900,
+                marginBottom: 8,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+              }}
+            >
+              {sportLabels.join(" • ")}
+            </div>
+
+            <AutoFitTitle>{event.title}</AutoFitTitle>
+
+            <button
+              type="button"
+              onClick={() => openMaps(event.location)}
+              style={{
+                ...mapBtn,
+                display: "inline-flex",
+                alignItems: "flex-start",
+                gap: 8,
+                width: "calc(100% - 10px)",
+                maxWidth: "calc(100% - 10px)",
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.13)",
+                borderRadius: 999,
+                padding: "8px 11px",
+                color: "rgba(255,255,255,0.92)",
+                cursor: "pointer",
+                textDecoration: "none",
+                marginBottom: 12,
+                minHeight: 48,
+                boxSizing: "border-box",
+                overflow: "hidden",
+              }}
+            >
+              <span style={{ flex: "0 0 auto", lineHeight: "22px" }}>📍</span>
+              <AutoFitLocation>
+                {event.location || "Location not set"}
+              </AutoFitLocation>
+              <span style={{ flex: "0 0 auto", lineHeight: "22px" }}>↗</span>
+            </button>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                justifyContent: "flex-start",
+                maxWidth: "100%",
+              }}
+            >
+              {event.distance ? (
+                <StatBadge
+                  icon="↝"
+                  value={`${Number(event.distance).toFixed(2)} km`}
+                />
+              ) : null}
+
+              {event.elevation_gain_m !== null &&
+                event.elevation_gain_m !== undefined &&
+                Number(event.elevation_gain_m) > 0 && (
+                  <StatBadge
+                    icon="▲"
+                    value={`${Math.round(Number(event.elevation_gain_m))} m+`}
+                    accent
+                  />
+                )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr)",
+              gap: 12,
+              alignItems: "center",
+              paddingTop: 14,
+              borderTop: "1px solid rgba(255,255,255,0.09)",
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                minWidth: 0,
+                overflow: "hidden",
+              }}
+            >
+              <Avatar src={creatorAvatar} name={creatorName} size={46} ring />
+
+              <div style={{ minWidth: 0, overflow: "hidden" }}>
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.52)",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
+                >
+                  Organized by
+                </div>
+
+                <Link
+                  href={`/profile/${event.creator_id}`}
+                  style={{
+                    ...profileLink,
+                    color: "#e4ef16",
+                    fontWeight: 950,
+                    fontSize: 17,
+                    textDecoration: "none",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    display: "block",
+                    maxWidth: "100%",
+                  }}
+                >
+                  {creatorName}
+                </Link>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                color: "rgba(255,255,255,0.9)",
+                fontWeight: 850,
+                fontSize: 15,
+                lineHeight: 1.4,
+              }}
+            >
+              <span>📅 {formatDate(event.date)}</span>
+              <span>⏰ {formatTime(event.time)}</span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gap: 12,
+              alignItems: "center",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ minWidth: 0, overflow: "hidden" }}>
               <div
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: '#000',
-                  fontWeight: 950,
-                  fontSize: 24,
+                  color: "rgba(255,255,255,0.52)",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  marginBottom: 7,
                 }}
               >
-                {organizerName.slice(0, 1)}
+                Participants
+              </div>
+
+              <AvatarStack people={event.participants || []} />
+            </div>
+
+            <div
+              style={{
+                color: "rgba(255,255,255,0.82)",
+                fontWeight: 900,
+                fontSize: 15,
+                whiteSpace: "nowrap",
+              }}
+            >
+              👥 {event.participants.length}
+            </div>
+          </div>
+          </div>
+        </section>
+
+        {hasRouteMap && (
+          <section
+            style={{
+              marginTop: 16,
+              overflow: "hidden",
+              borderRadius: 22,
+            }}
+          >
+            <DetailRouteMap
+              gpxUrl={event.gpx_file_url}
+              points={event.route_points}
+            />
+          </section>
+        )}
+
+        {event.gpx_file_url && (
+          <div style={{ ...gpxActions, marginTop: 12 }}>
+            <a
+              href={event.gpx_file_url}
+              target="_blank"
+              rel="noreferrer"
+              style={gpxLink}
+            >
+              Download GPX
+            </a>
+
+            {event.canRemoveGpx && (
+              <button
+                type="button"
+                onClick={() => removeGpxFromEvent(event)}
+                style={dangerBtnSmall}
+              >
+                Remove GPX
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={{ ...communityBox, marginTop: 16, overflow: "hidden" }}>
+          <div style={communityTitle}>Description</div>
+
+          <div style={communityText}>
+            {event.description?.trim()
+              ? event.description
+              : "No description added yet."}
+          </div>
+
+          <div style={likeRow}>
+            <button type="button" onClick={() => toggleLike(event)} style={likeBtn}>
+              {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
+            </button>
+
+            <div style={likeCount}>
+              {event.likes.length} like{event.likes.length === 1 ? "" : "s"}
+            </div>
+
+            {!!event.likes.length && (
+              <div
+                style={{
+                  ...likeUsers,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  minWidth: 0,
+                }}
+              >
+                <AvatarStack people={event.likes || []} max={4} size={28} />
+
+                <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                  {event.likes.map((like, index) => (
+                    <span key={like.id}>
+                      <Link
+                        href={`/profile/${like.user_id}`}
+                        style={inlineProfileLink}
+                      >
+                        {like.user_profile?.name || "Unknown"}
+                      </Link>
+                      {index < event.likes.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          <div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 800 }}>
-              Organized by
-            </div>
-            <div style={{ color: LIME, fontSize: 22, fontWeight: 950, lineHeight: 1.05 }}>
-              {organizerName}
-            </div>
-          </div>
-        </div>
+          <div style={commentsWrap}>
+            <div style={communityTitle}>Comments</div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 18,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            fontSize: 22,
-            fontWeight: 900,
-            marginBottom: 22,
-          }}
-        >
-          {event?.date && <span>📅 {formatDate(event.date)}</span>}
-          {event?.time && <span>⏰ {formatTime(event.time)}</span>}
-        </div>
+            {event.comments.length ? (
+              <div style={commentList}>
+                {event.comments.map((comment) => (
+                  <div key={comment.id} style={commentItem}>
+                    <div style={commentHeader}>
+                      <div style={commentName}>
+                        <Link
+                          href={`/profile/${comment.user_id}`}
+                          style={inlineProfileLink}
+                        >
+                          {comment.user_profile?.name || "Unknown"}
+                        </Link>
+                      </div>
 
-        <section
-          style={{
-            maxWidth: 470,
-            borderRadius: 24,
-            background: 'rgba(0,0,0,0.48)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            padding: 18,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontSize: 21, fontWeight: 950, marginBottom: 8 }}>Participants</div>
-          <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 18 }}>
-            {participantsCount > 0 ? `${participantsCount} participant${participantsCount === 1 ? '' : 's'}` : 'No participants yet'}
-          </div>
-        </section>
+                      {(comment.user_id === user?.id || isModerator) && (
+                        <button
+                          type="button"
+                          onClick={() => deleteComment(comment.id)}
+                          style={miniDeleteBtn}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
 
-        <section
-          style={{
-            maxWidth: 470,
-            borderRadius: 24,
-            background: 'rgba(0,0,0,0.48)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            padding: 18,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontSize: 21, fontWeight: 950, marginBottom: 8 }}>Description</div>
-          <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, margin: 0, lineHeight: 1.35 }}>
-            {event?.description || 'No description added yet.'}
-          </p>
-        </section>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            maxWidth: 470,
-          }}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onLike?.(event);
-            }}
-            style={{
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.11)',
-              color: '#fff',
-              borderRadius: 18,
-              padding: '12px 18px',
-              fontSize: 18,
-              fontWeight: 900,
-              cursor: 'pointer',
-            }}
-          >
-            🤍 Like
-          </button>
-
-          <span style={{ color: 'rgba(255,255,255,0.70)', fontSize: 18, fontWeight: 800 }}>
-            {likesCount} likes
-          </span>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onJoin?.(event);
-            }}
-            style={{
-              marginLeft: 'auto',
-              border: 0,
-              background: LIME,
-              color: '#000',
-              borderRadius: 18,
-              padding: '12px 18px',
-              fontSize: 18,
-              fontWeight: 950,
-              cursor: 'pointer',
-            }}
-          >
-            Join Event
-          </button>
-        </div>
-
-        {onComment && (
-          <section
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: 470,
-              marginTop: 18,
-              borderRadius: 24,
-              background: 'rgba(0,0,0,0.48)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              padding: 18,
-            }}
-          >
-            <div style={{ fontSize: 21, fontWeight: 950, marginBottom: 10 }}>Comments</div>
-
-            {comments?.length ? (
-              <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-                {comments.slice(0, 3).map((comment) => (
-                  <div key={comment.id} style={{ color: 'rgba(255,255,255,0.76)', lineHeight: 1.35 }}>
-                    {comment.text}
+                    <div style={commentTextStyle}>{comment.text}</div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{ color: 'rgba(255,255,255,0.55)', marginBottom: 12 }}>
-                No comments yet.
-              </div>
+              <div style={communityMuted}>No comments yet.</div>
             )}
 
-            <textarea
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              placeholder={`Commenting as ${currentUser?.name || 'Endurance'}...`}
-              rows={3}
-              style={{
-                width: '100%',
-                resize: 'vertical',
-                borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.08)',
-                color: '#fff',
-                padding: 14,
-                fontSize: 16,
-                outline: 'none',
-                marginBottom: 10,
-              }}
-            />
+            <div style={commentForm}>
+              <div style={commentUserLabel}>
+                Commenting as <strong>{profile?.name || user?.email}</strong>
+              </div>
 
+              <textarea
+                value={commentText[event.id] || ""}
+                onChange={(e) =>
+                  setCommentText((prev) => ({
+                    ...prev,
+                    [event.id]: e.target.value,
+                  }))
+                }
+                placeholder="Write a comment..."
+                style={commentField}
+              />
+
+              <button
+                type="button"
+                onClick={() => postComment(event.id)}
+                style={primaryBtnSmall}
+              >
+                Post Comment
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ ...btnRow, marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={() => toggleParticipation(event)}
+            style={primaryBtnSmall}
+          >
+            {event.joinedByMe ? "Leave Event" : "Join Event"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => downloadIcs(event)}
+            style={secondaryBtnSmall}
+          >
+            Add to Calendar
+          </button>
+
+          {(event.isOwner || isModerator) && (
             <button
               type="button"
-              onClick={submitComment}
-              style={{
-                width: '100%',
-                border: 0,
-                background: LIME,
-                color: '#000',
-                borderRadius: 16,
-                padding: 13,
-                fontSize: 17,
-                fontWeight: 950,
-                cursor: 'pointer',
-              }}
+              onClick={() => openEdit(event)}
+              style={secondaryBtnSmall}
             >
-              Post Comment
+              Edit
             </button>
-          </section>
-        )}
+          )}
+
+          {(event.isOwner || isModerator) && (
+            <button
+              type="button"
+              onClick={() => deleteEvent(event.id)}
+              style={dangerBtnSmall}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
-    </article>
+    </div>
   );
 }
