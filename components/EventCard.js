@@ -222,12 +222,50 @@ function AutoFitLocation({ children }) {
 
 
 
-function eventHasRunningBackground(event) {
-  const sports = Array.isArray(event.sports) ? event.sports : [];
+function normalizeSportId(sport) {
+  return String(sport || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, "-");
+}
 
-  return sports.some((sport) =>
-    ["running", "trail-running"].includes(String(sport).toLowerCase())
-  );
+function getEventSportBackground(event) {
+  const sports = Array.isArray(event.sports) ? event.sports.map(normalizeSportId) : [];
+
+  if (sports.includes("trail-running")) {
+    return {
+      image: "/images/trailrunner-bg.svg",
+      position: "right -72px center",
+      accent: "rgba(228,239,22,0.20)",
+    };
+  }
+
+  if (sports.includes("mountain-biking") || sports.includes("mtb") || sports.includes("gravel-cycling") || sports.includes("gravel-bike")) {
+    return {
+      image: "/images/gravel-mtb-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
+    };
+  }
+
+  if (sports.includes("road-cycling") || sports.includes("cycling")) {
+    return {
+      image: "/images/roadcycling-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
+    };
+  }
+
+  if (sports.includes("running")) {
+    return {
+      image: "/images/runner-bg.svg",
+      position: "right -68px center",
+      accent: "rgba(228,239,22,0.20)",
+    };
+  }
+
+  return null;
 }
 
 function Avatar({ src, name, size = 42, ring = false }) {
@@ -401,7 +439,7 @@ export default function EventCard({
     event.creator_profile?.name || event.creator_profile?.email || "Unknown";
 
   const creatorAvatar = event.creator_profile?.avatar_url || null;
-  const showRunnerBackground = eventHasRunningBackground(event);
+  const sportBackground = getEventSportBackground(event);
 
   return (
     <div
@@ -434,8 +472,8 @@ export default function EventCard({
             display: "grid",
             gap: 16,
             background:
-              showRunnerBackground
-                ? "linear-gradient(135deg, rgba(10,10,10,0.78), rgba(10,10,10,0.36))"
+              sportBackground
+                ? "linear-gradient(135deg, rgba(10,10,10,0.82), rgba(10,10,10,0.44))"
                 : "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
@@ -448,18 +486,8 @@ export default function EventCard({
             isolation: "isolate",
           }}
         >
-          {showRunnerBackground && (
+          {sportBackground && (
             <>
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  pointerEvents: "none",
-                  zIndex: 0,
-                  background:
-                    "linear-gradient(90deg, rgba(10,10,10,0.96) 0%, rgba(10,10,10,0.78) 42%, rgba(10,10,10,0.35) 100%)",
-                }}
-              />
               <div
                 aria-hidden="true"
                 style={{
@@ -467,12 +495,12 @@ export default function EventCard({
                   inset: 0,
                   pointerEvents: "none",
                   zIndex: 0,
-                  opacity: 1,
-                  backgroundImage: "url('/images/event-bg-running.webp')",
+                  opacity: 0.95,
+                  backgroundImage: `url('${sportBackground.image}')`,
                   backgroundRepeat: "no-repeat",
                   backgroundSize: "cover",
-                  backgroundPosition: "72% center",
-                  filter: "saturate(1.05) contrast(1.08)",
+                  backgroundPosition: sportBackground.position,
+                  filter: "saturate(1.08) contrast(1.08)",
                   transform: "scale(1.02)",
                 }}
               />
@@ -485,7 +513,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.92) 40%, rgba(5,5,5,0.56) 68%, rgba(5,5,5,0.20) 100%), radial-gradient(circle at 82% 30%, rgba(228,239,22,0.18), transparent 34%)",
+                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 38%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.12) 100%), radial-gradient(circle at 84% 30%, ${sportBackground.accent}, transparent 36%)`,
                 }}
               />
             </>
