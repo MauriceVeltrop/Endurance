@@ -435,7 +435,7 @@ export default function EventCard({
             gap: 16,
             background:
               showRunnerBackground
-                ? "linear-gradient(135deg, rgba(228,239,22,0.12), rgba(255,255,255,0.025) 42%, rgba(5,5,5,0.18))"
+                ? "linear-gradient(135deg, rgba(10,10,10,0.78), rgba(10,10,10,0.36))"
                 : "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
@@ -464,18 +464,28 @@ export default function EventCard({
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  right: -88,
-                  top: -62,
-                  width: 430,
-                  height: 430,
+                  inset: 0,
                   pointerEvents: "none",
                   zIndex: 0,
-                  opacity: 0.72,
-                  backgroundImage: "url('/runner-bg.svg')",
+                  opacity: 1,
+                  backgroundImage: "url('/images/event-bg-running.webp')",
                   backgroundRepeat: "no-repeat",
-                  backgroundSize: "contain",
-                  backgroundPosition: "right top",
-                  filter: "saturate(1.15) contrast(1.08)",
+                  backgroundSize: "cover",
+                  backgroundPosition: "72% center",
+                  filter: "saturate(1.05) contrast(1.08)",
+                  transform: "scale(1.02)",
+                }}
+              />
+
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  background:
+                    "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.92) 40%, rgba(5,5,5,0.56) 68%, rgba(5,5,5,0.20) 100%), radial-gradient(circle at 82% 30%, rgba(228,239,22,0.18), transparent 34%)",
                 }}
               />
             </>
