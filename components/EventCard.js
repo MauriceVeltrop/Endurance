@@ -496,7 +496,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    `radial-gradient(circle at 84% 28%, ${sportBackground.accent}, transparent 42%)`,
+                    `radial-gradient(circle at 78% 32%, ${sportBackground.accent}, transparent 46%)`,
                 }}
               />
 
@@ -506,17 +506,18 @@ export default function EventCard({
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  right: "-78px",
-                  top: "18px",
-                  width: "118%",
-                  maxWidth: 520,
+                  right: "-30px",
+                  top: "10px",
+                  width: "88%",
+                  maxWidth: 420,
+                  minWidth: 260,
                   height: "auto",
-                  opacity: 0.62,
-                  zIndex: 0,
+                  opacity: 0.95,
+                  zIndex: 1,
                   pointerEvents: "none",
                   objectFit: "contain",
                   filter:
-                    "saturate(1.15) contrast(1.15) drop-shadow(0 0 32px rgba(228,239,22,0.42))",
+                    "saturate(1.25) contrast(1.22) drop-shadow(0 0 34px rgba(228,239,22,0.60))",
                 }}
               />
 
@@ -526,9 +527,9 @@ export default function EventCard({
                   position: "absolute",
                   inset: 0,
                   pointerEvents: "none",
-                  zIndex: 0,
+                  zIndex: 2,
                   background:
-                    "linear-gradient(90deg, rgba(5,5,5,0.97) 0%, rgba(5,5,5,0.86) 36%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.16) 100%)",
+                    "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.88) 40%, rgba(5,5,5,0.38) 69%, rgba(5,5,5,0.02) 100%)",
                 }}
               />
             </>
@@ -537,7 +538,7 @@ export default function EventCard({
           <div
             style={{
               position: "relative",
-              zIndex: 1,
+              zIndex: 3,
               display: "grid",
               gap: 16,
               minWidth: 0,
