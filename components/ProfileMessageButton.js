@@ -8,9 +8,7 @@ export default function ProfileMessageButton({
   currentUserRole,
 }) {
   const router = useRouter();
-
   const canMessage = isTeamMember || currentUserRole === "moderator";
-
   if (!canMessage || !profileId) return null;
 
   return (
