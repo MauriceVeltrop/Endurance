@@ -208,7 +208,7 @@ function AutoFitLocation({ children }) {
           overflow: "hidden",
           whiteSpace: "normal",
           wordBreak: "normal",
-          overflowWrap: "anywhere",
+          overflowWrap: "break-word",
           fontSize,
           fontWeight: 650,
           lineHeight: 1.15,
@@ -236,32 +236,49 @@ function getEventSportBackground(event) {
   if (sports.includes("trail-running")) {
     return {
       image: "/images/trailrunner-bg.svg",
-      position: "right -72px center",
-      accent: "rgba(228,239,22,0.20)",
+      right: "-42px",
+      top: "6px",
+      width: "58%",
+      opacity: 0.82,
+      accent: "rgba(228,239,22,0.24)",
     };
   }
 
-  if (sports.includes("mountain-biking") || sports.includes("mtb") || sports.includes("gravel-cycling") || sports.includes("gravel-bike")) {
+  if (
+    sports.includes("mountain-biking") ||
+    sports.includes("mtb") ||
+    sports.includes("gravel-cycling") ||
+    sports.includes("gravel-bike")
+  ) {
     return {
       image: "/images/gravel-mtb-bg.svg",
-      position: "right -78px center",
-      accent: "rgba(228,239,22,0.18)",
+      right: "-52px",
+      top: "10px",
+      width: "62%",
+      opacity: 0.78,
+      accent: "rgba(228,239,22,0.22)",
     };
   }
 
   if (sports.includes("road-cycling") || sports.includes("cycling")) {
     return {
       image: "/images/roadcycling-bg.svg",
-      position: "right -78px center",
-      accent: "rgba(228,239,22,0.18)",
+      right: "-52px",
+      top: "10px",
+      width: "62%",
+      opacity: 0.78,
+      accent: "rgba(228,239,22,0.22)",
     };
   }
 
   if (sports.includes("running")) {
     return {
       image: "/images/runner-bg.svg",
-      position: "right -68px center",
-      accent: "rgba(228,239,22,0.20)",
+      right: "-38px",
+      top: "2px",
+      width: "56%",
+      opacity: 0.84,
+      accent: "rgba(228,239,22,0.24)",
     };
   }
 
@@ -488,6 +505,26 @@ export default function EventCard({
         >
           {sportBackground && (
             <>
+              <img
+                src={sportBackground.image}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: sportBackground.right || "-58px",
+                  top: sportBackground.top || "18px",
+                  width: sportBackground.width || "62%",
+                  minWidth: 190,
+                  maxWidth: 360,
+                  height: "auto",
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  opacity: sportBackground.opacity || 0.72,
+                  filter:
+                    "drop-shadow(0 0 34px rgba(228,239,22,0.45)) saturate(1.2) contrast(1.12)",
+                }}
+              />
+
               <div
                 aria-hidden="true"
                 style={{
@@ -496,40 +533,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    `radial-gradient(circle at 78% 32%, ${sportBackground.accent}, transparent 46%)`,
-                }}
-              />
-
-              <img
-                src={sportBackground.image}
-                alt=""
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: "-30px",
-                  top: "10px",
-                  width: "88%",
-                  maxWidth: 420,
-                  minWidth: 260,
-                  height: "auto",
-                  opacity: 0.95,
-                  zIndex: 1,
-                  pointerEvents: "none",
-                  objectFit: "contain",
-                  filter:
-                    "saturate(1.25) contrast(1.22) drop-shadow(0 0 34px rgba(228,239,22,0.60))",
-                }}
-              />
-
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  pointerEvents: "none",
-                  zIndex: 2,
-                  background:
-                    "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.88) 40%, rgba(5,5,5,0.38) 69%, rgba(5,5,5,0.02) 100%)",
+                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.88) 42%, rgba(5,5,5,0.54) 72%, rgba(5,5,5,0.24) 100%), radial-gradient(circle at 82% 30%, ${sportBackground.accent}, transparent 38%)`,
                 }}
               />
             </>
@@ -538,7 +542,7 @@ export default function EventCard({
           <div
             style={{
               position: "relative",
-              zIndex: 3,
+              zIndex: 1,
               display: "grid",
               gap: 16,
               minWidth: 0,
@@ -553,8 +557,7 @@ export default function EventCard({
                 marginBottom: 8,
                 display: "flex",
                 flexWrap: "wrap",
-                gap: "3px 6px",
-                lineHeight: 1.15,
+                gap: "4px 6px",
                 whiteSpace: "normal",
                 wordBreak: "normal",
                 overflowWrap: "normal",
