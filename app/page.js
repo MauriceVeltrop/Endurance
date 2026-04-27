@@ -802,48 +802,85 @@ const payload = {
   };
 
   const downloadIcs = (event) => {
-    const start = `${event.date.replaceAll("-", "")}T${event.time.replace(
-      ":",
-      ""
-    )}00`;
+    const escapeIcsText = (value = "") =>
+      String(value)
+        .replaceAll("\\", "\\\\")
+        .replaceAll("\n", "\\n")
+        .replaceAll(",", "\\,")
+        .replaceAll(";", "\\;");
 
-    const endDate = new Date(`${event.date}T${event.time}:00`);
-    endDate.setHours(endDate.getHours() + 1);
+    const toIcsDateTime = (date, time) => {
+      const safeDate = String(date || "").replaceAll("-", "");
+      const safeTime = String(time || "09:00").slice(0, 5).replace(":", "");
+      return `${safeDate}T${safeTime}00`;
+    };
 
-    const yyyy = endDate.getFullYear();
-    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
-    const dd = String(endDate.getDate()).padStart(2, "0");
-    const hh = String(endDate.getHours()).padStart(2, "0");
-    const mi = String(endDate.getMinutes()).padStart(2, "0");
-    const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
+    const makeEndDateTime = (date, time) => {
+      const startDate = new Date(`${date}T${String(time || "09:00").slice(0, 5)}:00`);
+      startDate.setHours(startDate.getHours() + 1);
 
-    const sportText = getSportLabels(event.sports || []).join(" • ");
+      const yyyy = startDate.getFullYear();
+      const mm = String(startDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(startDate.getDate()).padStart(2, "0");
+      const hh = String(startDate.getHours()).padStart(2, "0");
+      const mi = String(startDate.getMinutes()).padStart(2, "0");
+
+      return `${yyyy}${mm}${dd}T${hh}${mi}00`;
+    };
+
+    if (!event?.date) {
+      alert("This event has no date.");
+      return;
+    }
+
+    const title = escapeIcsText(event.title || "Endurance Event");
+    const location = escapeIcsText(event.location || "");
+    const sportText = escapeIcsText(getSportLabels(event.sports || []).join(" • "));
+    const description = escapeIcsText(
+      `${sportText ? `${sportText} training via Endurance` : "Training via Endurance"}${
+        event.description ? `\\n\\n${event.description}` : ""
+      }`
+    );
+
+    const start = toIcsDateTime(event.date, event.time);
+    const end = makeEndDateTime(event.date, event.time);
+    const uid = `${event.id || Date.now()}@endurance-app`;
+    const fileName = `${String(event.title || "endurance-event")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "endurance-event"}.ics`;
 
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
+      "PRODID:-//Endurance//Event Calendar//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
       "BEGIN:VEVENT",
-      `SUMMARY:${event.title}`,
+      `UID:${uid}`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+      `SUMMARY:${title}`,
       `DTSTART:${start}`,
       `DTEND:${end}`,
-      `LOCATION:${event.location}`,
-      `DESCRIPTION:${sportText} training via Endurance`,
+      `LOCATION:${location}`,
+      `DESCRIPTION:${description}`,
       "END:VEVENT",
       "END:VCALENDAR",
-    ].join("\n");
+    ].join("\r\n");
 
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+    const encodedIcs = encodeURIComponent(ics);
+    const dataUrl = `data:text/calendar;charset=utf-8,${encodedIcs}`;
+
     const a = document.createElement("a");
-
-    a.href = url;
-    a.download = `${event.title.replace(/\s+/g, "-").toLowerCase()}.ics`;
+    a.href = dataUrl;
+    a.download = fileName;
+    a.rel = "noopener";
+    document.body.appendChild(a);
     a.click();
-
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
-  const openMaps = (location) => {
+  const openMaps  const openMaps = (location) => {
     const q = encodeURIComponent(location);
     window.open(
       `https://www.google.com/maps/search/?api=1&query=${q}`,
