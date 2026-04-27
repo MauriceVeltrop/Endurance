@@ -136,6 +136,91 @@ function AutoFitTitle({ children }) {
   );
 }
 
+
+function AutoFitLocation({ children }) {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(17);
+
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+
+    if (!wrap || !text) return;
+
+    let size = 17;
+    const minSize = 11;
+
+    text.style.fontSize = `${size}px`;
+
+    const maxHeight = 42;
+
+    while (size > minSize && text.scrollHeight > maxHeight) {
+      size -= 0.5;
+      text.style.fontSize = `${size}px`;
+    }
+
+    setFontSize(size);
+  };
+
+  useLayoutEffect(() => {
+    fit();
+  }, [children]);
+
+  useEffect(() => {
+    fit();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => fit())
+        : null;
+
+    if (wrapRef.current && resizeObserver) {
+      resizeObserver.observe(wrapRef.current);
+    }
+
+    window.addEventListener("resize", fit);
+
+    return () => {
+      window.removeEventListener("resize", fit);
+      resizeObserver?.disconnect();
+    };
+  }, [children]);
+
+  return (
+    <span
+      ref={wrapRef}
+      style={{
+        minWidth: 0,
+        flex: "1 1 auto",
+        maxWidth: "100%",
+        overflow: "hidden",
+        textAlign: "left",
+        lineHeight: 1.15,
+      }}
+    >
+      <span
+        ref={textRef}
+        style={{
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          whiteSpace: "normal",
+          wordBreak: "normal",
+          overflowWrap: "anywhere",
+          fontSize,
+          fontWeight: 650,
+          lineHeight: 1.15,
+        }}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+
 function Avatar({ src, name, size = 42, ring = false }) {
   return (
     <div
@@ -184,8 +269,8 @@ function StatBadge({ icon, value, accent = false }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 7,
-        padding: "8px 11px",
-        borderRadius: 999,
+        padding: "9px 11px",
+        borderRadius: 18,
         background: accent
           ? "rgba(228,239,22,0.13)"
           : "rgba(255,255,255,0.075)",
@@ -373,8 +458,8 @@ export default function EventCard({
               style={{
                 ...mapBtn,
                 display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
+                alignItems: "flex-start",
+                gap: 8,
                 width: "calc(100% - 10px)",
                 maxWidth: "calc(100% - 10px)",
                 background: "rgba(255,255,255,0.07)",
@@ -385,24 +470,16 @@ export default function EventCard({
                 cursor: "pointer",
                 textDecoration: "none",
                 marginBottom: 12,
+                minHeight: 48,
                 boxSizing: "border-box",
                 overflow: "hidden",
               }}
             >
-              <span style={{ flex: "0 0 auto" }}>📍</span>
-              <span
-                style={{
-                  minWidth: 0,
-                  flex: "1 1 auto",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  textAlign: "left",
-                }}
-              >
+              <span style={{ flex: "0 0 auto", lineHeight: "22px" }}>📍</span>
+              <AutoFitLocation>
                 {event.location || "Location not set"}
-              </span>
-              <span style={{ flex: "0 0 auto" }}>↗</span>
+              </AutoFitLocation>
+              <span style={{ flex: "0 0 auto", lineHeight: "22px" }}>↗</span>
             </button>
 
             <div
