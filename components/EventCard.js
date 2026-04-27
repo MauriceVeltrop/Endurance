@@ -231,11 +231,27 @@ function normalizeSportId(sport) {
 }
 
 function getEventSportBackground(event) {
-  const sports = Array.isArray(event.sports) ? event.sports.map(normalizeSportId) : [];
+  const sports = Array.isArray(event.sports)
+    ? event.sports.map(normalizeSportId)
+    : [];
 
   if (sports.includes("trail-running")) {
     return {
       image: "/images/trailrunner-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.22)",
+    };
+  }
+
+  if (
+    sports.includes("crossfit") ||
+    sports.includes("cross-fit") ||
+    sports.includes("strength-training") ||
+    sports.includes("strength") ||
+    sports.includes("functional-fitness")
+  ) {
+    return {
+      image: "/images/strength-bg.png",
       position: "right center",
       accent: "rgba(228,239,22,0.22)",
     };
@@ -259,6 +275,14 @@ function getEventSportBackground(event) {
       image: "/images/roadcycling-bg.png",
       position: "right center",
       accent: "rgba(228,239,22,0.20)",
+    };
+  }
+
+  if (sports.includes("walking")) {
+    return {
+      image: "/images/walking-bg.png",
+      position: "right center",
+      accent: "rgba(228,239,22,0.22)",
     };
   }
 
