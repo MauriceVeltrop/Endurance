@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { supabase } from "../../../lib/supabase";
 import { SPORTS, getSportLabels } from "../../../lib/sports";
+import ProfileMessageButton from "../../../components/ProfileMessageButton";
 
 const DEFAULT_VISIBILITY = {
   avatar_visibility: "all",
@@ -769,6 +770,12 @@ const handleAvatarSelect = async (e) => {
                 {relationActionLoading ? "Working..." : "Team Up"}
               </button>
             )}
+
+            <ProfileMessageButton
+              profileId={profile.id}
+              isTeamMember={isAccepted}
+              currentUserRole={myProfile?.role}
+            />
           </div>
         )}
 
