@@ -221,6 +221,15 @@ function AutoFitLocation({ children }) {
 }
 
 
+
+function eventHasRunningBackground(event) {
+  const sports = Array.isArray(event.sports) ? event.sports : [];
+
+  return sports.some((sport) =>
+    ["running", "trail-running"].includes(String(sport).toLowerCase())
+  );
+}
+
 function Avatar({ src, name, size = 42, ring = false }) {
   return (
     <div
@@ -392,6 +401,7 @@ export default function EventCard({
     event.creator_profile?.name || event.creator_profile?.email || "Unknown";
 
   const creatorAvatar = event.creator_profile?.avatar_url || null;
+  const showRunnerBackground = eventHasRunningBackground(event);
 
   return (
     <div
@@ -424,7 +434,9 @@ export default function EventCard({
             display: "grid",
             gap: 16,
             background:
-              "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
+              showRunnerBackground
+                ? "linear-gradient(135deg, rgba(228,239,22,0.12), rgba(255,255,255,0.025) 42%, rgba(5,5,5,0.18))"
+                : "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
             padding: "16px 18px 16px 16px",
@@ -432,8 +444,52 @@ export default function EventCard({
             minWidth: 0,
             maxWidth: "100%",
             boxSizing: "border-box",
+            position: "relative",
+            isolation: "isolate",
           }}
         >
+          {showRunnerBackground && (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  background:
+                    "linear-gradient(90deg, rgba(10,10,10,0.96) 0%, rgba(10,10,10,0.78) 42%, rgba(10,10,10,0.35) 100%)",
+                }}
+              />
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: -88,
+                  top: -62,
+                  width: 430,
+                  height: 430,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  opacity: 0.72,
+                  backgroundImage: "url('/runner-bg.svg')",
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "contain",
+                  backgroundPosition: "right top",
+                  filter: "saturate(1.15) contrast(1.08)",
+                }}
+              />
+            </>
+          )}
+
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
+              display: "grid",
+              gap: 16,
+              minWidth: 0,
+            }}
+          >
           <div style={{ textAlign: "left", minWidth: 0, maxWidth: "100%" }}>
             <div
               style={{
@@ -613,6 +669,7 @@ export default function EventCard({
             >
               👥 {event.participants.length}
             </div>
+          </div>
           </div>
         </section>
 
