@@ -32,49 +32,6 @@ import {
   secondaryBtnSmall,
 } from "../lib/enduranceStyles";
 
-const SPORT_ICON_MAP = {
-  running: "🏃",
-  "trail-running": "⛰️",
-  "road-cycling": "🚴",
-  "mountain-biking": "🚵",
-  "gravel-cycling": "🚴",
-  walking: "🚶",
-  swimming: "🏊",
-  kayaking: "🛶",
-  padel: "🎾",
-  crossfit: "🏋️",
-  hyrox: "🔥",
-  "strength-training": "💪",
-};
-
-const SPORT_GRADIENT_MAP = {
-  running: "linear-gradient(135deg, #e4ef16 0%, #9ca30c 100%)",
-  "trail-running": "linear-gradient(135deg, #a3e635 0%, #365314 100%)",
-  "road-cycling": "linear-gradient(135deg, #60a5fa 0%, #1e3a8a 100%)",
-  "mountain-biking": "linear-gradient(135deg, #4ade80 0%, #14532d 100%)",
-  "gravel-cycling": "linear-gradient(135deg, #d6a84f 0%, #5b3d16 100%)",
-  walking: "linear-gradient(135deg, #e4ef16 0%, #575c0a 100%)",
-  swimming: "linear-gradient(135deg, #38bdf8 0%, #075985 100%)",
-  kayaking: "linear-gradient(135deg, #fb923c 0%, #7c2d12 100%)",
-};
-
-function getPrimarySport(event) {
-  return Array.isArray(event.sports) && event.sports.length
-    ? event.sports[0]
-    : "default";
-}
-
-function getPrimarySportIcon(event) {
-  return SPORT_ICON_MAP[getPrimarySport(event)] || "⚡";
-}
-
-function getSportGradient(event) {
-  return (
-    SPORT_GRADIENT_MAP[getPrimarySport(event)] ||
-    "linear-gradient(135deg, #e4ef16 0%, #444 100%)"
-  );
-}
-
 function initials(nameOrEmail = "?") {
   const clean = String(nameOrEmail).trim();
 
@@ -271,7 +228,7 @@ export default function EventCard({
           inset: 0,
           pointerEvents: "none",
           background:
-            "radial-gradient(circle at 15% 0%, rgba(228,239,22,0.17), transparent 30%), radial-gradient(circle at 100% 10%, rgba(255,255,255,0.07), transparent 28%)",
+            "radial-gradient(circle at 10% 0%, rgba(228,239,22,0.13), transparent 33%), radial-gradient(circle at 100% 10%, rgba(255,255,255,0.07), transparent 28%)",
         }}
       />
 
@@ -284,109 +241,92 @@ export default function EventCard({
               "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
-            padding: 14,
+            padding: 16,
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "76px minmax(0,1fr)",
-              gap: 15,
-              alignItems: "start",
-            }}
-          >
+          <div style={{ textAlign: "left" }}>
             <div
               style={{
-                width: 76,
-                height: 76,
-                borderRadius: 22,
-                display: "grid",
-                placeItems: "center",
-                background: getSportGradient(event),
-                color: "#050505",
-                fontSize: 36,
-                boxShadow: "0 0 28px rgba(228,239,22,0.22)",
+                color: "#e4ef16",
+                fontSize: 14,
+                fontWeight: 850,
+                marginBottom: 8,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
-              {getPrimarySportIcon(event)}
+              {sportLabels.join(" • ")}
             </div>
 
-            <div style={{ minWidth: 0 }}>
-              <div
+            <h2
+              style={{
+                margin: "0 0 12px",
+                color: "white",
+                fontSize: 30,
+                lineHeight: 1.05,
+                letterSpacing: "-0.045em",
+                textAlign: "left",
+              }}
+            >
+              {event.title}
+            </h2>
+
+            <button
+              onClick={() => openMaps(event.location)}
+              style={{
+                ...mapBtn,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                maxWidth: "100%",
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.13)",
+                borderRadius: 999,
+                padding: "8px 11px",
+                color: "rgba(255,255,255,0.92)",
+                cursor: "pointer",
+                textDecoration: "none",
+                marginBottom: 12,
+              }}
+            >
+              <span>📍</span>
+              <span
                 style={{
-                  color: "#e4ef16",
-                  fontSize: 14,
-                  fontWeight: 850,
-                  marginBottom: 7,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
               >
-                {sportLabels.join(" • ")}
-              </div>
+                {event.location || "Location not set"}
+              </span>
+              <span>↗</span>
+            </button>
 
-              <h2
-                style={{
-                  margin: "0 0 10px",
-                  color: "white",
-                  fontSize: 28,
-                  lineHeight: 1.04,
-                  letterSpacing: "-0.045em",
-                }}
-              >
-                {event.title}
-              </h2>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                justifyContent: "flex-start",
+              }}
+            >
+              {event.distance ? (
+                <StatBadge
+                  icon="↝"
+                  value={`${Number(event.distance).toFixed(2)} km`}
+                />
+              ) : null}
 
-              <button
-                onClick={() => openMaps(event.location)}
-                style={{
-                  ...mapBtn,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  maxWidth: "100%",
-                  background: "rgba(255,255,255,0.07)",
-                  border: "1px solid rgba(255,255,255,0.13)",
-                  borderRadius: 999,
-                  padding: "8px 11px",
-                  color: "rgba(255,255,255,0.92)",
-                  cursor: "pointer",
-                  textDecoration: "none",
-                  marginBottom: 10,
-                }}
-              >
-                <span>📍</span>
-                <span
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {event.location || "Location not set"}
-                </span>
-                <span>↗</span>
-              </button>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {event.distance ? (
+              {event.elevation_gain_m !== null &&
+                event.elevation_gain_m !== undefined &&
+                Number(event.elevation_gain_m) > 0 && (
                   <StatBadge
-                    icon="↝"
-                    value={`${Number(event.distance).toFixed(2)} km`}
+                    icon="▲"
+                    value={`${Math.round(Number(event.elevation_gain_m))} m+`}
+                    accent
                   />
-                ) : null}
-
-                {event.elevation_gain_m !== null &&
-                  event.elevation_gain_m !== undefined &&
-                  Number(event.elevation_gain_m) > 0 && (
-                    <StatBadge
-                      icon="▲"
-                      value={`${Math.round(Number(event.elevation_gain_m))} m+`}
-                      accent
-                    />
-                  )}
-              </div>
+                )}
             </div>
           </div>
 
