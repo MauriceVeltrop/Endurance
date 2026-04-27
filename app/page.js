@@ -897,65 +897,242 @@ const payload = {
   }
 
   if (!session) {
+    const authHeroStyle = {
+      ...authCard,
+      position: "relative",
+      overflow: "hidden",
+      padding: 0,
+      borderRadius: 30,
+      border: "1px solid rgba(255,255,255,0.10)",
+      boxShadow: "0 28px 90px rgba(0,0,0,0.62)",
+      background:
+        "radial-gradient(circle at 82% 10%, rgba(228,239,22,0.22), transparent 36%), linear-gradient(180deg, rgba(18,18,18,0.98), rgba(5,5,5,0.98))",
+    };
+
+    const authPanelStyle = {
+      position: "relative",
+      zIndex: 2,
+      display: "grid",
+      gap: 18,
+      padding: "26px 24px 24px",
+    };
+
+    const authKickerStyle = {
+      color: "#e4ef16",
+      fontSize: 13,
+      fontWeight: 950,
+      letterSpacing: "0.12em",
+      textTransform: "uppercase",
+    };
+
+    const authTitleStyle = {
+      margin: 0,
+      color: "white",
+      fontSize: "clamp(32px, 9vw, 52px)",
+      lineHeight: 0.95,
+      letterSpacing: "-0.06em",
+      fontWeight: 1000,
+      maxWidth: 520,
+    };
+
+    const authTextStyle = {
+      margin: 0,
+      color: "rgba(255,255,255,0.72)",
+      fontSize: 16,
+      lineHeight: 1.45,
+      maxWidth: 560,
+    };
+
+    const authNoticeStyle = {
+      borderRadius: 20,
+      padding: "14px 16px",
+      background: "rgba(228,239,22,0.10)",
+      border: "1px solid rgba(228,239,22,0.22)",
+      color: "rgba(255,255,255,0.88)",
+      fontSize: 14,
+      lineHeight: 1.35,
+    };
+
+    const authFormStyle = {
+      ...grid,
+      gap: 14,
+    };
+
+    const professionalFieldStyle = {
+      ...field,
+      background: "rgba(255,255,255,0.07)",
+      border: "1px solid rgba(255,255,255,0.13)",
+      borderRadius: 18,
+      minHeight: 56,
+      fontSize: 16,
+    };
+
+    const authPrimaryStyle = {
+      ...primaryBtn,
+      minHeight: 56,
+      borderRadius: 18,
+      fontSize: 17,
+      fontWeight: 950,
+      boxShadow: "0 16px 38px rgba(228,239,22,0.20)",
+    };
+
+    const authSecondaryStyle = {
+      ...secondaryBtn,
+      minHeight: 48,
+      borderRadius: 16,
+      fontWeight: 850,
+    };
+
     return (
-      <main style={app}>
-        <header style={header}>
+      <main
+        style={{
+          ...app,
+          minHeight: "100svh",
+          background:
+            "radial-gradient(circle at 70% 0%, rgba(228,239,22,0.12), transparent 30%), #000",
+        }}
+      >
+        <header style={{ ...header, paddingTop: 34, marginBottom: 18 }}>
           <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
         </header>
 
-        <div style={authCard}>
-          <div style={authTabs}>
-            <button
-              style={authMode === "signin" ? primaryBtn : secondaryBtn}
-              onClick={() => setAuthMode("signin")}
-              type="button"
-            >
-              Sign In
-            </button>
+        <section style={authHeroStyle}>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 0,
+              backgroundImage: "url('/images/runner-bg.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "right center",
+              backgroundRepeat: "no-repeat",
+              opacity: 0.38,
+              filter: "saturate(1.1) contrast(1.08)",
+            }}
+          />
 
-            <button
-              style={authMode === "signup" ? primaryBtn : secondaryBtn}
-              onClick={() => setAuthMode("signup")}
-              type="button"
-            >
-              Create Account
-            </button>
-          </div>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 1,
+              background:
+                "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 48%, rgba(5,5,5,0.40) 100%)",
+            }}
+          />
 
-          <form
-            onSubmit={authMode === "signup" ? handleSignUp : handleSignIn}
-            style={grid}
-          >
-            {authMode === "signup" && (
+          <div style={authPanelStyle}>
+            <div style={authKickerStyle}>Endurance Community</div>
+
+            <h1 style={authTitleStyle}>
+              Train together.
+              <br />
+              Go further.
+            </h1>
+
+            <p style={authTextStyle}>
+              Sign in to join local endurance events, connect with training partners,
+              download routes and add sessions to your calendar.
+            </p>
+
+            <div style={authNoticeStyle}>
+              <strong>Invite-only access.</strong> New registrations are temporarily
+              closed while the platform is being prepared for the first community.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                style={primaryBtn}
+                onClick={() => setAuthMode("signin")}
+                type="button"
+              >
+                Sign In
+              </button>
+
+              <button
+                style={{ ...secondaryBtn, display: "none" }}
+                onClick={() => setAuthMode("signup")}
+                type="button"
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                Create Account
+              </button>
+            </div>
+
+            <form onSubmit={handleSignIn} style={authFormStyle}>
               <input
-                value={authName}
-                onChange={(e) => setAuthName(e.target.value)}
-                placeholder="Name"
-                style={field}
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="Email address"
+                type="email"
+                autoComplete="email"
+                style={professionalFieldStyle}
               />
-            )}
 
-            <input
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              placeholder="Email address"
-              type="email"
-              style={field}
-            />
+              <input
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Password"
+                type="password"
+                autoComplete="current-password"
+                style={professionalFieldStyle}
+              />
 
-            <input
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              placeholder="Password"
-              type="password"
-              style={field}
-            />
+              <button type="submit" style={authPrimaryStyle}>
+                Sign In
+              </button>
+            </form>
 
-            <button type="submit" style={primaryBtn}>
-              {authMode === "signup" ? "Register" : "Sign In"}
-            </button>
-          </form>
-        </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                marginTop: 4,
+              }}
+            >
+              {[
+                ["Events", "Join local sessions"],
+                ["Routes", "GPX-ready training"],
+                ["Team Up", "Find training partners"],
+              ].map(([title, body]) => (
+                <div
+                  key={title}
+                  style={{
+                    padding: 12,
+                    borderRadius: 18,
+                    background: "rgba(255,255,255,0.055)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "#e4ef16",
+                      fontSize: 13,
+                      fontWeight: 950,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {title}
+                  </div>
+                  <div
+                    style={{
+                      color: "rgba(255,255,255,0.58)",
+                      fontSize: 12,
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {body}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       </main>
     );
   }
