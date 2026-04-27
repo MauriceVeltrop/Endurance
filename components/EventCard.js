@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getSportLabels } from "../lib/sports";
 import DetailRouteMap from "./DetailRouteMap";
 import {
@@ -47,6 +50,92 @@ function initials(nameOrEmail = "?") {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
+function AutoFitTitle({ children }) {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(32);
+
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+
+    if (!wrap || !text) return;
+
+    const maxWidth = Math.max(0, wrap.clientWidth - 18);
+    if (!maxWidth) return;
+
+    let size = 32;
+    const minSize = 13;
+
+    text.style.fontSize = `${size}px`;
+    text.style.letterSpacing = "-0.045em";
+
+    while (size > minSize && text.scrollWidth > maxWidth) {
+      size -= 0.5;
+      text.style.fontSize = `${size}px`;
+    }
+
+    setFontSize(size);
+  };
+
+  useLayoutEffect(() => {
+    fit();
+  }, [children]);
+
+  useEffect(() => {
+    fit();
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => fit())
+        : null;
+
+    if (wrapRef.current && resizeObserver) {
+      resizeObserver.observe(wrapRef.current);
+    }
+
+    window.addEventListener("resize", fit);
+
+    return () => {
+      window.removeEventListener("resize", fit);
+      resizeObserver?.disconnect();
+    };
+  }, [children]);
+
+  return (
+    <div
+      ref={wrapRef}
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        overflow: "hidden",
+        paddingRight: 10,
+        boxSizing: "border-box",
+      }}
+    >
+      <h2
+        ref={textRef}
+        style={{
+          margin: "0 0 12px",
+          color: "white",
+          fontSize,
+          lineHeight: 1.05,
+          letterSpacing: "-0.045em",
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          overflow: "visible",
+          display: "inline-block",
+          fontWeight: 950,
+          maxWidth: "none",
+          transformOrigin: "left center",
+        }}
+      >
+        {children}
+      </h2>
+    </div>
+  );
+}
+
 function Avatar({ src, name, size = 42, ring = false }) {
   return (
     <div
@@ -62,7 +151,7 @@ function Avatar({ src, name, size = 42, ring = false }) {
         background:
           "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.15))",
         color: "#050505",
-        fontWeight: 900,
+        fontWeight: 950,
         fontSize: Math.max(12, size * 0.32),
         border: ring
           ? "2px solid rgba(228,239,22,0.95)"
@@ -101,13 +190,15 @@ function StatBadge({ icon, value, accent = false }) {
           ? "rgba(228,239,22,0.13)"
           : "rgba(255,255,255,0.075)",
         border: accent
-          ? "1px solid rgba(228,239,22,0.26)"
+          ? "1px solid rgba(228,239,22,0.28)"
           : "1px solid rgba(255,255,255,0.14)",
         color: "white",
-        fontWeight: 850,
+        fontWeight: 900,
         lineHeight: 1,
         fontSize: 15,
         whiteSpace: "nowrap",
+        maxWidth: "100%",
+        boxSizing: "border-box",
       }}
     >
       <span style={{ color: accent ? "#e4ef16" : "rgba(255,255,255,0.8)" }}>
@@ -131,12 +222,19 @@ function AvatarStack({ people = [], max = 5, size = 34 }) {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        maxWidth: "100%",
+        overflow: "hidden",
+      }}
+    >
       {visible.map((person, index) => {
-        const profile = person.user_profile || person;
-        const name = profile?.name || profile?.email || "Unknown";
-        const src = profile?.avatar_url || null;
-        const profileId = person.user_id || profile?.id;
+        const userProfile = person.user_profile || person;
+        const name = userProfile?.name || userProfile?.email || "Unknown";
+        const src = userProfile?.avatar_url || null;
+        const profileId = person.user_id || userProfile?.id;
 
         return (
           <Link
@@ -147,6 +245,7 @@ function AvatarStack({ people = [], max = 5, size = 34 }) {
               textDecoration: "none",
               position: "relative",
               zIndex: visible.length - index,
+              flex: "0 0 auto",
             }}
           >
             <Avatar src={src} name={name} size={size} ring={index === 0} />
@@ -167,7 +266,8 @@ function AvatarStack({ people = [], max = 5, size = 34 }) {
             placeItems: "center",
             color: "white",
             fontSize: 13,
-            fontWeight: 900,
+            fontWeight: 950,
+            flex: "0 0 auto",
           }}
         >
           +{remaining}
@@ -216,10 +316,11 @@ export default function EventCard({
         padding: 0,
         overflow: "hidden",
         position: "relative",
-        borderRadius: 26,
+        borderRadius: 28,
         border: "1px solid rgba(255,255,255,0.10)",
         boxShadow: "0 18px 55px rgba(0,0,0,0.38)",
         scrollSnapAlign: "center",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -232,7 +333,7 @@ export default function EventCard({
         }}
       />
 
-      <div style={{ position: "relative", padding: 18 }}>
+      <div style={{ position: "relative", padding: 18, boxSizing: "border-box" }}>
         <section
           style={{
             display: "grid",
@@ -241,45 +342,41 @@ export default function EventCard({
               "linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 24,
-            padding: 16,
+            padding: "16px 18px 16px 16px",
+            overflow: "hidden",
+            minWidth: 0,
+            maxWidth: "100%",
+            boxSizing: "border-box",
           }}
         >
-          <div style={{ textAlign: "left" }}>
+          <div style={{ textAlign: "left", minWidth: 0, maxWidth: "100%" }}>
             <div
               style={{
                 color: "#e4ef16",
                 fontSize: 14,
-                fontWeight: 850,
+                fontWeight: 900,
                 marginBottom: 8,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
+                maxWidth: "100%",
               }}
             >
               {sportLabels.join(" • ")}
             </div>
 
-            <h2
-              style={{
-                margin: "0 0 12px",
-                color: "white",
-                fontSize: 30,
-                lineHeight: 1.05,
-                letterSpacing: "-0.045em",
-                textAlign: "left",
-              }}
-            >
-              {event.title}
-            </h2>
+            <AutoFitTitle>{event.title}</AutoFitTitle>
 
             <button
+              type="button"
               onClick={() => openMaps(event.location)}
               style={{
                 ...mapBtn,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 7,
-                maxWidth: "100%",
+                width: "calc(100% - 10px)",
+                maxWidth: "calc(100% - 10px)",
                 background: "rgba(255,255,255,0.07)",
                 border: "1px solid rgba(255,255,255,0.13)",
                 borderRadius: 999,
@@ -288,19 +385,24 @@ export default function EventCard({
                 cursor: "pointer",
                 textDecoration: "none",
                 marginBottom: 12,
+                boxSizing: "border-box",
+                overflow: "hidden",
               }}
             >
-              <span>📍</span>
+              <span style={{ flex: "0 0 auto" }}>📍</span>
               <span
                 style={{
+                  minWidth: 0,
+                  flex: "1 1 auto",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
+                  textAlign: "left",
                 }}
               >
                 {event.location || "Location not set"}
               </span>
-              <span>↗</span>
+              <span style={{ flex: "0 0 auto" }}>↗</span>
             </button>
 
             <div
@@ -309,6 +411,7 @@ export default function EventCard({
                 gap: 8,
                 flexWrap: "wrap",
                 justifyContent: "flex-start",
+                maxWidth: "100%",
               }}
             >
               {event.distance ? (
@@ -333,11 +436,12 @@ export default function EventCard({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr auto",
+              gridTemplateColumns: "minmax(0, 1fr)",
               gap: 12,
               alignItems: "center",
               paddingTop: 14,
               borderTop: "1px solid rgba(255,255,255,0.09)",
+              minWidth: 0,
             }}
           >
             <div
@@ -346,16 +450,17 @@ export default function EventCard({
                 gap: 10,
                 alignItems: "center",
                 minWidth: 0,
+                overflow: "hidden",
               }}
             >
               <Avatar src={creatorAvatar} name={creatorName} size={46} ring />
 
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, overflow: "hidden" }}>
                 <div
                   style={{
                     color: "rgba(255,255,255,0.52)",
                     fontSize: 13,
-                    fontWeight: 750,
+                    fontWeight: 800,
                   }}
                 >
                   Organized by
@@ -366,14 +471,14 @@ export default function EventCard({
                   style={{
                     ...profileLink,
                     color: "#e4ef16",
-                    fontWeight: 900,
+                    fontWeight: 950,
                     fontSize: 17,
                     textDecoration: "none",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                     display: "block",
-                    maxWidth: 180,
+                    maxWidth: "100%",
                   }}
                 >
                   {creatorName}
@@ -383,32 +488,35 @@ export default function EventCard({
 
             <div
               style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
                 color: "rgba(255,255,255,0.9)",
-                fontWeight: 800,
+                fontWeight: 850,
                 fontSize: 15,
-                textAlign: "right",
-                lineHeight: 1.7,
+                lineHeight: 1.4,
               }}
             >
-              <div>📅 {formatDate(event.date)}</div>
-              <div>⏰ {formatTime(event.time)}</div>
+              <span>📅 {formatDate(event.date)}</span>
+              <span>⏰ {formatTime(event.time)}</span>
             </div>
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr auto",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
               gap: 12,
               alignItems: "center",
+              minWidth: 0,
             }}
           >
-            <div>
+            <div style={{ minWidth: 0, overflow: "hidden" }}>
               <div
                 style={{
                   color: "rgba(255,255,255,0.52)",
                   fontSize: 13,
-                  fontWeight: 750,
+                  fontWeight: 800,
                   marginBottom: 7,
                 }}
               >
@@ -421,7 +529,7 @@ export default function EventCard({
             <div
               style={{
                 color: "rgba(255,255,255,0.82)",
-                fontWeight: 850,
+                fontWeight: 900,
                 fontSize: 15,
                 whiteSpace: "nowrap",
               }}
@@ -432,7 +540,13 @@ export default function EventCard({
         </section>
 
         {hasRouteMap && (
-          <section style={{ marginTop: 16 }}>
+          <section
+            style={{
+              marginTop: 16,
+              overflow: "hidden",
+              borderRadius: 22,
+            }}
+          >
             <DetailRouteMap
               gpxUrl={event.gpx_file_url}
               points={event.route_points}
@@ -463,7 +577,7 @@ export default function EventCard({
           </div>
         )}
 
-        <div style={{ ...communityBox, marginTop: 16 }}>
+        <div style={{ ...communityBox, marginTop: 16, overflow: "hidden" }}>
           <div style={communityTitle}>Description</div>
 
           <div style={communityText}>
@@ -473,7 +587,7 @@ export default function EventCard({
           </div>
 
           <div style={likeRow}>
-            <button onClick={() => toggleLike(event)} style={likeBtn}>
+            <button type="button" onClick={() => toggleLike(event)} style={likeBtn}>
               {event.likedByMe ? "❤️ Liked" : "🤍 Like"}
             </button>
 
@@ -489,11 +603,12 @@ export default function EventCard({
                   alignItems: "center",
                   gap: 8,
                   flexWrap: "wrap",
+                  minWidth: 0,
                 }}
               >
                 <AvatarStack people={event.likes || []} max={4} size={28} />
 
-                <div>
+                <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                   {event.likes.map((like, index) => (
                     <span key={like.id}>
                       <Link
@@ -576,24 +691,37 @@ export default function EventCard({
 
         <div style={{ ...btnRow, marginTop: 16 }}>
           <button
+            type="button"
             onClick={() => toggleParticipation(event)}
             style={primaryBtnSmall}
           >
             {event.joinedByMe ? "Leave Event" : "Join Event"}
           </button>
 
-          <button onClick={() => downloadIcs(event)} style={secondaryBtnSmall}>
+          <button
+            type="button"
+            onClick={() => downloadIcs(event)}
+            style={secondaryBtnSmall}
+          >
             Add to Calendar
           </button>
 
           {(event.isOwner || isModerator) && (
-            <button onClick={() => openEdit(event)} style={secondaryBtnSmall}>
+            <button
+              type="button"
+              onClick={() => openEdit(event)}
+              style={secondaryBtnSmall}
+            >
               Edit
             </button>
           )}
 
           {(event.isOwner || isModerator) && (
-            <button onClick={() => deleteEvent(event.id)} style={dangerBtnSmall}>
+            <button
+              type="button"
+              onClick={() => deleteEvent(event.id)}
+              style={dangerBtnSmall}
+            >
               Delete
             </button>
           )}
