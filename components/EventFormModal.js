@@ -78,6 +78,88 @@ export default function EventFormModal({
     cursor: "not-allowed",
   };
 
+  const isCrossFitEvent = form.sports?.includes("crossfit");
+
+  const wodTemplates = [
+    {
+      title: "Endurance WOD - Engine Builder",
+      type: "AMRAP 20",
+      workout: [
+        "10 calorie row / bike",
+        "12 kettlebell swings",
+        "10 burpees",
+        "12 wall balls",
+      ],
+      notes: "Steady pacing. Keep moving, avoid redlining in the first 10 minutes.",
+    },
+    {
+      title: "Endurance WOD - Power & Pace",
+      type: "For Time - 5 Rounds",
+      workout: [
+        "400 m run",
+        "15 box jumps",
+        "12 dumbbell snatches",
+        "10 push-ups",
+      ],
+      notes: "Target: controlled intensity. Scale running to 250 m if needed.",
+    },
+    {
+      title: "Endurance WOD - Strength Circuit",
+      type: "EMOM 24",
+      workout: [
+        "Min 1: 12/10 calorie bike",
+        "Min 2: 10 deadlifts",
+        "Min 3: 12 sit-ups",
+        "Min 4: Rest",
+      ],
+      notes: "Choose a deadlift weight that stays technically clean for all rounds.",
+    },
+    {
+      title: "Endurance WOD - Team Up",
+      type: "Partner WOD - 30 min cap",
+      workout: [
+        "1000 m row",
+        "80 wall balls",
+        "60 kettlebell swings",
+        "40 burpees",
+        "1000 m row",
+      ],
+      notes: "Split reps as needed. One athlete works at a time.",
+    },
+  ];
+
+  const createWod = () => {
+    const template =
+      wodTemplates[Math.floor(Math.random() * wodTemplates.length)];
+
+    const description = [
+      template.type,
+      "",
+      "Workout:",
+      ...template.workout.map((item) => `• ${item}`),
+      "",
+      "Coaching notes:",
+      template.notes,
+      "",
+      "Scaling:",
+      "Adjust load, reps or movement difficulty to match your current level.",
+    ].join("\n");
+
+    setForm({
+      ...form,
+      title: form.title?.trim() ? form.title : template.title,
+      description,
+      distance: null,
+      gpxFile: null,
+      gpx_file_path: null,
+      gpx_file_url: null,
+      route_points: null,
+      route_distance_km: null,
+      elevation_gain_m: null,
+      gpx_uploaded_by: null,
+    });
+  };
+
   const useCurrentLocation = () => {
     setRouteError("");
 
@@ -217,6 +299,47 @@ export default function EventFormModal({
                 );
               })}
             </div>
+
+            {isCrossFitEvent && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 14,
+                  borderRadius: 18,
+                  border: "1px solid rgba(228,239,22,0.22)",
+                  background:
+                    "linear-gradient(135deg, rgba(228,239,22,0.12), rgba(255,255,255,0.04))",
+                }}
+              >
+                <div
+                  style={{
+                    color: "#e4ef16",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    marginBottom: 6,
+                  }}
+                >
+                  CrossFit WOD
+                </div>
+
+                <div style={{ ...helperText, marginBottom: 10 }}>
+                  Generate a ready-to-use Workout of the Day for this CrossFit event.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={createWod}
+                  style={{
+                    ...primaryBtn,
+                    width: "100%",
+                    borderRadius: 16,
+                    minHeight: 48,
+                  }}
+                >
+                  Create WOD
+                </button>
+              </div>
+            )}
           </div>
 
           {showDistance && (
