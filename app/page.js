@@ -1182,9 +1182,9 @@ const payload = {
         style={{
           ...header,
           display: "grid",
-          gap: 12,
+          gap: 10,
           paddingTop: 22,
-          marginBottom: 14,
+          marginBottom: 12,
         }}
       >
         <div
@@ -1192,7 +1192,7 @@ const payload = {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            minHeight: 74,
+            minHeight: 70,
           }}
         >
           <img
@@ -1200,8 +1200,8 @@ const payload = {
             alt="Endurance"
             style={{
               ...logoImg,
-              width: "min(76vw, 500px)",
-              filter: "drop-shadow(0 16px 30px rgba(0,0,0,0.70))",
+              width: "min(74vw, 500px)",
+              filter: "drop-shadow(0 14px 26px rgba(0,0,0,0.68))",
             }}
           />
         </div>
@@ -1209,31 +1209,33 @@ const payload = {
         <section
           style={{
             ...loginBar,
+            width: "min(600px, calc(100vw - 56px))",
+            justifySelf: "center",
             margin: 0,
-            padding: 12,
-            borderRadius: 24,
+            padding: 11,
+            borderRadius: 22,
             display: "grid",
-            gap: 10,
+            gap: 9,
             background:
-              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.11), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.030))",
+              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.10), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.072), rgba(255,255,255,0.028))",
             border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 18px 55px rgba(0,0,0,0.42)",
+            boxShadow: "0 16px 46px rgba(0,0,0,0.40)",
             backdropFilter: "blur(12px)",
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "44px minmax(0, 1fr) 40px",
-              gap: 10,
+              gridTemplateColumns: "40px minmax(0, 1fr) 38px",
+              gap: 9,
               alignItems: "center",
             }}
           >
             <Link
               href={`/profile/${user.id}`}
               style={{
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 borderRadius: "50%",
                 overflow: "hidden",
                 display: "grid",
@@ -1242,10 +1244,10 @@ const payload = {
                 background:
                   "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.18))",
                 color: "#050505",
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: 1000,
-                border: "2px solid rgba(228,239,22,0.82)",
-                boxShadow: "0 0 22px rgba(228,239,22,0.18)",
+                border: "2px solid rgba(228,239,22,0.78)",
+                boxShadow: "0 0 18px rgba(228,239,22,0.16)",
               }}
             >
               {profile?.avatar_url ? (
@@ -1266,58 +1268,42 @@ const payload = {
               )}
             </Link>
 
-            <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                flexWrap: "wrap",
+                minWidth: 0,
+              }}
+            >
               <div
                 style={{
-                  color: "rgba(255,255,255,0.52)",
-                  fontSize: 10,
-                  fontWeight: 850,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  marginBottom: 3,
+                  color: "white",
+                  fontSize: "clamp(16px, 4.15vw, 21px)",
+                  fontWeight: 950,
+                  letterSpacing: "-0.04em",
+                  lineHeight: 1.05,
+                  whiteSpace: "normal",
+                  overflow: "visible",
+                  textOverflow: "clip",
+                  overflowWrap: "anywhere",
                 }}
               >
-                Signed in
+                {profile?.name || user?.email}
               </div>
 
               <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  flexWrap: "wrap",
-                  minWidth: 0,
+                  ...roleBadge,
+                  flex: "0 0 auto",
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  borderRadius: 999,
+                  boxShadow: "0 0 14px rgba(228,239,22,0.09)",
                 }}
               >
-                <div
-                  style={{
-                    color: "white",
-                    fontSize: "clamp(17px, 4.6vw, 23px)",
-                    fontWeight: 1000,
-                    letterSpacing: "-0.04em",
-                    lineHeight: 1.05,
-                    whiteSpace: "normal",
-                    overflow: "visible",
-                    textOverflow: "clip",
-                    wordBreak: "normal",
-                    overflowWrap: "anywhere",
-                  }}
-                >
-                  {profile?.name || user?.email}
-                </div>
-
-                <div
-                  style={{
-                    ...roleBadge,
-                    flex: "0 0 auto",
-                    fontSize: 12,
-                    padding: "5px 9px",
-                    borderRadius: 999,
-                    boxShadow: "0 0 16px rgba(228,239,22,0.10)",
-                  }}
-                >
-                  {profile?.role || "user"}
-                </div>
+                {profile?.role || "user"}
               </div>
             </div>
 
@@ -1331,23 +1317,23 @@ const payload = {
               aria-label="Search users"
               title="Search users"
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 14,
+                width: 38,
+                height: 38,
+                borderRadius: 13,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background:
-                  "linear-gradient(145deg, rgba(228,239,22,0.14), rgba(255,255,255,0.04))",
-                border: "1px solid rgba(228,239,22,0.34)",
+                  "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.035))",
+                border: "1px solid rgba(228,239,22,0.32)",
                 boxShadow:
-                  "0 0 14px rgba(228,239,22,0.14), 0 10px 24px rgba(0,0,0,0.40)",
+                  "0 0 12px rgba(228,239,22,0.12), 0 9px 22px rgba(0,0,0,0.36)",
                 cursor: "pointer",
               }}
             >
               <svg
-                width="18"
-                height="18"
+                width="17"
+                height="17"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="#e4ef16"
@@ -1364,7 +1350,7 @@ const payload = {
           <div
             style={{
               display: "flex",
-              gap: 8,
+              gap: 7,
               flexWrap: "wrap",
             }}
           >
@@ -1372,9 +1358,10 @@ const payload = {
               href={`/profile/${user.id}`}
               style={{
                 ...actionLinkBtn,
-                borderRadius: 14,
-                padding: "10px 14px",
-                fontSize: 15,
+                borderRadius: 13,
+                padding: "8px 12px",
+                fontSize: 14,
+                lineHeight: 1,
               }}
             >
               Profile
@@ -1385,9 +1372,10 @@ const payload = {
                 href="/admin"
                 style={{
                   ...actionLinkBtn,
-                  borderRadius: 14,
-                  padding: "10px 14px",
-                  fontSize: 15,
+                  borderRadius: 13,
+                  padding: "8px 12px",
+                  fontSize: 14,
+                  lineHeight: 1,
                 }}
               >
                 Admin
@@ -1398,9 +1386,10 @@ const payload = {
               onClick={handleSignOut}
               style={{
                 ...secondaryBtn,
-                borderRadius: 14,
-                padding: "10px 14px",
-                fontSize: 15,
+                borderRadius: 13,
+                padding: "8px 12px",
+                fontSize: 14,
+                lineHeight: 1,
               }}
             >
               Sign Out
