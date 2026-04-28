@@ -1031,7 +1031,153 @@ const payload = {
             "radial-gradient(circle at 70% 0%, rgba(228,239,22,0.12), transparent 30%), #000",
         }}
       >
-  
+        <header style={{ ...header, paddingTop: 34, marginBottom: 18 }}>
+          <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
+        </header>
+
+        <section style={authHeroStyle}>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 0,
+              backgroundImage: "url('/images/runner-bg.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "right center",
+              backgroundRepeat: "no-repeat",
+              opacity: 0.38,
+              filter: "saturate(1.1) contrast(1.08)",
+            }}
+          />
+
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 1,
+              background:
+                "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 48%, rgba(5,5,5,0.40) 100%)",
+            }}
+          />
+
+          <div style={authPanelStyle}>
+            <div style={authKickerStyle}>Endurance Community</div>
+
+            <h1 style={authTitleStyle}>
+              Train together.
+              <br />
+              Go further.
+            </h1>
+
+            <p style={authTextStyle}>
+              Sign in to join local endurance events, connect with training partners,
+              download routes and add sessions to your calendar.
+            </p>
+
+            <div style={authNoticeStyle}>
+              <strong>Invite-only access.</strong> New registrations are temporarily
+              closed while the platform is being prepared for the first community.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                style={primaryBtn}
+                onClick={() => setAuthMode("signin")}
+                type="button"
+              >
+                Sign In
+              </button>
+
+              <button
+                style={{ ...secondaryBtn, display: "none" }}
+                onClick={() => setAuthMode("signup")}
+                type="button"
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                Create Account
+              </button>
+            </div>
+
+            <form onSubmit={handleSignIn} style={authFormStyle}>
+              <input
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="Email address"
+                type="email"
+                autoComplete="email"
+                style={professionalFieldStyle}
+              />
+
+              <input
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Password"
+                type="password"
+                autoComplete="current-password"
+                style={professionalFieldStyle}
+              />
+
+              <button type="submit" style={authPrimaryStyle}>
+                Sign In
+              </button>
+            </form>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                marginTop: 4,
+              }}
+            >
+              {[
+                ["Events", "Join local sessions"],
+                ["Routes", "GPX-ready training"],
+                ["Team Up", "Find training partners"],
+              ].map(([title, body]) => (
+                <div
+                  key={title}
+                  style={{
+                    padding: 12,
+                    borderRadius: 18,
+                    background: "rgba(255,255,255,0.055)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "#e4ef16",
+                      fontSize: 13,
+                      fontWeight: 950,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {title}
+                  </div>
+                  <div
+                    style={{
+                      color: "rgba(255,255,255,0.58)",
+                      fontSize: 12,
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {body}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main style={app}>
       <header
         style={{
           ...header,
@@ -1164,6 +1310,8 @@ const payload = {
                 setUserSearchQuery("");
                 setUserSearchResults([]);
               }}
+              aria-label="Search users"
+              title="Search users"
               style={{
                 width: 32,
                 height: 32,
@@ -1174,6 +1322,7 @@ const payload = {
                 background:
                   "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.03))",
                 border: "1px solid rgba(228,239,22,0.30)",
+                cursor: "pointer",
               }}
             >
               <svg
@@ -1239,6 +1388,7 @@ const payload = {
           </div>
         </section>
       </header>
+
       {user?.id && <TeamRequestsPanel userId={user.id} />}
       {userSearchOpen && (
         <div
