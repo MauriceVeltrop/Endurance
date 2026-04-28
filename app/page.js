@@ -1182,9 +1182,9 @@ const payload = {
         style={{
           ...header,
           display: "grid",
-          gap: 16,
-          paddingTop: 24,
-          marginBottom: 18,
+          gap: 12,
+          paddingTop: 22,
+          marginBottom: 14,
         }}
       >
         <div
@@ -1192,7 +1192,7 @@ const payload = {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            minHeight: 82,
+            minHeight: 74,
           }}
         >
           <img
@@ -1200,8 +1200,8 @@ const payload = {
             alt="Endurance"
             style={{
               ...logoImg,
-              width: "min(78vw, 520px)",
-              filter: "drop-shadow(0 18px 34px rgba(0,0,0,0.75))",
+              width: "min(76vw, 500px)",
+              filter: "drop-shadow(0 16px 30px rgba(0,0,0,0.70))",
             }}
           />
         </div>
@@ -1210,30 +1210,30 @@ const payload = {
           style={{
             ...loginBar,
             margin: 0,
-            padding: 16,
-            borderRadius: 30,
+            padding: 12,
+            borderRadius: 24,
             display: "grid",
-            gap: 14,
+            gap: 10,
             background:
-              "radial-gradient(circle at 78% 10%, rgba(228,239,22,0.12), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
-            border: "1px solid rgba(255,255,255,0.11)",
-            boxShadow: "0 22px 70px rgba(0,0,0,0.48)",
+              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.11), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.030))",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "0 18px 55px rgba(0,0,0,0.42)",
             backdropFilter: "blur(12px)",
           }}
         >
           <div
             style={{
-              display: "flex",
+              display: "grid",
+              gridTemplateColumns: "44px minmax(0, 1fr) 40px",
+              gap: 10,
               alignItems: "center",
-              gap: 12,
-              minWidth: 0,
             }}
           >
             <Link
               href={`/profile/${user.id}`}
               style={{
-                width: 58,
-                height: 58,
+                width: 44,
+                height: 44,
                 borderRadius: "50%",
                 overflow: "hidden",
                 display: "grid",
@@ -1242,10 +1242,10 @@ const payload = {
                 background:
                   "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.18))",
                 color: "#050505",
+                fontSize: 15,
                 fontWeight: 1000,
-                flex: "0 0 auto",
-                border: "2px solid rgba(228,239,22,0.88)",
-                boxShadow: "0 0 28px rgba(228,239,22,0.22)",
+                border: "2px solid rgba(228,239,22,0.82)",
+                boxShadow: "0 0 22px rgba(228,239,22,0.18)",
               }}
             >
               {profile?.avatar_url ? (
@@ -1266,15 +1266,15 @@ const payload = {
               )}
             </Link>
 
-            <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+            <div style={{ minWidth: 0 }}>
               <div
                 style={{
                   color: "rgba(255,255,255,0.52)",
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: 850,
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
-                  marginBottom: 4,
+                  marginBottom: 3,
                 }}
               >
                 Signed in
@@ -1284,20 +1284,23 @@ const payload = {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 9,
+                  gap: 7,
+                  flexWrap: "wrap",
                   minWidth: 0,
                 }}
               >
                 <div
                   style={{
                     color: "white",
-                    fontSize: "clamp(20px, 5.5vw, 28px)",
+                    fontSize: "clamp(17px, 4.6vw, 23px)",
                     fontWeight: 1000,
                     letterSpacing: "-0.04em",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    minWidth: 0,
+                    lineHeight: 1.05,
+                    whiteSpace: "normal",
+                    overflow: "visible",
+                    textOverflow: "clip",
+                    wordBreak: "normal",
+                    overflowWrap: "anywhere",
                   }}
                 >
                   {profile?.name || user?.email}
@@ -1307,7 +1310,10 @@ const payload = {
                   style={{
                     ...roleBadge,
                     flex: "0 0 auto",
-                    boxShadow: "0 0 20px rgba(228,239,22,0.12)",
+                    fontSize: 12,
+                    padding: "5px 9px",
+                    borderRadius: 999,
+                    boxShadow: "0 0 16px rgba(228,239,22,0.10)",
                   }}
                 >
                   {profile?.role || "user"}
@@ -1325,24 +1331,23 @@ const payload = {
               aria-label="Search users"
               title="Search users"
               style={{
-                width: 46,
-                height: 46,
-                borderRadius: 16,
+                width: 40,
+                height: 40,
+                borderRadius: 14,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background:
-                  "linear-gradient(145deg, rgba(228,239,22,0.16), rgba(255,255,255,0.04))",
-                border: "1px solid rgba(228,239,22,0.40)",
+                  "linear-gradient(145deg, rgba(228,239,22,0.14), rgba(255,255,255,0.04))",
+                border: "1px solid rgba(228,239,22,0.34)",
                 boxShadow:
-                  "0 0 18px rgba(228,239,22,0.18), 0 14px 34px rgba(0,0,0,0.45)",
+                  "0 0 14px rgba(228,239,22,0.14), 0 10px 24px rgba(0,0,0,0.40)",
                 cursor: "pointer",
-                flex: "0 0 auto",
               }}
             >
               <svg
-                width="20"
-                height="20"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="#e4ef16"
@@ -1359,7 +1364,7 @@ const payload = {
           <div
             style={{
               display: "flex",
-              gap: 9,
+              gap: 8,
               flexWrap: "wrap",
             }}
           >
@@ -1367,8 +1372,9 @@ const payload = {
               href={`/profile/${user.id}`}
               style={{
                 ...actionLinkBtn,
-                borderRadius: 16,
-                padding: "12px 17px",
+                borderRadius: 14,
+                padding: "10px 14px",
+                fontSize: 15,
               }}
             >
               Profile
@@ -1379,8 +1385,9 @@ const payload = {
                 href="/admin"
                 style={{
                   ...actionLinkBtn,
-                  borderRadius: 16,
-                  padding: "12px 17px",
+                  borderRadius: 14,
+                  padding: "10px 14px",
+                  fontSize: 15,
                 }}
               >
                 Admin
@@ -1391,8 +1398,9 @@ const payload = {
               onClick={handleSignOut}
               style={{
                 ...secondaryBtn,
-                borderRadius: 16,
-                padding: "12px 17px",
+                borderRadius: 14,
+                padding: "10px 14px",
+                fontSize: 15,
               }}
             >
               Sign Out
