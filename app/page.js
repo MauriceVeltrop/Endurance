@@ -144,6 +144,11 @@ export default function Home() {
 
   const [commentText, setCommentText] = useState({});
   const [pageError, setPageError] = useState("");
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+
 
   const [authMode, setAuthMode] = useState("signin");
   const [authName, setAuthName] = useState("");
@@ -801,6 +806,40 @@ const payload = {
     await loadComments();
   };
 
+  const searchUsers = async (query) => {
+    const cleanQuery = String(query || "").trim();
+    const safeQuery = cleanQuery.replaceAll(",", " ");
+
+    setUserSearchQuery(query);
+
+    if (cleanQuery.length < 2) {
+      setUserSearchResults([]);
+      setUserSearchLoading(false);
+      return;
+    }
+
+    setUserSearchLoading(true);
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name, email, location, avatar_url, role")
+      .or(
+        `name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,location.ilike.%${safeQuery}%`
+      )
+      .order("name", { ascending: true })
+      .limit(12);
+
+    if (error) {
+      console.error("User search failed:", error);
+      setUserSearchResults([]);
+      setUserSearchLoading(false);
+      return;
+    }
+
+    setUserSearchResults(data || []);
+    setUserSearchLoading(false);
+  };
+
   const downloadIcs = (event) => {
     const escapeIcsText = (value = "") =>
       String(value)
@@ -1139,8 +1178,42 @@ const payload = {
 
   return (
     <main style={app}>
-      <header style={header}>
+      <header
+        style={{
+          ...header,
+          position: "relative",
+        }}
+      >
         <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
+
+        <button
+          type="button"
+          onClick={() => {
+            setUserSearchOpen(true);
+            setUserSearchQuery("");
+            setUserSearchResults([]);
+          }}
+          aria-label="Search users"
+          title="Search users"
+          style={{
+            position: "absolute",
+            top: 18,
+            right: 18,
+            width: 48,
+            height: 48,
+            borderRadius: "50%",
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "rgba(255,255,255,0.075)",
+            color: "#e4ef16",
+            fontSize: 22,
+            cursor: "pointer",
+            boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+          }}
+        >
+          🔎
+        </button>
       </header>
 
       <section style={loginBar}>
@@ -1167,6 +1240,224 @@ const payload = {
       </section>
 
       {user?.id && <TeamRequestsPanel userId={user.id} />}
+
+      {userSearchOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            background: "rgba(0,0,0,0.72)",
+            backdropFilter: "blur(10px)",
+            padding: 18,
+            display: "grid",
+            alignItems: "start",
+            justifyItems: "center",
+            overflowY: "auto",
+          }}
+          onClick={() => setUserSearchOpen(false)}
+        >
+          <div
+            style={{
+              width: "min(680px, 100%)",
+              marginTop: 24,
+              borderRadius: 28,
+              background:
+                "linear-gradient(180deg, rgba(24,24,24,0.98), rgba(6,6,6,0.98))",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 28px 90px rgba(0,0,0,0.62)",
+              overflow: "hidden",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: 18,
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  background: "rgba(228,239,22,0.14)",
+                  color: "#e4ef16",
+                  fontSize: 22,
+                  flex: "0 0 auto",
+                }}
+              >
+                🔎
+              </div>
+
+              <input
+                value={userSearchQuery}
+                onChange={(event) => searchUsers(event.target.value)}
+                placeholder="Search users by name, email or city..."
+                autoFocus
+                style={{
+                  ...field,
+                  flex: "1 1 auto",
+                  minWidth: 0,
+                  margin: 0,
+                  background: "rgba(255,255,255,0.07)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 16,
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => setUserSearchOpen(false)}
+                style={{
+                  ...secondaryBtn,
+                  width: 44,
+                  height: 44,
+                  padding: 0,
+                  borderRadius: 16,
+                  flex: "0 0 auto",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: 18 }}>
+              {userSearchQuery.trim().length < 2 ? (
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.58)",
+                    fontSize: 15,
+                    lineHeight: 1.45,
+                    padding: "12px 4px",
+                  }}
+                >
+                  Type at least 2 characters to search for users.
+                </div>
+              ) : userSearchLoading ? (
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.72)",
+                    fontSize: 15,
+                    padding: "12px 4px",
+                  }}
+                >
+                  Searching...
+                </div>
+              ) : userSearchResults.length === 0 ? (
+                <div
+                  style={{
+                    color: "rgba(255,255,255,0.58)",
+                    fontSize: 15,
+                    padding: "12px 4px",
+                  }}
+                >
+                  No users found.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {userSearchResults.map((foundUser) => (
+                    <Link
+                      key={foundUser.id}
+                      href={`/profile/${foundUser.id}`}
+                      onClick={() => setUserSearchOpen(false)}
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "center",
+                        padding: 12,
+                        borderRadius: 18,
+                        background: "rgba(255,255,255,0.055)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        textDecoration: "none",
+                        color: "white",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: "50%",
+                          overflow: "hidden",
+                          display: "grid",
+                          placeItems: "center",
+                          background:
+                            "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.15))",
+                          color: "#050505",
+                          fontWeight: 950,
+                          flex: "0 0 auto",
+                        }}
+                      >
+                        {foundUser.avatar_url ? (
+                          <img
+                            src={foundUser.avatar_url}
+                            alt={foundUser.name || "user"}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          String(foundUser.name || foundUser.email || "?")
+                            .replace(/@.*/, "")
+                            .slice(0, 2)
+                            .toUpperCase()
+                        )}
+                      </div>
+
+                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                        <div
+                          style={{
+                            fontWeight: 950,
+                            fontSize: 16,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {foundUser.name || foundUser.email || "Unknown user"}
+                        </div>
+
+                        <div
+                          style={{
+                            color: "rgba(255,255,255,0.55)",
+                            fontSize: 13,
+                            marginTop: 3,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {[foundUser.location, foundUser.role]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          color: "#e4ef16",
+                          fontWeight: 950,
+                          fontSize: 18,
+                        }}
+                      >
+                        ↗
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {pageError ? (
         <div style={errorCard}>
