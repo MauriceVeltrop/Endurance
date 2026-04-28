@@ -46,6 +46,25 @@ export default function EventFormModal({
   const [locating, setLocating] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [createRouteTrigger, setCreateRouteTrigger] = useState(0);
+  const [selectedWodEquipment, setSelectedWodEquipment] = useState([
+    "bodyweight",
+    "dumbbells",
+    "kettlebell",
+  ]);
+
+  const wodEquipmentOptions = [
+    { id: "bodyweight", label: "Bodyweight" },
+    { id: "dumbbells", label: "Dumbbells" },
+    { id: "kettlebell", label: "Kettlebell" },
+    { id: "barbell", label: "Barbell" },
+    { id: "box", label: "Box" },
+    { id: "rower", label: "Rower" },
+    { id: "bike", label: "Bike" },
+    { id: "wallball", label: "Wall Ball" },
+    { id: "jumprope", label: "Jump Rope" },
+    { id: "pullupbar", label: "Pull-up Bar" },
+  ];
+
 
   const canUseRouteBuilder =
     userRole === "moderator" || userRole === "organizer";
@@ -80,74 +99,134 @@ export default function EventFormModal({
 
   const isCrossFitEvent = form.sports?.includes("crossfit");
 
-  const wodTemplates = [
-    {
-      title: "Endurance WOD - Engine Builder",
-      type: "AMRAP 20",
-      workout: [
-        "10 calorie row / bike",
-        "12 kettlebell swings",
-        "10 burpees",
-        "12 wall balls",
-      ],
-      notes: "Steady pacing. Keep moving, avoid redlining in the first 10 minutes.",
-    },
-    {
-      title: "Endurance WOD - Power & Pace",
-      type: "For Time - 5 Rounds",
-      workout: [
-        "400 m run",
-        "15 box jumps",
-        "12 dumbbell snatches",
-        "10 push-ups",
-      ],
-      notes: "Target: controlled intensity. Scale running to 250 m if needed.",
-    },
-    {
-      title: "Endurance WOD - Strength Circuit",
-      type: "EMOM 24",
-      workout: [
-        "Min 1: 12/10 calorie bike",
-        "Min 2: 10 deadlifts",
-        "Min 3: 12 sit-ups",
-        "Min 4: Rest",
-      ],
-      notes: "Choose a deadlift weight that stays technically clean for all rounds.",
-    },
-    {
-      title: "Endurance WOD - Team Up",
-      type: "Partner WOD - 30 min cap",
-      workout: [
-        "1000 m row",
-        "80 wall balls",
-        "60 kettlebell swings",
-        "40 burpees",
-        "1000 m row",
-      ],
-      notes: "Split reps as needed. One athlete works at a time.",
-    },
+  const movementPool = {
+    bodyweight: [
+      "10 burpees",
+      "15 air squats",
+      "12 push-ups",
+      "20 sit-ups",
+      "16 alternating lunges",
+      "30 second plank",
+    ],
+    dumbbells: [
+      "12 dumbbell snatches",
+      "14 dumbbell box step-overs",
+      "12 dumbbell push press",
+      "16 dumbbell walking lunges",
+      "10 dumbbell thrusters",
+    ],
+    kettlebell: [
+      "15 kettlebell swings",
+      "12 goblet squats",
+      "10 kettlebell clean and press",
+      "16 kettlebell reverse lunges",
+    ],
+    barbell: [
+      "10 deadlifts",
+      "8 hang power cleans",
+      "8 front squats",
+      "8 push jerks",
+      "10 barbell cycling reps",
+    ],
+    box: [
+      "15 box jumps",
+      "16 box step-ups",
+      "12 burpee box jump-overs",
+    ],
+    rower: [
+      "250 m row",
+      "12/10 calorie row",
+      "500 m row",
+    ],
+    bike: [
+      "15/12 calorie bike",
+      "30 second hard bike sprint",
+      "1000 m bike",
+    ],
+    wallball: [
+      "18 wall balls",
+      "15 wall balls",
+      "12 wall ball shots",
+    ],
+    jumprope: [
+      "50 single unders",
+      "30 double unders",
+      "60 rope skips",
+    ],
+    pullupbar: [
+      "8 pull-ups",
+      "10 ring rows",
+      "12 hanging knee raises",
+      "8 toes-to-bar",
+    ],
+  };
+
+  const wodFormats = [
+    { type: "AMRAP 18", rounds: 4, note: "Steady pacing. Keep moving without redlining early." },
+    { type: "AMRAP 22", rounds: 5, note: "Find a sustainable rhythm and keep transitions short." },
+    { type: "For Time - 5 Rounds", rounds: 4, note: "Move clean and fast. Scale reps before form breaks." },
+    { type: "EMOM 24", rounds: 4, note: "Use the remaining time in each minute to recover." },
+    { type: "Partner WOD - 30 min cap", rounds: 5, note: "Split reps as needed. One athlete works at a time." },
   ];
 
+  const toggleWodEquipment = (equipmentId) => {
+    setSelectedWodEquipment((current) => {
+      if (current.includes(equipmentId)) {
+        const next = current.filter((id) => id !== equipmentId);
+        return next.length ? next : current;
+      }
+
+      return [...current, equipmentId];
+    });
+  };
+
+  const pickRandom = (items) => items[Math.floor(Math.random() * items.length)];
+
   const createWod = () => {
-    const template =
-      wodTemplates[Math.floor(Math.random() * wodTemplates.length)];
+    const availableMovements = selectedWodEquipment.flatMap(
+      (equipmentId) => movementPool[equipmentId] || []
+    );
+
+    const movementSource = availableMovements.length
+      ? availableMovements
+      : movementPool.bodyweight;
+
+    const format = pickRandom(wodFormats);
+    const movements = [];
+
+    while (movements.length < format.rounds) {
+      const movement = pickRandom(movementSource);
+
+      if (!movements.includes(movement)) {
+        movements.push(movement);
+      }
+
+      if (movementSource.length <= movements.length) break;
+    }
+
+    const equipmentLabels = wodEquipmentOptions
+      .filter((item) => selectedWodEquipment.includes(item.id))
+      .map((item) => item.label)
+      .join(", ");
 
     const description = [
-      template.type,
+      format.type,
+      "",
+      `Equipment: ${equipmentLabels || "Bodyweight"}`,
       "",
       "Workout:",
-      ...template.workout.map((item) => `• ${item}`),
+      ...movements.map((item) => `• ${item}`),
       "",
       "Coaching notes:",
-      template.notes,
+      format.note,
       "",
       "Scaling:",
-      "Adjust load, reps or movement difficulty to match your current level.",
+      "Adjust load, reps, range of motion or movement difficulty to match your current level.",
     ].join("\n");
 
     setForm({
       ...form,
-      title: form.title?.trim() ? form.title : template.title,
+      title: form.title?.trim() ? form.title : `CrossFit WOD - ${format.type}`,
       description,
       distance: null,
       gpxFile: null,
@@ -323,7 +402,43 @@ export default function EventFormModal({
                 </div>
 
                 <div style={{ ...helperText, marginBottom: 10 }}>
-                  Generate a ready-to-use Workout of the Day for this CrossFit event.
+                  Select available equipment and generate a ready-to-use Workout of the Day.
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    marginBottom: 12,
+                  }}
+                >
+                  {wodEquipmentOptions.map((equipment) => {
+                    const selected = selectedWodEquipment.includes(equipment.id);
+
+                    return (
+                      <button
+                        key={equipment.id}
+                        type="button"
+                        onClick={() => toggleWodEquipment(equipment.id)}
+                        style={{
+                          border: selected
+                            ? "1px solid rgba(228,239,22,0.75)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: 999,
+                          padding: "8px 11px",
+                          background: selected
+                            ? "rgba(228,239,22,0.18)"
+                            : "rgba(255,255,255,0.06)",
+                          color: selected ? "#e4ef16" : "rgba(255,255,255,0.82)",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {equipment.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <button
