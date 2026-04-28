@@ -1182,73 +1182,184 @@ const payload = {
         style={{
           ...header,
           position: "relative",
+          display: "grid",
+          gap: 18,
+          paddingTop: 28,
+          marginBottom: 18,
         }}
       >
-        <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
-
-        <button
-          type="button"
-          onClick={() => {
-            setUserSearchOpen(true);
-            setUserSearchQuery("");
-            setUserSearchResults([]);
-          }}
-          aria-label="Search users"
-          title="Search users"
+        <div
           style={{
-            position: "absolute",
-            top: 18,
-            right: 18,
-            width: 48,
-            height: 48,
-            borderRadius: "50%",
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.075)",
-            color: "#e4ef16",
-            fontSize: 22,
-            cursor: "pointer",
-            boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 92,
           }}
         >
-          🔎
-        </button>
-      </header>
+          <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
 
-      <section style={loginBar}>
-        <div style={loginInfo}>
-          Signed in as <strong>{profile?.name || user?.email}</strong>
-          <div style={roleBadge}>{profile?.role || "user"}</div>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href={`/profile/${user.id}`} style={actionLinkBtn}>
-            My Profile
-          </Link>
-
-          {isModerator && (
-            <Link href="/admin" style={actionLinkBtn}>
-              Admin
-            </Link>
-          )}
-
-          <button onClick={handleSignOut} style={secondaryBtn}>
-            Sign Out
+          <button
+            type="button"
+            onClick={() => {
+              setUserSearchOpen(true);
+              setUserSearchQuery("");
+              setUserSearchResults([]);
+            }}
+            aria-label="Search users"
+            title="Search users"
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 4,
+              width: 46,
+              height: 46,
+              borderRadius: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background:
+                "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035))",
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(228,239,22,0.42)",
+              boxShadow:
+                "0 0 18px rgba(228,239,22,0.22), 0 14px 34px rgba(0,0,0,0.55)",
+              cursor: "pointer",
+            }}
+          >
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#e4ef16" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7.5" />
+              <line x1="16.5" y1="16.5" x2="21" y2="21" />
+            </svg>
           </button>
         </div>
-      </section>
+
+        <section
+          style={{
+            ...loginBar,
+            margin: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+            borderRadius: 26,
+            background:
+              "linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035))",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "0 20px 55px rgba(0,0,0,0.38)",
+          }}
+        >
+          <div
+            style={{
+              ...loginInfo,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minWidth: 0,
+              flex: "1 1 auto",
+            }}
+          >
+            <Link
+              href={`/profile/${user.id}`}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                overflow: "hidden",
+                display: "grid",
+                placeItems: "center",
+                textDecoration: "none",
+                background:
+                  "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.20))",
+                color: "#050505",
+                fontWeight: 1000,
+                flex: "0 0 auto",
+                border: "2px solid rgba(228,239,22,0.80)",
+              }}
+            >
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile?.name || "Profile"}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                String(profile?.name || user?.email || "?")
+                  .replace(/@.*/, "")
+                  .slice(0, 2)
+                  .toUpperCase()
+              )}
+            </Link>
+
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: "rgba(255,255,255,0.58)",
+                  fontSize: 12,
+                  fontWeight: 750,
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                  marginBottom: 3,
+                }}
+              >
+                Signed in
+              </div>
+
+              <div
+                style={{
+                  color: "white",
+                  fontSize: 18,
+                  fontWeight: 950,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: 230,
+                }}
+              >
+                {profile?.name || user?.email}
+              </div>
+            </div>
+
+            <div style={{ ...roleBadge, flex: "0 0 auto" }}>
+              {profile?.role || "user"}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              flex: "0 0 auto",
+            }}
+          >
+            <Link href={`/profile/${user.id}`} style={actionLinkBtn}>
+              Profile
+            </Link>
+
+            {isModerator && (
+              <Link href="/admin" style={actionLinkBtn}>
+                Admin
+              </Link>
+            )}
+
+            <button onClick={handleSignOut} style={secondaryBtn}>
+              Sign Out
+            </button>
+          </div>
+        </section>
+      </header>
 
       {user?.id && <TeamRequestsPanel userId={user.id} />}
-
       {userSearchOpen && (
         <div
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 2000,
-            background: "rgba(0,0,0,0.72)",
-            backdropFilter: "blur(10px)",
+            background: "rgba(0,0,0,0.74)",
+            backdropFilter: "blur(12px)",
             padding: 18,
             display: "grid",
             alignItems: "start",
@@ -1259,13 +1370,13 @@ const payload = {
         >
           <div
             style={{
-              width: "min(680px, 100%)",
-              marginTop: 24,
-              borderRadius: 28,
+              width: "min(720px, 100%)",
+              marginTop: 22,
+              borderRadius: 30,
               background:
-                "linear-gradient(180deg, rgba(24,24,24,0.98), rgba(6,6,6,0.98))",
+                "radial-gradient(circle at 84% 0%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(180deg, rgba(24,24,24,0.98), rgba(6,6,6,0.98))",
               border: "1px solid rgba(255,255,255,0.12)",
-              boxShadow: "0 28px 90px rgba(0,0,0,0.62)",
+              boxShadow: "0 30px 95px rgba(0,0,0,0.70)",
               overflow: "hidden",
             }}
             onClick={(event) => event.stopPropagation()}
@@ -1281,18 +1392,20 @@ const payload = {
             >
               <div
                 style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: "50%",
+                  width: 46,
+                  height: 46,
+                  borderRadius: 16,
                   display: "grid",
                   placeItems: "center",
                   background: "rgba(228,239,22,0.14)",
-                  color: "#e4ef16",
-                  fontSize: 22,
+                  border: "1px solid rgba(228,239,22,0.24)",
                   flex: "0 0 auto",
                 }}
               >
-                🔎
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e4ef16" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7.5" />
+                  <line x1="16.5" y1="16.5" x2="21" y2="21" />
+                </svg>
               </div>
 
               <input
@@ -1305,9 +1418,10 @@ const payload = {
                   flex: "1 1 auto",
                   minWidth: 0,
                   margin: 0,
-                  background: "rgba(255,255,255,0.07)",
+                  background: "rgba(255,255,255,0.075)",
                   border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 16,
+                  borderRadius: 18,
+                  minHeight: 52,
                 }}
               />
 
@@ -1316,11 +1430,12 @@ const payload = {
                 onClick={() => setUserSearchOpen(false)}
                 style={{
                   ...secondaryBtn,
-                  width: 44,
-                  height: 44,
+                  width: 46,
+                  height: 46,
                   padding: 0,
                   borderRadius: 16,
                   flex: "0 0 auto",
+                  fontSize: 18,
                 }}
               >
                 ✕
@@ -1329,34 +1444,15 @@ const payload = {
 
             <div style={{ padding: 18 }}>
               {userSearchQuery.trim().length < 2 ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.58)",
-                    fontSize: 15,
-                    lineHeight: 1.45,
-                    padding: "12px 4px",
-                  }}
-                >
+                <div style={{ color: "rgba(255,255,255,0.58)", fontSize: 15, lineHeight: 1.45, padding: "12px 4px" }}>
                   Type at least 2 characters to search for users.
                 </div>
               ) : userSearchLoading ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.72)",
-                    fontSize: 15,
-                    padding: "12px 4px",
-                  }}
-                >
+                <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 15, padding: "12px 4px" }}>
                   Searching...
                 </div>
               ) : userSearchResults.length === 0 ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.58)",
-                    fontSize: 15,
-                    padding: "12px 4px",
-                  }}
-                >
+                <div style={{ color: "rgba(255,255,255,0.58)", fontSize: 15, padding: "12px 4px" }}>
                   No users found.
                 </div>
               ) : (
@@ -1371,7 +1467,7 @@ const payload = {
                         gap: 12,
                         alignItems: "center",
                         padding: 12,
-                        borderRadius: 18,
+                        borderRadius: 20,
                         background: "rgba(255,255,255,0.055)",
                         border: "1px solid rgba(255,255,255,0.08)",
                         textDecoration: "none",
@@ -1380,8 +1476,8 @@ const payload = {
                     >
                       <div
                         style={{
-                          width: 48,
-                          height: 48,
+                          width: 52,
+                          height: 52,
                           borderRadius: "50%",
                           overflow: "hidden",
                           display: "grid",
@@ -1389,20 +1485,13 @@ const payload = {
                           background:
                             "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.15))",
                           color: "#050505",
-                          fontWeight: 950,
+                          fontWeight: 1000,
                           flex: "0 0 auto",
+                          border: "2px solid rgba(228,239,22,0.65)",
                         }}
                       >
                         {foundUser.avatar_url ? (
-                          <img
-                            src={foundUser.avatar_url}
-                            alt={foundUser.name || "user"}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
+                          <img src={foundUser.avatar_url} alt={foundUser.name || "user"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
                           String(foundUser.name || foundUser.email || "?")
                             .replace(/@.*/, "")
@@ -1412,41 +1501,16 @@ const payload = {
                       </div>
 
                       <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                        <div
-                          style={{
-                            fontWeight: 950,
-                            fontSize: 16,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <div style={{ fontWeight: 950, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {foundUser.name || foundUser.email || "Unknown user"}
                         </div>
 
-                        <div
-                          style={{
-                            color: "rgba(255,255,255,0.55)",
-                            fontSize: 13,
-                            marginTop: 3,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {[foundUser.location, foundUser.role]
-                            .filter(Boolean)
-                            .join(" • ")}
+                        <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {[foundUser.location, foundUser.role].filter(Boolean).join(" • ")}
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          color: "#e4ef16",
-                          fontWeight: 950,
-                          fontSize: 18,
-                        }}
-                      >
+                      <div style={{ color: "#e4ef16", fontWeight: 950, fontSize: 20 }}>
                         ↗
                       </div>
                     </Link>
