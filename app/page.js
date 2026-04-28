@@ -1031,160 +1031,14 @@ const payload = {
             "radial-gradient(circle at 70% 0%, rgba(228,239,22,0.12), transparent 30%), #000",
         }}
       >
-        <header style={{ ...header, paddingTop: 34, marginBottom: 18 }}>
-          <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
-        </header>
-
-        <section style={authHeroStyle}>
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 0,
-              backgroundImage: "url('/images/runner-bg.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "right center",
-              backgroundRepeat: "no-repeat",
-              opacity: 0.38,
-              filter: "saturate(1.1) contrast(1.08)",
-            }}
-          />
-
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 1,
-              background:
-                "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 48%, rgba(5,5,5,0.40) 100%)",
-            }}
-          />
-
-          <div style={authPanelStyle}>
-            <div style={authKickerStyle}>Endurance Community</div>
-
-            <h1 style={authTitleStyle}>
-              Train together.
-              <br />
-              Go further.
-            </h1>
-
-            <p style={authTextStyle}>
-              Sign in to join local endurance events, connect with training partners,
-              download routes and add sessions to your calendar.
-            </p>
-
-            <div style={authNoticeStyle}>
-              <strong>Invite-only access.</strong> New registrations are temporarily
-              closed while the platform is being prepared for the first community.
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                style={primaryBtn}
-                onClick={() => setAuthMode("signin")}
-                type="button"
-              >
-                Sign In
-              </button>
-
-              <button
-                style={{ ...secondaryBtn, display: "none" }}
-                onClick={() => setAuthMode("signup")}
-                type="button"
-                aria-hidden="true"
-                tabIndex={-1}
-              >
-                Create Account
-              </button>
-            </div>
-
-            <form onSubmit={handleSignIn} style={authFormStyle}>
-              <input
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email address"
-                type="email"
-                autoComplete="email"
-                style={professionalFieldStyle}
-              />
-
-              <input
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Password"
-                type="password"
-                autoComplete="current-password"
-                style={professionalFieldStyle}
-              />
-
-              <button type="submit" style={authPrimaryStyle}>
-                Sign In
-              </button>
-            </form>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                marginTop: 4,
-              }}
-            >
-              {[
-                ["Events", "Join local sessions"],
-                ["Routes", "GPX-ready training"],
-                ["Team Up", "Find training partners"],
-              ].map(([title, body]) => (
-                <div
-                  key={title}
-                  style={{
-                    padding: 12,
-                    borderRadius: 18,
-                    background: "rgba(255,255,255,0.055)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      color: "#e4ef16",
-                      fontSize: 13,
-                      fontWeight: 950,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {title}
-                  </div>
-                  <div
-                    style={{
-                      color: "rgba(255,255,255,0.58)",
-                      fontSize: 12,
-                      lineHeight: 1.25,
-                    }}
-                  >
-                    {body}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main style={app}>
+  
       <header
         style={{
           ...header,
           display: "grid",
-          gap: 10,
-          paddingTop: 22,
-          marginBottom: 12,
+          gap: 6,
+          paddingTop: 6,
+          marginBottom: 6,
         }}
       >
         <div
@@ -1192,7 +1046,7 @@ const payload = {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            minHeight: 70,
+            minHeight: 54,
           }}
         >
           <img
@@ -1200,8 +1054,9 @@ const payload = {
             alt="Endurance"
             style={{
               ...logoImg,
-              width: "min(74vw, 500px)",
-              filter: "drop-shadow(0 14px 26px rgba(0,0,0,0.68))",
+              width: "min(70vw, 460px)",
+              marginTop: -8,
+              filter: "drop-shadow(0 12px 20px rgba(0,0,0,0.65))",
             }}
           />
         </div>
@@ -1212,30 +1067,30 @@ const payload = {
             width: "min(600px, calc(100vw - 56px))",
             justifySelf: "center",
             margin: 0,
-            padding: 11,
-            borderRadius: 22,
+            padding: "7px 9px",
+            borderRadius: 20,
             display: "grid",
-            gap: 9,
+            gap: 6,
             background:
-              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.10), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.072), rgba(255,255,255,0.028))",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 16px 46px rgba(0,0,0,0.40)",
+              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.08), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025))",
+            border: "1px solid rgba(255,255,255,0.09)",
+            boxShadow: "0 12px 34px rgba(0,0,0,0.36)",
             backdropFilter: "blur(12px)",
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "40px minmax(0, 1fr) 38px",
-              gap: 9,
+              gridTemplateColumns: "34px minmax(0, 1fr) 32px",
+              gap: 8,
               alignItems: "center",
             }}
           >
             <Link
               href={`/profile/${user.id}`}
               style={{
-                width: 40,
-                height: 40,
+                width: 34,
+                height: 34,
                 borderRadius: "50%",
                 overflow: "hidden",
                 display: "grid",
@@ -1244,10 +1099,9 @@ const payload = {
                 background:
                   "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.18))",
                 color: "#050505",
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: 1000,
-                border: "2px solid rgba(228,239,22,0.78)",
-                boxShadow: "0 0 18px rgba(228,239,22,0.16)",
+                border: "2px solid rgba(228,239,22,0.75)",
               }}
             >
               {profile?.avatar_url ? (
@@ -1272,7 +1126,7 @@ const payload = {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 7,
+                gap: 6,
                 flexWrap: "wrap",
                 minWidth: 0,
               }}
@@ -1280,13 +1134,10 @@ const payload = {
               <div
                 style={{
                   color: "white",
-                  fontSize: "clamp(16px, 4.15vw, 21px)",
-                  fontWeight: 950,
-                  letterSpacing: "-0.04em",
+                  fontSize: "clamp(15px, 4vw, 18px)",
+                  fontWeight: 900,
+                  letterSpacing: "-0.03em",
                   lineHeight: 1.05,
-                  whiteSpace: "normal",
-                  overflow: "visible",
-                  textOverflow: "clip",
                   overflowWrap: "anywhere",
                 }}
               >
@@ -1297,10 +1148,9 @@ const payload = {
                 style={{
                   ...roleBadge,
                   flex: "0 0 auto",
-                  fontSize: 11,
-                  padding: "4px 8px",
+                  fontSize: 10,
+                  padding: "3px 7px",
                   borderRadius: 999,
-                  boxShadow: "0 0 14px rgba(228,239,22,0.09)",
                 }}
               >
                 {profile?.role || "user"}
@@ -1314,26 +1164,21 @@ const payload = {
                 setUserSearchQuery("");
                 setUserSearchResults([]);
               }}
-              aria-label="Search users"
-              title="Search users"
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: 13,
+                width: 32,
+                height: 32,
+                borderRadius: 10,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background:
-                  "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.035))",
-                border: "1px solid rgba(228,239,22,0.32)",
-                boxShadow:
-                  "0 0 12px rgba(228,239,22,0.12), 0 9px 22px rgba(0,0,0,0.36)",
-                cursor: "pointer",
+                  "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.03))",
+                border: "1px solid rgba(228,239,22,0.30)",
               }}
             >
               <svg
-                width="17"
-                height="17"
+                width="15"
+                height="15"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="#e4ef16"
@@ -1350,7 +1195,7 @@ const payload = {
           <div
             style={{
               display: "flex",
-              gap: 7,
+              gap: 6,
               flexWrap: "wrap",
             }}
           >
@@ -1358,10 +1203,9 @@ const payload = {
               href={`/profile/${user.id}`}
               style={{
                 ...actionLinkBtn,
-                borderRadius: 13,
-                padding: "8px 12px",
-                fontSize: 14,
-                lineHeight: 1,
+                borderRadius: 11,
+                padding: "5px 9px",
+                fontSize: 12,
               }}
             >
               Profile
@@ -1372,10 +1216,9 @@ const payload = {
                 href="/admin"
                 style={{
                   ...actionLinkBtn,
-                  borderRadius: 13,
-                  padding: "8px 12px",
-                  fontSize: 14,
-                  lineHeight: 1,
+                  borderRadius: 11,
+                  padding: "5px 9px",
+                  fontSize: 12,
                 }}
               >
                 Admin
@@ -1386,10 +1229,9 @@ const payload = {
               onClick={handleSignOut}
               style={{
                 ...secondaryBtn,
-                borderRadius: 13,
-                padding: "8px 12px",
-                fontSize: 14,
-                lineHeight: 1,
+                borderRadius: 11,
+                padding: "5px 9px",
+                fontSize: 12,
               }}
             >
               Sign Out
@@ -1397,7 +1239,6 @@ const payload = {
           </div>
         </section>
       </header>
-
       {user?.id && <TeamRequestsPanel userId={user.id} />}
       {userSearchOpen && (
         <div
