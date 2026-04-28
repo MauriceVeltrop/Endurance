@@ -1360,6 +1360,18 @@ const payload = {
               Profile
             </Link>
 
+            <Link
+              href="/messages"
+              style={{
+                ...actionLinkBtn,
+                borderRadius: 11,
+                padding: "5px 9px",
+                fontSize: 12,
+              }}
+            >
+              Messages
+            </Link>
+
             {isModerator && (
               <Link
                 href="/admin"
