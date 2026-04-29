@@ -873,38 +873,38 @@ const app = {
   height: "100svh",
   overflow: "hidden",
   background:
-    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.13), transparent 32%), #050505",
+    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.10), transparent 30%), #050505",
   color: "white",
-  padding: 8,
+  padding: "4px 6px 6px",
   fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
 const chatShell = {
   width: "min(720px, 100%)",
-  height: "calc(100svh - 16px)",
+  height: "calc(100svh - 10px)",
   margin: "0 auto",
   display: "grid",
   gridTemplateRows: "auto auto minmax(0, 1fr) auto auto",
-  gap: 8,
-  padding: 10,
-  borderRadius: 26,
+  gap: 6,
+  padding: 7,
+  borderRadius: 22,
   background:
-    "radial-gradient(circle at 86% 0%, rgba(228,239,22,0.10), transparent 30%), linear-gradient(180deg, rgba(255,255,255,0.080), rgba(255,255,255,0.030))",
+    "radial-gradient(circle at 86% 0%, rgba(228,239,22,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.070), rgba(255,255,255,0.025))",
   border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 24px 76px rgba(0,0,0,0.56)",
+  boxShadow: "0 20px 64px rgba(0,0,0,0.54)",
 };
 
 const chatHeader = {
   display: "grid",
-  gridTemplateColumns: "38px minmax(0, 1fr) 38px",
+  gridTemplateColumns: "34px minmax(0, 1fr) 34px",
   alignItems: "center",
-  gap: 8,
+  gap: 7,
 };
 
 const backButton = {
-  width: 38,
-  height: 38,
-  borderRadius: 14,
+  width: 34,
+  height: 34,
+  borderRadius: 13,
   display: "grid",
   placeItems: "center",
   background:
@@ -917,9 +917,9 @@ const backButton = {
 };
 
 const refreshButton = {
-  width: 38,
-  height: 38,
-  borderRadius: 14,
+  width: 34,
+  height: 34,
+  borderRadius: 13,
   display: "grid",
   placeItems: "center",
   background:
@@ -940,8 +940,8 @@ const profileHeader = {
 };
 
 const headerAvatar = {
-  width: 42,
-  height: 42,
+  width: 38,
+  height: 38,
   borderRadius: "50%",
   overflow: "hidden",
   display: "grid",
@@ -965,7 +965,7 @@ const headerText = {
 };
 
 const headerName = {
-  fontSize: "clamp(17px, 4.6vw, 23px)",
+  fontSize: "clamp(16px, 4.3vw, 21px)",
   fontWeight: 1000,
   lineHeight: 1.05,
   letterSpacing: "-0.045em",
@@ -977,10 +977,10 @@ const headerName = {
 const headerSubline = {
   display: "flex",
   alignItems: "center",
-  gap: 6,
-  marginTop: 3,
+  gap: 5,
+  marginTop: 2,
   color: "rgba(255,255,255,0.58)",
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 800,
   overflow: "hidden",
   whiteSpace: "nowrap",
@@ -995,7 +995,7 @@ const liveDot = {
 };
 
 const errorBox = {
-  padding: "9px 11px",
+  padding: "7px 9px",
   borderRadius: 15,
   background: "rgba(120,20,20,0.28)",
   border: "1px solid rgba(255,120,120,0.22)",
@@ -1018,16 +1018,16 @@ const errorClose = {
 const messagesBox = {
   minHeight: 0,
   overflowY: "auto",
-  borderRadius: 22,
-  padding: "8px 7px 10px",
+  borderRadius: 20,
+  padding: "7px 6px 8px",
   background: "rgba(0,0,0,0.34)",
   border: "1px solid rgba(255,255,255,0.075)",
 };
 
 const dayDivider = {
   width: "fit-content",
-  margin: "9px auto 7px",
-  padding: "5px 10px",
+  margin: "7px auto 6px",
+  padding: "4px 9px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.075)",
   color: "rgba(255,255,255,0.56)",
@@ -1038,12 +1038,12 @@ const dayDivider = {
 const messageRow = {
   display: "flex",
   alignItems: "flex-end",
-  gap: 7,
+  gap: 5,
 };
 
 const messageAvatar = {
-  width: 28,
-  height: 28,
+  width: 24,
+  height: 24,
   borderRadius: "50%",
   overflow: "hidden",
   display: "grid",
@@ -1056,21 +1056,21 @@ const messageAvatar = {
 };
 
 const avatarSpacer = {
-  width: 28,
+  width: 24,
   flex: "0 0 auto",
 };
 
 const messageStack = {
-  maxWidth: "84%",
+  maxWidth: "78%",
   display: "grid",
-  gap: 4,
+  gap: 3,
 };
 
 const bubble = {
-  padding: "9px 11px 7px",
-  borderRadius: 19,
-  lineHeight: 1.34,
-  fontSize: 15,
+  padding: "8px 10px 6px",
+  borderRadius: 18,
+  lineHeight: 1.3,
+  fontSize: 14,
   wordBreak: "break-word",
   boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
 };
@@ -1090,7 +1090,7 @@ const theirBubble = {
 
 const senderName = {
   color: "#e4ef16",
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 1000,
   marginBottom: 4,
 };
@@ -1098,9 +1098,9 @@ const senderName = {
 const messageMeta = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: 8,
-  marginTop: 5,
-  fontSize: 10,
+  gap: 7,
+  marginTop: 4,
+  fontSize: 9,
   fontWeight: 850,
 };
 
@@ -1199,10 +1199,10 @@ const typingDot = {
 
 const contextBar = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 28px",
-  gap: 8,
+  gridTemplateColumns: "minmax(0, 1fr) 26px",
+  gap: 7,
   alignItems: "center",
-  padding: "8px 10px",
+  padding: "7px 9px",
   borderRadius: 16,
   background: "rgba(228,239,22,0.10)",
   border: "1px solid rgba(228,239,22,0.22)",
@@ -1222,14 +1222,14 @@ const contextClose = {
 
 const composer = {
   display: "grid",
-  gridTemplateColumns: "42px minmax(0, 1fr) 48px",
-  gap: 8,
+  gridTemplateColumns: "38px minmax(0, 1fr) 44px",
+  gap: 6,
 };
 
 const attachButton = {
-  width: 42,
-  minHeight: 46,
-  borderRadius: 17,
+  width: 38,
+  minHeight: 42,
+  borderRadius: 16,
   display: "grid",
   placeItems: "center",
   background: "rgba(255,255,255,0.075)",
@@ -1241,11 +1241,11 @@ const attachButton = {
 
 const input = {
   width: "100%",
-  minHeight: 46,
-  maxHeight: 108,
+  minHeight: 42,
+  maxHeight: 94,
   resize: "vertical",
-  borderRadius: 17,
-  padding: "11px 12px",
+  borderRadius: 16,
+  padding: "10px 11px",
   background: "rgba(255,255,255,0.075)",
   border: "1px solid rgba(255,255,255,0.12)",
   outline: "none",
@@ -1255,8 +1255,8 @@ const input = {
 };
 
 const sendButton = {
-  width: 48,
-  minHeight: 46,
+  width: 44,
+  minHeight: 42,
   border: "none",
   borderRadius: 17,
   background: "#e4ef16",
@@ -1294,7 +1294,7 @@ const emptyCopy = {
 };
 
 const loadingCard = {
-  minHeight: "calc(100svh - 16px)",
+  minHeight: "calc(100svh - 10px)",
   display: "grid",
   placeItems: "center",
   alignContent: "center",
