@@ -10,20 +10,61 @@ export default function MessagesPage() {
   const [profilesById, setProfilesById] = useState({});
   const [unreadByThread, setUnreadByThread] = useState({});
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [liveStatus, setLiveStatus] = useState("connecting");
 
   useEffect(() => {
     loadInbox();
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`messenger-overview-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_threads" },
+        () => loadInbox(false)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const message = payload.new || payload.old;
+
+          if (
+            message?.sender_id === user.id ||
+            message?.receiver_id === user.id
+          ) {
+            loadInbox(false);
+          }
+        }
+      )
+      .subscribe((status) => {
+        setLiveStatus(status === "SUBSCRIBED" ? "live" : "connecting");
+      });
+
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
+  const unreadTotal = Object.values(unreadByThread).reduce(
+    (sum, count) => sum + Number(count || 0),
+    0
+  );
+
   const filteredThreads = useMemo(() => {
     const cleanQuery = query.trim().toLowerCase();
 
-    if (!cleanQuery) return threads;
-
     return threads.filter((thread) => {
       const other = profilesById[thread.otherUserId];
+      const unread = unreadByThread[thread.id] || 0;
+
+      if (filter === "unread" && unread === 0) return false;
+      if (!cleanQuery) return true;
+
       const haystack = [
         other?.name,
         other?.email,
@@ -37,11 +78,11 @@ export default function MessagesPage() {
 
       return haystack.includes(cleanQuery);
     });
-  }, [query, threads, profilesById]);
+  }, [query, filter, threads, profilesById, unreadByThread]);
 
-  async function loadInbox() {
+  async function loadInbox(showLoader = true) {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       setErrorText("");
 
       const {
@@ -52,7 +93,7 @@ export default function MessagesPage() {
       setUser(currentUser);
 
       if (!currentUser) {
-        setLoading(false);
+        if (showLoader) setLoading(false);
         return;
       }
 
@@ -123,7 +164,7 @@ export default function MessagesPage() {
       console.error("messages inbox error", err);
       setErrorText(err?.message || "Could not load conversations.");
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }
 
@@ -143,12 +184,18 @@ export default function MessagesPage() {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
 
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
     if (isToday) {
       return date.toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
       });
     }
+
+    if (isYesterday) return "Yesterday";
 
     return date.toLocaleDateString("en-GB", {
       day: "2-digit",
@@ -158,31 +205,42 @@ export default function MessagesPage() {
 
   return (
     <main style={app}>
-      <header style={header}>
-        <Link href="/" style={backButton}>
+      <header style={topHeader}>
+        <Link href="/" style={headerButton}>
           ←
         </Link>
 
         <img src="/logo-endurance.png" alt="Endurance" style={logo} />
 
-        <button type="button" onClick={loadInbox} style={refreshButton}>
+        <button type="button" onClick={() => loadInbox()} style={headerButton}>
           ↻
         </button>
       </header>
 
-      <section style={panel}>
-        <div style={titleRow}>
+      <section style={hero}>
+        <div style={heroTop}>
           <div>
             <div style={kicker}>Endurance Messenger</div>
             <h1 style={title}>Messages</h1>
           </div>
 
-          <div style={countPill}>
-            {threads.length} {threads.length === 1 ? "chat" : "chats"}
+          <div style={unreadSummary}>
+            <div style={unreadNumber}>{unreadTotal}</div>
+            <div style={unreadLabel}>unread</div>
           </div>
         </div>
 
-        <div style={searchWrap}>
+        <div style={statusRow}>
+          <span
+            style={{
+              ...statusDot,
+              background: liveStatus === "live" ? "#e4ef16" : "#777",
+            }}
+          />
+          <span>{liveStatus === "live" ? "Live updates active" : "Connecting realtime..."}</span>
+        </div>
+
+        <div style={searchBar}>
           <svg
             width="18"
             height="18"
@@ -206,28 +264,43 @@ export default function MessagesPage() {
           />
         </div>
 
+        <div style={tabs}>
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            style={filter === "all" ? activeTab : tab}
+          >
+            All
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilter("unread")}
+            style={filter === "unread" ? activeTab : tab}
+          >
+            Unread
+          </button>
+        </div>
+      </section>
+
+      <section style={listPanel}>
         {loading ? (
-          <div style={stateCard}>Loading conversations...</div>
+          <StateCard title="Loading conversations..." />
         ) : !user ? (
-          <div style={stateCard}>Please sign in to view your conversations.</div>
+          <StateCard title="Please sign in to view your conversations." />
         ) : errorText ? (
-          <div style={errorCard}>{errorText}</div>
+          <StateCard title={errorText} danger />
         ) : threads.length === 0 ? (
-          <div style={emptyCard}>
-            <div style={emptyIcon}>💬</div>
-            <div style={emptyTitle}>No conversations yet</div>
-            <div style={emptyText}>
-              Open a profile and start a chat with someone from your team.
-            </div>
-          </div>
+          <EmptyState />
         ) : filteredThreads.length === 0 ? (
-          <div style={stateCard}>No conversations found.</div>
+          <StateCard title="No conversations found." />
         ) : (
           <div style={list}>
             {filteredThreads.map((thread) => {
               const other = profilesById[thread.otherUserId];
               const displayName = other?.name || other?.email || "Unknown user";
               const unread = unreadByThread[thread.id] || 0;
+              const hasUnread = unread > 0;
 
               return (
                 <Link
@@ -235,26 +308,28 @@ export default function MessagesPage() {
                   href={`/messages/${thread.otherUserId}`}
                   style={{
                     ...threadRow,
-                    borderColor:
-                      unread > 0
-                        ? "rgba(228,239,22,0.36)"
-                        : "rgba(255,255,255,0.08)",
-                    background:
-                      unread > 0
-                        ? "linear-gradient(135deg, rgba(228,239,22,0.095), rgba(255,255,255,0.045))"
-                        : "rgba(255,255,255,0.045)",
+                    borderColor: hasUnread
+                      ? "rgba(228,239,22,0.44)"
+                      : "rgba(255,255,255,0.08)",
+                    background: hasUnread
+                      ? "linear-gradient(135deg, rgba(228,239,22,0.105), rgba(255,255,255,0.045))"
+                      : "rgba(255,255,255,0.045)",
                   }}
                 >
-                  <div style={avatar}>
-                    {other?.avatar_url ? (
-                      <img src={other.avatar_url} alt={displayName} style={avatarImg} />
-                    ) : (
-                      initials(displayName)
-                    )}
+                  <div style={avatarWrap}>
+                    <div style={avatar}>
+                      {other?.avatar_url ? (
+                        <img src={other.avatar_url} alt={displayName} style={avatarImg} />
+                      ) : (
+                        initials(displayName)
+                      )}
+                    </div>
+
+                    {hasUnread ? <div style={unreadDot} /> : null}
                   </div>
 
                   <div style={threadText}>
-                    <div style={threadTopLine}>
+                    <div style={threadTop}>
                       <div style={threadName}>{displayName}</div>
                       <div style={threadTime}>
                         {formatThreadTime(thread.last_message_at || thread.updated_at)}
@@ -263,7 +338,9 @@ export default function MessagesPage() {
 
                     <div style={threadMeta}>
                       {other?.role ? <span style={rolePill}>{other.role}</span> : null}
-                      {other?.location ? <span style={locationText}>{other.location}</span> : null}
+                      {other?.location ? (
+                        <span style={locationText}>{other.location}</span>
+                      ) : null}
                     </div>
 
                     <div style={lastMessage}>
@@ -271,7 +348,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
 
-                  {unread > 0 ? (
+                  {hasUnread ? (
                     <div style={unreadBadge}>{unread > 9 ? "9+" : unread}</div>
                   ) : (
                     <div style={chevron}>›</div>
@@ -286,113 +363,157 @@ export default function MessagesPage() {
   );
 }
 
+function StateCard({ title, danger = false }) {
+  return (
+    <div
+      style={{
+        ...stateCard,
+        background: danger ? "rgba(120,20,20,0.28)" : stateCard.background,
+        color: danger ? "#ffd6d6" : stateCard.color,
+      }}
+    >
+      {title}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div style={emptyCard}>
+      <div style={emptyIcon}>💬</div>
+      <div style={emptyTitle}>No conversations yet</div>
+      <div style={emptyText}>
+        Open a profile and start a chat with someone from your team.
+      </div>
+    </div>
+  );
+}
+
 const app = {
   minHeight: "100svh",
   background:
-    "radial-gradient(circle at 78% 0%, rgba(228,239,22,0.10), transparent 28%), #050505",
+    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.12), transparent 30%), #050505",
   color: "white",
-  padding: "12px 16px 32px",
+  padding: "10px 16px 34px",
   fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-const header = {
+const topHeader = {
   position: "sticky",
   top: 0,
   zIndex: 5,
   display: "grid",
-  gridTemplateColumns: "42px 1fr 42px",
+  gridTemplateColumns: "40px 1fr 40px",
   alignItems: "center",
   gap: 10,
-  padding: "10px 0 14px",
-  background: "linear-gradient(to bottom, #050505 82%, rgba(5,5,5,0))",
+  padding: "8px 0 10px",
+  background: "linear-gradient(to bottom, #050505 84%, rgba(5,5,5,0))",
 };
 
 const logo = {
-  height: 62,
+  height: 54,
   width: "auto",
   maxWidth: "72vw",
   justifySelf: "center",
   filter: "drop-shadow(0 14px 26px rgba(0,0,0,0.70))",
 };
 
-const backButton = {
-  width: 42,
-  height: 42,
-  borderRadius: 15,
+const headerButton = {
+  width: 40,
+  height: 40,
+  borderRadius: 14,
   display: "grid",
   placeItems: "center",
-  background: "rgba(255,255,255,0.07)",
-  border: "1px solid rgba(255,255,255,0.10)",
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
+  border: "1px solid rgba(255,255,255,0.11)",
   color: "white",
   textDecoration: "none",
-  fontSize: 24,
+  fontSize: 22,
 };
 
-const refreshButton = {
-  width: 42,
-  height: 42,
-  borderRadius: 15,
-  display: "grid",
-  placeItems: "center",
-  background: "rgba(228,239,22,0.11)",
-  border: "1px solid rgba(228,239,22,0.28)",
-  color: "#e4ef16",
-  fontSize: 20,
-};
-
-const panel = {
-  width: "min(720px, 100%)",
-  margin: "0 auto",
-  borderRadius: 30,
-  padding: 16,
+const hero = {
+  width: "min(600px, calc(100vw - 32px))",
+  margin: "0 auto 12px",
+  borderRadius: 28,
+  padding: 15,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.030))",
+    "radial-gradient(circle at 86% 0%, rgba(228,239,22,0.15), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.030))",
   border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 28px 90px rgba(0,0,0,0.55)",
+  boxShadow: "0 22px 68px rgba(0,0,0,0.45)",
 };
 
-const titleRow = {
+const heroTop = {
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: 12,
-  marginBottom: 14,
+  marginBottom: 10,
 };
 
 const kicker = {
   color: "#e4ef16",
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 950,
-  letterSpacing: "0.10em",
+  letterSpacing: "0.11em",
   textTransform: "uppercase",
 };
 
 const title = {
   margin: "2px 0 0",
-  fontSize: "clamp(30px, 8vw, 46px)",
-  lineHeight: 0.95,
-  letterSpacing: "-0.06em",
+  fontSize: "clamp(32px, 8vw, 48px)",
+  lineHeight: 0.9,
+  letterSpacing: "-0.07em",
 };
 
-const countPill = {
-  padding: "8px 11px",
-  borderRadius: 999,
+const unreadSummary = {
+  minWidth: 66,
+  padding: "9px 11px",
+  borderRadius: 19,
   background: "rgba(228,239,22,0.11)",
-  border: "1px solid rgba(228,239,22,0.22)",
-  color: "#e4ef16",
-  fontSize: 12,
-  fontWeight: 900,
-  whiteSpace: "nowrap",
+  border: "1px solid rgba(228,239,22,0.23)",
+  textAlign: "center",
 };
 
-const searchWrap = {
+const unreadNumber = {
+  color: "#e4ef16",
+  fontSize: 23,
+  fontWeight: 1000,
+  lineHeight: 1,
+};
+
+const unreadLabel = {
+  color: "rgba(255,255,255,0.62)",
+  fontSize: 10,
+  fontWeight: 850,
+  marginTop: 3,
+};
+
+const statusRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  color: "rgba(255,255,255,0.58)",
+  fontSize: 12,
+  fontWeight: 750,
+  marginBottom: 11,
+};
+
+const statusDot = {
+  width: 8,
+  height: 8,
+  borderRadius: "50%",
+  boxShadow: "0 0 14px rgba(228,239,22,0.45)",
+};
+
+const searchBar = {
   display: "flex",
   alignItems: "center",
   gap: 10,
-  marginBottom: 14,
-  padding: "12px 14px",
-  borderRadius: 20,
-  background: "rgba(0,0,0,0.24)",
+  marginBottom: 11,
+  padding: "11px 13px",
+  borderRadius: 19,
+  background: "rgba(0,0,0,0.25)",
   border: "1px solid rgba(255,255,255,0.09)",
 };
 
@@ -403,26 +524,68 @@ const searchInput = {
   border: "none",
   outline: "none",
   color: "white",
-  fontSize: 16,
+  fontSize: 15,
 };
 
-const list = { display: "grid", gap: 10 };
+const tabs = {
+  display: "flex",
+  gap: 7,
+};
+
+const tab = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.055)",
+  color: "rgba(255,255,255,0.72)",
+  padding: "8px 12px",
+  borderRadius: 999,
+  fontWeight: 850,
+  fontSize: 13,
+};
+
+const activeTab = {
+  ...tab,
+  background: "#e4ef16",
+  color: "#050505",
+  border: "1px solid #e4ef16",
+};
+
+const listPanel = {
+  width: "min(600px, calc(100vw - 32px))",
+  margin: "0 auto",
+  borderRadius: 26,
+  padding: 9,
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.052), rgba(255,255,255,0.025))",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const list = {
+  display: "grid",
+  gap: 9,
+};
 
 const threadRow = {
   display: "grid",
-  gridTemplateColumns: "54px minmax(0, 1fr) auto",
+  gridTemplateColumns: "52px minmax(0, 1fr) auto",
   alignItems: "center",
-  gap: 12,
-  padding: 12,
-  borderRadius: 22,
+  gap: 11,
+  padding: 11,
+  borderRadius: 21,
   border: "1px solid rgba(255,255,255,0.08)",
   color: "white",
   textDecoration: "none",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.22)",
+};
+
+const avatarWrap = {
+  position: "relative",
+  width: 52,
+  height: 52,
 };
 
 const avatar = {
-  width: 54,
-  height: 54,
+  width: 52,
+  height: 52,
   borderRadius: "50%",
   overflow: "hidden",
   display: "grid",
@@ -431,13 +594,31 @@ const avatar = {
     "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.14))",
   color: "#050505",
   fontWeight: 1000,
-  border: "2px solid rgba(228,239,22,0.72)",
+  border: "2px solid rgba(228,239,22,0.70)",
 };
 
-const avatarImg = { width: "100%", height: "100%", objectFit: "cover" };
-const threadText = { minWidth: 0 };
+const avatarImg = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
 
-const threadTopLine = {
+const unreadDot = {
+  position: "absolute",
+  right: 1,
+  bottom: 2,
+  width: 13,
+  height: 13,
+  borderRadius: "50%",
+  background: "#e4ef16",
+  border: "2px solid #111",
+};
+
+const threadText = {
+  minWidth: 0,
+};
+
+const threadTop = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -446,7 +627,7 @@ const threadTopLine = {
 };
 
 const threadName = {
-  fontSize: 17,
+  fontSize: 16,
   fontWeight: 950,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -455,7 +636,7 @@ const threadName = {
 
 const threadTime = {
   color: "rgba(255,255,255,0.46)",
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 750,
   whiteSpace: "nowrap",
 };
@@ -473,14 +654,14 @@ const rolePill = {
   background: "rgba(228,239,22,0.10)",
   borderRadius: 999,
   padding: "3px 7px",
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 900,
   textTransform: "lowercase",
 };
 
 const locationText = {
   color: "rgba(255,255,255,0.48)",
-  fontSize: 12,
+  fontSize: 11,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -488,7 +669,7 @@ const locationText = {
 
 const lastMessage = {
   color: "rgba(255,255,255,0.62)",
-  fontSize: 14,
+  fontSize: 13,
   marginTop: 6,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -496,35 +677,29 @@ const lastMessage = {
 };
 
 const unreadBadge = {
-  minWidth: 26,
-  height: 26,
+  minWidth: 24,
+  height: 24,
   borderRadius: 999,
   display: "grid",
   placeItems: "center",
   background: "#e4ef16",
   color: "#050505",
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 1000,
 };
 
 const chevron = {
   color: "rgba(255,255,255,0.35)",
-  fontSize: 28,
+  fontSize: 26,
   lineHeight: 1,
 };
 
 const stateCard = {
   padding: 18,
-  borderRadius: 22,
+  borderRadius: 21,
   background: "rgba(255,255,255,0.045)",
   border: "1px solid rgba(255,255,255,0.08)",
   color: "rgba(255,255,255,0.68)",
-};
-
-const errorCard = {
-  ...stateCard,
-  background: "rgba(120,20,20,0.28)",
-  color: "#ffd6d6",
 };
 
 const emptyCard = {
@@ -536,8 +711,14 @@ const emptyCard = {
   padding: 28,
 };
 
-const emptyIcon = { fontSize: 34 };
-const emptyTitle = { fontSize: 18, fontWeight: 950 };
+const emptyIcon = {
+  fontSize: 34,
+};
+
+const emptyTitle = {
+  fontSize: 18,
+  fontWeight: 950,
+};
 
 const emptyText = {
   color: "rgba(255,255,255,0.56)",
