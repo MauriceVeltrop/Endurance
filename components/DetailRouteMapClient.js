@@ -292,7 +292,7 @@ function buildRouteAnalysis(points) {
 
   // Distance-based smoothing is more accurate than point-based smoothing,
   // because GPX points are not evenly spaced.
-  const profile = smoothElevationByDistance(rawProfile, 70);
+  const profile = smoothElevationByDistance(rawProfile, 120);
 
   let elevationGain = 0;
   let elevationLoss = 0;
@@ -305,7 +305,7 @@ function buildRouteAnalysis(points) {
     if (diff > 0) {
       accumulatedClimb += diff;
 
-      if (accumulatedDescent >= 2) {
+      if (accumulatedDescent >= 3) {
         elevationLoss += accumulatedDescent;
       }
 
@@ -313,7 +313,7 @@ function buildRouteAnalysis(points) {
     } else if (diff < 0) {
       accumulatedDescent += Math.abs(diff);
 
-      if (accumulatedClimb >= 2) {
+      if (accumulatedClimb >= 3) {
         elevationGain += accumulatedClimb;
       }
 
@@ -321,8 +321,8 @@ function buildRouteAnalysis(points) {
     }
   }
 
-  if (accumulatedClimb >= 2) elevationGain += accumulatedClimb;
-  if (accumulatedDescent >= 2) elevationLoss += accumulatedDescent;
+  if (accumulatedClimb >= 3) elevationGain += accumulatedClimb;
+  if (accumulatedDescent >= 3) elevationLoss += accumulatedDescent;
 
   const elevations = profile.map((p) => p.ele);
   const minEle = Math.min(...elevations);
@@ -330,7 +330,7 @@ function buildRouteAnalysis(points) {
 
   // Use a rolling 120m window for realistic maximum gradients.
   // This avoids false spikes from GPS/elevation noise between two close points.
-  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 120);
+  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 250);
 
   return {
     profile,
@@ -406,9 +406,9 @@ function ElevationProfile({ analysis }) {
     <div style={styles.elevationCard}>
       <div style={styles.elevationHeader}>
         <div>
-          <div style={styles.elevationTitle}>Elevation profile</div>
+          <div style={styles.elevationTitle}>Elevation profile v2</div>
           <div style={styles.elevationSub}>
-            {formatKm(analysis.distanceKm)} • {analysis.pointCount} points
+            {formatKm(analysis.distanceKm)} • {analysis.pointCount} points • filtered
           </div>
         </div>
 
@@ -454,12 +454,12 @@ function ElevationProfile({ analysis }) {
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Max climb</span>
+          <span style={styles.statLabel}>Max 250m</span>
           <strong>{formatGrade(analysis.steepestClimb)}</strong>
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Max descent</span>
+          <span style={styles.statLabel}>Min 250m</span>
           <strong>{formatGrade(analysis.steepestDescent)}</strong>
         </div>
       </div>
