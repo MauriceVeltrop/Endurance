@@ -1223,48 +1223,64 @@ const contextClose = {
 
 const composer = {
   display: "grid",
-  gridTemplateColumns: "34px minmax(0, 1fr) 40px",
-  gap: 5,
+  gridTemplateColumns: "32px minmax(0, 1fr) 42px",
+  alignItems: "stretch",
+  gap: 6,
+  padding: "2px 0 0",
 };
 
 const attachButton = {
-  width: 34,
-  minHeight: 38,
+  width: 32,
+  height: 42,
+  minHeight: 42,
   borderRadius: 14,
   display: "grid",
   placeItems: "center",
-  background: "rgba(255,255,255,0.075)",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.040))",
+  border: "1px solid rgba(255,255,255,0.11)",
   color: "#e4ef16",
-  fontSize: 19,
-  fontWeight: 900,
+  fontSize: 20,
+  lineHeight: 1,
+  fontWeight: 950,
+  boxSizing: "border-box",
 };
 
 const input = {
   width: "100%",
-  minHeight: 38,
-  maxHeight: 82,
-  resize: "vertical",
+  height: 42,
+  minHeight: 42,
+  maxHeight: 42,
+  resize: "none",
   borderRadius: 14,
-  padding: "8px 10px",
-  background: "rgba(255,255,255,0.075)",
+  padding: "10px 12px",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.080), rgba(255,255,255,0.045))",
   border: "1px solid rgba(255,255,255,0.12)",
   outline: "none",
   color: "white",
   fontSize: 14,
-  lineHeight: 1.28,
+  lineHeight: 1.25,
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const sendButton = {
-  width: 40,
-  minHeight: 38,
+  width: 42,
+  height: 42,
+  minHeight: 42,
   border: "none",
-  borderRadius: 15,
-  background: "#e4ef16",
+  borderRadius: 14,
+  background: "linear-gradient(135deg, #e4ef16, #f4ff2d)",
   color: "#050505",
-  fontSize: 19,
+  fontSize: 18,
+  lineHeight: 1,
   fontWeight: 1000,
   cursor: "pointer",
+  display: "grid",
+  placeItems: "center",
+  boxSizing: "border-box",
+  boxShadow: "0 8px 18px rgba(228,239,22,0.18)",
 };
 
 const emptyState = {
