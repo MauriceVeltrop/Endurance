@@ -7,7 +7,7 @@ import EventCard from "../components/EventCard";
 import EventFormModal from "../components/EventFormModal";
 import { supabase } from "../lib/supabase";
 import { getSportLabels } from "../lib/sports";
-import { parseGpxFile, calculateRouteStats } from "../lib/gpx";
+import { parseGpxFile, calculateRouteStats, enrichPointsWithElevationApi } from "../lib/gpx";
 import {
   actionLinkBtn,
   app,
@@ -578,6 +578,15 @@ useEffect(() => {
         setSavingEvent(false);
         alert("No route points found in this GPX file.");
         return;
+      }
+
+      try {
+        routePoints = await enrichPointsWithElevationApi(routePoints, {
+          spacingMeters: 50,
+          smoothingMeters: 70,
+        });
+      } catch (error) {
+        console.warn("Elevation API failed, using GPX elevation data:", error);
       }
 
       const routeStats = calculateRouteStats(routePoints);
