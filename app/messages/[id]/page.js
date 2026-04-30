@@ -59,18 +59,11 @@ function initials(name = "?") {
 }
 
 function getAvatarUrl(profile) {
-  return (
-    profile?.avatar_url ||
-    profile?.profile_photo_url ||
-    profile?.photo_url ||
-    profile?.image_url ||
-    profile?.avatar ||
-    ""
-  );
+  return profile?.avatar_url || "";
 }
 
 function displayName(profile, fallback = "User") {
-  return profile?.name || profile?.full_name || profile?.email || fallback;
+  return profile?.name || profile?.email || fallback;
 }
 
 export default function DirectMessagePage() {
@@ -235,12 +228,12 @@ export default function DirectMessagePage() {
         await Promise.all([
           supabase
             .from("profiles")
-            .select("id, name, full_name, email, avatar_url, profile_photo_url, photo_url, image_url, role, location")
+            .select("id, name, email, avatar_url, role, location")
             .eq("id", currentUser.id)
             .maybeSingle(),
           supabase
             .from("profiles")
-            .select("id, name, full_name, email, avatar_url, profile_photo_url, photo_url, image_url, role, location")
+            .select("id, name, email, avatar_url, role, location")
             .eq("id", otherUserId)
             .maybeSingle(),
         ]);
