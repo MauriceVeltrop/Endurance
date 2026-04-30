@@ -759,10 +759,10 @@ export default function DirectMessagePage() {
 
                   {item.media_url ? (
                     item.media_type === "image" ? (
-                      <img src={item.media_url} alt="Shared media" style={styles.mediaImage} />
+                      <a href={item.media_url} target="_blank" rel="noreferrer"><img src={item.media_url} alt="Shared media" style={styles.mediaImage} /></a>
                     ) : (
-                      <a href={item.media_url} target="_blank" rel="noreferrer" style={styles.fileLink}>
-                        Open attachment
+                      <a href={item.media_url} target="_blank" rel="noreferrer" download style={styles.fileLink}>
+                        📎 Download attachment
                       </a>
                     )
                   ) : null}
