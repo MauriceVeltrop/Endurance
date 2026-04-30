@@ -164,6 +164,95 @@ function movingAverage(values, radius = 2) {
   });
 }
 
+function interpolateElevationAtDistance(profile, targetMeters) {
+  if (!profile || profile.length === 0) return null;
+
+  if (targetMeters <= profile[0].distanceMeters) return profile[0].ele;
+  const last = profile[profile.length - 1];
+  if (targetMeters >= last.distanceMeters) return last.ele;
+
+  for (let i = 1; i < profile.length; i++) {
+    const previous = profile[i - 1];
+    const current = profile[i];
+
+    if (current.distanceMeters >= targetMeters) {
+      const span = current.distanceMeters - previous.distanceMeters || 1;
+      const ratio = (targetMeters - previous.distanceMeters) / span;
+      return previous.ele + (current.ele - previous.ele) * ratio;
+    }
+  }
+
+  return last.ele;
+}
+
+function smoothElevationByDistance(rawProfile, windowMeters = 70) {
+  if (!rawProfile || rawProfile.length === 0) return [];
+
+  return rawProfile.map((point, index) => {
+    let total = 0;
+    let count = 0;
+
+    for (let i = index; i >= 0; i--) {
+      if (point.distanceMeters - rawProfile[i].distanceMeters > windowMeters) break;
+      if (Number.isFinite(rawProfile[i].ele)) {
+        total += rawProfile[i].ele;
+        count += 1;
+      }
+    }
+
+    for (let i = index + 1; i < rawProfile.length; i++) {
+      if (rawProfile[i].distanceMeters - point.distanceMeters > windowMeters) break;
+      if (Number.isFinite(rawProfile[i].ele)) {
+        total += rawProfile[i].ele;
+        count += 1;
+      }
+    }
+
+    return {
+      ...point,
+      ele: count ? total / count : point.ele,
+    };
+  });
+}
+
+function calculateRollingGrades(profile, windowMeters = 120) {
+  if (!profile || profile.length < 2) {
+    return { steepestClimb: null, steepestDescent: null };
+  }
+
+  const totalDistance = profile[profile.length - 1].distanceMeters || 0;
+
+  if (totalDistance < windowMeters) {
+    return { steepestClimb: null, steepestDescent: null };
+  }
+
+  let steepestClimb = null;
+  let steepestDescent = null;
+
+  for (let startMeters = 0; startMeters + windowMeters <= totalDistance; startMeters += 10) {
+    const endMeters = startMeters + windowMeters;
+    const startEle = interpolateElevationAtDistance(profile, startMeters);
+    const endEle = interpolateElevationAtDistance(profile, endMeters);
+
+    if (!Number.isFinite(startEle) || !Number.isFinite(endEle)) continue;
+
+    const grade = ((endEle - startEle) / windowMeters) * 100;
+
+    if (grade > 0 && (steepestClimb === null || grade > steepestClimb)) {
+      steepestClimb = grade;
+    }
+
+    if (grade < 0 && (steepestDescent === null || grade < steepestDescent)) {
+      steepestDescent = grade;
+    }
+  }
+
+  return {
+    steepestClimb,
+    steepestDescent,
+  };
+}
+
 function buildRouteAnalysis(points) {
   if (!points || points.length < 2) {
     return {
@@ -180,66 +269,68 @@ function buildRouteAnalysis(points) {
   }
 
   let distanceMeters = 0;
+  let lastKnownElevation = null;
 
-  const rawElevations = points.map((p) =>
-    Number.isFinite(p.ele) ? Number(p.ele) : null
-  );
+  const rawProfile = points.map((point, index) => {
+    if (index > 0) {
+      distanceMeters += haversineMeters(points[index - 1], point);
+    }
 
-  const fallbackElevation = rawElevations.find((value) => Number.isFinite(value)) ?? 0;
-  const filledElevations = rawElevations.map((value) =>
-    Number.isFinite(value) ? value : fallbackElevation
-  );
-  const smoothedElevations = movingAverage(filledElevations, 2);
+    if (Number.isFinite(point.ele)) {
+      lastKnownElevation = Number(point.ele);
+    }
 
-  const profile = [
-    {
-      distanceKm: 0,
-      ele: smoothedElevations[0],
-      rawEle: filledElevations[0],
-      lat: points[0].lat,
-      lng: points[0].lng,
-    },
-  ];
+    return {
+      distanceMeters,
+      distanceKm: distanceMeters / 1000,
+      ele: Number.isFinite(lastKnownElevation) ? lastKnownElevation : 0,
+      rawEle: Number.isFinite(point.ele) ? Number(point.ele) : null,
+      lat: point.lat,
+      lng: point.lng,
+    };
+  });
+
+  // Distance-based smoothing is more accurate than point-based smoothing,
+  // because GPX points are not evenly spaced.
+  const profile = smoothElevationByDistance(rawProfile, 70);
 
   let elevationGain = 0;
   let elevationLoss = 0;
-  let steepestClimb = null;
-  let steepestDescent = null;
+  let accumulatedClimb = 0;
+  let accumulatedDescent = 0;
 
-  for (let i = 1; i < points.length; i++) {
-    const segmentMeters = haversineMeters(points[i - 1], points[i]);
-    distanceMeters += segmentMeters;
+  for (let i = 1; i < profile.length; i++) {
+    const diff = profile[i].ele - profile[i - 1].ele;
 
-    const diff = smoothedElevations[i] - smoothedElevations[i - 1];
+    if (diff > 0) {
+      accumulatedClimb += diff;
 
-    // Ignore tiny GPS/elevation noise but keep enough detail for hills.
-    if (diff > 1) elevationGain += diff;
-    if (diff < -1) elevationLoss += Math.abs(diff);
-
-    if (segmentMeters >= 15 && Number.isFinite(diff)) {
-      const grade = (diff / segmentMeters) * 100;
-
-      if (diff > 0 && (steepestClimb === null || grade > steepestClimb)) {
-        steepestClimb = grade;
+      if (accumulatedDescent >= 2) {
+        elevationLoss += accumulatedDescent;
       }
 
-      if (diff < 0 && (steepestDescent === null || grade < steepestDescent)) {
-        steepestDescent = grade;
+      accumulatedDescent = 0;
+    } else if (diff < 0) {
+      accumulatedDescent += Math.abs(diff);
+
+      if (accumulatedClimb >= 2) {
+        elevationGain += accumulatedClimb;
       }
+
+      accumulatedClimb = 0;
     }
-
-    profile.push({
-      distanceKm: distanceMeters / 1000,
-      ele: smoothedElevations[i],
-      rawEle: filledElevations[i],
-      lat: points[i].lat,
-      lng: points[i].lng,
-    });
   }
+
+  if (accumulatedClimb >= 2) elevationGain += accumulatedClimb;
+  if (accumulatedDescent >= 2) elevationLoss += accumulatedDescent;
 
   const elevations = profile.map((p) => p.ele);
   const minEle = Math.min(...elevations);
   const maxEle = Math.max(...elevations);
+
+  // Use a rolling 120m window for realistic maximum gradients.
+  // This avoids false spikes from GPS/elevation noise between two close points.
+  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 120);
 
   return {
     profile,
