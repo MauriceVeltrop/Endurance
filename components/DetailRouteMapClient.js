@@ -386,22 +386,31 @@ function smoothVisualProfile(profile, radius = 5) {
 }
 
 function buildSmoothSvgPath(points) {
-  if (!points || points.length === 0) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  const safePoints = (points || []).filter(
+    (point) =>
+      point &&
+      Number.isFinite(Number(point.x)) &&
+      Number.isFinite(Number(point.y))
+  );
 
-  let path = `M ${points[0].x} ${points[0].y}`;
+  if (safePoints.length === 0) return "";
+  if (safePoints.length === 1) {
+    return `M ${safePoints[0].x} ${safePoints[0].y}`;
+  }
 
-  for (let i = 0; i < points.length - 1; i++) {
-    const current = points[i];
-    const next = points[i + 1];
+  let path = `M ${safePoints[0].x} ${safePoints[0].y}`;
 
-    const midX = ((current.x + next.x) / 2).toFixed(2);
-    const midY = ((current.y + next.y) / 2).toFixed(2);
+  for (let i = 0; i < safePoints.length - 1; i++) {
+    const current = safePoints[i];
+    const next = safePoints[i + 1];
+
+    const midX = ((Number(current.x) + Number(next.x)) / 2).toFixed(2);
+    const midY = ((Number(current.y) + Number(next.y)) / 2).toFixed(2);
 
     path += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
   }
 
-  const last = points[points.length - 1];
+  const last = safePoints[safePoints.length - 1];
   path += ` T ${last.x} ${last.y}`;
 
   return path;
@@ -412,11 +421,25 @@ function ElevationProfile({ analysis }) {
 
   if (profile.length < 6) return null;
 
-  const chartData = smoothVisualProfile(downsamplePoints(profile, 900), 6);
-  const visualElevations = chartData.map((point) => point.ele);
+  const rawChart = downsamplePoints(profile || [], 900).filter(
+    (point) => point && Number.isFinite(Number(point.ele))
+  );
+
+  const chartData = smoothVisualProfile(rawChart, 6).filter(
+    (point) => point && Number.isFinite(Number(point.ele))
+  );
+
+  if (chartData.length < 2) return null;
+
+  const visualElevations = chartData
+    .map((point) => Number(point.ele))
+    .filter((value) => Number.isFinite(value));
+
+  if (visualElevations.length < 2) return null;
+
   const min = Math.min(...visualElevations);
   const max = Math.max(...visualElevations);
-  const range = max - min || 1;
+  const range = Math.max(max - min, 1);
 
   const width = 360;
   const height = 92;
@@ -424,18 +447,27 @@ function ElevationProfile({ analysis }) {
   const bottomPad = 18;
   const usableHeight = height - topPad - bottomPad;
 
-  const svgPoints = chartData.map((point, index) => {
-    const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
-    const y = (
-      topPad +
-      (1 - (point.ele - min) / range) * usableHeight
-    ).toFixed(2);
+  const svgPoints = chartData
+    .map((point, index) => {
+      const ele = Number(point.ele);
+      if (!Number.isFinite(ele)) return null;
 
-    return { x, y };
-  });
+      const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
+      const y = (
+        topPad +
+        (1 - (ele - min) / range) * usableHeight
+      ).toFixed(2);
+
+      if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+        return null;
+      }
+
+      return { x, y };
+    })
+    .filter(Boolean);
 
   const path = buildSmoothSvgPath(svgPoints);
-  const fillPath = `${path} L ${width} ${height} L 0 ${height} Z`;
+  const fillPath = path ? `${path} L ${width} ${height} L 0 ${height} Z` : "";
 
   const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
     const y = topPad + ratio * usableHeight;
@@ -480,16 +512,18 @@ function ElevationProfile({ analysis }) {
         </defs>
 
         {gridLines}
-        <path d={fillPath} fill="url(#enduranceElevationFill)" />
-        <path
-          d={path}
-          fill="none"
-          stroke={ROUTE_COLOR}
-          strokeWidth="2.7"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
+        {path && <path d={fillPath} fill="url(#enduranceElevationFill)" />}
+        {path && (
+          <path
+            d={path}
+            fill="none"
+            stroke={ROUTE_COLOR}
+            strokeWidth="2.7"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
 
       <div style={styles.elevationStats}>
