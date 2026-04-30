@@ -1,13 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
 const ENDURANCE_YELLOW = "#eaff00";
 const DARK_BG = "#050505";
-const PANEL = "#101113";
 const PANEL_2 = "#1b1c20";
 const TEXT = "#f5f5f5";
-const MUTED = "#a7a7a7";
+
+const REACTIONS = ["👍", "🔥", "💪", "😂", "❤️", "👏"];
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -46,7 +49,7 @@ function dateChip(value) {
 }
 
 function initials(name = "?") {
-  return name
+  return String(name || "?")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
@@ -55,91 +58,140 @@ function initials(name = "?") {
     .toUpperCase();
 }
 
-const demoMe = {
-  id: "me",
-  name: "Maurice Veltrop",
-  role: "moderator",
-  avatar: "/avatar.png",
-};
+function getAvatarUrl(profile) {
+  return (
+    profile?.avatar_url ||
+    profile?.profile_photo_url ||
+    profile?.photo_url ||
+    profile?.image_url ||
+    profile?.avatar ||
+    ""
+  );
+}
 
-const demoOther = {
-  id: "other",
-  name: "Maurice Veltrop",
-  role: "moderator",
-  avatar: "/avatar.png",
-};
+function displayName(profile, fallback = "User") {
+  return profile?.name || profile?.full_name || profile?.email || fallback;
+}
 
-const initialMessages = [
-  {
-    id: "1",
-    sender_id: "other",
-    sender_name: "Maurice Veltrop",
-    body: "Test",
-    created_at: "2026-04-27T11:44:00",
-  },
-  {
-    id: "2",
-    sender_id: "me",
-    sender_name: "Maurice Veltrop",
-    body: "Heey... Hoe issie?",
-    created_at: "2026-04-27T11:49:00",
-  },
-  {
-    id: "3",
-    sender_id: "me",
-    sender_name: "Maurice Veltrop",
-    body: "Lekker weer",
-    created_at: "2026-04-27T11:50:00",
-  },
-  {
-    id: "4",
-    sender_id: "other",
-    sender_name: "Maurice Veltrop",
-    body: "Ja, vandaag ook!",
-    created_at: "2026-04-28T15:24:00",
-  },
-  {
-    id: "5",
-    sender_id: "other",
-    sender_name: "Maurice Veltrop",
-    body: "Hoi",
-    created_at: "2026-04-28T21:11:00",
-  },
-  {
-    id: "6",
-    sender_id: "me",
-    sender_name: "Maurice Veltrop",
-    body: "Hallo",
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "7",
-    sender_id: "other",
-    sender_name: "Maurice Veltrop",
-    body: "Test",
-    created_at: new Date(Date.now() - 23.95 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "8",
-    sender_id: "other",
-    sender_name: "Maurice Veltrop",
-    body: "Test 2",
-    created_at: new Date(Date.now() - 22 * 60 * 60 * 1000).toISOString(),
-  },
-];
+export default function DirectMessagePage() {
+  const params = useParams();
+  const otherUserId = params?.id;
 
-export default function MessageThreadPage() {
-  const [messages, setMessages] = useState(initialMessages);
+  const [user, setUser] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
+  const [otherProfile, setOtherProfile] = useState(null);
+  const [thread, setThread] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [reactionsByMessageId, setReactionsByMessageId] = useState({});
   const [input, setInput] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [errorText, setErrorText] = useState("");
+  const [liveStatus, setLiveStatus] = useState("connecting");
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [showActionsFor, setShowActionsFor] = useState(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
-
-  const contact = demoOther;
-  const currentUser = demoMe;
+  const typingTimeoutRef = useRef(null);
 
   const canSend = input.trim().length > 0 || !!selectedFile;
+
+  useEffect(() => {
+    if (!otherUserId) return;
+    loadChat();
+  }, [otherUserId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, otherTyping]);
+
+  useEffect(() => {
+    if (!thread?.id || !user?.id) return;
+
+    const channel = supabase
+      .channel(`direct-message-${thread.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        async (payload) => {
+          const newMessage = payload.new;
+          const senderProfile =
+            newMessage.sender_id === user.id ? myProfile : otherProfile;
+
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === newMessage.id)) return prev;
+            return [...prev, { ...newMessage, sender_profile: senderProfile || null }];
+          });
+
+          if (newMessage.receiver_id === user.id) {
+            await markRead(thread.id, user.id);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        (payload) => {
+          const updated = payload.new;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === updated.id ? { ...message, ...updated } : message
+            )
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_message_reactions",
+        },
+        () => loadReactions()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_typing",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        (payload) => {
+          const row = payload.new;
+          if (!row || row.user_id === user.id) return;
+
+          const lastTyping = new Date(row.updated_at).getTime();
+          const isRecent = Date.now() - lastTyping < 4500;
+          setOtherTyping(Boolean(row.is_typing && isRecent));
+
+          setTimeout(() => setOtherTyping(false), 4800);
+        }
+      )
+      .subscribe((status) => {
+        setLiveStatus(status === "SUBSCRIBED" ? "live" : "connecting");
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [thread?.id, user?.id, myProfile?.id, otherProfile?.id]);
 
   const grouped = useMemo(() => {
     const rows = [];
@@ -153,72 +205,464 @@ export default function MessageThreadPage() {
           rows.push({ type: "date", id: `date-${m.created_at}`, label: dateChip(m.created_at) });
           lastDate = m.created_at;
         }
+
         rows.push({ type: "message", ...m });
       });
 
     return rows;
   }, [messages]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length]);
+  async function loadChat() {
+    try {
+      setLoading(true);
+      setErrorText("");
 
-  function sendMessage() {
-    if (!canSend) return;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const text = input.trim();
-    const attachmentText = selectedFile ? `📎 ${selectedFile.name}` : "";
-    const body = [text, attachmentText].filter(Boolean).join("\n");
+      const currentUser = session?.user;
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: crypto?.randomUUID?.() || String(Date.now()),
-        sender_id: currentUser.id,
-        sender_name: currentUser.name,
-        body,
-        created_at: new Date().toISOString(),
-        pending: false,
-      },
-    ]);
+      if (!currentUser) {
+        setLoading(false);
+        setErrorText("Please sign in to use messages.");
+        return;
+      }
 
-    setInput("");
-    setSelectedFile(null);
+      setUser(currentUser);
+
+      const [{ data: myData }, { data: otherData, error: otherError }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, name, full_name, email, avatar_url, profile_photo_url, photo_url, image_url, role, location")
+            .eq("id", currentUser.id)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("id, name, full_name, email, avatar_url, profile_photo_url, photo_url, image_url, role, location")
+            .eq("id", otherUserId)
+            .maybeSingle(),
+        ]);
+
+      if (otherError) throw otherError;
+
+      setMyProfile(myData || null);
+      setOtherProfile(otherData || null);
+
+      let activeThread = await findThread(currentUser.id, otherUserId);
+      if (!activeThread) activeThread = await createThread(currentUser.id, otherUserId);
+
+      setThread(activeThread);
+
+      const { data: rows, error: messageError } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("thread_id", activeThread.id)
+        .order("created_at", { ascending: true });
+
+      if (messageError) throw messageError;
+
+      const visibleRows = (rows || []).filter((message) => !message.deleted_at);
+
+      const hydrated = visibleRows.map((message) => ({
+        ...message,
+        sender_profile:
+          message.sender_id === currentUser.id ? myData || null : otherData || null,
+      }));
+
+      setMessages(hydrated);
+
+      await markRead(activeThread.id, currentUser.id);
+      await loadReactions(activeThread.id);
+    } catch (error) {
+      console.error("loadChat error", error);
+      setErrorText(error?.message || "Could not load this chat.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function findThread(userA, userB) {
+    const { data, error } = await supabase
+      .from("chat_threads")
+      .select("*")
+      .or(`and(user_a.eq.${userA},user_b.eq.${userB}),and(user_a.eq.${userB},user_b.eq.${userA})`)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+    return data?.[0] || null;
+  }
+
+  async function createThread(userA, userB) {
+    const ordered = [userA, userB].sort();
+
+    const { data, error } = await supabase
+      .from("chat_threads")
+      .insert({
+        user_a: ordered[0],
+        user_b: ordered[1],
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async function loadReactions(threadId = thread?.id) {
+    if (!threadId) return;
+
+    const { data, error } = await supabase
+      .from("chat_message_reactions")
+      .select("id, message_id, user_id, emoji")
+      .eq("thread_id", threadId);
+
+    if (error) return;
+
+    const groupedReactions = {};
+    (data || []).forEach((reaction) => {
+      if (!groupedReactions[reaction.message_id]) groupedReactions[reaction.message_id] = {};
+      if (!groupedReactions[reaction.message_id][reaction.emoji]) {
+        groupedReactions[reaction.message_id][reaction.emoji] = {
+          count: 0,
+          mine: false,
+        };
+      }
+
+      groupedReactions[reaction.message_id][reaction.emoji].count += 1;
+      if (reaction.user_id === user?.id) groupedReactions[reaction.message_id][reaction.emoji].mine = true;
+    });
+
+    setReactionsByMessageId(groupedReactions);
+  }
+
+  async function markRead(threadId, userId) {
+    if (!threadId || !userId) return;
+
+    const now = new Date().toISOString();
+
+    await supabase
+      .from("chat_messages")
+      .update({ read_at: now })
+      .eq("thread_id", threadId)
+      .eq("receiver_id", userId)
+      .is("read_at", null);
+
+    await supabase.from("chat_reads").upsert(
+      { thread_id: threadId, user_id: userId, last_read_at: now },
+      { onConflict: "thread_id,user_id" }
+    );
+
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.receiver_id === userId && !message.read_at
+          ? { ...message, read_at: now }
+          : message
+      )
+    );
+  }
+
+  async function setTyping(isTyping) {
+    if (!thread?.id || !user?.id) return;
+
+    await supabase
+      .from("chat_typing")
+      .upsert(
+        {
+          thread_id: thread.id,
+          user_id: user.id,
+          is_typing: isTyping,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "thread_id,user_id" }
+      )
+      .then(() => null)
+      .catch(() => null);
+  }
+
+  function handleTyping(value) {
+    setInput(value);
+
+    if (!thread?.id || !user?.id) return;
+
+    setTyping(true);
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setTyping(false);
+    }, 1800);
+  }
+
+  async function sendMessage(media = null) {
+    const clean = input.trim();
+
+    if ((!clean && !media && !selectedFile) || !user?.id || !otherUserId || !thread?.id || sending) return;
+
+    try {
+      setSending(true);
+
+      let mediaPayload = media;
+
+      if (!mediaPayload && selectedFile) {
+        mediaPayload = await uploadMediaOnly(selectedFile);
+      }
+
+      const now = new Date().toISOString();
+      const messageText = clean || (mediaPayload?.type === "image" ? "Photo" : "Attachment");
+
+      setInput("");
+      setSelectedFile(null);
+      setReplyTo(null);
+      setEditingMessage(null);
+      await setTyping(false);
+
+      const payload = {
+        thread_id: thread.id,
+        sender_id: user.id,
+        receiver_id: otherUserId,
+        message: messageText,
+        reply_to_message_id: replyTo?.id || null,
+      };
+
+      if (mediaPayload?.url) {
+        payload.media_url = mediaPayload.url;
+        payload.media_type = mediaPayload.type || "image";
+      }
+
+      const { data: insertedMessage, error: insertError } = await supabase
+        .from("chat_messages")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (insertError) throw insertError;
+
+      if (insertedMessage) {
+        setMessages((prev) => {
+          if (prev.some((message) => message.id === insertedMessage.id)) return prev;
+          return [
+            ...prev,
+            {
+              ...insertedMessage,
+              sender_profile: myProfile || null,
+            },
+          ];
+        });
+      }
+
+      await supabase
+        .from("chat_threads")
+        .update({
+          last_message: messageText,
+          last_message_at: now,
+          updated_at: now,
+        })
+        .eq("id", thread.id);
+
+      textareaRef.current?.focus();
+    } catch (error) {
+      console.error("sendMessage error", error);
+      if (!media) setInput(clean);
+      setErrorText(error?.message || "Could not send message.");
+    } finally {
+      setSending(false);
+      setUploadingMedia(false);
+    }
+  }
+
+  async function uploadMediaOnly(file) {
+    if (!file || !user?.id || !thread?.id) return null;
+
+    setUploadingMedia(true);
+
+    const ext = file.name.split(".").pop() || "jpg";
+    const filePath = `${thread.id}/${user.id}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("chat-media")
+      .upload(filePath, file, { upsert: false });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from("chat-media").getPublicUrl(filePath);
+
+    return {
+      url: data.publicUrl,
+      type: file.type?.startsWith("image/") ? "image" : "file",
+    };
+  }
+
+  async function editMessage() {
+    const clean = input.trim();
+    if (!clean || !editingMessage?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from("chat_messages")
+        .update({
+          message: clean,
+          edited_at: new Date().toISOString(),
+        })
+        .eq("id", editingMessage.id)
+        .eq("sender_id", user.id);
+
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === editingMessage.id
+            ? { ...message, message: clean, edited_at: new Date().toISOString() }
+            : message
+        )
+      );
+
+      setInput("");
+      setEditingMessage(null);
+    } catch (error) {
+      setErrorText(error?.message || "Could not edit message.");
+    }
+  }
+
+  async function deleteMessage(message) {
+    if (!message?.id || message.sender_id !== user?.id) return;
+
+    const confirmed = window.confirm("Delete this message?");
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("chat_messages")
+      .update({
+        deleted_at: now,
+        message: "Message deleted",
+      })
+      .eq("id", message.id)
+      .eq("sender_id", user.id);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    setMessages((prev) => prev.filter((item) => item.id !== message.id));
+  }
+
+  async function toggleReaction(message, emoji) {
+    if (!message?.id || !thread?.id || !user?.id) return;
+
+    const current = reactionsByMessageId[message.id]?.[emoji];
+    const mine = current?.mine;
+
+    if (mine) {
+      await supabase
+        .from("chat_message_reactions")
+        .delete()
+        .eq("message_id", message.id)
+        .eq("user_id", user.id)
+        .eq("emoji", emoji);
+    } else {
+      await supabase.from("chat_message_reactions").upsert(
+        {
+          thread_id: thread.id,
+          message_id: message.id,
+          user_id: user.id,
+          emoji,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "message_id,user_id,emoji" }
+      );
+    }
+
+    await loadReactions();
+  }
+
+  function startEdit(message) {
+    setEditingMessage(message);
+    setReplyTo(null);
+    setInput(message.message || "");
+    textareaRef.current?.focus();
   }
 
   function onKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      editingMessage ? editMessage() : sendMessage();
     }
+  }
+
+  function findReplyMessage(id) {
+    if (!id) return null;
+    return messages.find((message) => message.id === id);
+  }
+
+  function statusLabel(message) {
+    if (message.sender_id !== user?.id) return "";
+    return message.read_at ? "✓✓" : "✓";
+  }
+
+  function renderAvatar(profile, size = "large") {
+    const avatarUrl = getAvatarUrl(profile);
+    const name = displayName(profile, "User");
+
+    return (
+      <div style={size === "small" ? styles.smallAvatarWrap : styles.avatarWrap}>
+        <span style={size === "small" ? styles.smallAvatarFallback : styles.avatarFallback}>
+          {initials(name)}
+        </span>
+
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={name}
+            style={size === "small" ? styles.smallAvatar : styles.avatar}
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.loadingCard}>
+          <img src="/logo-endurance.png" alt="Endurance" style={styles.loadingLogo} />
+          <div style={styles.loadingText}>Loading chat...</div>
+        </section>
+      </main>
+    );
   }
 
   return (
     <main style={styles.page}>
       <header style={styles.header}>
-        <button style={styles.iconBtn} onClick={() => history.back()} aria-label="Back">
+        <Link href="/messages" style={styles.iconBtn} aria-label="Back">
           ‹
-        </button>
+        </Link>
 
-        <div style={styles.avatarWrap}>
-          <img
-            src={contact.avatar}
-            alt=""
-            style={styles.avatar}
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-          <span style={styles.avatarFallback}>{initials(contact.name)}</span>
-        </div>
+        <Link href={`/profile/${otherUserId}`} style={styles.profileHeader}>
+          {renderAvatar(otherProfile)}
 
-        <div style={styles.headerText}>
-          <div style={styles.name}>{contact.name}</div>
-          <div style={styles.status}>
-            <span style={styles.dot} />
-            online <span style={styles.bullet}>•</span> {contact.role}
+          <div style={styles.headerText}>
+            <div style={styles.name}>{displayName(otherProfile, "Chat")}</div>
+            <div style={styles.status}>
+              <span style={styles.dot} />
+              {liveStatus === "live" ? "online" : "connecting"}{" "}
+              {otherProfile?.role ? (
+                <>
+                  <span style={styles.bullet}>•</span> {otherProfile.role}
+                </>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </Link>
 
         <button
           style={styles.menuBtn}
@@ -230,12 +674,21 @@ export default function MessageThreadPage() {
 
         {menuOpen && (
           <div style={styles.menu}>
-            <button style={styles.menuItem}>View profile</button>
-            <button style={styles.menuItem}>Mute chat</button>
-            <button style={styles.menuItem}>Clear chat</button>
+            <Link href={`/profile/${otherUserId}`} style={styles.menuItem}>View profile</Link>
+            <button type="button" style={styles.menuItem} onClick={() => loadChat()}>Refresh chat</button>
+            <button type="button" style={styles.menuItem}>Mute chat</button>
           </div>
         )}
       </header>
+
+      {errorText ? (
+        <div style={styles.errorBox}>
+          <span>{errorText}</span>
+          <button type="button" onClick={() => setErrorText("")} style={styles.errorClose}>
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <section style={styles.chat}>
         <div style={styles.bgDots} />
@@ -249,7 +702,11 @@ export default function MessageThreadPage() {
             );
           }
 
-          const mine = item.sender_id === currentUser.id;
+          const mine = item.sender_id === user?.id;
+          const senderProfile = mine ? myProfile : otherProfile;
+          const senderName = displayName(senderProfile);
+          const replyMessage = findReplyMessage(item.reply_to_message_id);
+          const messageReactions = reactionsByMessageId[item.id] || {};
 
           return (
             <div
@@ -259,45 +716,135 @@ export default function MessageThreadPage() {
                 justifyContent: mine ? "flex-end" : "flex-start",
               }}
             >
-              {!mine && (
-                <div style={styles.smallAvatarWrap}>
-                  <img
-                    src={contact.avatar}
-                    alt=""
-                    style={styles.smallAvatar}
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
-                  <span style={styles.smallAvatarFallback}>{initials(contact.name)}</span>
-                </div>
-              )}
+              {!mine ? renderAvatar(otherProfile, "small") : null}
 
-              <div
-                style={{
-                  ...styles.bubble,
-                  ...(mine ? styles.bubbleMine : styles.bubbleOther),
-                }}
-              >
-                {!mine && <div style={styles.senderName}>{item.sender_name}</div>}
-                <div style={styles.messageText}>{item.body}</div>
+              <div style={styles.messageStack}>
                 <div
+                  onClick={() => setShowActionsFor(showActionsFor === item.id ? null : item.id)}
                   style={{
-                    ...styles.time,
-                    color: mine ? "rgba(0,0,0,.55)" : "#aeb0b5",
+                    ...styles.bubble,
+                    ...(mine ? styles.bubbleMine : styles.bubbleOther),
                   }}
                 >
-                  {timeLabel(item.created_at)} {mine && <span style={styles.checks}>✓✓</span>}
+                  {!mine ? <div style={styles.senderName}>{senderName}</div> : null}
+
+                  {replyMessage ? (
+                    <div style={styles.replyPreview}>
+                      <strong>{replyMessage.sender_id === user?.id ? "You" : displayName(otherProfile)}</strong>
+                      <span>{replyMessage.message}</span>
+                    </div>
+                  ) : null}
+
+                  {item.media_url ? (
+                    item.media_type === "image" ? (
+                      <img src={item.media_url} alt="Shared media" style={styles.mediaImage} />
+                    ) : (
+                      <a href={item.media_url} target="_blank" rel="noreferrer" style={styles.fileLink}>
+                        Open attachment
+                      </a>
+                    )
+                  ) : null}
+
+                  <div style={styles.messageText}>{item.message}</div>
+
+                  <div
+                    style={{
+                      ...styles.time,
+                      color: mine ? "rgba(0,0,0,.55)" : "#aeb0b5",
+                    }}
+                  >
+                    {timeLabel(item.created_at)} {mine && <span style={styles.checks}>{statusLabel(item)}</span>}
+                  </div>
                 </div>
+
+                {Object.keys(messageReactions).length > 0 ? (
+                  <div style={{ ...styles.reactionSummary, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                    {Object.entries(messageReactions).map(([emoji, data]) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => toggleReaction(item, emoji)}
+                        style={{
+                          ...styles.reactionChip,
+                          borderColor: data.mine ? "rgba(234,255,0,0.55)" : "rgba(255,255,255,0.10)",
+                        }}
+                      >
+                        {emoji} {data.count}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {showActionsFor === item.id ? (
+                  <div style={{ ...styles.actionsBar, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                    {REACTIONS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => toggleReaction(item, emoji)}
+                        style={styles.emojiButton}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+
+                    <button type="button" onClick={() => setReplyTo(item)} style={styles.smallAction}>
+                      Reply
+                    </button>
+
+                    {mine ? (
+                      <>
+                        <button type="button" onClick={() => startEdit(item)} style={styles.smallAction}>
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => deleteMessage(item)} style={styles.smallActionDanger}>
+                          Delete
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           );
         })}
 
+        {otherTyping ? (
+          <div style={styles.messageRow}>
+            {renderAvatar(otherProfile, "small")}
+            <div style={styles.typingBubble}>
+              <span style={styles.typingDot} />
+              <span style={styles.typingDot} />
+              <span style={styles.typingDot} />
+            </div>
+          </div>
+        ) : null}
+
         <div ref={bottomRef} />
       </section>
 
       <footer style={styles.composerWrap}>
+        {(replyTo || editingMessage) && (
+          <div style={styles.contextBar}>
+            <div style={{ minWidth: 0 }}>
+              <strong>{editingMessage ? "Editing message" : "Replying to"}</strong>
+              <span>{(editingMessage || replyTo)?.message}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setReplyTo(null);
+                setEditingMessage(null);
+                setInput("");
+              }}
+              style={styles.contextClose}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {selectedFile && (
           <div style={styles.filePreview}>
             <span style={styles.fileName}>📎 {selectedFile.name}</span>
@@ -312,6 +859,7 @@ export default function MessageThreadPage() {
             style={styles.plusBtn}
             aria-label="Add attachment"
             onClick={() => fileRef.current?.click()}
+            type="button"
           >
             +
           </button>
@@ -319,13 +867,15 @@ export default function MessageThreadPage() {
           <input
             ref={fileRef}
             type="file"
+            accept="image/*"
             style={{ display: "none" }}
             onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
           />
 
           <textarea
+            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleTyping(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
             placeholder="Message"
@@ -337,11 +887,12 @@ export default function MessageThreadPage() {
               ...styles.sendBtn,
               opacity: canSend ? 1 : 0.55,
             }}
-            disabled={!canSend}
-            onClick={sendMessage}
+            disabled={!canSend || sending || uploadingMedia}
+            onClick={editingMessage ? editMessage : () => sendMessage()}
             aria-label="Send message"
+            type="button"
           >
-            ➤
+            {sending || uploadingMedia ? "…" : "➤"}
           </button>
         </div>
       </footer>
@@ -351,7 +902,7 @@ export default function MessageThreadPage() {
 
 const styles = {
   page: {
-    minHeight: "100dvh",
+    height: "100dvh",
     width: "100%",
     background: DARK_BG,
     color: TEXT,
@@ -371,8 +922,7 @@ const styles = {
     padding: "10px 12px",
     background: "rgba(5,5,5,.96)",
     borderBottom: "1px solid rgba(255,255,255,.08)",
-    position: "sticky",
-    top: 0,
+    position: "relative",
     zIndex: 20,
     boxSizing: "border-box",
   },
@@ -388,6 +938,19 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
     padding: 0,
+    textDecoration: "none",
+    display: "grid",
+    placeItems: "center",
+  },
+
+  profileHeader: {
+    minWidth: 0,
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    color: "white",
+    textDecoration: "none",
   },
 
   avatarWrap: {
@@ -399,13 +962,16 @@ const styles = {
     overflow: "hidden",
     position: "relative",
     background: PANEL_2,
+    display: "grid",
+    placeItems: "center",
   },
 
   avatar: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    position: "relative",
+    position: "absolute",
+    inset: 0,
     zIndex: 2,
   },
 
@@ -417,6 +983,7 @@ const styles = {
     color: ENDURANCE_YELLOW,
     fontWeight: 900,
     fontSize: 16,
+    zIndex: 1,
   },
 
   headerText: {
@@ -443,6 +1010,9 @@ const styles = {
     fontSize: 15,
     lineHeight: "18px",
     fontWeight: 800,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   dot: {
@@ -451,6 +1021,7 @@ const styles = {
     borderRadius: "50%",
     background: ENDURANCE_YELLOW,
     display: "inline-block",
+    flex: "0 0 auto",
   },
 
   bullet: {
@@ -491,6 +1062,30 @@ const styles = {
     textAlign: "left",
     padding: "13px 15px",
     fontSize: 14,
+    display: "block",
+    textDecoration: "none",
+    boxSizing: "border-box",
+  },
+
+  errorBox: {
+    padding: "8px 12px",
+    background: "rgba(120,20,20,0.34)",
+    borderBottom: "1px solid rgba(255,120,120,0.20)",
+    color: "#ffd2d2",
+    fontSize: 13,
+    fontWeight: 750,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    zIndex: 21,
+  },
+
+  errorClose: {
+    background: "transparent",
+    color: "#ffd2d2",
+    border: "none",
+    fontSize: 18,
   },
 
   chat: {
@@ -507,7 +1102,7 @@ const styles = {
     pointerEvents: "none",
     position: "fixed",
     inset: 0,
-    opacity: 0.16,
+    opacity: 0.14,
     backgroundImage:
       "radial-gradient(rgba(255,255,255,.28) 1px, transparent 1px)",
     backgroundSize: "28px 28px",
@@ -550,13 +1145,16 @@ const styles = {
     position: "relative",
     background: PANEL_2,
     marginBottom: 1,
+    display: "grid",
+    placeItems: "center",
   },
 
   smallAvatar: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    position: "relative",
+    position: "absolute",
+    inset: 0,
     zIndex: 2,
   },
 
@@ -568,10 +1166,16 @@ const styles = {
     color: ENDURANCE_YELLOW,
     fontSize: 10,
     fontWeight: 900,
+    zIndex: 1,
+  },
+
+  messageStack: {
+    maxWidth: "76%",
+    display: "grid",
+    gap: 3,
   },
 
   bubble: {
-    maxWidth: "76%",
     minWidth: 78,
     padding: "11px 12px 7px",
     borderRadius: 18,
@@ -622,6 +1226,95 @@ const styles = {
     fontWeight: 900,
   },
 
+  replyPreview: {
+    display: "grid",
+    gap: 2,
+    padding: "7px 8px",
+    borderRadius: 12,
+    background: "rgba(0,0,0,0.14)",
+    borderLeft: "3px solid rgba(234,255,0,0.85)",
+    marginBottom: 7,
+    fontSize: 12,
+  },
+
+  mediaImage: {
+    width: "100%",
+    maxWidth: 260,
+    borderRadius: 15,
+    marginBottom: 7,
+    display: "block",
+  },
+
+  fileLink: {
+    color: ENDURANCE_YELLOW,
+    fontWeight: 900,
+  },
+
+  reactionSummary: {
+    display: "flex",
+    gap: 4,
+    flexWrap: "wrap",
+  },
+
+  reactionChip: {
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    border: "1px solid rgba(255,255,255,0.10)",
+    padding: "3px 7px",
+    fontSize: 11,
+    fontWeight: 850,
+  },
+
+  actionsBar: {
+    display: "flex",
+    gap: 4,
+    flexWrap: "wrap",
+  },
+
+  emojiButton: {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.08)",
+    borderRadius: 999,
+    padding: "5px 7px",
+    fontSize: 14,
+  },
+
+  smallAction: {
+    border: "1px solid rgba(234,255,0,0.24)",
+    background: "rgba(234,255,0,0.10)",
+    color: ENDURANCE_YELLOW,
+    borderRadius: 999,
+    padding: "5px 8px",
+    fontSize: 11,
+    fontWeight: 900,
+  },
+
+  smallActionDanger: {
+    border: "1px solid rgba(255,120,120,0.28)",
+    background: "rgba(255,120,120,0.10)",
+    color: "#ffb0b0",
+    borderRadius: 999,
+    padding: "5px 8px",
+    fontSize: 11,
+    fontWeight: 900,
+  },
+
+  typingBubble: {
+    display: "flex",
+    gap: 4,
+    padding: "10px 12px",
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.08)",
+  },
+
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "rgba(255,255,255,0.65)",
+  },
+
   composerWrap: {
     position: "fixed",
     left: 0,
@@ -632,6 +1325,33 @@ const styles = {
     background:
       "linear-gradient(180deg, rgba(2,2,2,0), rgba(2,2,2,.92) 18%, rgba(2,2,2,.98))",
     boxSizing: "border-box",
+  },
+
+  contextBar: {
+    margin: "0 0 6px 48px",
+    maxWidth: "calc(100% - 60px)",
+    minHeight: 34,
+    borderRadius: 16,
+    background: "rgba(234,255,0,0.10)",
+    border: "1px solid rgba(234,255,0,0.22)",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 24px",
+    gap: 6,
+    alignItems: "center",
+    padding: "6px 8px 6px 12px",
+    boxSizing: "border-box",
+    fontSize: 12,
+  },
+
+  contextClose: {
+    width: 24,
+    height: 24,
+    borderRadius: "50%",
+    border: "none",
+    background: "rgba(255,255,255,.12)",
+    color: "#fff",
+    fontSize: 18,
+    lineHeight: "20px",
   },
 
   filePreview: {
@@ -671,7 +1391,7 @@ const styles = {
 
   composer: {
     display: "flex",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 7,
     width: "100%",
     boxSizing: "border-box",
@@ -695,8 +1415,9 @@ const styles = {
 
   input: {
     flex: 1,
+    height: 40,
     minHeight: 40,
-    maxHeight: 110,
+    maxHeight: 40,
     resize: "none",
     border: "none",
     outline: "none",
@@ -709,6 +1430,7 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "inherit",
     boxShadow: "inset 0 0 0 1px rgba(255,255,255,.06)",
+    overflow: "hidden",
   },
 
   sendBtn: {
@@ -726,5 +1448,52 @@ const styles = {
     placeItems: "center",
     transform: "rotate(-35deg)",
     boxShadow: "0 2px 10px rgba(234,255,0,.22)",
+  },
+
+  emptyState: {
+    minHeight: "100%",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: 7,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.60)",
+    padding: 24,
+  },
+
+  emptyIcon: {
+    fontSize: 36,
+  },
+
+  emptyTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: 1000,
+  },
+
+  emptyCopy: {
+    maxWidth: 260,
+    fontSize: 14,
+    lineHeight: 1.4,
+  },
+
+  loadingCard: {
+    minHeight: "100dvh",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: 14,
+    background:
+      "radial-gradient(circle at 76% 0%, rgba(234,255,0,0.12), transparent 30%), #050505",
+  },
+
+  loadingLogo: {
+    width: "min(68vw, 360px)",
+    filter: "drop-shadow(0 18px 32px rgba(0,0,0,0.70))",
+  },
+
+  loadingText: {
+    color: "rgba(255,255,255,0.66)",
+    fontWeight: 850,
   },
 };
