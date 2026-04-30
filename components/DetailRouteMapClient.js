@@ -43,9 +43,7 @@ function DisableMapInteraction() {
     map.boxZoom.disable();
     map.keyboard.disable();
 
-    if (map.tap) {
-      map.tap.disable();
-    }
+    if (map.tap) map.tap.disable();
   }, [map]);
 
   return null;
@@ -71,11 +69,7 @@ function normalizePoint(point) {
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  return {
-    lat,
-    lng,
-    ele,
-  };
+  return { lat, lng, ele };
 }
 
 function parseGpx(gpxText) {
@@ -90,7 +84,6 @@ function parseGpx(gpxText) {
 
     const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
     const rtepts = Array.from(xml.getElementsByTagName("rtept"));
-
     const sourcePoints = trkpts.length > 0 ? trkpts : rtepts;
 
     return sourcePoints
@@ -116,12 +109,12 @@ function parseGpx(gpxText) {
 }
 
 function downsamplePoints(points, maxPoints = 1200) {
-  if (!points || points.length <= maxPoints) return points;
+  if (!points || points.length <= maxPoints) return points || [];
 
   const step = Math.ceil(points.length / maxPoints);
   const sampled = points.filter((_, index) => index % step === 0);
-
   const last = points[points.length - 1];
+
   if (last && sampled[sampled.length - 1] !== last) sampled.push(last);
 
   return sampled;
@@ -146,28 +139,11 @@ function haversineMeters(a, b) {
   return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function movingAverage(values, radius = 2) {
-  if (!values || values.length === 0) return [];
-
-  return values.map((value, index) => {
-    let total = 0;
-    let count = 0;
-
-    for (let i = index - radius; i <= index + radius; i++) {
-      if (i >= 0 && i < values.length && Number.isFinite(values[i])) {
-        total += values[i];
-        count += 1;
-      }
-    }
-
-    return count ? total / count : value;
-  });
-}
-
 function interpolateElevationAtDistance(profile, targetMeters) {
   if (!profile || profile.length === 0) return null;
 
   if (targetMeters <= profile[0].distanceMeters) return profile[0].ele;
+
   const last = profile[profile.length - 1];
   if (targetMeters >= last.distanceMeters) return last.ele;
 
@@ -185,7 +161,7 @@ function interpolateElevationAtDistance(profile, targetMeters) {
   return last.ele;
 }
 
-function smoothElevationByDistance(rawProfile, windowMeters = 70) {
+function smoothElevationByDistance(rawProfile, windowMeters = 60) {
   if (!rawProfile || rawProfile.length === 0) return [];
 
   return rawProfile.map((point, index) => {
@@ -215,7 +191,7 @@ function smoothElevationByDistance(rawProfile, windowMeters = 70) {
   });
 }
 
-function calculateRollingGrades(profile, windowMeters = 120) {
+function calculateRollingGrades(profile, windowMeters = 100) {
   if (!profile || profile.length < 2) {
     return { steepestClimb: null, steepestDescent: null };
   }
@@ -229,7 +205,11 @@ function calculateRollingGrades(profile, windowMeters = 120) {
   let steepestClimb = null;
   let steepestDescent = null;
 
-  for (let startMeters = 0; startMeters + windowMeters <= totalDistance; startMeters += 10) {
+  for (
+    let startMeters = 0;
+    startMeters + windowMeters <= totalDistance;
+    startMeters += 10
+  ) {
     const endMeters = startMeters + windowMeters;
     const startEle = interpolateElevationAtDistance(profile, startMeters);
     const endEle = interpolateElevationAtDistance(profile, endMeters);
@@ -247,19 +227,14 @@ function calculateRollingGrades(profile, windowMeters = 120) {
     }
   }
 
-  return {
-    steepestClimb,
-    steepestDescent,
-  };
+  return { steepestClimb, steepestDescent };
 }
-
 
 function isLikelyClosedLoop(profile, maxDistanceMeters = 80, maxElevationDiffMeters = 8) {
   if (!profile || profile.length < 2) return false;
 
   const first = profile[0];
   const last = profile[profile.length - 1];
-
   const startEndDistance = haversineMeters(first, last);
   const startEndElevationDiff = Math.abs((last.ele || 0) - (first.ele || 0));
 
@@ -275,14 +250,77 @@ function calculateGainLoss(profile, thresholdMeters = 1.25) {
     return { elevationGain: 0, elevationLoss: 0 };
   }
 
-  const { elevationGain, elevationLoss } = calculateGainLoss(profile, 1.25);
+  let elevationGain = 0;
+  let elevationLoss = 0;
+  let accumulatedClimb = 0;
+  let accumulatedDescent = 0;
 
+  for (let i = 1; i < profile.length; i++) {
+    const diff = profile[i].ele - profile[i - 1].ele;
+
+    if (diff > 0) {
+      accumulatedClimb += diff;
+      if (accumulatedDescent >= thresholdMeters) elevationLoss += accumulatedDescent;
+      accumulatedDescent = 0;
+    } else if (diff < 0) {
+      accumulatedDescent += Math.abs(diff);
+      if (accumulatedClimb >= thresholdMeters) elevationGain += accumulatedClimb;
+      accumulatedClimb = 0;
+    }
+  }
+
+  if (accumulatedClimb >= thresholdMeters) elevationGain += accumulatedClimb;
+  if (accumulatedDescent >= thresholdMeters) elevationLoss += accumulatedDescent;
+
+  if (isLikelyClosedLoop(profile)) {
+    const balanced = (elevationGain + elevationLoss) / 2;
+    elevationGain = balanced;
+    elevationLoss = balanced;
+  }
+
+  return { elevationGain, elevationLoss };
+}
+
+function buildRouteAnalysis(points) {
+  if (!points || points.length < 2) {
+    return {
+      profile: [],
+      distanceKm: null,
+      elevationGain: null,
+      elevationLoss: null,
+      minEle: null,
+      maxEle: null,
+      steepestClimb: null,
+      steepestDescent: null,
+      pointCount: points?.length || 0,
+    };
+  }
+
+  let distanceMeters = 0;
+  let lastKnownElevation = null;
+
+  const rawProfile = points.map((point, index) => {
+    if (index > 0) {
+      distanceMeters += haversineMeters(points[index - 1], point);
+    }
+
+    if (Number.isFinite(point.ele)) lastKnownElevation = Number(point.ele);
+
+    return {
+      distanceMeters,
+      distanceKm: distanceMeters / 1000,
+      ele: Number.isFinite(lastKnownElevation) ? lastKnownElevation : 0,
+      rawEle: Number.isFinite(point.ele) ? Number(point.ele) : null,
+      lat: point.lat,
+      lng: point.lng,
+    };
+  });
+
+  const profile = smoothElevationByDistance(rawProfile, 60);
+  const { elevationGain, elevationLoss } = calculateGainLoss(profile, 1.25);
   const elevations = profile.map((p) => p.ele);
   const minEle = Math.min(...elevations);
   const maxEle = Math.max(...elevations);
-
-  // Use a rolling 120m window for realistic maximum gradients.
-  // This avoids false spikes from GPS/elevation noise between two close points.
   const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 100);
 
   return {
@@ -313,8 +351,7 @@ function formatGrade(value) {
   return `${value.toFixed(1)}%`;
 }
 
-
-function smoothVisualProfile(profile, radius = 5) {
+function smoothVisualProfile(profile, radius = 7) {
   if (!profile || profile.length === 0) return [];
 
   return profile.map((point, index) => {
@@ -338,47 +375,14 @@ function smoothVisualProfile(profile, radius = 5) {
   });
 }
 
-function buildSmoothSvgPath(points) {
-  const safePoints = (points || []).filter(
-    (point) =>
-      point &&
-      Number.isFinite(Number(point.x)) &&
-      Number.isFinite(Number(point.y))
-  );
-
-  if (safePoints.length === 0) return "";
-  if (safePoints.length === 1) {
-    return `M ${safePoints[0].x} ${safePoints[0].y}`;
-  }
-
-  let path = `M ${safePoints[0].x} ${safePoints[0].y}`;
-
-  for (let i = 0; i < safePoints.length - 1; i++) {
-    const current = safePoints[i];
-    const next = safePoints[i + 1];
-
-    const midX = ((Number(current.x) + Number(next.x)) / 2).toFixed(2);
-    const midY = ((Number(current.y) + Number(next.y)) / 2).toFixed(2);
-
-    path += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
-  }
-
-  const last = safePoints[safePoints.length - 1];
-  path += ` T ${last.x} ${last.y}`;
-
-  return path;
-}
-
 function ElevationProfile({ analysis }) {
-  const profile = analysis.profile || [];
-
-  if (profile.length < 6) return null;
-
-  const rawChart = downsamplePoints(profile || [], 900).filter(
+  const profile = (analysis?.profile || []).filter(
     (point) => point && Number.isFinite(Number(point.ele))
   );
 
-  const chartData = smoothVisualProfile(rawChart, 6).filter(
+  if (profile.length < 6) return null;
+
+  const chartData = smoothVisualProfile(downsamplePoints(profile, 700), 7).filter(
     (point) => point && Number.isFinite(Number(point.ele))
   );
 
@@ -403,24 +407,22 @@ function ElevationProfile({ analysis }) {
   const svgPoints = chartData
     .map((point, index) => {
       const ele = Number(point.ele);
-      if (!Number.isFinite(ele)) return null;
+      const x = (index / Math.max(chartData.length - 1, 1)) * width;
+      const y = topPad + (1 - (ele - min) / range) * usableHeight;
 
-      const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
-      const y = (
-        topPad +
-        (1 - (ele - min) / range) * usableHeight
-      ).toFixed(2);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-      if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
-        return null;
-      }
-
-      return { x, y };
+      return {
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+      };
     })
     .filter(Boolean);
 
-  const path = buildSmoothSvgPath(svgPoints);
-  const fillPath = path ? `${path} L ${width} ${height} L 0 ${height} Z` : "";
+  if (svgPoints.length < 2) return null;
+
+  const linePoints = svgPoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const fillPoints = `0,${height} ${linePoints} ${width},${height}`;
 
   const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
     const y = topPad + ratio * usableHeight;
@@ -458,25 +460,25 @@ function ElevationProfile({ analysis }) {
         style={styles.elevationSvg}
       >
         <defs>
-          <linearGradient id="enduranceElevationFill" x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id="enduranceElevationFillV4" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgba(223,255,0,0.55)" />
             <stop offset="100%" stopColor="rgba(223,255,0,0.08)" />
           </linearGradient>
         </defs>
 
         {gridLines}
-        {path && <path d={fillPath} fill="url(#enduranceElevationFill)" />}
-        {path && (
-          <path
-            d={path}
-            fill="none"
-            stroke={ROUTE_COLOR}
-            strokeWidth="2.7"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
+
+        <polygon points={fillPoints} fill="url(#enduranceElevationFillV4)" />
+
+        <polyline
+          points={linePoints}
+          fill="none"
+          stroke={ROUTE_COLOR}
+          strokeWidth="2.9"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
       </svg>
 
       <div style={styles.elevationStats}>
@@ -544,9 +546,7 @@ export default function DetailRouteMapClient({
 
         const text = await response.text();
 
-        if (!cancelled) {
-          setRemoteGpxText(text);
-        }
+        if (!cancelled) setRemoteGpxText(text);
       } catch (error) {
         console.error("GPX fetch error:", error);
       }
@@ -566,14 +566,8 @@ export default function DetailRouteMapClient({
       return event.route_points.map(normalizePoint).filter(Boolean);
     }
 
-    if (typeof gpxText === "string" && gpxText.trim()) {
-      return parseGpx(gpxText);
-    }
-
-    if (typeof gpx === "string" && gpx.trim().startsWith("<")) {
-      return parseGpx(gpx);
-    }
-
+    if (typeof gpxText === "string" && gpxText.trim()) return parseGpx(gpxText);
+    if (typeof gpx === "string" && gpx.trim().startsWith("<")) return parseGpx(gpx);
     if (typeof remoteGpxText === "string" && remoteGpxText.trim()) {
       return parseGpx(remoteGpxText);
     }
