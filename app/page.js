@@ -583,7 +583,7 @@ useEffect(() => {
       try {
         routePoints = await enrichPointsWithElevationApi(routePoints, {
           spacingMeters: 50,
-          smoothingMeters: 70,
+          smoothingMeters: 120,
         });
       } catch (error) {
         console.warn("Elevation API failed, using GPX elevation data:", error);
