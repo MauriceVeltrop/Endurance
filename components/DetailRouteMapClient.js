@@ -253,76 +253,29 @@ function calculateRollingGrades(profile, windowMeters = 120) {
   };
 }
 
-function buildRouteAnalysis(points) {
-  if (!points || points.length < 2) {
-    return {
-      profile: [],
-      distanceKm: null,
-      elevationGain: null,
-      elevationLoss: null,
-      minEle: null,
-      maxEle: null,
-      steepestClimb: null,
-      steepestDescent: null,
-      pointCount: points?.length || 0,
-    };
+
+function isLikelyClosedLoop(profile, maxDistanceMeters = 80, maxElevationDiffMeters = 8) {
+  if (!profile || profile.length < 2) return false;
+
+  const first = profile[0];
+  const last = profile[profile.length - 1];
+
+  const startEndDistance = haversineMeters(first, last);
+  const startEndElevationDiff = Math.abs((last.ele || 0) - (first.ele || 0));
+
+  return (
+    Number.isFinite(startEndDistance) &&
+    startEndDistance <= maxDistanceMeters &&
+    startEndElevationDiff <= maxElevationDiffMeters
+  );
+}
+
+function calculateGainLoss(profile, thresholdMeters = 1.25) {
+  if (!profile || profile.length < 2) {
+    return { elevationGain: 0, elevationLoss: 0 };
   }
 
-  let distanceMeters = 0;
-  let lastKnownElevation = null;
-
-  const rawProfile = points.map((point, index) => {
-    if (index > 0) {
-      distanceMeters += haversineMeters(points[index - 1], point);
-    }
-
-    if (Number.isFinite(point.ele)) {
-      lastKnownElevation = Number(point.ele);
-    }
-
-    return {
-      distanceMeters,
-      distanceKm: distanceMeters / 1000,
-      ele: Number.isFinite(lastKnownElevation) ? lastKnownElevation : 0,
-      rawEle: Number.isFinite(point.ele) ? Number(point.ele) : null,
-      lat: point.lat,
-      lng: point.lng,
-    };
-  });
-
-  // Distance-based smoothing is more accurate than point-based smoothing,
-  // because GPX points are not evenly spaced.
-  const profile = smoothElevationByDistance(rawProfile, 120);
-
-  let elevationGain = 0;
-  let elevationLoss = 0;
-  let accumulatedClimb = 0;
-  let accumulatedDescent = 0;
-
-  for (let i = 1; i < profile.length; i++) {
-    const diff = profile[i].ele - profile[i - 1].ele;
-
-    if (diff > 0) {
-      accumulatedClimb += diff;
-
-      if (accumulatedDescent >= 3) {
-        elevationLoss += accumulatedDescent;
-      }
-
-      accumulatedDescent = 0;
-    } else if (diff < 0) {
-      accumulatedDescent += Math.abs(diff);
-
-      if (accumulatedClimb >= 3) {
-        elevationGain += accumulatedClimb;
-      }
-
-      accumulatedClimb = 0;
-    }
-  }
-
-  if (accumulatedClimb >= 3) elevationGain += accumulatedClimb;
-  if (accumulatedDescent >= 3) elevationLoss += accumulatedDescent;
+  const { elevationGain, elevationLoss } = calculateGainLoss(profile, 1.25);
 
   const elevations = profile.map((p) => p.ele);
   const minEle = Math.min(...elevations);
@@ -488,7 +441,7 @@ function ElevationProfile({ analysis }) {
     <div style={styles.elevationCard}>
       <div style={styles.elevationHeader}>
         <div>
-          <div style={styles.elevationTitle}>Elevation profile v2</div>
+          <div style={styles.elevationTitle}>Elevation profile v4</div>
           <div style={styles.elevationSub}>
             {formatKm(analysis.distanceKm)} • {analysis.pointCount} points • filtered
           </div>
