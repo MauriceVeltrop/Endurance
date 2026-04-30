@@ -426,12 +426,12 @@ export default function DirectMessagePage() {
     const filePath = `${thread.id}/${user.id}-${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("chat-media")
+      .from("chat-attachments")
       .upload(filePath, file, { upsert: false });
 
     if (uploadError) throw uploadError;
 
-    const { data } = supabase.storage.from("chat-media").getPublicUrl(filePath);
+    const { data } = supabase.storage.from("chat-attachments").getPublicUrl(filePath);
 
     return {
       url: data.publicUrl,
