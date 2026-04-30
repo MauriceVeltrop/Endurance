@@ -330,7 +330,7 @@ function buildRouteAnalysis(points) {
 
   // Use a rolling 120m window for realistic maximum gradients.
   // This avoids false spikes from GPS/elevation noise between two close points.
-  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 250);
+  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 150);
 
   return {
     profile,
@@ -360,14 +360,62 @@ function formatGrade(value) {
   return `${value.toFixed(1)}%`;
 }
 
+
+function smoothVisualProfile(profile, radius = 5) {
+  if (!profile || profile.length === 0) return [];
+
+  return profile.map((point, index) => {
+    let weightedTotal = 0;
+    let weightTotal = 0;
+
+    for (let offset = -radius; offset <= radius; offset++) {
+      const candidate = profile[index + offset];
+
+      if (!candidate || !Number.isFinite(candidate.ele)) continue;
+
+      const weight = radius + 1 - Math.abs(offset);
+      weightedTotal += candidate.ele * weight;
+      weightTotal += weight;
+    }
+
+    return {
+      ...point,
+      ele: weightTotal ? weightedTotal / weightTotal : point.ele,
+    };
+  });
+}
+
+function buildSmoothSvgPath(points) {
+  if (!points || points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i];
+    const next = points[i + 1];
+
+    const midX = ((current.x + next.x) / 2).toFixed(2);
+    const midY = ((current.y + next.y) / 2).toFixed(2);
+
+    path += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
+  }
+
+  const last = points[points.length - 1];
+  path += ` T ${last.x} ${last.y}`;
+
+  return path;
+}
+
 function ElevationProfile({ analysis }) {
   const profile = analysis.profile || [];
 
   if (profile.length < 6) return null;
 
-  const chartData = downsamplePoints(profile, 1600);
-  const min = analysis.minEle;
-  const max = analysis.maxEle;
+  const chartData = smoothVisualProfile(downsamplePoints(profile, 900), 6);
+  const visualElevations = chartData.map((point) => point.ele);
+  const min = Math.min(...visualElevations);
+  const max = Math.max(...visualElevations);
   const range = max - min || 1;
 
   const width = 360;
@@ -376,15 +424,17 @@ function ElevationProfile({ analysis }) {
   const bottomPad = 18;
   const usableHeight = height - topPad - bottomPad;
 
-  const path = chartData
-    .map((point, index) => {
-      const x = (index / Math.max(chartData.length - 1, 1)) * width;
-      const y = topPad + (1 - (point.ele - min) / range) * usableHeight;
+  const svgPoints = chartData.map((point, index) => {
+    const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
+    const y = (
+      topPad +
+      (1 - (point.ele - min) / range) * usableHeight
+    ).toFixed(2);
 
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+    return { x, y };
+  });
 
+  const path = buildSmoothSvgPath(svgPoints);
   const fillPath = `${path} L ${width} ${height} L 0 ${height} Z`;
 
   const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
@@ -435,7 +485,7 @@ function ElevationProfile({ analysis }) {
           d={path}
           fill="none"
           stroke={ROUTE_COLOR}
-          strokeWidth="3"
+          strokeWidth="2.7"
           strokeLinejoin="round"
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
@@ -454,12 +504,12 @@ function ElevationProfile({ analysis }) {
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Max 250m</span>
+          <span style={styles.statLabel}>Max 150m</span>
           <strong>{formatGrade(analysis.steepestClimb)}</strong>
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Min 250m</span>
+          <span style={styles.statLabel}>Min 150m</span>
           <strong>{formatGrade(analysis.steepestDescent)}</strong>
         </div>
       </div>
