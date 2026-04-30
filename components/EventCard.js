@@ -208,7 +208,7 @@ function AutoFitLocation({ children }) {
           overflow: "hidden",
           whiteSpace: "normal",
           wordBreak: "normal",
-          overflowWrap: "break-word",
+          overflowWrap: "anywhere",
           fontSize,
           fontWeight: 650,
           lineHeight: 1.15,
@@ -231,66 +231,37 @@ function normalizeSportId(sport) {
 }
 
 function getEventSportBackground(event) {
-  const sports = Array.isArray(event.sports)
-    ? event.sports.map(normalizeSportId)
-    : [];
+  const sports = Array.isArray(event.sports) ? event.sports.map(normalizeSportId) : [];
 
   if (sports.includes("trail-running")) {
     return {
-      image: "/images/trailrunner-bg.png",
-      position: "right center",
-      accent: "rgba(228,239,22,0.22)",
-    };
-  }
-
-  if (
-    sports.includes("crossfit") ||
-    sports.includes("cross-fit") ||
-    sports.includes("strength-training") ||
-    sports.includes("strength") ||
-    sports.includes("functional-fitness")
-  ) {
-    return {
-      image: "/images/strength-bg.png",
-      position: "right center",
-      accent: "rgba(228,239,22,0.22)",
-    };
-  }
-
-  if (
-    sports.includes("mountain-biking") ||
-    sports.includes("mtb") ||
-    sports.includes("gravel-cycling") ||
-    sports.includes("gravel-bike")
-  ) {
-    return {
-      image: "/images/gravel-mtb-bg.png",
-      position: "right center",
+      image: "/images/trailrunner-bg.svg",
+      position: "right -72px center",
       accent: "rgba(228,239,22,0.20)",
+    };
+  }
+
+  if (sports.includes("mountain-biking") || sports.includes("mtb") || sports.includes("gravel-cycling") || sports.includes("gravel-bike")) {
+    return {
+      image: "/images/gravel-mtb-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
     };
   }
 
   if (sports.includes("road-cycling") || sports.includes("cycling")) {
     return {
-      image: "/images/roadcycling-bg.png",
-      position: "right center",
-      accent: "rgba(228,239,22,0.20)",
-    };
-  }
-
-  if (sports.includes("walking")) {
-    return {
-      image: "/images/walking-bg.png",
-      position: "right center",
-      accent: "rgba(228,239,22,0.22)",
+      image: "/images/roadcycling-bg.svg",
+      position: "right -78px center",
+      accent: "rgba(228,239,22,0.18)",
     };
   }
 
   if (sports.includes("running")) {
     return {
-      image: "/images/runner-bg.png",
-      position: "right center",
-      accent: "rgba(228,239,22,0.22)",
+      image: "/images/runner-bg.svg",
+      position: "right -68px center",
+      accent: "rgba(228,239,22,0.20)",
     };
   }
 
@@ -464,6 +435,34 @@ export default function EventCard({
 
   const hasRouteMap = !!event.gpx_file_url || hasRoutePoints;
 
+  function shareEventWhatsApp() {
+    if (typeof window === "undefined") return;
+
+    const eventUrl = `${window.location.origin}/?event=${event.id}`;
+
+    const parts = [
+      "Join this Endurance event:",
+      "",
+      event.title || "Endurance event",
+      sportLabels.length ? `🏷️ ${sportLabels.join(" • ")}` : "",
+      event.location ? `📍 ${event.location}` : "",
+      event.date || event.time ? `📅 ${formatDate(event.date)} ${formatTime(event.time)}`.trim() : "",
+      event.distance ? `🏁 ${Number(event.distance).toFixed(2)} km` : "",
+      event.elevation_gain_m !== null &&
+      event.elevation_gain_m !== undefined &&
+      Number(event.elevation_gain_m) > 0
+        ? `▲ ${Math.round(Number(event.elevation_gain_m))} m+`
+        : "",
+      "",
+      event.description?.trim() ? event.description.trim() : "",
+      "",
+      eventUrl,
+    ].filter(Boolean);
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(parts.join("\n"))}`;
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  }
+
   const creatorName =
     event.creator_profile?.name || event.creator_profile?.email || "Unknown";
 
@@ -524,13 +523,28 @@ export default function EventCard({
                   inset: 0,
                   pointerEvents: "none",
                   zIndex: 0,
-                  opacity: 1,
-                  backgroundImage: `url('${sportBackground.image}')`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundSize: "cover",
-                  backgroundPosition: sportBackground.position,
-                  filter: "saturate(1.12) contrast(1.08)",
-                  transform: "scale(1.01)",
+                  background:
+                    `radial-gradient(circle at 84% 28%, ${sportBackground.accent}, transparent 42%)`,
+                }}
+              />
+
+              <img
+                src={sportBackground.image}
+                alt=""
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: "-78px",
+                  top: "18px",
+                  width: "118%",
+                  maxWidth: 520,
+                  height: "auto",
+                  opacity: 0.62,
+                  zIndex: 0,
+                  pointerEvents: "none",
+                  objectFit: "contain",
+                  filter:
+                    "saturate(1.15) contrast(1.15) drop-shadow(0 0 32px rgba(228,239,22,0.42))",
                 }}
               />
 
@@ -542,7 +556,7 @@ export default function EventCard({
                   pointerEvents: "none",
                   zIndex: 0,
                   background:
-                    `linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 40%, rgba(5,5,5,0.58) 70%, rgba(5,5,5,0.25) 100%), radial-gradient(circle at 82% 30%, ${sportBackground.accent}, transparent 38%)`,
+                    "linear-gradient(90deg, rgba(5,5,5,0.97) 0%, rgba(5,5,5,0.86) 36%, rgba(5,5,5,0.48) 68%, rgba(5,5,5,0.16) 100%)",
                 }}
               />
             </>
@@ -564,10 +578,13 @@ export default function EventCard({
                 fontSize: 14,
                 fontWeight: 900,
                 marginBottom: 8,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "3px 6px",
+                lineHeight: 1.15,
                 whiteSpace: "normal",
                 wordBreak: "normal",
-                overflowWrap: "break-word",
-                lineHeight: 1.18,
+                overflowWrap: "normal",
                 maxWidth: "100%",
               }}
             >
@@ -906,6 +923,14 @@ export default function EventCard({
             style={secondaryBtnSmall}
           >
             Add to Calendar
+          </button>
+
+          <button
+            type="button"
+            onClick={shareEventWhatsApp}
+            style={secondaryBtnSmall}
+          >
+            WhatsApp
           </button>
 
           {(event.isOwner || isModerator) && (
