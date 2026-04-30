@@ -10,6 +10,11 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+const ROUTE_COLOR = "#dfff00";
+const DARK_LINE = "#2d3436";
+const CARD_BG = "rgba(255,255,255,0.06)";
+const CARD_BORDER = "rgba(255,255,255,0.10)";
+
 function FitRouteBounds({ points }) {
   const map = useMap();
 
@@ -34,7 +39,6 @@ function DisableMapInteraction() {
     map.dragging.disable();
     map.touchZoom.disable();
     map.doubleClickZoom.disable();
-    map.doubleClickZoom.disable();
     map.scrollWheelZoom.disable();
     map.boxZoom.disable();
     map.keyboard.disable();
@@ -47,12 +51,42 @@ function DisableMapInteraction() {
   return null;
 }
 
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizePoint(point) {
+  if (!point) return null;
+
+  const lat = toNumber(point.lat ?? point.latitude);
+  const lng = toNumber(point.lng ?? point.lon ?? point.longitude);
+  const eleRaw =
+    point.ele ??
+    point.elevation ??
+    point.elevation_m ??
+    point.alt ??
+    point.altitude;
+  const ele = toNumber(eleRaw);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  return {
+    lat,
+    lng,
+    ele,
+  };
+}
+
 function parseGpx(gpxText) {
   if (!gpxText) return [];
 
   try {
     const parser = new DOMParser();
     const xml = parser.parseFromString(gpxText, "application/xml");
+
+    const parserError = xml.getElementsByTagName("parsererror")[0];
+    if (parserError) return [];
 
     const trkpts = Array.from(xml.getElementsByTagName("trkpt"));
     const rtepts = Array.from(xml.getElementsByTagName("rtept"));
@@ -68,7 +102,11 @@ function parseGpx(gpxText) {
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-        return { lat, lng, ele };
+        return {
+          lat,
+          lng,
+          ele: Number.isFinite(ele) ? ele : null,
+        };
       })
       .filter(Boolean);
   } catch (error) {
@@ -77,11 +115,265 @@ function parseGpx(gpxText) {
   }
 }
 
-function smoothPoints(points, maxPoints = 900) {
+function downsamplePoints(points, maxPoints = 1200) {
   if (!points || points.length <= maxPoints) return points;
 
   const step = Math.ceil(points.length / maxPoints);
-  return points.filter((_, index) => index % step === 0);
+  const sampled = points.filter((_, index) => index % step === 0);
+
+  const last = points[points.length - 1];
+  if (last && sampled[sampled.length - 1] !== last) sampled.push(last);
+
+  return sampled;
+}
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (degree) => (degree * Math.PI) / 180;
+
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function movingAverage(values, radius = 2) {
+  if (!values || values.length === 0) return [];
+
+  return values.map((value, index) => {
+    let total = 0;
+    let count = 0;
+
+    for (let i = index - radius; i <= index + radius; i++) {
+      if (i >= 0 && i < values.length && Number.isFinite(values[i])) {
+        total += values[i];
+        count += 1;
+      }
+    }
+
+    return count ? total / count : value;
+  });
+}
+
+function buildRouteAnalysis(points) {
+  if (!points || points.length < 2) {
+    return {
+      profile: [],
+      distanceKm: null,
+      elevationGain: null,
+      elevationLoss: null,
+      minEle: null,
+      maxEle: null,
+      steepestClimb: null,
+      steepestDescent: null,
+      pointCount: points?.length || 0,
+    };
+  }
+
+  let distanceMeters = 0;
+
+  const rawElevations = points.map((p) =>
+    Number.isFinite(p.ele) ? Number(p.ele) : null
+  );
+
+  const fallbackElevation = rawElevations.find((value) => Number.isFinite(value)) ?? 0;
+  const filledElevations = rawElevations.map((value) =>
+    Number.isFinite(value) ? value : fallbackElevation
+  );
+  const smoothedElevations = movingAverage(filledElevations, 2);
+
+  const profile = [
+    {
+      distanceKm: 0,
+      ele: smoothedElevations[0],
+      rawEle: filledElevations[0],
+      lat: points[0].lat,
+      lng: points[0].lng,
+    },
+  ];
+
+  let elevationGain = 0;
+  let elevationLoss = 0;
+  let steepestClimb = null;
+  let steepestDescent = null;
+
+  for (let i = 1; i < points.length; i++) {
+    const segmentMeters = haversineMeters(points[i - 1], points[i]);
+    distanceMeters += segmentMeters;
+
+    const diff = smoothedElevations[i] - smoothedElevations[i - 1];
+
+    // Ignore tiny GPS/elevation noise but keep enough detail for hills.
+    if (diff > 1) elevationGain += diff;
+    if (diff < -1) elevationLoss += Math.abs(diff);
+
+    if (segmentMeters >= 15 && Number.isFinite(diff)) {
+      const grade = (diff / segmentMeters) * 100;
+
+      if (diff > 0 && (steepestClimb === null || grade > steepestClimb)) {
+        steepestClimb = grade;
+      }
+
+      if (diff < 0 && (steepestDescent === null || grade < steepestDescent)) {
+        steepestDescent = grade;
+      }
+    }
+
+    profile.push({
+      distanceKm: distanceMeters / 1000,
+      ele: smoothedElevations[i],
+      rawEle: filledElevations[i],
+      lat: points[i].lat,
+      lng: points[i].lng,
+    });
+  }
+
+  const elevations = profile.map((p) => p.ele);
+  const minEle = Math.min(...elevations);
+  const maxEle = Math.max(...elevations);
+
+  return {
+    profile,
+    distanceKm: distanceMeters / 1000,
+    elevationGain,
+    elevationLoss,
+    minEle,
+    maxEle,
+    steepestClimb,
+    steepestDescent,
+    pointCount: points.length,
+  };
+}
+
+function formatKm(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)} km`;
+}
+
+function formatMeters(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${Math.round(value)} m`;
+}
+
+function formatGrade(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${value.toFixed(1)}%`;
+}
+
+function ElevationProfile({ analysis }) {
+  const profile = analysis.profile || [];
+
+  if (profile.length < 6) return null;
+
+  const chartData = downsamplePoints(profile, 1600);
+  const min = analysis.minEle;
+  const max = analysis.maxEle;
+  const range = max - min || 1;
+
+  const width = 360;
+  const height = 92;
+  const topPad = 12;
+  const bottomPad = 18;
+  const usableHeight = height - topPad - bottomPad;
+
+  const path = chartData
+    .map((point, index) => {
+      const x = (index / Math.max(chartData.length - 1, 1)) * width;
+      const y = topPad + (1 - (point.ele - min) / range) * usableHeight;
+
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  const fillPath = `${path} L ${width} ${height} L 0 ${height} Z`;
+
+  const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
+    const y = topPad + ratio * usableHeight;
+    return (
+      <line
+        key={ratio}
+        x1="0"
+        x2={width}
+        y1={y}
+        y2={y}
+        stroke="rgba(255,255,255,0.10)"
+        strokeDasharray="4 5"
+      />
+    );
+  });
+
+  return (
+    <div style={styles.elevationCard}>
+      <div style={styles.elevationHeader}>
+        <div>
+          <div style={styles.elevationTitle}>Elevation profile</div>
+          <div style={styles.elevationSub}>
+            {formatKm(analysis.distanceKm)} • {analysis.pointCount} points
+          </div>
+        </div>
+
+        <div style={styles.elevationRange}>
+          {formatMeters(min)}–{formatMeters(max)}
+        </div>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        style={styles.elevationSvg}
+      >
+        <defs>
+          <linearGradient id="enduranceElevationFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgba(223,255,0,0.55)" />
+            <stop offset="100%" stopColor="rgba(223,255,0,0.08)" />
+          </linearGradient>
+        </defs>
+
+        {gridLines}
+        <path d={fillPath} fill="url(#enduranceElevationFill)" />
+        <path
+          d={path}
+          fill="none"
+          stroke={ROUTE_COLOR}
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      <div style={styles.elevationStats}>
+        <div style={styles.statPill}>
+          <span style={styles.statLabel}>Gain</span>
+          <strong>{formatMeters(analysis.elevationGain)}+</strong>
+        </div>
+
+        <div style={styles.statPill}>
+          <span style={styles.statLabel}>Loss</span>
+          <strong>{formatMeters(analysis.elevationLoss)}−</strong>
+        </div>
+
+        <div style={styles.statPill}>
+          <span style={styles.statLabel}>Max climb</span>
+          <strong>{formatGrade(analysis.steepestClimb)}</strong>
+        </div>
+
+        <div style={styles.statPill}>
+          <span style={styles.statLabel}>Max descent</span>
+          <strong>{formatGrade(analysis.steepestDescent)}</strong>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function DetailRouteMapClient({
@@ -91,6 +383,7 @@ export default function DetailRouteMapClient({
   gpx_url,
   event,
   route,
+  points: pointsProp,
   height = 245,
   showElevation = true,
 }) {
@@ -139,7 +432,11 @@ export default function DetailRouteMapClient({
   }, [finalGpxUrl, gpxText, gpx]);
 
   const rawPoints = useMemo(() => {
-    if (Array.isArray(route)) return route;
+    if (Array.isArray(pointsProp)) return pointsProp.map(normalizePoint).filter(Boolean);
+    if (Array.isArray(route)) return route.map(normalizePoint).filter(Boolean);
+    if (Array.isArray(event?.route_points)) {
+      return event.route_points.map(normalizePoint).filter(Boolean);
+    }
 
     if (typeof gpxText === "string" && gpxText.trim()) {
       return parseGpx(gpxText);
@@ -154,9 +451,10 @@ export default function DetailRouteMapClient({
     }
 
     return [];
-  }, [gpxText, gpx, remoteGpxText, route]);
+  }, [pointsProp, gpxText, gpx, remoteGpxText, route, event?.route_points]);
 
-  const points = useMemo(() => smoothPoints(rawPoints), [rawPoints]);
+  const points = useMemo(() => downsamplePoints(rawPoints, 900), [rawPoints]);
+  const analysis = useMemo(() => buildRouteAnalysis(rawPoints), [rawPoints]);
 
   const polyline = useMemo(() => {
     return points.map((p) => [p.lat, p.lng]);
@@ -165,32 +463,11 @@ export default function DetailRouteMapClient({
   const startPoint = points[0];
   const endPoint = points[points.length - 1];
 
-  const elevationData = useMemo(() => {
-    return points
-      .filter((p) => Number.isFinite(p.ele))
-      .map((p) => p.ele);
-  }, [points]);
-
   if (!mounted) return null;
 
-  if (finalGpxUrl && points.length < 2) {
+  if (finalGpxUrl && rawPoints.length < 2) {
     return (
-      <div
-        style={{
-          width: "100%",
-          height,
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "rgba(255,255,255,0.65)",
-          fontSize: 14,
-          marginTop: 12,
-          marginBottom: 14,
-        }}
-      >
+      <div style={{ ...styles.loadingBox, height }}>
         Loading route…
       </div>
     );
@@ -199,28 +476,8 @@ export default function DetailRouteMapClient({
   if (!points || points.length < 2) return null;
 
   return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        marginTop: 12,
-        marginBottom: 14,
-        zIndex: 1,
-      }}
-    >
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height,
-          borderRadius: 18,
-          overflow: "hidden",
-          background: "#1b1b1b",
-          border: "1px solid rgba(255,255,255,0.12)",
-          zIndex: 1,
-          touchAction: "pan-y",
-        }}
-      >
+    <div style={styles.wrap}>
+      <div style={{ ...styles.mapBox, height }}>
         <MapContainer
           center={[startPoint.lat, startPoint.lng]}
           zoom={13}
@@ -232,13 +489,7 @@ export default function DetailRouteMapClient({
           touchZoom={false}
           boxZoom={false}
           keyboard={false}
-          style={{
-            width: "100%",
-            height: "100%",
-            zIndex: 1,
-            pointerEvents: "none",
-            touchAction: "pan-y",
-          }}
+          style={styles.map}
         >
           <TileLayer
             attribution="© OpenStreetMap"
@@ -248,18 +499,18 @@ export default function DetailRouteMapClient({
           <Polyline
             positions={polyline}
             pathOptions={{
-              color: "#2d3436",
-              weight: 8,
-              opacity: 0.35,
+              color: DARK_LINE,
+              weight: 9,
+              opacity: 0.42,
             }}
           />
 
           <Polyline
             positions={polyline}
             pathOptions={{
-              color: "#dfff00",
+              color: ROUTE_COLOR,
               weight: 5,
-              opacity: 0.95,
+              opacity: 0.98,
             }}
           />
 
@@ -290,58 +541,128 @@ export default function DetailRouteMapClient({
         </MapContainer>
       </div>
 
-      {showElevation && elevationData.length > 5 && (
-        <div
-          style={{
-            width: "100%",
-            height: 52,
-            marginTop: 8,
-            borderRadius: 14,
-            overflow: "hidden",
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <svg
-            viewBox="0 0 300 52"
-            preserveAspectRatio="none"
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "block",
-            }}
-          >
-            {(() => {
-              const min = Math.min(...elevationData);
-              const max = Math.max(...elevationData);
-              const range = max - min || 1;
-              const step = 300 / (elevationData.length - 1);
-
-              const path = elevationData
-                .map((ele, index) => {
-                  const x = index * step;
-                  const y = 44 - ((ele - min) / range) * 34;
-                  return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-                })
-                .join(" ");
-
-              const fillPath = `${path} L 300 52 L 0 52 Z`;
-
-              return (
-                <>
-                  <path d={fillPath} fill="rgba(223,255,0,0.18)" />
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke="#dfff00"
-                    strokeWidth="2.5"
-                  />
-                </>
-              );
-            })()}
-          </svg>
-        </div>
-      )}
+      {showElevation && <ElevationProfile analysis={analysis} />}
     </div>
   );
 }
+
+const styles = {
+  wrap: {
+    position: "relative",
+    width: "100%",
+    marginTop: 12,
+    marginBottom: 14,
+    zIndex: 1,
+  },
+
+  mapBox: {
+    position: "relative",
+    width: "100%",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    overflow: "hidden",
+    background: "#1b1b1b",
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderBottom: "none",
+    zIndex: 1,
+    touchAction: "pan-y",
+  },
+
+  map: {
+    width: "100%",
+    height: "100%",
+    zIndex: 1,
+    pointerEvents: "none",
+    touchAction: "pan-y",
+  },
+
+  loadingBox: {
+    width: "100%",
+    borderRadius: 18,
+    background: CARD_BG,
+    border: `1px solid ${CARD_BORDER}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 14,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+
+  elevationCard: {
+    width: "100%",
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    overflow: "hidden",
+    background:
+      "linear-gradient(180deg, rgba(30,31,22,0.98), rgba(19,20,16,0.98))",
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderTop: "1px solid rgba(223,255,0,0.20)",
+    boxSizing: "border-box",
+  },
+
+  elevationHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: "11px 12px 6px",
+  },
+
+  elevationTitle: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: 950,
+    letterSpacing: "-0.02em",
+  },
+
+  elevationSub: {
+    marginTop: 2,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 11,
+    fontWeight: 750,
+  },
+
+  elevationRange: {
+    color: ROUTE_COLOR,
+    fontSize: 12,
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+  },
+
+  elevationSvg: {
+    width: "100%",
+    height: 92,
+    display: "block",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.10))",
+  },
+
+  elevationStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 6,
+    padding: "8px 8px 10px",
+  },
+
+  statPill: {
+    minWidth: 0,
+    borderRadius: 12,
+    padding: "7px 6px",
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    gap: 2,
+    textAlign: "center",
+  },
+
+  statLabel: {
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 9,
+    fontWeight: 850,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    whiteSpace: "nowrap",
+  },
+};
