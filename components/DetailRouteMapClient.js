@@ -417,15 +417,13 @@ function buildSmoothSvgPath(points) {
 }
 
 function ElevationProfile({ analysis }) {
-  const profile = analysis.profile || [];
-
-  if (profile.length < 6) return null;
-
-  const rawChart = downsamplePoints(profile || [], 900).filter(
+  const profile = (analysis?.profile || []).filter(
     (point) => point && Number.isFinite(Number(point.ele))
   );
 
-  const chartData = smoothVisualProfile(rawChart, 6).filter(
+  if (profile.length < 6) return null;
+
+  const chartData = smoothVisualProfile(downsamplePoints(profile, 700), 7).filter(
     (point) => point && Number.isFinite(Number(point.ele))
   );
 
@@ -450,24 +448,22 @@ function ElevationProfile({ analysis }) {
   const svgPoints = chartData
     .map((point, index) => {
       const ele = Number(point.ele);
-      if (!Number.isFinite(ele)) return null;
+      const x = (index / Math.max(chartData.length - 1, 1)) * width;
+      const y = topPad + (1 - (ele - min) / range) * usableHeight;
 
-      const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
-      const y = (
-        topPad +
-        (1 - (ele - min) / range) * usableHeight
-      ).toFixed(2);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-      if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
-        return null;
-      }
-
-      return { x, y };
+      return {
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+      };
     })
     .filter(Boolean);
 
-  const path = buildSmoothSvgPath(svgPoints);
-  const fillPath = path ? `${path} L ${width} ${height} L 0 ${height} Z` : "";
+  if (svgPoints.length < 2) return null;
+
+  const linePoints = svgPoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const fillPoints = `0,${height} ${linePoints} ${width},${height}`;
 
   const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
     const y = topPad + ratio * usableHeight;
@@ -488,7 +484,7 @@ function ElevationProfile({ analysis }) {
     <div style={styles.elevationCard}>
       <div style={styles.elevationHeader}>
         <div>
-          <div style={styles.elevationTitle}>Elevation profile v2</div>
+          <div style={styles.elevationTitle}>Elevation profile v3</div>
           <div style={styles.elevationSub}>
             {formatKm(analysis.distanceKm)} • {analysis.pointCount} points • filtered
           </div>
@@ -505,25 +501,28 @@ function ElevationProfile({ analysis }) {
         style={styles.elevationSvg}
       >
         <defs>
-          <linearGradient id="enduranceElevationFill" x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id="enduranceElevationFillV3" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgba(223,255,0,0.55)" />
             <stop offset="100%" stopColor="rgba(223,255,0,0.08)" />
           </linearGradient>
         </defs>
 
         {gridLines}
-        {path && <path d={fillPath} fill="url(#enduranceElevationFill)" />}
-        {path && (
-          <path
-            d={path}
-            fill="none"
-            stroke={ROUTE_COLOR}
-            strokeWidth="2.7"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
+
+        <polygon
+          points={fillPoints}
+          fill="url(#enduranceElevationFillV3)"
+        />
+
+        <polyline
+          points={linePoints}
+          fill="none"
+          stroke={ROUTE_COLOR}
+          strokeWidth="2.9"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
       </svg>
 
       <div style={styles.elevationStats}>
