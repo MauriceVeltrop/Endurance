@@ -330,7 +330,7 @@ function buildRouteAnalysis(points) {
 
   // Use a rolling 120m window for realistic maximum gradients.
   // This avoids false spikes from GPS/elevation noise between two close points.
-  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 150);
+  const { steepestClimb, steepestDescent } = calculateRollingGrades(profile, 100);
 
   return {
     profile,
@@ -417,13 +417,15 @@ function buildSmoothSvgPath(points) {
 }
 
 function ElevationProfile({ analysis }) {
-  const profile = (analysis?.profile || []).filter(
-    (point) => point && Number.isFinite(Number(point.ele))
-  );
+  const profile = analysis.profile || [];
 
   if (profile.length < 6) return null;
 
-  const chartData = smoothVisualProfile(downsamplePoints(profile, 700), 7).filter(
+  const rawChart = downsamplePoints(profile || [], 900).filter(
+    (point) => point && Number.isFinite(Number(point.ele))
+  );
+
+  const chartData = smoothVisualProfile(rawChart, 6).filter(
     (point) => point && Number.isFinite(Number(point.ele))
   );
 
@@ -448,22 +450,24 @@ function ElevationProfile({ analysis }) {
   const svgPoints = chartData
     .map((point, index) => {
       const ele = Number(point.ele);
-      const x = (index / Math.max(chartData.length - 1, 1)) * width;
-      const y = topPad + (1 - (ele - min) / range) * usableHeight;
+      if (!Number.isFinite(ele)) return null;
 
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const x = ((index / Math.max(chartData.length - 1, 1)) * width).toFixed(2);
+      const y = (
+        topPad +
+        (1 - (ele - min) / range) * usableHeight
+      ).toFixed(2);
 
-      return {
-        x: Number(x.toFixed(2)),
-        y: Number(y.toFixed(2)),
-      };
+      if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+        return null;
+      }
+
+      return { x, y };
     })
     .filter(Boolean);
 
-  if (svgPoints.length < 2) return null;
-
-  const linePoints = svgPoints.map((point) => `${point.x},${point.y}`).join(" ");
-  const fillPoints = `0,${height} ${linePoints} ${width},${height}`;
+  const path = buildSmoothSvgPath(svgPoints);
+  const fillPath = path ? `${path} L ${width} ${height} L 0 ${height} Z` : "";
 
   const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
     const y = topPad + ratio * usableHeight;
@@ -484,7 +488,7 @@ function ElevationProfile({ analysis }) {
     <div style={styles.elevationCard}>
       <div style={styles.elevationHeader}>
         <div>
-          <div style={styles.elevationTitle}>Elevation profile v3</div>
+          <div style={styles.elevationTitle}>Elevation profile v2</div>
           <div style={styles.elevationSub}>
             {formatKm(analysis.distanceKm)} • {analysis.pointCount} points • filtered
           </div>
@@ -501,28 +505,25 @@ function ElevationProfile({ analysis }) {
         style={styles.elevationSvg}
       >
         <defs>
-          <linearGradient id="enduranceElevationFillV3" x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id="enduranceElevationFill" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgba(223,255,0,0.55)" />
             <stop offset="100%" stopColor="rgba(223,255,0,0.08)" />
           </linearGradient>
         </defs>
 
         {gridLines}
-
-        <polygon
-          points={fillPoints}
-          fill="url(#enduranceElevationFillV3)"
-        />
-
-        <polyline
-          points={linePoints}
-          fill="none"
-          stroke={ROUTE_COLOR}
-          strokeWidth="2.9"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
+        {path && <path d={fillPath} fill="url(#enduranceElevationFill)" />}
+        {path && (
+          <path
+            d={path}
+            fill="none"
+            stroke={ROUTE_COLOR}
+            strokeWidth="2.7"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
 
       <div style={styles.elevationStats}>
@@ -537,12 +538,12 @@ function ElevationProfile({ analysis }) {
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Max 150m</span>
+          <span style={styles.statLabel}>Max 100m</span>
           <strong>{formatGrade(analysis.steepestClimb)}</strong>
         </div>
 
         <div style={styles.statPill}>
-          <span style={styles.statLabel}>Min 150m</span>
+          <span style={styles.statLabel}>Min 100m</span>
           <strong>{formatGrade(analysis.steepestDescent)}</strong>
         </div>
       </div>
