@@ -657,7 +657,7 @@ export default function DirectMessagePage() {
                     style={{
                       ...messageRow,
                       justifyContent: mine ? "flex-end" : "flex-start",
-                      marginTop: message.compactTop ? 3 : 9,
+                      marginTop: message.compactTop ? 2 : 7,
                     }}
                   >
                     {!mine && !message.compactBottom ? (
@@ -682,8 +682,8 @@ export default function DirectMessagePage() {
                         style={{
                           ...bubble,
                           ...(mine ? myBubble : theirBubble),
-                          borderBottomRightRadius: mine && message.compactBottom ? 18 : 7,
-                          borderBottomLeftRadius: !mine && message.compactBottom ? 18 : 7,
+                          borderBottomRightRadius: mine && message.compactBottom ? 16 : 6,
+                          borderBottomLeftRadius: !mine && message.compactBottom ? 16 : 6,
                         }}
                       >
                         {!mine && !message.compactTop ? (
@@ -845,7 +845,7 @@ export default function DirectMessagePage() {
             placeholder={
               editingMessage
                 ? "Edit message..."
-                : `Message ${displayName(otherProfile, "user")}...`
+                : `Message...`
             }
             style={input}
             rows={1}
@@ -873,38 +873,38 @@ const app = {
   height: "100svh",
   overflow: "hidden",
   background:
-    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.10), transparent 30%), #050505",
+    "radial-gradient(circle at 78% -8%, rgba(228,239,22,0.10), transparent 26%), #050505",
   color: "white",
-  padding: "4px 6px 6px",
+  padding: "2px 4px 4px",
   fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
 const chatShell = {
   width: "min(720px, 100%)",
-  height: "calc(100svh - 10px)",
+  height: "calc(100svh - 6px)",
   margin: "0 auto",
   display: "grid",
   gridTemplateRows: "auto auto minmax(0, 1fr) auto auto",
-  gap: 6,
-  padding: 7,
-  borderRadius: 22,
+  gap: 5,
+  padding: 6,
+  borderRadius: 18,
   background:
-    "radial-gradient(circle at 86% 0%, rgba(228,239,22,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.070), rgba(255,255,255,0.025))",
-  border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 20px 64px rgba(0,0,0,0.54)",
+    "radial-gradient(circle at 88% 0%, rgba(228,239,22,0.075), transparent 26%), linear-gradient(180deg, rgba(255,255,255,0.060), rgba(255,255,255,0.022))",
+  border: "1px solid rgba(255,255,255,0.09)",
+  boxShadow: "0 14px 46px rgba(0,0,0,0.52)",
 };
 
 const chatHeader = {
   display: "grid",
-  gridTemplateColumns: "34px minmax(0, 1fr) 34px",
+  gridTemplateColumns: "31px minmax(0, 1fr) 31px",
   alignItems: "center",
-  gap: 7,
+  gap: 6,
 };
 
 const backButton = {
-  width: 34,
-  height: 34,
-  borderRadius: 13,
+  width: 31,
+  height: 31,
+  borderRadius: 12,
   display: "grid",
   placeItems: "center",
   background:
@@ -917,9 +917,9 @@ const backButton = {
 };
 
 const refreshButton = {
-  width: 34,
-  height: 34,
-  borderRadius: 13,
+  width: 31,
+  height: 31,
+  borderRadius: 12,
   display: "grid",
   placeItems: "center",
   background:
@@ -933,15 +933,15 @@ const refreshButton = {
 const profileHeader = {
   display: "flex",
   alignItems: "center",
-  gap: 9,
+  gap: 7,
   minWidth: 0,
   color: "white",
   textDecoration: "none",
 };
 
 const headerAvatar = {
-  width: 38,
-  height: 38,
+  width: 34,
+  height: 34,
   borderRadius: "50%",
   overflow: "hidden",
   display: "grid",
@@ -965,7 +965,7 @@ const headerText = {
 };
 
 const headerName = {
-  fontSize: "clamp(16px, 4.3vw, 21px)",
+  fontSize: "clamp(15px, 4vw, 20px)",
   fontWeight: 1000,
   lineHeight: 1.05,
   letterSpacing: "-0.045em",
@@ -977,18 +977,18 @@ const headerName = {
 const headerSubline = {
   display: "flex",
   alignItems: "center",
-  gap: 5,
-  marginTop: 2,
+  gap: 4,
+  marginTop: 1,
   color: "rgba(255,255,255,0.58)",
-  fontSize: 10,
+  fontSize: 9,
   fontWeight: 800,
   overflow: "hidden",
   whiteSpace: "nowrap",
 };
 
 const liveDot = {
-  width: 8,
-  height: 8,
+  width: 7,
+  height: 7,
   borderRadius: "50%",
   boxShadow: "0 0 14px rgba(228,239,22,0.55)",
   flex: "0 0 auto",
@@ -1018,16 +1018,17 @@ const errorClose = {
 const messagesBox = {
   minHeight: 0,
   overflowY: "auto",
-  borderRadius: 20,
-  padding: "7px 6px 8px",
-  background: "rgba(0,0,0,0.34)",
-  border: "1px solid rgba(255,255,255,0.075)",
+  borderRadius: 15,
+  padding: "6px 5px 7px",
+  background: "rgba(0,0,0,0.38)",
+  border: "1px solid rgba(255,255,255,0.065)",
+  scrollbarWidth: "none",
 };
 
 const dayDivider = {
   width: "fit-content",
-  margin: "7px auto 6px",
-  padding: "4px 9px",
+  margin: "6px auto 5px",
+  padding: "3px 8px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.075)",
   color: "rgba(255,255,255,0.56)",
@@ -1038,12 +1039,12 @@ const dayDivider = {
 const messageRow = {
   display: "flex",
   alignItems: "flex-end",
-  gap: 5,
+  gap: 4,
 };
 
 const messageAvatar = {
-  width: 24,
-  height: 24,
+  width: 22,
+  height: 22,
   borderRadius: "50%",
   overflow: "hidden",
   display: "grid",
@@ -1056,23 +1057,23 @@ const messageAvatar = {
 };
 
 const avatarSpacer = {
-  width: 24,
+  width: 22,
   flex: "0 0 auto",
 };
 
 const messageStack = {
-  maxWidth: "78%",
+  maxWidth: "74%",
   display: "grid",
-  gap: 3,
+  gap: 2,
 };
 
 const bubble = {
-  padding: "8px 10px 6px",
-  borderRadius: 18,
-  lineHeight: 1.3,
-  fontSize: 14,
+  padding: "7px 9px 5px",
+  borderRadius: 16,
+  lineHeight: 1.25,
+  fontSize: 13,
   wordBreak: "break-word",
-  boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.22)",
 };
 
 const myBubble = {
@@ -1090,29 +1091,29 @@ const theirBubble = {
 
 const senderName = {
   color: "#e4ef16",
-  fontSize: 10,
+  fontSize: 9,
   fontWeight: 1000,
-  marginBottom: 4,
+  marginBottom: 3,
 };
 
 const messageMeta = {
   display: "flex",
   justifyContent: "flex-end",
-  gap: 7,
-  marginTop: 4,
-  fontSize: 9,
+  gap: 6,
+  marginTop: 3,
+  fontSize: 8,
   fontWeight: 850,
 };
 
 const replyPreview = {
   display: "grid",
   gap: 2,
-  padding: "7px 8px",
-  borderRadius: 12,
+  padding: "6px 7px",
+  borderRadius: 11,
   background: "rgba(0,0,0,0.14)",
   borderLeft: "3px solid rgba(228,239,22,0.85)",
   marginBottom: 7,
-  fontSize: 12,
+  fontSize: 11,
 };
 
 const mediaImage = {
@@ -1199,15 +1200,15 @@ const typingDot = {
 
 const contextBar = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 26px",
-  gap: 7,
+  gridTemplateColumns: "minmax(0, 1fr) 24px",
+  gap: 6,
   alignItems: "center",
-  padding: "7px 9px",
-  borderRadius: 16,
+  padding: "6px 8px",
+  borderRadius: 14,
   background: "rgba(228,239,22,0.10)",
   border: "1px solid rgba(228,239,22,0.22)",
   color: "white",
-  fontSize: 12,
+  fontSize: 11,
 };
 
 const contextClose = {
@@ -1222,46 +1223,46 @@ const contextClose = {
 
 const composer = {
   display: "grid",
-  gridTemplateColumns: "38px minmax(0, 1fr) 44px",
-  gap: 6,
+  gridTemplateColumns: "34px minmax(0, 1fr) 40px",
+  gap: 5,
 };
 
 const attachButton = {
-  width: 38,
-  minHeight: 42,
-  borderRadius: 16,
+  width: 34,
+  minHeight: 38,
+  borderRadius: 14,
   display: "grid",
   placeItems: "center",
   background: "rgba(255,255,255,0.075)",
   border: "1px solid rgba(255,255,255,0.12)",
   color: "#e4ef16",
-  fontSize: 24,
+  fontSize: 19,
   fontWeight: 900,
 };
 
 const input = {
   width: "100%",
-  minHeight: 42,
-  maxHeight: 94,
+  minHeight: 38,
+  maxHeight: 82,
   resize: "vertical",
-  borderRadius: 16,
-  padding: "10px 11px",
+  borderRadius: 14,
+  padding: "8px 10px",
   background: "rgba(255,255,255,0.075)",
   border: "1px solid rgba(255,255,255,0.12)",
   outline: "none",
   color: "white",
-  fontSize: 15,
-  lineHeight: 1.35,
+  fontSize: 14,
+  lineHeight: 1.28,
 };
 
 const sendButton = {
-  width: 44,
-  minHeight: 42,
+  width: 40,
+  minHeight: 38,
   border: "none",
-  borderRadius: 17,
+  borderRadius: 15,
   background: "#e4ef16",
   color: "#050505",
-  fontSize: 21,
+  fontSize: 19,
   fontWeight: 1000,
   cursor: "pointer",
 };
@@ -1294,7 +1295,7 @@ const emptyCopy = {
 };
 
 const loadingCard = {
-  minHeight: "calc(100svh - 10px)",
+  minHeight: "calc(100svh - 6px)",
   display: "grid",
   placeItems: "center",
   alignContent: "center",
