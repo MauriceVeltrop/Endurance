@@ -1,1176 +1,578 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import TeamRequestsPanel from "../components/TeamRequestsPanel";
-import EventCard from "../components/EventCard";
-import EventFormModal from "../components/EventFormModal";
-import { supabase } from "../lib/supabase";
-import { getSportLabels } from "../lib/sports";
-import { parseGpxFile, calculateRouteStats } from "../lib/gpx";
-import {
-  actionLinkBtn,
-  app,
-  authCard,
-  authTabs,
-  emptyCard,
-  errorCard,
-  fab,
-  field,
-  grid,
-  header,
-  horizontalScroll,
-  loginBar,
-  loginInfo,
-  primaryBtn,
-  logoImg,
-  roleBadge,
-  secondaryBtn,
-  eventsSection,
-} from "../lib/enduranceStyles";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
-const EMPTY_EVENT = {
-  title: "",
-  sports: [],
-  distance: 10,
-  date: "",
-  time: "",
-  location: "",
-  description: "",
-  gpxFile: null,
-  gpx_file_path: null,
-  gpx_file_url: null,
-  route_points: null,
-  gpx_uploaded_by: null,
-  route_distance_km: null,
-  elevation_gain_m: null,
-};
+const REACTIONS = ["👍", "🔥", "💪", "😂", "❤️", "👏"];
 
-const DISTANCE_RANGES = {
-  running: { min: 1, max: 50 },
-  "trail-running": { min: 1, max: 50 },
-  "road-cycling": { min: 10, max: 250 },
-  "mountain-biking": { min: 5, max: 120 },
-  "gravel-cycling": { min: 10, max: 250 },
-  walking: { min: 1, max: 40 },
-  swimming: { min: 1, max: 10 },
-  kayaking: { min: 1, max: 50 },
-};
+export default function DirectMessagePage() {
+  const params = useParams();
+  const otherUserId = params?.id;
 
-const ROUTE_SPORTS = [
-  "running",
-  "trail-running",
-  "road-cycling",
-  "mountain-biking",
-  "gravel-cycling",
-  "walking",
-  "kayaking",
-];
-
-function getDistanceSportIds(sports = []) {
-  return sports.filter((sportId) => DISTANCE_RANGES[sportId]);
-}
-
-function eventCanHaveRoute(sports = []) {
-  return sports.some((sportId) => ROUTE_SPORTS.includes(sportId));
-}
-
-function formatDate(value) {
-  if (!value) return "";
-  const d = new Date(`${value}T00:00:00`);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatTime(value) {
-  if (!value) return "";
-  return value.slice(0, 5);
-}
-
-function makeEventDateTime(event) {
-  const timeValue = event?.time || "23:59";
-  return new Date(`${event.date}T${timeValue}`);
-}
-
-function routePointsToGpx(points, title = "Endurance Route") {
-  const safeTitle = title.replace(/[<>&'"]/g, "");
-
-  const trkpts = points
-    .map((p) => {
-      const lat = Number(p.lat);
-      const lon = Number(p.lon);
-      const ele = Number.isFinite(Number(p.ele)) ? Number(p.ele) : 0;
-
-      return `      <trkpt lat="${lat}" lon="${lon}">
-        <ele>${ele}</ele>
-      </trkpt>`;
-    })
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Endurance App" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata>
-    <name>${safeTitle}</name>
-  </metadata>
-  <trk>
-    <name>${safeTitle}</name>
-    <trkseg>
-${trkpts}
-    </trkseg>
-  </trk>
-</gpx>`;
-}
-
-export default function Home() {
-  const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-
-  const [events, setEvents] = useState([]);
-  const [likes, setLikes] = useState([]);
-  const [comments, setComments] = useState([]);
-  const [participants, setParticipants] = useState([]);
-  const [userSports, setUserSports] = useState([]);
-
+  const [myProfile, setMyProfile] = useState(null);
+  const [otherProfile, setOtherProfile] = useState(null);
+  const [thread, setThread] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [reactionsByMessageId, setReactionsByMessageId] = useState({});
+  const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savingEvent, setSavingEvent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [errorText, setErrorText] = useState("");
+  const [liveStatus, setLiveStatus] = useState("connecting");
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [showActionsFor, setShowActionsFor] = useState(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
-  const [open, setOpen] = useState(false);
-  const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState(EMPTY_EVENT);
-
-  const [commentText, setCommentText] = useState({});
-  const [pageError, setPageError] = useState("");
-  const [userSearchOpen, setUserSearchOpen] = useState(false);
-  const [userSearchQuery, setUserSearchQuery] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState([]);
-  const [userSearchLoading, setUserSearchLoading] = useState(false);
-
-
-  const [authMode, setAuthMode] = useState("signin");
-  const [authName, setAuthName] = useState("");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-
-  const isModerator = profile?.role === "moderator";
-  const isOrganizer = profile?.role === "organizer";
-  const canManageEvents = isModerator || isOrganizer;
-
-  const currentDistanceSportIds = getDistanceSportIds(form.sports);
-  const showDistance = currentDistanceSportIds.length > 0;
-
-  const activeDistanceRange =
-    DISTANCE_RANGES[currentDistanceSportIds[0]] || { min: 1, max: 50 };
-
-  const showGpxUpload = eventCanHaveRoute(form.sports);
-
-  const routeDistanceLocked =
-    !!form.gpxFile ||
-    !!form.gpx_file_url ||
-    (!!form.route_points && !!form.route_distance_km);
-
-  const eventCards = useMemo(() => {
-    const now = new Date();
-
-    if (userSports.length === 0) return [];
-
-    return [...events]
-      .filter((event) => {
-        const eventSports = Array.isArray(event.sports) ? event.sports : [];
-        return eventSports.some((sportId) => userSports.includes(sportId));
-      })
-      .filter((event) => makeEventDateTime(event) >= now)
-      .sort((a, b) => makeEventDateTime(a) - makeEventDateTime(b))
-      .map((event) => {
-        const eventLikes = likes.filter((l) => l.event_id === event.id);
-        const eventComments = comments.filter((c) => c.event_id === event.id);
-        const eventParticipants = participants.filter(
-          (p) => p.event_id === event.id
-        );
-
-        return {
-          ...event,
-          likes: eventLikes,
-          comments: eventComments,
-          participants: eventParticipants,
-          isOwner: user?.id === event.creator_id,
-          likedByMe: !!eventLikes.find((l) => l.user_id === user?.id),
-          joinedByMe: !!eventParticipants.find(
-            (p) => p.user_id === user?.id
-          ),
-          canRemoveGpx:
-            !!event.gpx_file_url &&
-            (isModerator || event.gpx_uploaded_by === user?.id),
-        };
-      });
-  }, [events, likes, comments, participants, user, userSports, isModerator]);
-
-  const removeGpxFromEvent = async (event) => {
-    if (!event?.id) return;
-
-    if (!(isModerator || event.gpx_uploaded_by === user?.id)) {
-      alert("You are not allowed to remove this GPX file.");
-      return;
-    }
-
-    if (!confirm("Remove GPX route from this event?")) return;
-
-    const { error } = await supabase
-      .from("events")
-      .update({
-        gpx_file_path: null,
-        gpx_file_url: null,
-        route_points: null,
-        gpx_uploaded_by: null,
-        route_distance_km: null,
-        elevation_gain_m: null,
-      })
-      .eq("id", event.id);
-
-    if (error) {
-      alert(`Removing GPX failed: ${error.message}`);
-      return;
-    }
-
-    if (event.gpx_file_path) {
-      await supabase.storage.from("event-gpx").remove([event.gpx_file_path]);
-    }
-
-    await loadEverything();
-  };
-
-useEffect(() => {
-    const init = async () => {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      setLoading(false);
-    };
-
-    init();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!user?.id) {
-      setProfile(null);
-      setEvents([]);
-      setLikes([]);
-      setComments([]);
-      setParticipants([]);
-      setUserSports([]);
-      return;
-    }
+    if (!otherUserId) return;
+    loadChat();
+  }, [otherUserId]);
 
-    loadProfile();
-    loadEverything();
-  }, [user?.id]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, otherTyping]);
 
-  const loadEverything = async () => {
-    setPageError("");
+  useEffect(() => {
+    if (!thread?.id || !user?.id) return;
 
-    await Promise.all([
-      loadEvents(),
-      loadLikes(),
-      loadComments(),
-      loadParticipants(),
-      loadUserSports(),
-    ]);
-  };
-
-  const loadProfile = async () => {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error("profile load error", error);
-      setPageError(error.message);
-      return;
-    }
-
-    setProfile(data);
-  };
-
-  const loadEvents = async () => {
-    const { data, error } = await supabase
-      .from("events")
-      .select(`
-        *,
-        creator_profile:profiles!events_creator_id_fkey (
-          id,
-          name,
-          email,
-          role,
-          avatar_url
-        )
-      `)
-      .order("date", { ascending: true })
-      .order("time", { ascending: true });
-
-    if (error) {
-      console.error("events load error", error);
-      setPageError(error.message);
-      return;
-    }
-
-    setEvents(data || []);
-  };
-
-  const loadLikes = async () => {
-    const { data, error } = await supabase
-      .from("event_likes")
-      .select(`
-        id,
-        event_id,
-        user_id,
-        created_at,
-        user_profile:profiles!event_likes_user_id_fkey (
-          id,
-          name,
-          role,
-          avatar_url
-        )
-      `);
-
-    if (error) {
-      console.error("likes load error", error);
-      return;
-    }
-
-    setLikes(data || []);
-  };
-
-  const loadComments = async () => {
-    const { data, error } = await supabase
-      .from("event_comments")
-      .select(`
-        id,
-        event_id,
-        user_id,
-        text,
-        created_at,
-        user_profile:profiles!event_comments_user_id_fkey (
-          id,
-          name,
-          role,
-          avatar_url
-        )
-      `)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("comments load error", error);
-      return;
-    }
-
-    setComments(data || []);
-  };
-
-  const loadParticipants = async () => {
-    const { data, error } = await supabase
-      .from("event_participants")
-      .select(`
-        id,
-        event_id,
-        user_id,
-        created_at,
-        user_profile:profiles!event_participants_user_id_fkey (
-          id,
-          name,
-          role,
-          avatar_url
-        )
-      `)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("participants load error", error);
-      return;
-    }
-
-    setParticipants(data || []);
-  };
-
-  const loadUserSports = async () => {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from("user_sports")
-      .select("sport")
-      .eq("user_id", user.id);
-
-    if (error) {
-      console.error("user sports load error", error);
-      return;
-    }
-
-    setUserSports((data || []).map((row) => row.sport));
-  };
-
-  const handleSignUp = async (e) => {
-    e.preventDefault();
-
-    const { error } = await supabase.auth.signUp({
-      email: authEmail,
-      password: authPassword,
-      options: {
-        data: {
-          name: authName || authEmail.split("@")[0],
+    const channel = supabase
+      .channel(`direct-message-${thread.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${thread.id}`,
         },
-      },
-    });
+        async (payload) => {
+          const newMessage = payload.new;
+          const senderProfile =
+            newMessage.sender_id === user.id ? myProfile : otherProfile;
 
-    if (error) {
-      alert(`Sign up failed: ${error.message}`);
-      return;
-    }
-
-    alert("Account created. You can now sign in.");
-    setAuthMode("signin");
-  };
-
-  const handleSignIn = async (e) => {
-    e.preventDefault();
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: authEmail,
-      password: authPassword,
-    });
-
-    if (error) {
-      alert(`Sign in failed: ${error.message}`);
-      return;
-    }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-
-  const openNew = () => {
-    setEditId(null);
-    setForm(EMPTY_EVENT);
-    setOpen(true);
-  };
-
-  const openEdit = (event) => {
-    setEditId(event.id);
-
-    setForm({
-      title: event.title || "",
-      sports: Array.isArray(event.sports) ? event.sports : [],
-      distance: event.distance || 10,
-      date: event.date || "",
-      time: event.time || "",
-      location: event.location || "",
-      description: event.description || "",
-      gpxFile: null,
-      gpx_file_path: event.gpx_file_path || null,
-      gpx_file_url: event.gpx_file_url || null,
-      route_points: event.route_points || null,
-      gpx_uploaded_by: event.gpx_uploaded_by || null,
-      route_distance_km: event.route_distance_km || null,
-      elevation_gain_m: event.elevation_gain_m || null,
-    });
-
-    setOpen(true);
-  };
-
-  const closeModal = () => {
-    setOpen(false);
-    setEditId(null);
-    setForm(EMPTY_EVENT);
-  };
-
-  const toggleSportInForm = (sportId) => {
-    const alreadySelected = form.sports.includes(sportId);
-
-    if (alreadySelected) {
-      const nextSports = form.sports.filter((id) => id !== sportId);
-      const nextDistanceSports = getDistanceSportIds(nextSports);
-      const nextRange =
-        DISTANCE_RANGES[nextDistanceSports[0]] || { min: 1, max: 50 };
-
-      setForm({
-        ...form,
-        sports: nextSports,
-        distance: Math.min(Number(form.distance || 0), nextRange.max),
-      });
-
-      return;
-    }
-
-    const nextSports = [...form.sports, sportId];
-    const nextDistanceSports = getDistanceSportIds(nextSports);
-    const nextRange =
-      DISTANCE_RANGES[nextDistanceSports[0]] || { min: 1, max: 50 };
-
-    setForm({
-      ...form,
-      sports: nextSports,
-      distance:
-        Number(form.distance || 0) < nextRange.min
-          ? nextRange.min
-          : Number(form.distance || 0),
-    });
-  };
-
-  const saveEvent = async (e) => {
-    e.preventDefault();
-
-    if (!form.title || !form.date || !form.time || !form.location) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-
-    if (form.sports.length === 0) {
-      alert("Please select at least one sport.");
-      return;
-    }
-
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    setSavingEvent(true);
-
-    let gpxFilePath = form.gpx_file_path || null;
-    let gpxFileUrl = form.gpx_file_url || null;
-    let routePoints = form.route_points || null;
-    let gpxUploadedBy = form.gpx_uploaded_by || null;
-    let routeDistanceKm = form.route_distance_km || null;
-    let elevationGainM = form.elevation_gain_m || null;
-    let finalDistance = showDistance ? Number(form.distance) : null;
-
-    if (form.gpxFile) {
-      const fileName = form.gpxFile.name.toLowerCase();
-
-      if (!fileName.endsWith(".gpx")) {
-        setSavingEvent(false);
-        alert("Only .gpx files are allowed.");
-        return;
-      }
-
-      routePoints = await parseGpxFile(form.gpxFile);
-
-      if (!routePoints.length) {
-        setSavingEvent(false);
-        alert("No route points found in this GPX file.");
-        return;
-      }
-
-      const routeStats = calculateRouteStats(routePoints);
-      const roundedRouteDistance = Number(routeStats.distanceKm.toFixed(2));
-
-      const safeFileName = form.gpxFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-      const filePath = `${user.id}/${Date.now()}-${safeFileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("event-gpx")
-        .upload(filePath, form.gpxFile, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: "application/gpx+xml",
-        });
-
-      if (uploadError) {
-        setSavingEvent(false);
-        alert(`GPX upload failed: ${uploadError.message}`);
-        return;
-      }
-
-      const { data: publicData } = supabase.storage
-        .from("event-gpx")
-        .getPublicUrl(filePath);
-
-      gpxFilePath = filePath;
-      gpxFileUrl = publicData.publicUrl;
-      gpxUploadedBy = user.id;
-      routeDistanceKm = roundedRouteDistance;
-      elevationGainM = routeStats.elevationGain;
-      finalDistance = roundedRouteDistance;
-    } else if (form.route_points && form.route_distance_km) {
-      finalDistance = Number(Number(form.route_distance_km).toFixed(2));
-      routeDistanceKm = Number(Number(form.route_distance_km).toFixed(2));
-
-      if (!gpxFileUrl && Array.isArray(form.route_points)) {
-        const gpxText = routePointsToGpx(
-          form.route_points,
-          form.title || "Endurance Route"
-        );
-
-        const safeTitle = (form.title || "endurance-route")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/(^-|-$)/g, "");
-
-        const filePath = `${user.id}/${Date.now()}-${safeTitle}.gpx`;
-
-        const gpxBlob = new Blob([gpxText], {
-          type: "application/gpx+xml",
-        });
-
-        const { error: uploadError } = await supabase.storage
-          .from("event-gpx")
-          .upload(filePath, gpxBlob, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: "application/gpx+xml",
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === newMessage.id)) return prev;
+            return [...prev, { ...newMessage, sender_profile: senderProfile || null }];
           });
 
-        if (uploadError) {
-          setSavingEvent(false);
-          alert(`Generated GPX upload failed: ${uploadError.message}`);
-          return;
+          if (newMessage.receiver_id === user.id) {
+            await markRead(thread.id, user.id);
+          }
         }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        (payload) => {
+          const updated = payload.new;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === updated.id ? { ...message, ...updated } : message
+            )
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_message_reactions",
+        },
+        () => loadReactions()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_typing",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        (payload) => {
+          const row = payload.new;
+          if (!row || row.user_id === user.id) return;
 
-        const { data: publicData } = supabase.storage
-          .from("event-gpx")
-          .getPublicUrl(filePath);
+          const lastTyping = new Date(row.updated_at).getTime();
+          const isRecent = Date.now() - lastTyping < 4500;
+          setOtherTyping(Boolean(row.is_typing && isRecent));
 
-        gpxFilePath = filePath;
-        gpxFileUrl = publicData.publicUrl;
-        gpxUploadedBy = user.id;
-      }
-    }
+          setTimeout(() => setOtherTyping(false), 4800);
+        }
+      )
+      .subscribe((status) => {
+        setLiveStatus(status === "SUBSCRIBED" ? "live" : "connecting");
+      });
 
-
-const payload = {
-      title: form.title,
-      sports: form.sports,
-      distance: finalDistance,
-      date: form.date,
-      time: form.time,
-      location: form.location,
-      description: form.description,
-      gpx_file_path: gpxFilePath,
-      gpx_file_url: gpxFileUrl,
-      route_points: routePoints,
-      gpx_uploaded_by: gpxUploadedBy,
-      route_distance_km: routeDistanceKm,
-      elevation_gain_m: elevationGainM,
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [thread?.id, user?.id, myProfile?.id, otherProfile?.id]);
 
-    const result = editId
-      ? await supabase.from("events").update(payload).eq("id", editId)
-      : await supabase.from("events").insert({
-          creator_id: user.id,
-          ...payload,
-        });
+  const groupedMessages = useMemo(() => {
+    return messages.map((message, index) => {
+      const previous = messages[index - 1];
+      const next = messages[index + 1];
 
-    if (result.error) {
-      setSavingEvent(false);
-      alert(`Saving failed: ${result.error.message}`);
-      return;
-    }
+      const startsNewDay =
+        !previous ||
+        new Date(previous.created_at).toDateString() !==
+          new Date(message.created_at).toDateString();
 
-    await loadEverything();
-    setSavingEvent(false);
-    closeModal();
-  };
+      const sameSenderAsPrevious =
+        previous && previous.sender_id === message.sender_id;
+      const sameSenderAsNext = next && next.sender_id === message.sender_id;
 
-  const deleteEvent = async (id) => {
-    if (!confirm("Delete this event?")) return;
-
-    const { error } = await supabase.from("events").delete().eq("id", id);
-
-    if (error) {
-      alert(`Delete failed: ${error.message}`);
-      return;
-    }
-
-    await loadEverything();
-  };
-
-  const toggleParticipation = async (event) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    if (event.joinedByMe) {
-      const { error } = await supabase
-        .from("event_participants")
-        .delete()
-        .eq("event_id", event.id)
-        .eq("user_id", user.id);
-
-      if (error) {
-        alert(`Leaving event failed: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("event_participants").insert({
-        event_id: event.id,
-        user_id: user.id,
-      });
-
-      if (error) {
-        alert(`Joining event failed: ${error.message}`);
-        return;
-      }
-    }
-
-    await loadParticipants();
-  };
-
-  const toggleLike = async (event) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    if (event.likedByMe) {
-      const { error } = await supabase
-        .from("event_likes")
-        .delete()
-        .eq("event_id", event.id)
-        .eq("user_id", user.id);
-
-      if (error) {
-        alert(`Removing like failed: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("event_likes").insert({
-        event_id: event.id,
-        user_id: user.id,
-      });
-
-      if (error) {
-        alert(`Liking event failed: ${error.message}`);
-        return;
-      }
-    }
-
-    await loadLikes();
-  };
-
-  const postComment = async (eventId) => {
-    if (!user?.id) {
-      alert("You must be signed in.");
-      return;
-    }
-
-    const text = (commentText[eventId] || "").trim();
-
-    if (!text) return;
-
-    const { error } = await supabase.from("event_comments").insert({
-      event_id: eventId,
-      user_id: user.id,
-      text,
+      return {
+        ...message,
+        startsNewDay,
+        compactTop: sameSenderAsPrevious && !startsNewDay,
+        compactBottom: sameSenderAsNext,
+      };
     });
+  }, [messages]);
 
-    if (error) {
-      alert(`Posting comment failed: ${error.message}`);
-      return;
+  async function loadChat() {
+    try {
+      setLoading(true);
+      setErrorText("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const currentUser = session?.user;
+
+      if (!currentUser) {
+        setLoading(false);
+        setErrorText("Please sign in to use messages.");
+        return;
+      }
+
+      setUser(currentUser);
+
+      const [{ data: myData }, { data: otherData, error: otherError }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, name, email, avatar_url, role, location")
+            .eq("id", currentUser.id)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("id, name, email, avatar_url, role, location")
+            .eq("id", otherUserId)
+            .maybeSingle(),
+        ]);
+
+      if (otherError) throw otherError;
+
+      setMyProfile(myData || null);
+      setOtherProfile(otherData || null);
+
+      let activeThread = await findThread(currentUser.id, otherUserId);
+      if (!activeThread) activeThread = await createThread(currentUser.id, otherUserId);
+
+      setThread(activeThread);
+
+      const { data: rows, error: messageError } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("thread_id", activeThread.id)
+        .order("created_at", { ascending: true });
+
+      if (messageError) throw messageError;
+
+      const visibleRows = (rows || []).filter((message) => !message.deleted_at);
+
+      const hydrated = visibleRows.map((message) => ({
+        ...message,
+        sender_profile:
+          message.sender_id === currentUser.id ? myData || null : otherData || null,
+      }));
+
+      setMessages(hydrated);
+
+      await markRead(activeThread.id, currentUser.id);
+      await loadReactions(activeThread.id);
+    } catch (error) {
+      console.error("loadChat error", error);
+      setErrorText(error?.message || "Could not load this chat.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    setCommentText((prev) => ({ ...prev, [eventId]: "" }));
-    await loadComments();
-  };
+  async function findThread(userA, userB) {
+    const { data, error } = await supabase
+      .from("chat_threads")
+      .select("*")
+      .or(`and(user_a.eq.${userA},user_b.eq.${userB}),and(user_a.eq.${userB},user_b.eq.${userA})`)
+      .order("updated_at", { ascending: false })
+      .limit(1);
 
-  const deleteComment = async (commentId) => {
-    const { error } = await supabase
-      .from("event_comments")
-      .delete()
-      .eq("id", commentId);
+    if (error) throw error;
+    return data?.[0] || null;
+  }
 
-    if (error) {
-      alert(`Deleting comment failed: ${error.message}`);
-      return;
-    }
-
-    await loadComments();
-  };
-
-  const searchUsers = async (query) => {
-    const cleanQuery = String(query || "").trim();
-    const safeQuery = cleanQuery.replaceAll(",", " ");
-
-    setUserSearchQuery(query);
-
-    if (cleanQuery.length < 2) {
-      setUserSearchResults([]);
-      setUserSearchLoading(false);
-      return;
-    }
-
-    setUserSearchLoading(true);
+  async function createThread(userA, userB) {
+    const ordered = [userA, userB].sort();
 
     const { data, error } = await supabase
-      .from("profiles")
-      .select("id, name, email, location, avatar_url, role")
-      .or(
-        `name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,location.ilike.%${safeQuery}%`
-      )
-      .order("name", { ascending: true })
-      .limit(12);
+      .from("chat_threads")
+      .insert({
+        user_a: ordered[0],
+        user_b: ordered[1],
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
 
-    if (error) {
-      console.error("User search failed:", error);
-      setUserSearchResults([]);
-      setUserSearchLoading(false);
-      return;
-    }
+    if (error) throw error;
+    return data;
+  }
 
-    setUserSearchResults(data || []);
-    setUserSearchLoading(false);
-  };
+  async function loadReactions(threadId = thread?.id) {
+    if (!threadId) return;
 
-  const downloadIcs = (event) => {
-    const escapeIcsText = (value = "") =>
-      String(value)
-        .replaceAll("\\", "\\\\")
-        .replaceAll("\n", "\\n")
-        .replaceAll(",", "\\,")
-        .replaceAll(";", "\\;");
+    const { data, error } = await supabase
+      .from("chat_message_reactions")
+      .select("id, message_id, user_id, emoji")
+      .eq("thread_id", threadId);
 
-    const safeDate = String(event?.date || "").trim();
-    const safeTime = String(event?.time || "09:00").slice(0, 5);
+    if (error) return;
 
-    if (!safeDate) {
-      alert("This event has no date.");
-      return;
-    }
+    const grouped = {};
+    (data || []).forEach((reaction) => {
+      if (!grouped[reaction.message_id]) grouped[reaction.message_id] = {};
+      if (!grouped[reaction.message_id][reaction.emoji]) {
+        grouped[reaction.message_id][reaction.emoji] = {
+          count: 0,
+          mine: false,
+        };
+      }
 
-    const start = `${safeDate.replaceAll("-", "")}T${safeTime.replace(":", "")}00`;
-
-    const endDate = new Date(`${safeDate}T${safeTime}:00`);
-    endDate.setHours(endDate.getHours() + 1);
-
-    const yyyy = endDate.getFullYear();
-    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
-    const dd = String(endDate.getDate()).padStart(2, "0");
-    const hh = String(endDate.getHours()).padStart(2, "0");
-    const mi = String(endDate.getMinutes()).padStart(2, "0");
-    const end = `${yyyy}${mm}${dd}T${hh}${mi}00`;
-
-    const sportText = getSportLabels(event.sports || []).join(" • ");
-    const description = [
-      sportText ? `${sportText} training via Endurance` : "Training via Endurance",
-      event.description?.trim() ? event.description.trim() : "",
-    ]
-      .filter(Boolean)
-      .join("\\n\\n");
-
-    const uid = `${event.id || Date.now()}@endurance-app`;
-    const fileName = `${
-      String(event.title || "endurance-event")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "endurance-event"
-    }.ics`;
-
-    const ics = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Endurance//Event Calendar//EN",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      "BEGIN:VEVENT",
-      `UID:${uid}`,
-      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
-      `SUMMARY:${escapeIcsText(event.title || "Endurance Event")}`,
-      `DTSTART:${start}`,
-      `DTEND:${end}`,
-      `LOCATION:${escapeIcsText(event.location || "")}`,
-      `DESCRIPTION:${escapeIcsText(description)}`,
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ].join("\r\n");
-
-    const blob = new Blob([ics], {
-      type: "text/calendar;charset=utf-8",
+      grouped[reaction.message_id][reaction.emoji].count += 1;
+      if (reaction.user_id === user?.id) grouped[reaction.message_id][reaction.emoji].mine = true;
     });
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    setReactionsByMessageId(grouped);
+  }
 
-    link.href = url;
-    link.download = fileName;
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  async function markRead(threadId, userId) {
+    if (!threadId || !userId) return;
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+    const now = new Date().toISOString();
 
-  const openMaps = (location) => {
-    const q = encodeURIComponent(location);
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${q}`,
-      "_blank"
+    await supabase
+      .from("chat_messages")
+      .update({ read_at: now })
+      .eq("thread_id", threadId)
+      .eq("receiver_id", userId)
+      .is("read_at", null);
+
+    await supabase.from("chat_reads").upsert(
+      { thread_id: threadId, user_id: userId, last_read_at: now },
+      { onConflict: "thread_id,user_id" }
     );
-  };
+
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.receiver_id === userId && !message.read_at
+          ? { ...message, read_at: now }
+          : message
+      )
+    );
+  }
+
+  async function setTyping(isTyping) {
+    if (!thread?.id || !user?.id) return;
+
+    await supabase
+      .from("chat_typing")
+      .upsert(
+        {
+          thread_id: thread.id,
+          user_id: user.id,
+          is_typing: isTyping,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "thread_id,user_id" }
+      )
+      .then(() => null)
+      .catch(() => null);
+  }
+
+  function handleTyping(value) {
+    setText(value);
+
+    if (!thread?.id || !user?.id) return;
+
+    setTyping(true);
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setTyping(false);
+    }, 1800);
+  }
+
+  async function sendMessage(media = null) {
+    const clean = text.trim();
+
+    if ((!clean && !media) || !user?.id || !otherUserId || !thread?.id || sending) return;
+
+    try {
+      setSending(true);
+
+      const now = new Date().toISOString();
+      const messageText = clean || (media?.type === "image" ? "Photo" : "Attachment");
+
+      setText("");
+      setReplyTo(null);
+      setEditingMessage(null);
+      await setTyping(false);
+
+      const payload = {
+        thread_id: thread.id,
+        sender_id: user.id,
+        receiver_id: otherUserId,
+        message: messageText,
+        reply_to_message_id: replyTo?.id || null,
+      };
+
+      if (media?.url) {
+        payload.media_url = media.url;
+        payload.media_type = media.type || "image";
+      }
+
+      const { data: insertedMessage, error: insertError } = await supabase
+        .from("chat_messages")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (insertError) throw insertError;
+
+      if (insertedMessage) {
+        setMessages((prev) => {
+          if (prev.some((message) => message.id === insertedMessage.id)) return prev;
+          return [
+            ...prev,
+            {
+              ...insertedMessage,
+              sender_profile: myProfile || null,
+            },
+          ];
+        });
+      }
+
+      await supabase
+        .from("chat_threads")
+        .update({
+          last_message: messageText,
+          last_message_at: now,
+          updated_at: now,
+        })
+        .eq("id", thread.id);
+
+      textareaRef.current?.focus();
+    } catch (error) {
+      console.error("sendMessage error", error);
+      if (!media) setText(clean);
+      setErrorText(error?.message || "Could not send message.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function editMessage() {
+    const clean = text.trim();
+    if (!clean || !editingMessage?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from("chat_messages")
+        .update({
+          message: clean,
+          edited_at: new Date().toISOString(),
+        })
+        .eq("id", editingMessage.id)
+        .eq("sender_id", user.id);
+
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === editingMessage.id
+            ? { ...message, message: clean, edited_at: new Date().toISOString() }
+            : message
+        )
+      );
+
+      setText("");
+      setEditingMessage(null);
+    } catch (error) {
+      setErrorText(error?.message || "Could not edit message.");
+    }
+  }
+
+  async function deleteMessage(message) {
+    if (!message?.id || message.sender_id !== user?.id) return;
+
+    const confirmed = window.confirm("Delete this message?");
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("chat_messages")
+      .update({
+        deleted_at: now,
+        message: "Message deleted",
+      })
+      .eq("id", message.id)
+      .eq("sender_id", user.id);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    setMessages((prev) => prev.filter((item) => item.id !== message.id));
+  }
+
+  async function toggleReaction(message, emoji) {
+    if (!message?.id || !thread?.id || !user?.id) return;
+
+    const current = reactionsByMessageId[message.id]?.[emoji];
+    const mine = current?.mine;
+
+    if (mine) {
+      await supabase
+        .from("chat_message_reactions")
+        .delete()
+        .eq("message_id", message.id)
+        .eq("user_id", user.id)
+        .eq("emoji", emoji);
+    } else {
+      await supabase.from("chat_message_reactions").upsert(
+        {
+          thread_id: thread.id,
+          message_id: message.id,
+          user_id: user.id,
+          emoji,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "message_id,user_id,emoji" }
+      );
+    }
+
+    await loadReactions();
+  }
+
+  async function uploadMedia(file) {
+    if (!file || !user?.id || !thread?.id) return;
+
+    try {
+      setUploadingMedia(true);
+
+      const ext = file.name.split(".").pop() || "jpg";
+      const filePath = `${thread.id}/${user.id}-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("chat-media")
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("chat-media").getPublicUrl(filePath);
+      await sendMessage({ url: data.publicUrl, type: file.type?.startsWith("image/") ? "image" : "file" });
+    } catch (error) {
+      setErrorText(error?.message || "Could not upload media.");
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
+  function startEdit(message) {
+    setEditingMessage(message);
+    setReplyTo(null);
+    setText(message.message || "");
+    textareaRef.current?.focus();
+  }
+
+  function initials(value = "?") {
+    const clean = String(value || "?").trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  function displayName(profile, fallback = "User") {
+    return profile?.name || profile?.email || fallback;
+  }
+
+  function formatTime(value) {
+    if (!value) return "";
+    return new Date(value).toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function formatDay(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+    const now = new Date();
+
+    if (date.toDateString() === now.toDateString()) return "Today";
+
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function statusLabel(message) {
+    if (message.sender_id !== user?.id) return "";
+    if (message.read_at) return "✓✓";
+    return "✓";
+  }
+
+  function findReplyMessage(id) {
+    if (!id) return null;
+    return messages.find((message) => message.id === id);
+  }
 
   if (loading) {
     return (
       <main style={app}>
-        <div style={emptyCard}>Loading...</div>
-      </main>
-    );
-  }
-
-  if (!session) {
-    const authHeroStyle = {
-      ...authCard,
-      position: "relative",
-      overflow: "hidden",
-      padding: 0,
-      borderRadius: 30,
-      border: "1px solid rgba(255,255,255,0.10)",
-      boxShadow: "0 28px 90px rgba(0,0,0,0.62)",
-      background:
-        "radial-gradient(circle at 82% 10%, rgba(228,239,22,0.22), transparent 36%), linear-gradient(180deg, rgba(18,18,18,0.98), rgba(5,5,5,0.98))",
-    };
-
-    const authPanelStyle = {
-      position: "relative",
-      zIndex: 2,
-      display: "grid",
-      gap: 18,
-      padding: "26px 24px 24px",
-    };
-
-    const authKickerStyle = {
-      color: "#e4ef16",
-      fontSize: 13,
-      fontWeight: 950,
-      letterSpacing: "0.12em",
-      textTransform: "uppercase",
-    };
-
-    const authTitleStyle = {
-      margin: 0,
-      color: "white",
-      fontSize: "clamp(32px, 9vw, 52px)",
-      lineHeight: 0.95,
-      letterSpacing: "-0.06em",
-      fontWeight: 1000,
-      maxWidth: 520,
-    };
-
-    const authTextStyle = {
-      margin: 0,
-      color: "rgba(255,255,255,0.72)",
-      fontSize: 16,
-      lineHeight: 1.45,
-      maxWidth: 560,
-    };
-
-    const authNoticeStyle = {
-      borderRadius: 20,
-      padding: "14px 16px",
-      background: "rgba(228,239,22,0.10)",
-      border: "1px solid rgba(228,239,22,0.22)",
-      color: "rgba(255,255,255,0.88)",
-      fontSize: 14,
-      lineHeight: 1.35,
-    };
-
-    const authFormStyle = {
-      ...grid,
-      gap: 14,
-    };
-
-    const professionalFieldStyle = {
-      ...field,
-      background: "rgba(255,255,255,0.07)",
-      border: "1px solid rgba(255,255,255,0.13)",
-      borderRadius: 18,
-      minHeight: 56,
-      fontSize: 16,
-    };
-
-    const authPrimaryStyle = {
-      ...primaryBtn,
-      minHeight: 56,
-      borderRadius: 18,
-      fontSize: 17,
-      fontWeight: 950,
-      boxShadow: "0 16px 38px rgba(228,239,22,0.20)",
-    };
-
-    const authSecondaryStyle = {
-      ...secondaryBtn,
-      minHeight: 48,
-      borderRadius: 16,
-      fontWeight: 850,
-    };
-
-    return (
-      <main
-        style={{
-          ...app,
-          minHeight: "100svh",
-          background:
-            "radial-gradient(circle at 70% 0%, rgba(228,239,22,0.12), transparent 30%), #000",
-        }}
-      >
-        <header style={{ ...header, paddingTop: 34, marginBottom: 18 }}>
-          <img src="/logo-endurance.png" alt="Endurance" style={logoImg} />
-        </header>
-
-        <section style={authHeroStyle}>
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 0,
-              backgroundImage: "url('/images/runner-bg.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "right center",
-              backgroundRepeat: "no-repeat",
-              opacity: 0.38,
-              filter: "saturate(1.1) contrast(1.08)",
-            }}
-          />
-
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 1,
-              background:
-                "linear-gradient(90deg, rgba(5,5,5,0.98) 0%, rgba(5,5,5,0.90) 48%, rgba(5,5,5,0.40) 100%)",
-            }}
-          />
-
-          <div style={authPanelStyle}>
-            <div style={authKickerStyle}>Endurance Community</div>
-
-            <h1 style={authTitleStyle}>
-              Train together.
-              <br />
-              Go further.
-            </h1>
-
-            <p style={authTextStyle}>
-              Sign in to join local endurance events, connect with training partners,
-              download routes and add sessions to your calendar.
-            </p>
-
-            <div style={authNoticeStyle}>
-              <strong>Invite-only access.</strong> New registrations are temporarily
-              closed while the platform is being prepared for the first community.
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                style={primaryBtn}
-                onClick={() => setAuthMode("signin")}
-                type="button"
-              >
-                Sign In
-              </button>
-
-              <button
-                style={{ ...secondaryBtn, display: "none" }}
-                onClick={() => setAuthMode("signup")}
-                type="button"
-                aria-hidden="true"
-                tabIndex={-1}
-              >
-                Create Account
-              </button>
-            </div>
-
-            <form onSubmit={handleSignIn} style={authFormStyle}>
-              <input
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email address"
-                type="email"
-                autoComplete="email"
-                style={professionalFieldStyle}
-              />
-
-              <input
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Password"
-                type="password"
-                autoComplete="current-password"
-                style={professionalFieldStyle}
-              />
-
-              <button type="submit" style={authPrimaryStyle}>
-                Sign In
-              </button>
-            </form>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                marginTop: 4,
-              }}
-            >
-              {[
-                ["Events", "Join local sessions"],
-                ["Routes", "GPX-ready training"],
-                ["Team Up", "Find training partners"],
-              ].map(([title, body]) => (
-                <div
-                  key={title}
-                  style={{
-                    padding: 12,
-                    borderRadius: 18,
-                    background: "rgba(255,255,255,0.055)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      color: "#e4ef16",
-                      fontSize: 13,
-                      fontWeight: 950,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {title}
-                  </div>
-                  <div
-                    style={{
-                      color: "rgba(255,255,255,0.58)",
-                      fontSize: 12,
-                      lineHeight: 1.25,
-                    }}
-                  >
-                    {body}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <section style={loadingCard}>
+          <img src="/logo-endurance.png" alt="Endurance" style={loadingLogo} />
+          <div style={loadingText}>Loading chat...</div>
         </section>
       </main>
     );
@@ -1178,542 +580,750 @@ const payload = {
 
   return (
     <main style={app}>
-      <header
-        style={{
-          ...header,
-          display: "grid",
-          gap: 6,
-          paddingTop: 6,
-          marginBottom: 6,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 54,
-          }}
-        >
-          <img
-            src="/logo-endurance.png"
-            alt="Endurance"
-            style={{
-              ...logoImg,
-              width: "min(70vw, 460px)",
-              marginTop: -8,
-              filter: "drop-shadow(0 12px 20px rgba(0,0,0,0.65))",
-            }}
-          />
-        </div>
+      <section style={chatShell}>
+        <header style={chatHeader}>
+          <Link href="/messages" style={backButton} aria-label="Back to messages">
+            ‹
+          </Link>
 
-        <section
-          style={{
-            ...loginBar,
-            width: "min(600px, calc(100vw - 56px))",
-            justifySelf: "center",
-            margin: 0,
-            padding: "7px 9px",
-            borderRadius: 20,
-            display: "grid",
-            gap: 6,
-            background:
-              "radial-gradient(circle at 82% 0%, rgba(228,239,22,0.08), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025))",
-            border: "1px solid rgba(255,255,255,0.09)",
-            boxShadow: "0 12px 34px rgba(0,0,0,0.36)",
-            backdropFilter: "blur(12px)",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "34px minmax(0, 1fr) 32px",
-              gap: 8,
-              alignItems: "center",
-            }}
-          >
-            <Link
-              href={`/profile/${user.id}`}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: "50%",
-                overflow: "hidden",
-                display: "grid",
-                placeItems: "center",
-                textDecoration: "none",
-                background:
-                  "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.18))",
-                color: "#050505",
-                fontSize: 12,
-                fontWeight: 1000,
-                border: "2px solid rgba(228,239,22,0.75)",
-              }}
-            >
-              {profile?.avatar_url ? (
+          <Link href={`/profile/${otherUserId}`} style={profileHeader}>
+            <div style={headerAvatar}>
+              {otherProfile?.avatar_url ? (
                 <img
-                  src={profile.avatar_url}
-                  alt={profile?.name || "Profile"}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  }}
+                  src={otherProfile.avatar_url}
+                  alt={displayName(otherProfile)}
+                  style={avatarImage}
                 />
               ) : (
-                String(profile?.name || user?.email || "?")
-                  .replace(/@.*/, "")
-                  .slice(0, 2)
-                  .toUpperCase()
+                initials(displayName(otherProfile))
               )}
-            </Link>
+            </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                flexWrap: "wrap",
-                minWidth: 0,
-              }}
-            >
-              <div
-                style={{
-                  color: "white",
-                  fontSize: "clamp(15px, 4vw, 18px)",
-                  fontWeight: 900,
-                  letterSpacing: "-0.03em",
-                  lineHeight: 1.05,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {profile?.name || user?.email}
+            <div style={headerText}>
+              <div style={headerName}>{displayName(otherProfile, "Chat")}</div>
+
+              <div style={headerSubline}>
+                <span
+                  style={{
+                    ...liveDot,
+                    background: liveStatus === "live" ? "#e4ef16" : "#777",
+                  }}
+                />
+                <span>{liveStatus === "live" ? "online" : "connecting..."}</span>
+                {otherProfile?.role ? <span>• {otherProfile.role}</span> : null}
+              </div>
+            </div>
+          </Link>
+
+          <button type="button" onClick={loadChat} style={menuButton} aria-label="Refresh chat">
+            ⋮
+          </button>
+        </header>
+
+        {errorText ? (
+          <div style={errorBox}>
+            <span>{errorText}</span>
+            <button type="button" onClick={() => setErrorText("")} style={errorClose}>
+              ×
+            </button>
+          </div>
+        ) : null}
+
+        <div style={messagesBox}>
+          {groupedMessages.length === 0 ? (
+            <div style={emptyState}>
+              <div style={emptyIcon}>💬</div>
+              <div style={emptyTitle}>Start the conversation</div>
+              <div style={emptyCopy}>
+                Send your first message to {displayName(otherProfile, "this user")}.
+              </div>
+            </div>
+          ) : (
+            groupedMessages.map((message) => {
+              const mine = message.sender_id === user?.id;
+              const replyMessage = findReplyMessage(message.reply_to_message_id);
+              const messageReactions = reactionsByMessageId[message.id] || {};
+
+              return (
+                <div key={message.id}>
+                  {message.startsNewDay ? (
+                    <div style={dayDivider}>{formatDay(message.created_at)}</div>
+                  ) : null}
+
+                  <div
+                    style={{
+                      ...messageRow,
+                      justifyContent: mine ? "flex-end" : "flex-start",
+                      marginTop: message.compactTop ? 3 : 9,
+                    }}
+                  >
+                    {!mine && !message.compactBottom ? (
+                      <div style={messageAvatar}>
+                        {otherProfile?.avatar_url ? (
+                          <img
+                            src={otherProfile.avatar_url}
+                            alt={displayName(otherProfile)}
+                            style={avatarImage}
+                          />
+                        ) : (
+                          initials(displayName(otherProfile))
+                        )}
+                      </div>
+                    ) : !mine ? (
+                      <div style={avatarSpacer} />
+                    ) : null}
+
+                    <div style={messageStack}>
+                      <div
+                        onClick={() => setShowActionsFor(showActionsFor === message.id ? null : message.id)}
+                        style={{
+                          ...bubble,
+                          ...(mine ? myBubble : theirBubble),
+                          borderBottomRightRadius: mine && message.compactBottom ? 18 : 6,
+                          borderBottomLeftRadius: !mine && message.compactBottom ? 18 : 6,
+                        }}
+                      >
+                        {!mine && !message.compactTop ? (
+                          <div style={senderName}>{displayName(otherProfile)}</div>
+                        ) : null}
+
+                        {replyMessage ? (
+                          <div style={replyPreview}>
+                            <strong>{replyMessage.sender_id === user?.id ? "You" : displayName(otherProfile)}</strong>
+                            <span>{replyMessage.message}</span>
+                          </div>
+                        ) : null}
+
+                        {message.media_url ? (
+                          message.media_type === "image" ? (
+                            <img src={message.media_url} alt="Shared media" style={mediaImage} />
+                          ) : (
+                            <a href={message.media_url} target="_blank" rel="noreferrer" style={fileLink}>
+                              Open attachment
+                            </a>
+                          )
+                        ) : null}
+
+                        <div>{message.message}</div>
+
+                        <div
+                          style={{
+                            ...messageMeta,
+                            color: mine ? "rgba(5,5,5,0.62)" : "rgba(255,255,255,0.50)",
+                          }}
+                        >
+                          <span>{formatTime(message.created_at)}</span>
+                          {message.edited_at ? <span>Edited</span> : null}
+                          {mine ? <span>{statusLabel(message)}</span> : null}
+                        </div>
+                      </div>
+
+                      {Object.keys(messageReactions).length > 0 ? (
+                        <div style={{ ...reactionSummary, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                          {Object.entries(messageReactions).map(([emoji, data]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => toggleReaction(message, emoji)}
+                              style={{
+                                ...reactionChip,
+                                borderColor: data.mine ? "rgba(228,239,22,0.55)" : "rgba(255,255,255,0.10)",
+                              }}
+                            >
+                              {emoji} {data.count}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {showActionsFor === message.id ? (
+                        <div style={{ ...actionsBar, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                          {REACTIONS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => toggleReaction(message, emoji)}
+                              style={emojiButton}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+
+                          <button type="button" onClick={() => setReplyTo(message)} style={smallAction}>
+                            Reply
+                          </button>
+
+                          {mine ? (
+                            <>
+                              <button type="button" onClick={() => startEdit(message)} style={smallAction}>
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => deleteMessage(message)} style={smallActionDanger}>
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {otherTyping ? (
+            <div style={typingRow}>
+              <div style={messageAvatar}>
+                {otherProfile?.avatar_url ? (
+                  <img src={otherProfile.avatar_url} alt={displayName(otherProfile)} style={avatarImage} />
+                ) : (
+                  initials(displayName(otherProfile))
+                )}
               </div>
 
-              <div
-                style={{
-                  ...roleBadge,
-                  flex: "0 0 auto",
-                  fontSize: 10,
-                  padding: "3px 7px",
-                  borderRadius: 999,
-                }}
-              >
-                {profile?.role || "user"}
+              <div style={typingBubble}>
+                <span style={typingDot} />
+                <span style={typingDot} />
+                <span style={typingDot} />
               </div>
+            </div>
+          ) : null}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {(replyTo || editingMessage) && (
+          <div style={contextBar}>
+            <div style={{ minWidth: 0 }}>
+              <strong>{editingMessage ? "Editing message" : "Replying to"}</strong>
+              <span>{(editingMessage || replyTo)?.message}</span>
             </div>
 
             <button
               type="button"
               onClick={() => {
-                setUserSearchOpen(true);
-                setUserSearchQuery("");
-                setUserSearchResults([]);
+                setReplyTo(null);
+                setEditingMessage(null);
+                setText("");
               }}
-              aria-label="Search users"
-              title="Search users"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 10,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background:
-                  "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.03))",
-                border: "1px solid rgba(228,239,22,0.30)",
-                cursor: "pointer",
-              }}
+              style={contextClose}
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#e4ef16"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="7.5" />
-                <line x1="16.5" y1="16.5" x2="21" y2="21" />
-              </svg>
+              ×
             </button>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link
-              href={`/profile/${user.id}`}
-              style={{
-                ...actionLinkBtn,
-                borderRadius: 11,
-                padding: "5px 9px",
-                fontSize: 12,
-              }}
-            >
-              Profile
-            </Link>
-
-            <Link
-              href="/messages"
-              style={{
-                ...actionLinkBtn,
-                borderRadius: 11,
-                padding: "5px 9px",
-                fontSize: 12,
-              }}
-            >
-              Messages
-            </Link>
-
-            {isModerator && (
-              <Link
-                href="/admin"
-                style={{
-                  ...actionLinkBtn,
-                  borderRadius: 11,
-                  padding: "5px 9px",
-                  fontSize: 12,
-                }}
-              >
-                Admin
-              </Link>
-            )}
-
-            <button
-              onClick={handleSignOut}
-              style={{
-                ...secondaryBtn,
-                borderRadius: 11,
-                padding: "5px 9px",
-                fontSize: 12,
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-        </section>
-      </header>
-
-      {user?.id && <TeamRequestsPanel userId={user.id} />}
-      {userSearchOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 2000,
-            background: "rgba(0,0,0,0.76)",
-            backdropFilter: "blur(12px)",
-            padding: 18,
-            display: "grid",
-            alignItems: "start",
-            justifyItems: "center",
-            overflowY: "auto",
-          }}
-          onClick={() => setUserSearchOpen(false)}
-        >
-          <div
-            style={{
-              width: "min(720px, 100%)",
-              marginTop: 22,
-              borderRadius: 30,
-              background:
-                "radial-gradient(circle at 84% 0%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(180deg, rgba(24,24,24,0.98), rgba(6,6,6,0.98))",
-              border: "1px solid rgba(255,255,255,0.12)",
-              boxShadow: "0 30px 95px rgba(0,0,0,0.70)",
-              overflow: "hidden",
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div
-              style={{
-                padding: 18,
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                borderBottom: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  width: 46,
-                  height: 46,
-                  borderRadius: 16,
-                  display: "grid",
-                  placeItems: "center",
-                  background: "rgba(228,239,22,0.14)",
-                  border: "1px solid rgba(228,239,22,0.24)",
-                  flex: "0 0 auto",
-                }}
-              >
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#e4ef16"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="11" cy="11" r="7.5" />
-                  <line x1="16.5" y1="16.5" x2="21" y2="21" />
-                </svg>
-              </div>
-
-              <input
-                value={userSearchQuery}
-                onChange={(event) => searchUsers(event.target.value)}
-                placeholder="Search users by name, email or city..."
-                autoFocus
-                style={{
-                  ...field,
-                  flex: "1 1 auto",
-                  minWidth: 0,
-                  margin: 0,
-                  background: "rgba(255,255,255,0.075)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 18,
-                  minHeight: 52,
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={() => setUserSearchOpen(false)}
-                style={{
-                  ...secondaryBtn,
-                  width: 46,
-                  height: 46,
-                  padding: 0,
-                  borderRadius: 16,
-                  flex: "0 0 auto",
-                  fontSize: 18,
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ padding: 18 }}>
-              {userSearchQuery.trim().length < 2 ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.58)",
-                    fontSize: 15,
-                    lineHeight: 1.45,
-                    padding: "12px 4px",
-                  }}
-                >
-                  Type at least 2 characters to search for users.
-                </div>
-              ) : userSearchLoading ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.72)",
-                    fontSize: 15,
-                    padding: "12px 4px",
-                  }}
-                >
-                  Searching...
-                </div>
-              ) : userSearchResults.length === 0 ? (
-                <div
-                  style={{
-                    color: "rgba(255,255,255,0.58)",
-                    fontSize: 15,
-                    padding: "12px 4px",
-                  }}
-                >
-                  No users found.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {userSearchResults.map((foundUser) => (
-                    <Link
-                      key={foundUser.id}
-                      href={`/profile/${foundUser.id}`}
-                      onClick={() => setUserSearchOpen(false)}
-                      style={{
-                        display: "flex",
-                        gap: 12,
-                        alignItems: "center",
-                        padding: 12,
-                        borderRadius: 20,
-                        background: "rgba(255,255,255,0.055)",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        textDecoration: "none",
-                        color: "white",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: "50%",
-                          overflow: "hidden",
-                          display: "grid",
-                          placeItems: "center",
-                          background:
-                            "linear-gradient(135deg, rgba(228,239,22,0.95), rgba(255,255,255,0.15))",
-                          color: "#050505",
-                          fontWeight: 1000,
-                          flex: "0 0 auto",
-                          border: "2px solid rgba(228,239,22,0.65)",
-                        }}
-                      >
-                        {foundUser.avatar_url ? (
-                          <img
-                            src={foundUser.avatar_url}
-                            alt={foundUser.name || "user"}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        ) : (
-                          String(foundUser.name || foundUser.email || "?")
-                            .replace(/@.*/, "")
-                            .slice(0, 2)
-                            .toUpperCase()
-                        )}
-                      </div>
-
-                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                        <div
-                          style={{
-                            fontWeight: 950,
-                            fontSize: 16,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {foundUser.name || foundUser.email || "Unknown user"}
-                        </div>
-
-                        <div
-                          style={{
-                            color: "rgba(255,255,255,0.55)",
-                            fontSize: 13,
-                            marginTop: 3,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {[foundUser.location, foundUser.role]
-                            .filter(Boolean)
-                            .join(" • ")}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          color: "#e4ef16",
-                          fontWeight: 950,
-                          fontSize: 20,
-                        }}
-                      >
-                        ↗
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {pageError ? (
-        <div style={errorCard}>
-          Could not load part of the app: {pageError}
-        </div>
-      ) : null}
-
-      {open && (
-        <EventFormModal
-          editId={editId}
-          form={form}
-          setForm={setForm}
-          saveEvent={saveEvent}
-          closeModal={closeModal}
-          savingEvent={savingEvent}
-          showDistance={showDistance}
-          activeDistanceRange={activeDistanceRange}
-          showGpxUpload={showGpxUpload}
-          toggleSportInForm={toggleSportInForm}
-          distanceLocked={routeDistanceLocked}
-          distanceLockText={
-            routeDistanceLocked
-              ? "Distance is calculated from the route."
-              : ""
-          }
-          userRole={profile?.role || "user"}
-        />
-      )}
-
-      <section style={eventsSection}>
-        {eventCards.length === 0 ? (
-          <div style={emptyCard}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-              No upcoming events
-            </div>
-            <div style={{ opacity: 0.7 }}>
-              {userSports.length === 0
-                ? "Select your preferred sports in your profile to see matching events."
-                : "No upcoming events match your preferred sports yet."}
-            </div>
-          </div>
-        ) : (
-          <div style={horizontalScroll}>
-            {eventCards.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                user={user}
-                profile={profile}
-                isModerator={isModerator}
-                formatDate={formatDate}
-                formatTime={formatTime}
-                openMaps={openMaps}
-                removeGpxFromEvent={removeGpxFromEvent}
-                toggleLike={toggleLike}
-                commentText={commentText}
-                setCommentText={setCommentText}
-                postComment={postComment}
-                deleteComment={deleteComment}
-                toggleParticipation={toggleParticipation}
-                downloadIcs={downloadIcs}
-                openEdit={openEdit}
-                deleteEvent={deleteEvent}
-              />
-            ))}
           </div>
         )}
-      </section>
 
-      {canManageEvents && (
-        <button onClick={openNew} style={fab}>
-          +
-        </button>
-      )}
+        <footer style={composer}>
+          <label style={attachButton}>
+            +
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) uploadMedia(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(event) => handleTyping(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                editingMessage ? editMessage() : sendMessage();
+              }
+            }}
+            placeholder={editingMessage ? "Edit message..." : `Message ${displayName(otherProfile, "user")}...`}
+            style={input}
+            rows={1}
+          />
+
+          <button
+            type="button"
+            onClick={editingMessage ? editMessage : () => sendMessage()}
+            disabled={sending || uploadingMedia || !text.trim()}
+            style={{
+              ...sendButton,
+              opacity: sending || uploadingMedia || !text.trim() ? 0.52 : 1,
+            }}
+            aria-label="Send message"
+          >
+            {sending || uploadingMedia ? "…" : "➤"}
+          </button>
+        </footer>
+      </section>
     </main>
   );
-            }
+}
 
+const app = {
+  height: "100svh",
+  overflow: "hidden",
+  background: "#050505",
+  color: "white",
+  padding: 0,
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+};
 
+const chatShell = {
+  width: "min(720px, 100%)",
+  height: "100svh",
+  margin: "0 auto",
+  display: "grid",
+  gridTemplateRows: "58px auto minmax(0, 1fr) auto auto",
+  gap: 0,
+  padding: 0,
+  borderRadius: 0,
+  background: "#050505",
+  border: "none",
+  boxShadow: "none",
+};
 
-    
+const chatHeader = {
+  display: "grid",
+  gridTemplateColumns: "38px minmax(0, 1fr) 38px",
+  alignItems: "center",
+  gap: 8,
+  height: 58,
+  padding: "7px 10px",
+  background:
+    "linear-gradient(180deg, rgba(12,12,12,0.98), rgba(8,8,8,0.94))",
+  borderBottom: "1px solid rgba(255,255,255,0.075)",
+  boxSizing: "border-box",
+};
 
+const backButton = {
+  width: 38,
+  height: 38,
+  borderRadius: 999,
+  display: "grid",
+  placeItems: "center",
+  background: "transparent",
+  border: "none",
+  color: "#e4ef16",
+  textDecoration: "none",
+  fontSize: 30,
+  lineHeight: 1,
+  fontWeight: 700,
+};
 
+const menuButton = {
+  width: 38,
+  height: 38,
+  borderRadius: 999,
+  display: "grid",
+  placeItems: "center",
+  background: "transparent",
+  border: "none",
+  color: "#e4ef16",
+  fontSize: 26,
+  fontWeight: 900,
+};
 
+const profileHeader = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  minWidth: 0,
+  color: "white",
+  textDecoration: "none",
+};
+
+const headerAvatar = {
+  width: 42,
+  height: 42,
+  borderRadius: "50%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  flex: "0 0 auto",
+  background:
+    "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.16))",
+  color: "#050505",
+  border: "2px solid rgba(228,239,22,0.90)",
+  fontWeight: 1000,
+  boxShadow: "0 0 18px rgba(228,239,22,0.18)",
+};
+
+const avatarImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const headerText = {
+  minWidth: 0,
+};
+
+const headerName = {
+  fontSize: "clamp(17px, 4.6vw, 23px)",
+  fontWeight: 950,
+  lineHeight: 1.02,
+  letterSpacing: "-0.045em",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const headerSubline = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  marginTop: 2,
+  color: "#e4ef16",
+  fontSize: 12,
+  fontWeight: 800,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+};
+
+const liveDot = {
+  width: 8,
+  height: 8,
+  borderRadius: "50%",
+  boxShadow: "0 0 14px rgba(228,239,22,0.55)",
+  flex: "0 0 auto",
+};
+
+const errorBox = {
+  padding: "8px 11px",
+  background: "rgba(120,20,20,0.34)",
+  borderBottom: "1px solid rgba(255,120,120,0.20)",
+  color: "#ffd2d2",
+  fontSize: 13,
+  fontWeight: 750,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const errorClose = {
+  background: "transparent",
+  color: "#ffd2d2",
+  border: "none",
+  fontSize: 18,
+};
+
+const messagesBox = {
+  minHeight: 0,
+  overflowY: "auto",
+  borderRadius: 0,
+  padding: "12px 12px 10px",
+  backgroundColor: "#080808",
+  backgroundImage:
+    "radial-gradient(circle at 24px 24px, rgba(228,239,22,0.035) 0 1px, transparent 1.5px), radial-gradient(circle at 74px 78px, rgba(255,255,255,0.030) 0 1px, transparent 1.5px)",
+  backgroundSize: "96px 96px",
+  border: "none",
+  scrollbarWidth: "none",
+};
+
+const dayDivider = {
+  width: "fit-content",
+  margin: "8px auto 10px",
+  padding: "5px 11px",
+  borderRadius: 999,
+  background: "rgba(42,42,46,0.92)",
+  color: "rgba(255,255,255,0.70)",
+  fontSize: 12,
+  fontWeight: 900,
+  boxShadow: "0 8px 20px rgba(0,0,0,0.22)",
+};
+
+const messageRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 6,
+};
+
+const messageAvatar = {
+  width: 30,
+  height: 30,
+  borderRadius: "50%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  background: "#e4ef16",
+  color: "#050505",
+  fontSize: 10,
+  fontWeight: 1000,
+  flex: "0 0 auto",
+};
+
+const avatarSpacer = {
+  width: 30,
+  flex: "0 0 auto",
+};
+
+const messageStack = {
+  maxWidth: "78%",
+  display: "grid",
+  gap: 2,
+};
+
+const bubble = {
+  padding: "9px 12px 6px",
+  borderRadius: 18,
+  lineHeight: 1.25,
+  fontSize: 16,
+  wordBreak: "break-word",
+  boxShadow: "0 8px 18px rgba(0,0,0,0.28)",
+};
+
+const myBubble = {
+  marginLeft: "auto",
+  background: "linear-gradient(135deg, #e4ef16, #f3ff2c)",
+  color: "#050505",
+};
+
+const theirBubble = {
+  background:
+    "linear-gradient(135deg, rgba(40,40,43,0.98), rgba(24,24,26,0.98))",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.075)",
+};
+
+const senderName = {
+  color: "#e4ef16",
+  fontSize: 12,
+  fontWeight: 950,
+  marginBottom: 5,
+};
+
+const messageMeta = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 5,
+  marginTop: 4,
+  fontSize: 10,
+  fontWeight: 850,
+};
+
+const replyPreview = {
+  display: "grid",
+  gap: 2,
+  padding: "7px 8px",
+  borderRadius: 12,
+  background: "rgba(0,0,0,0.14)",
+  borderLeft: "3px solid rgba(228,239,22,0.85)",
+  marginBottom: 7,
+  fontSize: 12,
+};
+
+const mediaImage = {
+  width: "100%",
+  maxWidth: 260,
+  borderRadius: 15,
+  marginBottom: 7,
+  display: "block",
+};
+
+const fileLink = {
+  color: "#e4ef16",
+  fontWeight: 900,
+};
+
+const reactionSummary = {
+  display: "flex",
+  gap: 4,
+  flexWrap: "wrap",
+};
+
+const reactionChip = {
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.10)",
+  padding: "3px 7px",
+  fontSize: 11,
+  fontWeight: 850,
+};
+
+const actionsBar = {
+  display: "flex",
+  gap: 4,
+  flexWrap: "wrap",
+};
+
+const emojiButton = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.08)",
+  borderRadius: 999,
+  padding: "5px 7px",
+  fontSize: 14,
+};
+
+const smallAction = {
+  border: "1px solid rgba(228,239,22,0.24)",
+  background: "rgba(228,239,22,0.10)",
+  color: "#e4ef16",
+  borderRadius: 999,
+  padding: "5px 8px",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const smallActionDanger = {
+  ...smallAction,
+  border: "1px solid rgba(255,120,120,0.28)",
+  background: "rgba(255,120,120,0.10)",
+  color: "#ffb0b0",
+};
+
+const typingRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 7,
+  marginTop: 10,
+};
+
+const typingBubble = {
+  display: "flex",
+  gap: 4,
+  padding: "10px 12px",
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.08)",
+};
+
+const typingDot = {
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  background: "rgba(255,255,255,0.65)",
+};
+
+const contextBar = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) 26px",
+  gap: 7,
+  alignItems: "center",
+  padding: "7px 12px",
+  background: "rgba(228,239,22,0.10)",
+  borderTop: "1px solid rgba(228,239,22,0.22)",
+  color: "white",
+  fontSize: 12,
+};
+
+const contextClose = {
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  border: "none",
+  background: "rgba(255,255,255,0.08)",
+  color: "white",
+  fontSize: 18,
+};
+
+const composer = {
+  display: "grid",
+  gridTemplateColumns: "44px minmax(0, 1fr) 50px",
+  alignItems: "center",
+  gap: 8,
+  padding: "9px 12px 12px",
+  background: "linear-gradient(180deg, rgba(8,8,8,0.94), #050505)",
+  borderTop: "1px solid rgba(255,255,255,0.07)",
+};
+
+const attachButton = {
+  width: 44,
+  height: 44,
+  minHeight: 44,
+  borderRadius: "50%",
+  display: "grid",
+  placeItems: "center",
+  background: "transparent",
+  border: "1px solid rgba(228,239,22,0.42)",
+  color: "#e4ef16",
+  fontSize: 30,
+  lineHeight: 1,
+  fontWeight: 450,
+  boxSizing: "border-box",
+};
+
+const input = {
+  width: "100%",
+  height: 44,
+  minHeight: 44,
+  maxHeight: 44,
+  resize: "none",
+  borderRadius: 999,
+  padding: "11px 15px",
+  background: "rgba(255,255,255,0.085)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  outline: "none",
+  color: "white",
+  fontSize: 15,
+  lineHeight: 1.25,
+  boxSizing: "border-box",
+  overflow: "hidden",
+};
+
+const sendButton = {
+  width: 50,
+  height: 50,
+  minHeight: 50,
+  border: "none",
+  borderRadius: "50%",
+  background: "linear-gradient(135deg, #e4ef16, #f4ff2d)",
+  color: "#050505",
+  fontSize: 22,
+  lineHeight: 1,
+  fontWeight: 1000,
+  cursor: "pointer",
+  display: "grid",
+  placeItems: "center",
+  boxShadow: "0 10px 24px rgba(228,239,22,0.22)",
+};
+
+const emptyState = {
+  minHeight: "100%",
+  display: "grid",
+  placeItems: "center",
+  alignContent: "center",
+  gap: 7,
+  textAlign: "center",
+  color: "rgba(255,255,255,0.60)",
+  padding: 24,
+};
+
+const emptyIcon = {
+  fontSize: 36,
+};
+
+const emptyTitle = {
+  color: "white",
+  fontSize: 18,
+  fontWeight: 1000,
+};
+
+const emptyCopy = {
+  maxWidth: 260,
+  fontSize: 14,
+  lineHeight: 1.4,
+};
+
+const loadingCard = {
+  minHeight: "100svh",
+  display: "grid",
+  placeItems: "center",
+  alignContent: "center",
+  gap: 14,
+  background:
+    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.12), transparent 30%), #050505",
+};
+
+const loadingLogo = {
+  width: "min(68vw, 360px)",
+  filter: "drop-shadow(0 18px 32px rgba(0,0,0,0.70))",
+};
+
+const loadingText = {
+  color: "rgba(255,255,255,0.66)",
+  fontWeight: 850,
+};
