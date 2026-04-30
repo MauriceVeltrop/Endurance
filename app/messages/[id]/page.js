@@ -5,66 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
-const ENDURANCE_YELLOW = "#eaff00";
-const DARK_BG = "#050505";
-const PANEL_2 = "#1b1c20";
-const TEXT = "#f5f5f5";
-
 const REACTIONS = ["👍", "🔥", "💪", "😂", "❤️", "👏"];
-
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-
-function timeLabel(value) {
-  const d = value ? new Date(value) : new Date();
-  if (Number.isNaN(d.getTime())) return "";
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function sameDay(a, b) {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-function dateChip(value) {
-  const d = new Date(value);
-  const now = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(now.getDate() - 1);
-
-  if (sameDay(d, now)) return "Today";
-  if (sameDay(d, yesterday)) return "Yesterday";
-
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function initials(name = "?") {
-  return String(name || "?")
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
-
-function getAvatarUrl(profile) {
-  return profile?.avatar_url || "";
-}
-
-function displayName(profile, fallback = "User") {
-  return profile?.name || profile?.email || fallback;
-}
 
 export default function DirectMessagePage() {
   const params = useParams();
@@ -76,9 +17,7 @@ export default function DirectMessagePage() {
   const [thread, setThread] = useState(null);
   const [messages, setMessages] = useState([]);
   const [reactionsByMessageId, setReactionsByMessageId] = useState({});
-  const [input, setInput] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -90,10 +29,8 @@ export default function DirectMessagePage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const bottomRef = useRef(null);
-  const fileRef = useRef(null);
+  const textareaRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-
-  const canSend = input.trim().length > 0 || !!selectedFile;
 
   useEffect(() => {
     if (!otherUserId) return;
@@ -101,8 +38,8 @@ export default function DirectMessagePage() {
   }, [otherUserId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, otherTyping]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, otherTyping]);
 
   useEffect(() => {
     if (!thread?.id || !user?.id) return;
@@ -186,23 +123,27 @@ export default function DirectMessagePage() {
     };
   }, [thread?.id, user?.id, myProfile?.id, otherProfile?.id]);
 
-  const grouped = useMemo(() => {
-    const rows = [];
-    let lastDate = null;
+  const groupedMessages = useMemo(() => {
+    return messages.map((message, index) => {
+      const previous = messages[index - 1];
+      const next = messages[index + 1];
 
-    messages
-      .slice()
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-      .forEach((m) => {
-        if (!lastDate || !sameDay(lastDate, m.created_at)) {
-          rows.push({ type: "date", id: `date-${m.created_at}`, label: dateChip(m.created_at) });
-          lastDate = m.created_at;
-        }
+      const startsNewDay =
+        !previous ||
+        new Date(previous.created_at).toDateString() !==
+          new Date(message.created_at).toDateString();
 
-        rows.push({ type: "message", ...m });
-      });
+      const sameSenderAsPrevious =
+        previous && previous.sender_id === message.sender_id;
+      const sameSenderAsNext = next && next.sender_id === message.sender_id;
 
-    return rows;
+      return {
+        ...message,
+        startsNewDay,
+        compactTop: sameSenderAsPrevious && !startsNewDay,
+        compactBottom: sameSenderAsNext,
+      };
+    });
   }, [messages]);
 
   async function loadChat() {
@@ -313,23 +254,26 @@ export default function DirectMessagePage() {
       .select("id, message_id, user_id, emoji")
       .eq("thread_id", threadId);
 
-    if (error) return;
+    if (error) {
+      console.warn("Reactions not available yet:", error.message);
+      return;
+    }
 
-    const groupedReactions = {};
+    const grouped = {};
     (data || []).forEach((reaction) => {
-      if (!groupedReactions[reaction.message_id]) groupedReactions[reaction.message_id] = {};
-      if (!groupedReactions[reaction.message_id][reaction.emoji]) {
-        groupedReactions[reaction.message_id][reaction.emoji] = {
+      if (!grouped[reaction.message_id]) grouped[reaction.message_id] = {};
+      if (!grouped[reaction.message_id][reaction.emoji]) {
+        grouped[reaction.message_id][reaction.emoji] = {
           count: 0,
           mine: false,
         };
       }
 
-      groupedReactions[reaction.message_id][reaction.emoji].count += 1;
-      if (reaction.user_id === user?.id) groupedReactions[reaction.message_id][reaction.emoji].mine = true;
+      grouped[reaction.message_id][reaction.emoji].count += 1;
+      if (reaction.user_id === user?.id) grouped[reaction.message_id][reaction.emoji].mine = true;
     });
 
-    setReactionsByMessageId(groupedReactions);
+    setReactionsByMessageId(grouped);
   }
 
   async function markRead(threadId, userId) {
@@ -377,7 +321,7 @@ export default function DirectMessagePage() {
   }
 
   function handleTyping(value) {
-    setInput(value);
+    setText(value);
 
     if (!thread?.id || !user?.id) return;
 
@@ -391,24 +335,17 @@ export default function DirectMessagePage() {
   }
 
   async function sendMessage(media = null) {
-    const clean = input.trim();
+    const clean = text.trim();
 
-    if ((!clean && !media && !selectedFile) || !user?.id || !otherUserId || !thread?.id || sending) return;
+    if ((!clean && !media) || !user?.id || !otherUserId || !thread?.id || sending) return;
 
     try {
       setSending(true);
 
-      let mediaPayload = media;
-
-      if (!mediaPayload && selectedFile) {
-        mediaPayload = await uploadMediaOnly(selectedFile);
-      }
-
       const now = new Date().toISOString();
-      const messageText = clean || (mediaPayload?.type === "image" ? "Photo" : "Attachment");
+      const messageText = clean || (media?.type === "image" ? "Photo" : "Attachment");
 
-      setInput("");
-      setSelectedFile(null);
+      setText("");
       setReplyTo(null);
       setEditingMessage(null);
       await setTyping(false);
@@ -421,9 +358,9 @@ export default function DirectMessagePage() {
         reply_to_message_id: replyTo?.id || null,
       };
 
-      if (mediaPayload?.url) {
-        payload.media_url = mediaPayload.url;
-        payload.media_type = mediaPayload.type || "image";
+      if (media?.url) {
+        payload.media_url = media.url;
+        payload.media_type = media.type || "image";
       }
 
       const { data: insertedMessage, error: insertError } = await supabase
@@ -459,38 +396,15 @@ export default function DirectMessagePage() {
       textareaRef.current?.focus();
     } catch (error) {
       console.error("sendMessage error", error);
-      if (!media) setInput(clean);
+      if (!media) setText(clean);
       setErrorText(error?.message || "Could not send message.");
     } finally {
       setSending(false);
-      setUploadingMedia(false);
     }
   }
 
-  async function uploadMediaOnly(file) {
-    if (!file || !user?.id || !thread?.id) return null;
-
-    setUploadingMedia(true);
-
-    const ext = file.name.split(".").pop() || "jpg";
-    const filePath = `${thread.id}/${user.id}-${Date.now()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("chat-media")
-      .upload(filePath, file, { upsert: false });
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage.from("chat-media").getPublicUrl(filePath);
-
-    return {
-      url: data.publicUrl,
-      type: file.type?.startsWith("image/") ? "image" : "file",
-    };
-  }
-
   async function editMessage() {
-    const clean = input.trim();
+    const clean = text.trim();
     if (!clean || !editingMessage?.id) return;
 
     try {
@@ -513,7 +427,7 @@ export default function DirectMessagePage() {
         )
       );
 
-      setInput("");
+      setText("");
       setEditingMessage(null);
     } catch (error) {
       setErrorText(error?.message || "Could not edit message.");
@@ -574,18 +488,81 @@ export default function DirectMessagePage() {
     await loadReactions();
   }
 
+  async function uploadMedia(file) {
+    if (!file || !user?.id || !thread?.id) return;
+
+    try {
+      setUploadingMedia(true);
+
+      const ext = file.name.split(".").pop() || "jpg";
+      const filePath = `${thread.id}/${user.id}-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("chat-media")
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("chat-media").getPublicUrl(filePath);
+      await sendMessage({ url: data.publicUrl, type: file.type?.startsWith("image/") ? "image" : "file" });
+    } catch (error) {
+      setErrorText(error?.message || "Could not upload media.");
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
   function startEdit(message) {
     setEditingMessage(message);
     setReplyTo(null);
-    setInput(message.message || "");
+    setText(message.message || "");
     textareaRef.current?.focus();
   }
 
-  function onKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      editingMessage ? editMessage() : sendMessage();
-    }
+  function initials(value = "?") {
+    const clean = String(value || "?").trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  function displayName(profile, fallback = "User") {
+    return profile?.name || profile?.email || fallback;
+  }
+
+  function formatTime(value) {
+    if (!value) return "";
+    return new Date(value).toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function formatDay(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+    const now = new Date();
+
+    if (date.toDateString() === now.toDateString()) return "Today";
+
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function statusLabel(message) {
+    if (message.sender_id !== user?.id) return "";
+    if (message.read_at) return "Read";
+    return "Sent";
   }
 
   function findReplyMessage(id) {
@@ -593,232 +570,234 @@ export default function DirectMessagePage() {
     return messages.find((message) => message.id === id);
   }
 
-  function statusLabel(message) {
-    if (message.sender_id !== user?.id) return "";
-    return message.read_at ? "✓✓" : "✓";
-  }
-
-  function renderAvatar(profile, size = "large") {
-    const avatarUrl = getAvatarUrl(profile);
-    const name = displayName(profile, "User");
-
-    return (
-      <div style={size === "small" ? styles.smallAvatarWrap : styles.avatarWrap}>
-        <span style={size === "small" ? styles.smallAvatarFallback : styles.avatarFallback}>
-          {initials(name)}
-        </span>
-
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt={name}
-            style={size === "small" ? styles.smallAvatar : styles.avatar}
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : null}
-      </div>
-    );
-  }
-
   if (loading) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loadingCard}>
-          <img src="/logo-endurance.png" alt="Endurance" style={styles.loadingLogo} />
-          <div style={styles.loadingText}>Loading chat...</div>
+      <main style={app}>
+        <section style={loadingCard}>
+          <img src="/logo-endurance.png" alt="Endurance" style={loadingLogo} />
+          <div style={loadingText}>Loading chat...</div>
         </section>
       </main>
     );
   }
 
   return (
-    <main style={styles.page}>
-      <header style={styles.header}>
-        <Link href="/messages" style={styles.iconBtn} aria-label="Back">
-          ‹
-        </Link>
+    <main style={app}>
+      <section style={chatShell}>
+        <header style={chatHeader}>
+          <Link href="/messages" style={backButton} aria-label="Back to messages">
+            ←
+          </Link>
 
-        <Link href={`/profile/${otherUserId}`} style={styles.profileHeader}>
-          {renderAvatar(otherProfile)}
-
-          <div style={styles.headerText}>
-            <div style={styles.name}>{displayName(otherProfile, "Chat")}</div>
-            <div style={styles.status}>
-              <span style={styles.dot} />
-              {liveStatus === "live" ? "online" : "connecting"}{" "}
-              {otherProfile?.role ? (
-                <>
-                  <span style={styles.bullet}>•</span> {otherProfile.role}
-                </>
-              ) : null}
+          <Link href={`/profile/${otherUserId}`} style={profileHeader}>
+            <div style={headerAvatar}>
+              {otherProfile?.avatar_url ? (
+                <img
+                  src={otherProfile.avatar_url}
+                  alt={displayName(otherProfile)}
+                  style={avatarImage}
+                />
+              ) : (
+                initials(displayName(otherProfile))
+              )}
             </div>
-          </div>
-        </Link>
 
-        <button
-          style={styles.menuBtn}
-          aria-label="Menu"
-          onClick={() => setMenuOpen((v) => !v)}
-        >
-          ⋮
-        </button>
+            <div style={headerText}>
+              <div style={headerName}>{displayName(otherProfile, "Chat")}</div>
 
-        {menuOpen && (
-          <div style={styles.menu}>
-            <Link href={`/profile/${otherUserId}`} style={styles.menuItem}>View profile</Link>
-            <button type="button" style={styles.menuItem} onClick={() => loadChat()}>Refresh chat</button>
-            <button type="button" style={styles.menuItem}>Mute chat</button>
-          </div>
-        )}
-      </header>
-
-      {errorText ? (
-        <div style={styles.errorBox}>
-          <span>{errorText}</span>
-          <button type="button" onClick={() => setErrorText("")} style={styles.errorClose}>
-            ×
-          </button>
-        </div>
-      ) : null}
-
-      <section style={styles.chat}>
-        <div style={styles.bgDots} />
-
-        {grouped.map((item) => {
-          if (item.type === "date") {
-            return (
-              <div key={item.id} style={styles.dateRow}>
-                <span style={styles.datePill}>{item.label}</span>
-              </div>
-            );
-          }
-
-          const mine = item.sender_id === user?.id;
-          const senderProfile = mine ? myProfile : otherProfile;
-          const senderName = displayName(senderProfile);
-          const replyMessage = findReplyMessage(item.reply_to_message_id);
-          const messageReactions = reactionsByMessageId[item.id] || {};
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                ...styles.messageRow,
-                justifyContent: mine ? "flex-end" : "flex-start",
-              }}
-            >
-              {!mine ? renderAvatar(otherProfile, "small") : null}
-
-              <div style={styles.messageStack}>
-                <div
-                  onClick={() => setShowActionsFor(showActionsFor === item.id ? null : item.id)}
+              <div style={headerSubline}>
+                <span
                   style={{
-                    ...styles.bubble,
-                    ...(mine ? styles.bubbleMine : styles.bubbleOther),
+                    ...liveDot,
+                    background: liveStatus === "live" ? "#e4ef16" : "#777",
                   }}
-                >
-                  {!mine ? <div style={styles.senderName}>{senderName}</div> : null}
-
-                  {replyMessage ? (
-                    <div style={styles.replyPreview}>
-                      <strong>{replyMessage.sender_id === user?.id ? "You" : displayName(otherProfile)}</strong>
-                      <span>{replyMessage.message}</span>
-                    </div>
-                  ) : null}
-
-                  {item.media_url ? (
-                    item.media_type === "image" ? (
-                      <img src={item.media_url} alt="Shared media" style={styles.mediaImage} />
-                    ) : (
-                      <a href={item.media_url} target="_blank" rel="noreferrer" style={styles.fileLink}>
-                        Open attachment
-                      </a>
-                    )
-                  ) : null}
-
-                  <div style={styles.messageText}>{item.message}</div>
-
-                  <div
-                    style={{
-                      ...styles.time,
-                      color: mine ? "rgba(0,0,0,.55)" : "#aeb0b5",
-                    }}
-                  >
-                    {timeLabel(item.created_at)} {mine && <span style={styles.checks}>{statusLabel(item)}</span>}
-                  </div>
-                </div>
-
-                {Object.keys(messageReactions).length > 0 ? (
-                  <div style={{ ...styles.reactionSummary, justifyContent: mine ? "flex-end" : "flex-start" }}>
-                    {Object.entries(messageReactions).map(([emoji, data]) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => toggleReaction(item, emoji)}
-                        style={{
-                          ...styles.reactionChip,
-                          borderColor: data.mine ? "rgba(234,255,0,0.55)" : "rgba(255,255,255,0.10)",
-                        }}
-                      >
-                        {emoji} {data.count}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {showActionsFor === item.id ? (
-                  <div style={{ ...styles.actionsBar, justifyContent: mine ? "flex-end" : "flex-start" }}>
-                    {REACTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => toggleReaction(item, emoji)}
-                        style={styles.emojiButton}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-
-                    <button type="button" onClick={() => setReplyTo(item)} style={styles.smallAction}>
-                      Reply
-                    </button>
-
-                    {mine ? (
-                      <>
-                        <button type="button" onClick={() => startEdit(item)} style={styles.smallAction}>
-                          Edit
-                        </button>
-                        <button type="button" onClick={() => deleteMessage(item)} style={styles.smallActionDanger}>
-                          Delete
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                ) : null}
+                />
+                <span>{liveStatus === "live" ? "Live chat" : "Connecting..."}</span>
+                {otherProfile?.role ? <span>• {otherProfile.role}</span> : null}
               </div>
             </div>
-          );
-        })}
+          </Link>
 
-        {otherTyping ? (
-          <div style={styles.messageRow}>
-            {renderAvatar(otherProfile, "small")}
-            <div style={styles.typingBubble}>
-              <span style={styles.typingDot} />
-              <span style={styles.typingDot} />
-              <span style={styles.typingDot} />
-            </div>
+          <button type="button" onClick={loadChat} style={refreshButton} aria-label="Refresh chat">
+            ↻
+          </button>
+        </header>
+
+        {errorText ? (
+          <div style={errorBox}>
+            <span>{errorText}</span>
+            <button type="button" onClick={() => setErrorText("")} style={errorClose}>
+              ×
+            </button>
           </div>
         ) : null}
 
-        <div ref={bottomRef} />
-      </section>
+        <div style={messagesBox}>
+          {groupedMessages.length === 0 ? (
+            <div style={emptyState}>
+              <div style={emptyIcon}>💬</div>
+              <div style={emptyTitle}>Start the conversation</div>
+              <div style={emptyCopy}>
+                Send your first message to {displayName(otherProfile, "this user")}.
+              </div>
+            </div>
+          ) : (
+            groupedMessages.map((message) => {
+              const mine = message.sender_id === user?.id;
+              const replyMessage = findReplyMessage(message.reply_to_message_id);
+              const messageReactions = reactionsByMessageId[message.id] || {};
 
-      <footer style={styles.composerWrap}>
+              return (
+                <div key={message.id}>
+                  {message.startsNewDay ? (
+                    <div style={dayDivider}>{formatDay(message.created_at)}</div>
+                  ) : null}
+
+                  <div
+                    style={{
+                      ...messageRow,
+                      justifyContent: mine ? "flex-end" : "flex-start",
+                      marginTop: message.compactTop ? 2 : 7,
+                    }}
+                  >
+                    {!mine && !message.compactBottom ? (
+                      <div style={messageAvatar}>
+                        {otherProfile?.avatar_url ? (
+                          <img
+                            src={otherProfile.avatar_url}
+                            alt={displayName(otherProfile)}
+                            style={avatarImage}
+                          />
+                        ) : (
+                          initials(displayName(otherProfile))
+                        )}
+                      </div>
+                    ) : !mine ? (
+                      <div style={avatarSpacer} />
+                    ) : null}
+
+                    <div style={messageStack}>
+                      <div
+                        onClick={() => setShowActionsFor(showActionsFor === message.id ? null : message.id)}
+                        style={{
+                          ...bubble,
+                          ...(mine ? myBubble : theirBubble),
+                          borderBottomRightRadius: mine && message.compactBottom ? 16 : 6,
+                          borderBottomLeftRadius: !mine && message.compactBottom ? 16 : 6,
+                        }}
+                      >
+                        {!mine && !message.compactTop ? (
+                          <div style={senderName}>{displayName(otherProfile)}</div>
+                        ) : null}
+
+                        {replyMessage ? (
+                          <div style={replyPreview}>
+                            <strong>{replyMessage.sender_id === user?.id ? "You" : displayName(otherProfile)}</strong>
+                            <span>{replyMessage.message}</span>
+                          </div>
+                        ) : null}
+
+                        {message.media_url ? (
+                          message.media_type === "image" ? (
+                            <img src={message.media_url} alt="Shared media" style={mediaImage} />
+                          ) : (
+                            <a href={message.media_url} target="_blank" rel="noreferrer" style={fileLink}>
+                              Open attachment
+                            </a>
+                          )
+                        ) : null}
+
+                        <div>{message.message}</div>
+
+                        <div
+                          style={{
+                            ...messageMeta,
+                            color: mine ? "rgba(5,5,5,0.60)" : "rgba(255,255,255,0.50)",
+                          }}
+                        >
+                          <span>{formatTime(message.created_at)}</span>
+                          {message.edited_at ? <span>Edited</span> : null}
+                          {mine ? <span>{statusLabel(message)}</span> : null}
+                        </div>
+                      </div>
+
+                      {Object.keys(messageReactions).length > 0 ? (
+                        <div style={{ ...reactionSummary, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                          {Object.entries(messageReactions).map(([emoji, data]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => toggleReaction(message, emoji)}
+                              style={{
+                                ...reactionChip,
+                                borderColor: data.mine ? "rgba(228,239,22,0.55)" : "rgba(255,255,255,0.10)",
+                              }}
+                            >
+                              {emoji} {data.count}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {showActionsFor === message.id ? (
+                        <div style={{ ...actionsBar, justifyContent: mine ? "flex-end" : "flex-start" }}>
+                          {REACTIONS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => toggleReaction(message, emoji)}
+                              style={emojiButton}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+
+                          <button type="button" onClick={() => setReplyTo(message)} style={smallAction}>
+                            Reply
+                          </button>
+
+                          {mine ? (
+                            <>
+                              <button type="button" onClick={() => startEdit(message)} style={smallAction}>
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => deleteMessage(message)} style={smallActionDanger}>
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {otherTyping ? (
+            <div style={typingRow}>
+              <div style={messageAvatar}>
+                {otherProfile?.avatar_url ? (
+                  <img src={otherProfile.avatar_url} alt={displayName(otherProfile)} style={avatarImage} />
+                ) : (
+                  initials(displayName(otherProfile))
+                )}
+              </div>
+
+              <div style={typingBubble}>
+                <span style={typingDot} />
+                <span style={typingDot} />
+                <span style={typingDot} />
+              </div>
+            </div>
+          ) : null}
+
+          <div ref={bottomRef} />
+        </div>
+
         {(replyTo || editingMessage) && (
-          <div style={styles.contextBar}>
+          <div style={contextBar}>
             <div style={{ minWidth: 0 }}>
               <strong>{editingMessage ? "Editing message" : "Replying to"}</strong>
               <span>{(editingMessage || replyTo)?.message}</span>
@@ -829,664 +808,526 @@ export default function DirectMessagePage() {
               onClick={() => {
                 setReplyTo(null);
                 setEditingMessage(null);
-                setInput("");
+                setText("");
               }}
-              style={styles.contextClose}
+              style={contextClose}
             >
               ×
             </button>
           </div>
         )}
 
-        {selectedFile && (
-          <div style={styles.filePreview}>
-            <span style={styles.fileName}>📎 {selectedFile.name}</span>
-            <button style={styles.fileRemove} onClick={() => setSelectedFile(null)}>
-              ×
-            </button>
-          </div>
-        )}
-
-        <div style={styles.composer}>
-          <button
-            style={styles.plusBtn}
-            aria-label="Add attachment"
-            onClick={() => fileRef.current?.click()}
-            type="button"
-          >
+        <footer style={composer}>
+          <label style={attachButton}>
             +
-          </button>
-
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-          />
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) uploadMedia(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
 
           <textarea
             ref={textareaRef}
-            value={input}
-            onChange={(e) => handleTyping(e.target.value)}
-            onKeyDown={onKeyDown}
+            value={text}
+            onChange={(event) => handleTyping(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                editingMessage ? editMessage() : sendMessage();
+              }
+            }}
+            placeholder={
+              editingMessage
+                ? "Edit message..."
+                : `Message...`
+            }
+            style={input}
             rows={1}
-            placeholder="Message"
-            style={styles.input}
           />
 
           <button
-            style={{
-              ...styles.sendBtn,
-              opacity: canSend ? 1 : 0.55,
-            }}
-            disabled={!canSend || sending || uploadingMedia}
-            onClick={editingMessage ? editMessage : () => sendMessage()}
-            aria-label="Send message"
             type="button"
+            onClick={editingMessage ? editMessage : () => sendMessage()}
+            disabled={sending || uploadingMedia || !text.trim()}
+            style={{
+              ...sendButton,
+              opacity: sending || uploadingMedia || !text.trim() ? 0.48 : 1,
+            }}
+            aria-label="Send message"
           >
             {sending || uploadingMedia ? "…" : "➤"}
           </button>
-        </div>
-      </footer>
+        </footer>
+      </section>
     </main>
   );
 }
 
-const styles = {
-  page: {
-    height: "100dvh",
-    width: "100%",
-    background: DARK_BG,
-    color: TEXT,
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    fontFamily:
-      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  },
+const app = {
+  height: "100svh",
+  overflow: "hidden",
+  background:
+    "radial-gradient(circle at 78% -8%, rgba(228,239,22,0.10), transparent 26%), #050505",
+  color: "white",
+  padding: "2px 4px 4px",
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+};
 
-  header: {
-    height: 78,
-    minHeight: 78,
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    background: "rgba(5,5,5,.96)",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    position: "relative",
-    zIndex: 20,
-    boxSizing: "border-box",
-  },
+const chatShell = {
+  width: "min(720px, 100%)",
+  height: "calc(100svh - 6px)",
+  margin: "0 auto",
+  display: "grid",
+  gridTemplateRows: "auto auto minmax(0, 1fr) auto auto",
+  gap: 5,
+  padding: 6,
+  borderRadius: 18,
+  background:
+    "radial-gradient(circle at 88% 0%, rgba(228,239,22,0.075), transparent 26%), linear-gradient(180deg, rgba(255,255,255,0.060), rgba(255,255,255,0.022))",
+  border: "1px solid rgba(255,255,255,0.09)",
+  boxShadow: "0 14px 46px rgba(0,0,0,0.52)",
+};
 
-  iconBtn: {
-    width: 34,
-    height: 44,
-    border: "none",
-    background: "transparent",
-    color: ENDURANCE_YELLOW,
-    fontSize: 42,
-    lineHeight: "32px",
-    fontWeight: 800,
-    cursor: "pointer",
-    padding: 0,
-    textDecoration: "none",
-    display: "grid",
-    placeItems: "center",
-  },
+const chatHeader = {
+  display: "grid",
+  gridTemplateColumns: "31px minmax(0, 1fr) 31px",
+  alignItems: "center",
+  gap: 6,
+};
 
-  profileHeader: {
-    minWidth: 0,
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    color: "white",
-    textDecoration: "none",
-  },
+const backButton = {
+  width: 31,
+  height: 31,
+  borderRadius: 12,
+  display: "grid",
+  placeItems: "center",
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.035))",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "white",
+  textDecoration: "none",
+  fontSize: 22,
+  fontWeight: 900,
+};
 
-  avatarWrap: {
-    width: 56,
-    height: 56,
-    minWidth: 56,
-    borderRadius: "50%",
-    border: `3px solid ${ENDURANCE_YELLOW}`,
-    overflow: "hidden",
-    position: "relative",
-    background: PANEL_2,
-    display: "grid",
-    placeItems: "center",
-  },
+const refreshButton = {
+  width: 31,
+  height: 31,
+  borderRadius: 12,
+  display: "grid",
+  placeItems: "center",
+  background:
+    "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.035))",
+  border: "1px solid rgba(228,239,22,0.26)",
+  color: "#e4ef16",
+  fontSize: 18,
+  fontWeight: 900,
+};
 
-  avatar: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    position: "absolute",
-    inset: 0,
-    zIndex: 2,
-  },
+const profileHeader = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  minWidth: 0,
+  color: "white",
+  textDecoration: "none",
+};
 
-  avatarFallback: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    color: ENDURANCE_YELLOW,
-    fontWeight: 900,
-    fontSize: 16,
-    zIndex: 1,
-  },
+const headerAvatar = {
+  width: 34,
+  height: 34,
+  borderRadius: "50%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  flex: "0 0 auto",
+  background:
+    "linear-gradient(135deg, rgba(228,239,22,0.98), rgba(255,255,255,0.16))",
+  color: "#050505",
+  border: "2px solid rgba(228,239,22,0.74)",
+  fontWeight: 1000,
+};
 
-  headerText: {
-    minWidth: 0,
-    flex: 1,
-  },
+const avatarImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
 
-  name: {
-    fontSize: 22,
-    lineHeight: "25px",
-    fontWeight: 900,
-    color: "#fff",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
+const headerText = {
+  minWidth: 0,
+};
 
-  status: {
-    marginTop: 2,
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    color: ENDURANCE_YELLOW,
-    fontSize: 15,
-    lineHeight: "18px",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
+const headerName = {
+  fontSize: "clamp(15px, 4vw, 20px)",
+  fontWeight: 1000,
+  lineHeight: 1.05,
+  letterSpacing: "-0.045em",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
 
-  dot: {
-    width: 11,
-    height: 11,
-    borderRadius: "50%",
-    background: ENDURANCE_YELLOW,
-    display: "inline-block",
-    flex: "0 0 auto",
-  },
+const headerSubline = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  marginTop: 1,
+  color: "rgba(255,255,255,0.58)",
+  fontSize: 9,
+  fontWeight: 800,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+};
 
-  bullet: {
-    color: ENDURANCE_YELLOW,
-    opacity: 0.9,
-  },
+const liveDot = {
+  width: 7,
+  height: 7,
+  borderRadius: "50%",
+  boxShadow: "0 0 14px rgba(228,239,22,0.55)",
+  flex: "0 0 auto",
+};
 
-  menuBtn: {
-    width: 36,
-    height: 46,
-    border: "none",
-    background: "transparent",
-    color: ENDURANCE_YELLOW,
-    fontSize: 34,
-    lineHeight: "34px",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
+const errorBox = {
+  padding: "7px 9px",
+  borderRadius: 15,
+  background: "rgba(120,20,20,0.28)",
+  border: "1px solid rgba(255,120,120,0.22)",
+  color: "#ffd2d2",
+  fontSize: 13,
+  fontWeight: 750,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
 
-  menu: {
-    position: "absolute",
-    right: 10,
-    top: 66,
-    width: 170,
-    borderRadius: 14,
-    overflow: "hidden",
-    background: "#1f2024",
-    boxShadow: "0 16px 40px rgba(0,0,0,.45)",
-    border: "1px solid rgba(255,255,255,.08)",
-    zIndex: 40,
-  },
+const errorClose = {
+  background: "transparent",
+  color: "#ffd2d2",
+  border: "none",
+  fontSize: 18,
+};
 
-  menuItem: {
-    width: "100%",
-    border: "none",
-    background: "transparent",
-    color: TEXT,
-    textAlign: "left",
-    padding: "13px 15px",
-    fontSize: 14,
-    display: "block",
-    textDecoration: "none",
-    boxSizing: "border-box",
-  },
+const messagesBox = {
+  minHeight: 0,
+  overflowY: "auto",
+  borderRadius: 15,
+  padding: "6px 5px 7px",
+  background: "rgba(0,0,0,0.38)",
+  border: "1px solid rgba(255,255,255,0.065)",
+  scrollbarWidth: "none",
+};
 
-  errorBox: {
-    padding: "8px 12px",
-    background: "rgba(120,20,20,0.34)",
-    borderBottom: "1px solid rgba(255,120,120,0.20)",
-    color: "#ffd2d2",
-    fontSize: 13,
-    fontWeight: 750,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    zIndex: 21,
-  },
+const dayDivider = {
+  width: "fit-content",
+  margin: "6px auto 5px",
+  padding: "3px 8px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.075)",
+  color: "rgba(255,255,255,0.56)",
+  fontSize: 11,
+  fontWeight: 850,
+};
 
-  errorClose: {
-    background: "transparent",
-    color: "#ffd2d2",
-    border: "none",
-    fontSize: 18,
-  },
+const messageRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 4,
+};
 
-  chat: {
-    position: "relative",
-    flex: 1,
-    overflowY: "auto",
-    padding: "22px 12px 118px",
-    boxSizing: "border-box",
-    background:
-      "radial-gradient(circle at 20% 10%, rgba(234,255,0,.035), transparent 26%), radial-gradient(circle at 80% 0%, rgba(234,255,0,.025), transparent 22%), #020202",
-  },
+const messageAvatar = {
+  width: 22,
+  height: 22,
+  borderRadius: "50%",
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  background: "#e4ef16",
+  color: "#050505",
+  fontSize: 10,
+  fontWeight: 1000,
+  flex: "0 0 auto",
+};
 
-  bgDots: {
-    pointerEvents: "none",
-    position: "fixed",
-    inset: 0,
-    opacity: 0.14,
-    backgroundImage:
-      "radial-gradient(rgba(255,255,255,.28) 1px, transparent 1px)",
-    backgroundSize: "28px 28px",
-    zIndex: 0,
-  },
+const avatarSpacer = {
+  width: 22,
+  flex: "0 0 auto",
+};
 
-  dateRow: {
-    position: "relative",
-    zIndex: 1,
-    display: "flex",
-    justifyContent: "center",
-    margin: "12px 0 18px",
-  },
+const messageStack = {
+  maxWidth: "74%",
+  display: "grid",
+  gap: 2,
+};
 
-  datePill: {
-    background: "#26272b",
-    color: "#d2d2d2",
-    borderRadius: 999,
-    padding: "8px 15px",
-    fontSize: 14,
-    fontWeight: 900,
-    boxShadow: "0 3px 10px rgba(0,0,0,.28)",
-  },
+const bubble = {
+  padding: "7px 9px 5px",
+  borderRadius: 16,
+  lineHeight: 1.25,
+  fontSize: 13,
+  wordBreak: "break-word",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.22)",
+};
 
-  messageRow: {
-    position: "relative",
-    zIndex: 1,
-    display: "flex",
-    alignItems: "flex-end",
-    gap: 8,
-    margin: "7px 0",
-  },
+const myBubble = {
+  marginLeft: "auto",
+  background: "linear-gradient(135deg, #e4ef16, #f2ff37)",
+  color: "#050505",
+};
 
-  smallAvatarWrap: {
-    width: 34,
-    height: 34,
-    minWidth: 34,
-    borderRadius: "50%",
-    overflow: "hidden",
-    position: "relative",
-    background: PANEL_2,
-    marginBottom: 1,
-    display: "grid",
-    placeItems: "center",
-  },
+const theirBubble = {
+  background:
+    "linear-gradient(135deg, rgba(255,255,255,0.11), rgba(255,255,255,0.058))",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
 
-  smallAvatar: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    position: "absolute",
-    inset: 0,
-    zIndex: 2,
-  },
+const senderName = {
+  color: "#e4ef16",
+  fontSize: 9,
+  fontWeight: 1000,
+  marginBottom: 3,
+};
 
-  smallAvatarFallback: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    color: ENDURANCE_YELLOW,
-    fontSize: 10,
-    fontWeight: 900,
-    zIndex: 1,
-  },
+const messageMeta = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 6,
+  marginTop: 3,
+  fontSize: 8,
+  fontWeight: 850,
+};
 
-  messageStack: {
-    maxWidth: "76%",
-    display: "grid",
-    gap: 3,
-  },
+const replyPreview = {
+  display: "grid",
+  gap: 2,
+  padding: "6px 7px",
+  borderRadius: 11,
+  background: "rgba(0,0,0,0.14)",
+  borderLeft: "3px solid rgba(228,239,22,0.85)",
+  marginBottom: 7,
+  fontSize: 11,
+};
 
-  bubble: {
-    minWidth: 78,
-    padding: "11px 12px 7px",
-    borderRadius: 18,
-    boxShadow: "0 4px 12px rgba(0,0,0,.28)",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    boxSizing: "border-box",
-  },
+const mediaImage = {
+  width: "100%",
+  maxWidth: 260,
+  borderRadius: 15,
+  marginBottom: 7,
+  display: "block",
+};
 
-  bubbleMine: {
-    background: ENDURANCE_YELLOW,
-    color: "#111",
-    borderBottomRightRadius: 5,
-  },
+const fileLink = {
+  color: "#e4ef16",
+  fontWeight: 900,
+};
 
-  bubbleOther: {
-    background: "linear-gradient(180deg, #202126, #17181c)",
-    color: "#f4f4f4",
-    border: "1px solid rgba(255,255,255,.055)",
-    borderBottomLeftRadius: 5,
-  },
+const reactionSummary = {
+  display: "flex",
+  gap: 4,
+  flexWrap: "wrap",
+};
 
-  senderName: {
-    color: ENDURANCE_YELLOW,
-    fontSize: 13,
-    lineHeight: "16px",
-    fontWeight: 900,
-    marginBottom: 5,
-  },
+const reactionChip = {
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  color: "white",
+  border: "1px solid rgba(255,255,255,0.10)",
+  padding: "3px 7px",
+  fontSize: 11,
+  fontWeight: 850,
+};
 
-  messageText: {
-    fontSize: 22,
-    lineHeight: "27px",
-    letterSpacing: "-.2px",
-  },
+const actionsBar = {
+  display: "flex",
+  gap: 4,
+  flexWrap: "wrap",
+};
 
-  time: {
-    marginTop: 2,
-    textAlign: "right",
-    fontSize: 12,
-    lineHeight: "14px",
-    fontWeight: 900,
-  },
+const emojiButton = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.08)",
+  borderRadius: 999,
+  padding: "5px 7px",
+  fontSize: 14,
+};
 
-  checks: {
-    marginLeft: 4,
-    fontSize: 13,
-    fontWeight: 900,
-  },
+const smallAction = {
+  border: "1px solid rgba(228,239,22,0.24)",
+  background: "rgba(228,239,22,0.10)",
+  color: "#e4ef16",
+  borderRadius: 999,
+  padding: "5px 8px",
+  fontSize: 11,
+  fontWeight: 900,
+};
 
-  replyPreview: {
-    display: "grid",
-    gap: 2,
-    padding: "7px 8px",
-    borderRadius: 12,
-    background: "rgba(0,0,0,0.14)",
-    borderLeft: "3px solid rgba(234,255,0,0.85)",
-    marginBottom: 7,
-    fontSize: 12,
-  },
+const smallActionDanger = {
+  ...smallAction,
+  border: "1px solid rgba(255,120,120,0.28)",
+  background: "rgba(255,120,120,0.10)",
+  color: "#ffb0b0",
+};
 
-  mediaImage: {
-    width: "100%",
-    maxWidth: 260,
-    borderRadius: 15,
-    marginBottom: 7,
-    display: "block",
-  },
+const typingRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 7,
+  marginTop: 10,
+};
 
-  fileLink: {
-    color: ENDURANCE_YELLOW,
-    fontWeight: 900,
-  },
+const typingBubble = {
+  display: "flex",
+  gap: 4,
+  padding: "10px 12px",
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.08)",
+};
 
-  reactionSummary: {
-    display: "flex",
-    gap: 4,
-    flexWrap: "wrap",
-  },
+const typingDot = {
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  background: "rgba(255,255,255,0.65)",
+};
 
-  reactionChip: {
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.08)",
-    color: "white",
-    border: "1px solid rgba(255,255,255,0.10)",
-    padding: "3px 7px",
-    fontSize: 11,
-    fontWeight: 850,
-  },
+const contextBar = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) 24px",
+  gap: 6,
+  alignItems: "center",
+  padding: "6px 8px",
+  borderRadius: 14,
+  background: "rgba(228,239,22,0.10)",
+  border: "1px solid rgba(228,239,22,0.22)",
+  color: "white",
+  fontSize: 11,
+};
 
-  actionsBar: {
-    display: "flex",
-    gap: 4,
-    flexWrap: "wrap",
-  },
+const contextClose = {
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  border: "none",
+  background: "rgba(255,255,255,0.08)",
+  color: "white",
+  fontSize: 18,
+};
 
-  emojiButton: {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.08)",
-    borderRadius: 999,
-    padding: "5px 7px",
-    fontSize: 14,
-  },
+const composer = {
+  display: "grid",
+  gridTemplateColumns: "32px minmax(0, 1fr) 42px",
+  alignItems: "stretch",
+  gap: 6,
+  padding: "2px 0 0",
+};
 
-  smallAction: {
-    border: "1px solid rgba(234,255,0,0.24)",
-    background: "rgba(234,255,0,0.10)",
-    color: ENDURANCE_YELLOW,
-    borderRadius: 999,
-    padding: "5px 8px",
-    fontSize: 11,
-    fontWeight: 900,
-  },
+const attachButton = {
+  width: 32,
+  height: 42,
+  minHeight: 42,
+  borderRadius: 14,
+  display: "grid",
+  placeItems: "center",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.040))",
+  border: "1px solid rgba(255,255,255,0.11)",
+  color: "#e4ef16",
+  fontSize: 20,
+  lineHeight: 1,
+  fontWeight: 950,
+  boxSizing: "border-box",
+};
 
-  smallActionDanger: {
-    border: "1px solid rgba(255,120,120,0.28)",
-    background: "rgba(255,120,120,0.10)",
-    color: "#ffb0b0",
-    borderRadius: 999,
-    padding: "5px 8px",
-    fontSize: 11,
-    fontWeight: 900,
-  },
+const input = {
+  width: "100%",
+  height: 42,
+  minHeight: 42,
+  maxHeight: 42,
+  resize: "none",
+  borderRadius: 14,
+  padding: "10px 12px",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.080), rgba(255,255,255,0.045))",
+  border: "1px solid rgba(255,255,255,0.12)",
+  outline: "none",
+  color: "white",
+  fontSize: 14,
+  lineHeight: 1.25,
+  boxSizing: "border-box",
+  overflow: "hidden",
+};
 
-  typingBubble: {
-    display: "flex",
-    gap: 4,
-    padding: "10px 12px",
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.08)",
-  },
+const sendButton = {
+  width: 42,
+  height: 42,
+  minHeight: 42,
+  border: "none",
+  borderRadius: 14,
+  background: "linear-gradient(135deg, #e4ef16, #f4ff2d)",
+  color: "#050505",
+  fontSize: 18,
+  lineHeight: 1,
+  fontWeight: 1000,
+  cursor: "pointer",
+  display: "grid",
+  placeItems: "center",
+  boxSizing: "border-box",
+  boxShadow: "0 8px 18px rgba(228,239,22,0.18)",
+};
 
-  typingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: "50%",
-    background: "rgba(255,255,255,0.65)",
-  },
+const emptyState = {
+  minHeight: "100%",
+  display: "grid",
+  placeItems: "center",
+  alignContent: "center",
+  gap: 7,
+  textAlign: "center",
+  color: "rgba(255,255,255,0.60)",
+  padding: 24,
+};
 
-  composerWrap: {
-    position: "fixed",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 30,
-    padding: "7px 8px calc(8px + env(safe-area-inset-bottom))",
-    background:
-      "linear-gradient(180deg, rgba(2,2,2,0), rgba(2,2,2,.92) 18%, rgba(2,2,2,.98))",
-    boxSizing: "border-box",
-  },
+const emptyIcon = {
+  fontSize: 36,
+};
 
-  contextBar: {
-    margin: "0 0 6px 48px",
-    maxWidth: "calc(100% - 60px)",
-    minHeight: 34,
-    borderRadius: 16,
-    background: "rgba(234,255,0,0.10)",
-    border: "1px solid rgba(234,255,0,0.22)",
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 24px",
-    gap: 6,
-    alignItems: "center",
-    padding: "6px 8px 6px 12px",
-    boxSizing: "border-box",
-    fontSize: 12,
-  },
+const emptyTitle = {
+  color: "white",
+  fontSize: 18,
+  fontWeight: 1000,
+};
 
-  contextClose: {
-    width: 24,
-    height: 24,
-    borderRadius: "50%",
-    border: "none",
-    background: "rgba(255,255,255,.12)",
-    color: "#fff",
-    fontSize: 18,
-    lineHeight: "20px",
-  },
+const emptyCopy = {
+  maxWidth: 260,
+  fontSize: 14,
+  lineHeight: 1.4,
+};
 
-  filePreview: {
-    margin: "0 0 6px 48px",
-    maxWidth: "calc(100% - 60px)",
-    minHeight: 34,
-    borderRadius: 16,
-    background: "#202126",
-    border: "1px solid rgba(255,255,255,.08)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "6px 8px 6px 12px",
-    boxSizing: "border-box",
-  },
+const loadingCard = {
+  minHeight: "calc(100svh - 6px)",
+  display: "grid",
+  placeItems: "center",
+  alignContent: "center",
+  gap: 14,
+  borderRadius: 26,
+  background:
+    "radial-gradient(circle at 76% 0%, rgba(228,239,22,0.12), transparent 30%), rgba(255,255,255,0.035)",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
 
-  fileName: {
-    minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    color: "#eee",
-    fontSize: 13,
-    fontWeight: 700,
-  },
+const loadingLogo = {
+  width: "min(68vw, 360px)",
+  filter: "drop-shadow(0 18px 32px rgba(0,0,0,0.70))",
+};
 
-  fileRemove: {
-    width: 24,
-    height: 24,
-    borderRadius: "50%",
-    border: "none",
-    background: "rgba(255,255,255,.12)",
-    color: "#fff",
-    fontSize: 18,
-    lineHeight: "20px",
-  },
-
-  composer: {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
-  plusBtn: {
-    width: 40,
-    height: 40,
-    minWidth: 40,
-    borderRadius: "50%",
-    border: "none",
-    background: "#202126",
-    color: ENDURANCE_YELLOW,
-    fontSize: 30,
-    lineHeight: "35px",
-    fontWeight: 500,
-    display: "grid",
-    placeItems: "center",
-    boxShadow: "0 2px 8px rgba(0,0,0,.35)",
-  },
-
-  input: {
-    flex: 1,
-    height: 40,
-    minHeight: 40,
-    maxHeight: 40,
-    resize: "none",
-    border: "none",
-    outline: "none",
-    borderRadius: 22,
-    background: "#202126",
-    color: "#fff",
-    fontSize: 17,
-    lineHeight: "22px",
-    padding: "9px 14px",
-    boxSizing: "border-box",
-    fontFamily: "inherit",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,.06)",
-    overflow: "hidden",
-  },
-
-  sendBtn: {
-    width: 40,
-    height: 40,
-    minWidth: 40,
-    borderRadius: "50%",
-    border: "none",
-    background: ENDURANCE_YELLOW,
-    color: "#111",
-    fontSize: 20,
-    lineHeight: "20px",
-    fontWeight: 900,
-    display: "grid",
-    placeItems: "center",
-    transform: "rotate(-35deg)",
-    boxShadow: "0 2px 10px rgba(234,255,0,.22)",
-  },
-
-  emptyState: {
-    minHeight: "100%",
-    display: "grid",
-    placeItems: "center",
-    alignContent: "center",
-    gap: 7,
-    textAlign: "center",
-    color: "rgba(255,255,255,0.60)",
-    padding: 24,
-  },
-
-  emptyIcon: {
-    fontSize: 36,
-  },
-
-  emptyTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: 1000,
-  },
-
-  emptyCopy: {
-    maxWidth: 260,
-    fontSize: 14,
-    lineHeight: 1.4,
-  },
-
-  loadingCard: {
-    minHeight: "100dvh",
-    display: "grid",
-    placeItems: "center",
-    alignContent: "center",
-    gap: 14,
-    background:
-      "radial-gradient(circle at 76% 0%, rgba(234,255,0,0.12), transparent 30%), #050505",
-  },
-
-  loadingLogo: {
-    width: "min(68vw, 360px)",
-    filter: "drop-shadow(0 18px 32px rgba(0,0,0,0.70))",
-  },
-
-  loadingText: {
-    color: "rgba(255,255,255,0.66)",
-    fontWeight: 850,
-  },
+const loadingText = {
+  color: "rgba(255,255,255,0.66)",
+  fontWeight: 850,
 };
