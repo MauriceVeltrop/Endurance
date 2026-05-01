@@ -522,6 +522,23 @@ export async function POST(request) {
       ele: coord[2] ?? 0,
     }));
 
+    // Keep the generated route visually anchored to the selected Add Event
+    // start point. OpenRouteService may snap to the nearest routable road/path,
+    // but the app should not move the chosen start/end location.
+    if (routePoints.length > 1 && Array.isArray(startCoords)) {
+      const startPoint = {
+        lon: startCoords[0],
+        lat: startCoords[1],
+        ele: routePoints[0]?.ele ?? 0,
+      };
+
+      routePoints[0] = startPoint;
+      routePoints[routePoints.length - 1] = {
+        ...startPoint,
+        ele: routePoints[routePoints.length - 1]?.ele ?? startPoint.ele,
+      };
+    }
+
     const summary = feature.properties?.summary || {};
 
     const distance = summary.distance
