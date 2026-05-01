@@ -67,13 +67,9 @@ function getSurfaceBreakdown(feature) {
 
     total += amount;
 
-    if (PAVED_SURFACES.has(value)) {
-      paved += amount;
-    } else if (UNPAVED_SURFACES.has(value)) {
-      unpaved += amount;
-    } else {
-      unknown += amount;
-    }
+    if (PAVED_SURFACES.has(value)) paved += amount;
+    else if (UNPAVED_SURFACES.has(value)) unpaved += amount;
+    else unknown += amount;
   }
 
   return { paved, unpaved, unknown, total };
@@ -97,9 +93,7 @@ function getWayTypeBreakdown(feature) {
 
     total += amount;
 
-    // ORS waytype values can differ by profile/data, so this is intentionally
-    // a broad bonus, not a hard dependency.
-    // In practice these values often cover path/track/footway-like segments.
+    // Broad bonus for path/track/footway-like segments.
     if ([3, 4, 5, 6, 7].includes(value)) {
       likelyTrail += amount;
     }
@@ -111,11 +105,7 @@ function getWayTypeBreakdown(feature) {
 function scoreRoute(feature, routePreference) {
   const surface = getSurfaceBreakdown(feature);
   const waytype = getWayTypeBreakdown(feature);
-
-  const total =
-    surface.total ||
-    feature?.properties?.summary?.distance ||
-    1;
+  const total = surface.total || feature?.properties?.summary?.distance || 1;
 
   const pavedRatio = surface.paved / total;
   const unpavedRatio = surface.unpaved / total;
@@ -123,13 +113,11 @@ function scoreRoute(feature, routePreference) {
   const trailWayRatio = waytype.total ? waytype.likelyTrail / waytype.total : 0;
 
   if (routePreference === "trail") {
-    // Trail routes should avoid paved roads when unpaved alternatives exist.
-    // Unknown surfaces get only a tiny bonus; paved gets a strong penalty.
     return (
-      unpavedRatio * 2.8 +
-      trailWayRatio * 0.6 +
-      unknownRatio * 0.05 -
-      pavedRatio * 2.2
+      unpavedRatio * 3.0 +
+      trailWayRatio * 0.65 +
+      unknownRatio * 0.04 -
+      pavedRatio * 2.35
     );
   }
 
@@ -142,27 +130,41 @@ function scoreRoute(feature, routePreference) {
 
 function getSurfaceScore(feature, routePreference) {
   const surface = getSurfaceBreakdown(feature);
-  const total =
-    surface.total ||
-    feature?.properties?.summary?.distance ||
-    1;
+  const total = surface.total || feature?.properties?.summary?.distance || 1;
 
-  if (routePreference === "trail") {
-    return surface.unpaved / total;
-  }
-
-  if (routePreference === "paved") {
-    return surface.paved / total;
-  }
+  if (routePreference === "trail") return surface.unpaved / total;
+  if (routePreference === "paved") return surface.paved / total;
 
   return 0;
 }
 
-function getRequestOptions(routePreference, strictTrail = false) {
+function getTrailStrictLevel(index) {
+  if (index < 4) return 0; // strongest trail preference
+  if (index < 8) return 1; // normal trail
+  return 2; // safe fallback
+}
+
+function getRequestOptions(routePreference, strictLevel = 0) {
   if (routePreference === "trail") {
+    if (strictLevel === 0) {
+      return {
+        roundTripPoints: 5,
+        avoidFeatures: ["ferries", "highways"],
+        preference: "recommended",
+      };
+    }
+
+    if (strictLevel === 1) {
+      return {
+        roundTripPoints: 4,
+        avoidFeatures: ["ferries"],
+        preference: "recommended",
+      };
+    }
+
     return {
-      roundTripPoints: strictTrail ? 5 : 4,
-      avoidFeatures: strictTrail ? ["ferries", "highways"] : ["ferries"],
+      roundTripPoints: 3,
+      avoidFeatures: [],
       preference: "recommended",
     };
   }
@@ -190,9 +192,9 @@ async function requestRoute({
   seed,
   routePreference,
   includeExtraInfo = true,
-  strictTrail = false,
+  strictLevel = 0,
 }) {
-  const requestOptions = getRequestOptions(routePreference, strictTrail);
+  const requestOptions = getRequestOptions(routePreference, strictLevel);
 
   const body = {
     coordinates: [startCoords],
@@ -205,9 +207,12 @@ async function requestRoute({
         points: requestOptions.roundTripPoints,
         seed,
       },
-      avoid_features: requestOptions.avoidFeatures,
     },
   };
+
+  if (requestOptions.avoidFeatures.length > 0) {
+    body.options.avoid_features = requestOptions.avoidFeatures;
+  }
 
   if (includeExtraInfo) {
     body.extra_info = ["surface", "waytype", "steepness"];
@@ -252,13 +257,13 @@ async function getBestRoute({
   routePreference,
 }) {
   const attempts =
-    routePreference === "trail" ? 14 : routePreference === "paved" ? 6 : 1;
+    routePreference === "trail" ? 12 : routePreference === "paved" ? 6 : 1;
 
   const candidates = [];
   let lastError = null;
 
   for (let i = 0; i < attempts; i++) {
-    const strictTrail = routePreference === "trail" && i < 9;
+    const strictLevel = routePreference === "trail" ? getTrailStrictLevel(i) : 0;
 
     try {
       const feature = await requestRoute({
@@ -269,63 +274,65 @@ async function getBestRoute({
         seed: Math.floor(Math.random() * 1000000),
         routePreference,
         includeExtraInfo: true,
-        strictTrail,
+        strictLevel,
       });
 
       candidates.push({
         feature,
         score: scoreRoute(feature, routePreference),
         surfaceScore: getSurfaceScore(feature, routePreference),
-        strictTrail,
+        strictLevel,
       });
     } catch (error) {
       lastError = error;
 
-      // If ORS rejects "highways" for this profile/region, retry the same
-      // variation without strict avoid_features.
-      if (routePreference === "trail" && strictTrail) {
-        try {
-          const feature = await requestRoute({
-            apiKey,
-            orsProfile,
-            startCoords,
-            targetDistanceMeters,
-            seed: Math.floor(Math.random() * 1000000),
-            routePreference,
-            includeExtraInfo: true,
-            strictTrail: false,
-          });
+      // Same seed strategy, but without extra_info. This prevents total failure
+      // when ORS accepts the route but rejects extra_info or strict options.
+      try {
+        const feature = await requestRoute({
+          apiKey,
+          orsProfile,
+          startCoords,
+          targetDistanceMeters,
+          seed: Math.floor(Math.random() * 1000000),
+          routePreference,
+          includeExtraInfo: false,
+          strictLevel: Math.min(strictLevel + 1, 2),
+        });
 
-          candidates.push({
-            feature,
-            score: scoreRoute(feature, routePreference),
-            surfaceScore: getSurfaceScore(feature, routePreference),
-            strictTrail: false,
-          });
-        } catch (fallbackError) {
-          lastError = fallbackError;
-        }
+        candidates.push({
+          feature,
+          score: 0,
+          surfaceScore: null,
+          strictLevel: Math.min(strictLevel + 1, 2),
+        });
+      } catch (fallbackError) {
+        lastError = fallbackError;
       }
     }
   }
 
   if (candidates.length === 0) {
-    // Fallback for ORS plans/regions where extra_info is not accepted.
-    const feature = await requestRoute({
+    const fallbackFeature = await requestRoute({
       apiKey,
       orsProfile,
       startCoords,
       targetDistanceMeters,
       seed: Math.floor(Math.random() * 1000000),
-      routePreference,
+      routePreference: "default",
       includeExtraInfo: false,
-      strictTrail: false,
+      strictLevel: 2,
     });
 
     return {
-      feature,
+      feature: fallbackFeature,
       surfaceScore: null,
-      routeQuality: null,
+      routeQuality: {
+        score: null,
+        strictLevel: 2,
+        attempts: 1,
+        fallback: true,
+      },
     };
   }
 
@@ -338,9 +345,10 @@ async function getBestRoute({
       ? Number(best.surfaceScore.toFixed(3))
       : null,
     routeQuality: {
-      score: Number(best.score.toFixed(3)),
-      strictTrail: best.strictTrail,
+      score: Number.isFinite(best.score) ? Number(best.score.toFixed(3)) : null,
+      strictLevel: best.strictLevel,
       attempts: candidates.length,
+      fallback: false,
     },
   };
 }
@@ -476,7 +484,6 @@ export async function POST(request) {
     }));
 
     const summary = feature.properties?.summary || {};
-
     const distance = summary.distance
       ? Number((summary.distance / 1000).toFixed(2))
       : Number(distanceKm);
