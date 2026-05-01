@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DetailRouteMap from "./DetailRouteMap";
 import {
   helperText,
   label,
   secondaryBtnSmall,
 } from "../lib/enduranceStyles";
+import {
+  getRoutePreference,
+  getRoutePreferenceLabel,
+} from "../lib/routePreference";
 
 export default function RouteBuilder({
   form,
@@ -18,7 +22,15 @@ export default function RouteBuilder({
   const [routeError, setRouteError] = useState("");
   const lastTriggerRef = useRef(0);
 
-  const firstSport = Array.isArray(form.sports) ? form.sports[0] : null;
+  const selectedSports = Array.isArray(form.sports) ? form.sports : [];
+  const firstSport = selectedSports[0] || null;
+
+  const routePreference = useMemo(
+    () => getRoutePreference(selectedSports),
+    [selectedSports]
+  );
+
+  const routePreferenceLabel = getRoutePreferenceLabel(routePreference);
 
   const supportedSports = [
     "running",
@@ -33,7 +45,7 @@ export default function RouteBuilder({
     canUseRouteBuilder &&
     form.distance &&
     firstSport &&
-    supportedSports.includes(firstSport) &&
+    selectedSports.some((sport) => supportedSports.includes(sport)) &&
     (form.location || form.startCoordinates);
 
   const generateRoute = async () => {
@@ -62,6 +74,8 @@ export default function RouteBuilder({
           startCoordinates: form.startCoordinates || null,
           distanceKm: Number(form.distance),
           sport: firstSport,
+          sports: selectedSports,
+          routePreference,
         }),
       });
 
@@ -131,17 +145,33 @@ export default function RouteBuilder({
         </div>
 
         <div style={helperText}>
-          Route type: <strong>{firstSport || "choose a sport first"}</strong>
+          Route type: <strong>{routePreferenceLabel}</strong>
         </div>
+
+        {selectedSports.includes("trail-running") && (
+          <div style={helperText}>
+            Trail Running selected: generated routes prefer unpaved paths where
+            map data allows it.
+          </div>
+        )}
+
+        {!selectedSports.includes("trail-running") &&
+          selectedSports.includes("running") && (
+            <div style={helperText}>
+              Running selected: generated routes prefer paved roads and paths
+              where map data allows it.
+            </div>
+          )}
       </div>
 
       {generating && <div style={helperText}>Creating route...</div>}
 
-      {!supportedSports.includes(firstSport) && firstSport && (
-        <div style={{ ...helperText, color: "#ffb4b4" }}>
-          This sport is not supported for route generation yet.
-        </div>
-      )}
+      {!selectedSports.some((sport) => supportedSports.includes(sport)) &&
+        firstSport && (
+          <div style={{ ...helperText, color: "#ffb4b4" }}>
+            This sport is not supported for route generation yet.
+          </div>
+        )}
 
       {routeError && (
         <div style={{ ...helperText, color: "#ffb4b4" }}>
