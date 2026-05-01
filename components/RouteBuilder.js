@@ -150,8 +150,8 @@ export default function RouteBuilder({
 
         {selectedSports.includes("trail-running") && (
           <div style={helperText}>
-            Trail Running selected: generated routes prefer unpaved paths where
-            map data allows it.
+            Trail Running selected: route generation strongly prefers unpaved paths
+            and tries multiple route variants where map data allows it.
           </div>
         )}
 
