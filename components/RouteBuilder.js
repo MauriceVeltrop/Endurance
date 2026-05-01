@@ -87,7 +87,7 @@ export default function RouteBuilder({
 
       setForm({
         ...form,
-        location: data.resolvedLocation || data.startLocation || form.location,
+        location: form.location,
         startCoordinates: data.startCoordinates || form.startCoordinates || null,
         distance: Number(data.distance).toFixed(2),
         route_distance_km: Number(data.route_distance_km).toFixed(2),
