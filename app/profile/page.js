@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
 import { supabase } from "../../lib/supabase";
 import { sportOptions } from "../../lib/sportsConfig";
 
@@ -227,6 +228,7 @@ export default function ProfilePage() {
           </button>
         </form>
       </section>
+      <BottomNav />
     </main>
   );
 }
@@ -247,7 +249,7 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 34px",
+    padding: "18px 18px 110px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: { width: "min(860px, 100%)", margin: "0 auto", display: "grid", gap: 18 },
