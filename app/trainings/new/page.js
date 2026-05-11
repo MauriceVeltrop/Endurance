@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
@@ -34,11 +34,13 @@ function makeAutomaticTitle(selectedSports) {
 export default function CreateTrainingPage() {
   const router = useRouter();
 
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
-    sports: ["running"],
+    sports: [],
     title: "",
     titleEdited: false,
     description: "",
@@ -64,9 +66,13 @@ export default function CreateTrainingPage() {
     is_outdoor: true,
   });
 
+  const availableSportOptions = useMemo(() => {
+    return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
+  }, [allowedSportIds]);
+
   const selectedSports = useMemo(
-    () => sportOptions.filter((sport) => form.sports.includes(sport.id)),
-    [form.sports]
+    () => availableSportOptions.filter((sport) => form.sports.includes(sport.id)),
+    [availableSportOptions, form.sports]
   );
 
   const automaticTitle = useMemo(
@@ -80,13 +86,87 @@ export default function CreateTrainingPage() {
   const supportsWorkouts = selectedSports.some((sport) => sport.workout);
   const usesPace = selectedSports.some((sport) => sport.metric === "pace");
   const usesSpeed = selectedSports.some((sport) => sport.metric === "speed");
-  const usesIntensity = selectedSports.some((sport) => sport.metric === "intensity") && !usesPace && !usesSpeed;
+  const usesIntensity =
+    selectedSports.some((sport) => sport.metric === "intensity") && !usesPace && !usesSpeed;
+
+  useEffect(() => {
+    const loadPreferredSports = async () => {
+      setCheckingAccess(true);
+      setMessage("");
+
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData?.user;
+
+        if (!user?.id) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("onboarding_completed")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (!profile?.onboarding_completed) {
+          router.replace("/onboarding");
+          return;
+        }
+
+        const { data: sportsRows, error: sportsError } = await supabase
+          .from("user_sports")
+          .select("sport_id")
+          .eq("user_id", user.id);
+
+        if (sportsError) throw sportsError;
+
+        const ids = (sportsRows || []).map((row) => row.sport_id);
+        setAllowedSportIds(ids);
+
+        if (!ids.length) {
+          setForm((current) => ({
+            ...current,
+            sports: [],
+            title: "",
+            titleEdited: false,
+          }));
+          setMessage("No preferred sports found. Update your profile before creating a training.");
+          return;
+        }
+
+        const firstAllowed = ids[0];
+        const firstSelected = sportOptions.find((sport) => sport.id === firstAllowed);
+        const firstTitle = makeAutomaticTitle(firstSelected ? [firstSelected] : []);
+
+        setForm((current) => ({
+          ...current,
+          sports: current.sports.length
+            ? current.sports.filter((sportId) => ids.includes(sportId))
+            : [firstAllowed],
+          title: current.titleEdited ? current.title : firstTitle,
+          titleEdited: current.titleEdited,
+        }));
+      } catch (err) {
+        console.error("Preferred sports load error", err);
+        setMessage(err?.message || "Could not load your preferred sports.");
+      } finally {
+        setCheckingAccess(false);
+      }
+    };
+
+    loadPreferredSports();
+  }, [router]);
 
   const update = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
   const toggleSport = (sportId) => {
+    if (!allowedSportIds.includes(sportId)) return;
+
     setForm((current) => {
       const exists = current.sports.includes(sportId);
       const next = exists
@@ -94,8 +174,8 @@ export default function CreateTrainingPage() {
         : [...current.sports, sportId];
 
       const updatedSports = next.length ? next : current.sports;
-      const updatedSelectedSports = sportOptions.filter((sport) =>
-        updatedSports.includes(sport.id)
+      const updatedSelectedSports = sportOptions.filter(
+        (sport) => updatedSports.includes(sport.id) && allowedSportIds.includes(sport.id)
       );
 
       return {
@@ -111,6 +191,17 @@ export default function CreateTrainingPage() {
   const saveTraining = async (event) => {
     event.preventDefault();
     setMessage("");
+
+    if (!form.sports.length) {
+      setMessage("Choose at least one of your preferred sports.");
+      return;
+    }
+
+    const forbiddenSports = form.sports.filter((sportId) => !allowedSportIds.includes(sportId));
+    if (forbiddenSports.length) {
+      setMessage("You can only create trainings for your preferred sports.");
+      return;
+    }
 
     if (!trainingTitle.trim()) {
       setMessage("Add a clear training name.");
@@ -163,7 +254,6 @@ export default function CreateTrainingPage() {
         planning_type: form.time_mode === "fixed" ? "fixed" : "flexible",
         starts_at: startsAt,
 
-        // Date is always fixed. Only time can be flexible.
         flexible_date: form.time_mode === "flexible" ? form.date : null,
         flexible_start_time: form.time_mode === "flexible" ? form.flexible_start_time || null : null,
         flexible_end_time: form.time_mode === "flexible" ? form.flexible_end_time || null : null,
@@ -175,7 +265,6 @@ export default function CreateTrainingPage() {
           ? Number(form.estimated_duration_min)
           : null,
 
-        // Intensity only when no pace/speed metric is used.
         intensity_label: usesIntensity ? form.intensity_label || null : null,
 
         pace_min: usesPace ? form.pace_min || null : null,
@@ -216,312 +305,332 @@ export default function CreateTrainingPage() {
           <div style={styles.kicker}>Create Training</div>
           <h1 style={styles.title}>Start with the sport.</h1>
           <p style={styles.subtitle}>
-            Choose one or more sports first. Endurance suggests a name, but you can overwrite it.
+            You can only create trainings for sports you selected as preferred sports.
           </p>
         </header>
 
-        <form onSubmit={saveTraining} style={styles.formCard}>
-          <section style={styles.sectionHero}>
-            <div style={styles.sectionTitle}>1. Sport first</div>
-
-            <div style={styles.sportGrid}>
-              {sportOptions.map((sport) => {
-                const active = form.sports.includes(sport.id);
-
-                return (
-                  <button
-                    type="button"
-                    key={sport.id}
-                    onClick={() => toggleSport(sport.id)}
-                    style={active ? styles.sportActive : styles.sportButton}
-                  >
-                    {sport.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <label style={styles.label}>
-              Training name
-              <input
-                value={trainingTitle}
-                onChange={(event) => {
-                  update("title", event.target.value);
-                  update("titleEdited", true);
-                }}
-                placeholder={automaticTitle}
-                style={styles.input}
-              />
-            </label>
-
-            {form.titleEdited ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setForm((current) => ({
-                    ...current,
-                    title: automaticTitle,
-                    titleEdited: false,
-                  }))
-                }
-                style={styles.resetNameButton}
-              >
-                Use automatic name: {automaticTitle}
-              </button>
-            ) : null}
+        {checkingAccess ? (
+          <section style={styles.stateCard}>
+            <div style={styles.stateTitle}>Loading your sports...</div>
+            <p style={styles.hint}>Checking your preferred sports before showing the form.</p>
           </section>
+        ) : (
+          <form onSubmit={saveTraining} style={styles.formCard}>
+            <section style={styles.sectionHero}>
+              <div style={styles.sectionTitle}>1. Your preferred sports</div>
 
-          <section style={styles.section}>
-            <div style={styles.sectionTitle}>2. Description</div>
+              {availableSportOptions.length ? (
+                <div style={styles.sportGrid}>
+                  {availableSportOptions.map((sport) => {
+                    const active = form.sports.includes(sport.id);
 
-            <label style={styles.label}>
-              Short description
-              <textarea
-                value={form.description}
-                onChange={(event) => update("description", event.target.value)}
-                placeholder="What kind of session is this?"
-                style={styles.textarea}
-              />
-            </label>
-          </section>
+                    return (
+                      <button
+                        type="button"
+                        key={sport.id}
+                        onClick={() => toggleSport(sport.id)}
+                        style={active ? styles.sportActive : styles.sportButton}
+                      >
+                        {sport.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={styles.infoCard}>
+                  <div style={styles.infoTitle}>No preferred sports</div>
+                  <p style={styles.hint}>
+                    Complete or update your onboarding before creating a training.
+                  </p>
+                </div>
+              )}
 
-          <section style={styles.section}>
-            <div style={styles.sectionTitle}>3. Date & time</div>
-
-            <label style={styles.label}>
-              Date
-              <input
-                type="date"
-                value={form.date}
-                onChange={(event) => update("date", event.target.value)}
-                style={styles.input}
-              />
-            </label>
-
-            <div style={styles.toggleRow}>
-              <button
-                type="button"
-                onClick={() => update("time_mode", "fixed")}
-                style={form.time_mode === "fixed" ? styles.toggleActive : styles.toggleButton}
-              >
-                Fixed time
-              </button>
-              <button
-                type="button"
-                onClick={() => update("time_mode", "flexible")}
-                style={form.time_mode === "flexible" ? styles.toggleActive : styles.toggleButton}
-              >
-                Flexible time
-              </button>
-            </div>
-
-            {form.time_mode === "fixed" ? (
               <label style={styles.label}>
-                Start time
+                Training name
                 <input
-                  type="time"
-                  value={form.time}
-                  onChange={(event) => update("time", event.target.value)}
+                  value={trainingTitle}
+                  onChange={(event) => {
+                    update("title", event.target.value);
+                    update("titleEdited", true);
+                  }}
+                  placeholder={automaticTitle}
                   style={styles.input}
                 />
               </label>
-            ) : (
-              <>
+
+              {form.titleEdited ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      title: automaticTitle,
+                      titleEdited: false,
+                    }))
+                  }
+                  style={styles.resetNameButton}
+                >
+                  Use automatic name: {automaticTitle}
+                </button>
+              ) : null}
+            </section>
+
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>2. Description</div>
+
+              <label style={styles.label}>
+                Short description
+                <textarea
+                  value={form.description}
+                  onChange={(event) => update("description", event.target.value)}
+                  placeholder="What kind of session is this?"
+                  style={styles.textarea}
+                />
+              </label>
+            </section>
+
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>3. Date & time</div>
+
+              <label style={styles.label}>
+                Date
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(event) => update("date", event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+
+              <div style={styles.toggleRow}>
+                <button
+                  type="button"
+                  onClick={() => update("time_mode", "fixed")}
+                  style={form.time_mode === "fixed" ? styles.toggleActive : styles.toggleButton}
+                >
+                  Fixed time
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update("time_mode", "flexible")}
+                  style={form.time_mode === "flexible" ? styles.toggleActive : styles.toggleButton}
+                >
+                  Flexible time
+                </button>
+              </div>
+
+              {form.time_mode === "fixed" ? (
+                <label style={styles.label}>
+                  Start time
+                  <input
+                    type="time"
+                    value={form.time}
+                    onChange={(event) => update("time", event.target.value)}
+                    style={styles.input}
+                  />
+                </label>
+              ) : (
+                <>
+                  <div style={styles.twoColumns}>
+                    <label style={styles.label}>
+                      Possible from
+                      <input
+                        type="time"
+                        value={form.flexible_start_time}
+                        onChange={(event) => update("flexible_start_time", event.target.value)}
+                        style={styles.input}
+                      />
+                    </label>
+
+                    <label style={styles.label}>
+                      Possible until
+                      <input
+                        type="time"
+                        value={form.flexible_end_time}
+                        onChange={(event) => update("flexible_end_time", event.target.value)}
+                        style={styles.input}
+                      />
+                    </label>
+                  </div>
+
+                  <p style={styles.hint}>
+                    The date is fixed. Only the start time is flexible.
+                  </p>
+                </>
+              )}
+            </section>
+
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>4. Location & effort</div>
+
+              <label style={styles.label}>
+                Start location
+                <input
+                  value={form.start_location}
+                  onChange={(event) => update("start_location", event.target.value)}
+                  placeholder="Landgraaf, Brunssummerheide, gym..."
+                  style={styles.input}
+                />
+              </label>
+
+              <div style={styles.twoColumns}>
+                <label style={styles.label}>
+                  Distance km
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={form.distance_km}
+                    onChange={(event) => update("distance_km", event.target.value)}
+                    style={styles.input}
+                  />
+                </label>
+
+                <label style={styles.label}>
+                  Duration min
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.estimated_duration_min}
+                    onChange={(event) => update("estimated_duration_min", event.target.value)}
+                    style={styles.input}
+                  />
+                </label>
+              </div>
+
+              {usesPace ? (
                 <div style={styles.twoColumns}>
                   <label style={styles.label}>
-                    Possible from
+                    Pace from
                     <input
-                      type="time"
-                      value={form.flexible_start_time}
-                      onChange={(event) => update("flexible_start_time", event.target.value)}
+                      value={form.pace_min}
+                      onChange={(event) => update("pace_min", event.target.value)}
+                      placeholder="5:30"
                       style={styles.input}
                     />
                   </label>
-
                   <label style={styles.label}>
-                    Possible until
+                    Pace to
                     <input
-                      type="time"
-                      value={form.flexible_end_time}
-                      onChange={(event) => update("flexible_end_time", event.target.value)}
+                      value={form.pace_max}
+                      onChange={(event) => update("pace_max", event.target.value)}
+                      placeholder="6:00"
                       style={styles.input}
                     />
                   </label>
                 </div>
+              ) : null}
 
-                <p style={styles.hint}>
-                  The date is fixed. Only the start time is flexible.
-                </p>
-              </>
-            )}
-          </section>
+              {usesSpeed ? (
+                <div style={styles.twoColumns}>
+                  <label style={styles.label}>
+                    Speed from
+                    <input
+                      type="number"
+                      value={form.speed_min}
+                      onChange={(event) => update("speed_min", event.target.value)}
+                      placeholder="28"
+                      style={styles.input}
+                    />
+                  </label>
+                  <label style={styles.label}>
+                    Speed to
+                    <input
+                      type="number"
+                      value={form.speed_max}
+                      onChange={(event) => update("speed_max", event.target.value)}
+                      placeholder="32"
+                      style={styles.input}
+                    />
+                  </label>
+                </div>
+              ) : null}
 
-          <section style={styles.section}>
-            <div style={styles.sectionTitle}>4. Location & effort</div>
+              {usesIntensity ? (
+                <label style={styles.label}>
+                  Intensity
+                  <select
+                    value={form.intensity_label}
+                    onChange={(event) => update("intensity_label", event.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="hard">Hard</option>
+                    <option value="race pace">Race pace</option>
+                    <option value="heavy">Heavy</option>
+                  </select>
+                </label>
+              ) : (
+                <div style={styles.infoCard}>
+                  <div style={styles.infoTitle}>Intensity hidden</div>
+                  <p style={styles.hint}>
+                    Pace or speed already describes the effort, so there is no separate intensity field.
+                  </p>
+                </div>
+              )}
+            </section>
 
-            <label style={styles.label}>
-              Start location
-              <input
-                value={form.start_location}
-                onChange={(event) => update("start_location", event.target.value)}
-                placeholder="Landgraaf, Brunssummerheide, gym..."
-                style={styles.input}
-              />
-            </label>
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>5. Visibility</div>
 
-            <div style={styles.twoColumns}>
               <label style={styles.label}>
-                Distance km
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={form.distance_km}
-                  onChange={(event) => update("distance_km", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
-              <label style={styles.label}>
-                Duration min
-                <input
-                  type="number"
-                  min="0"
-                  value={form.estimated_duration_min}
-                  onChange={(event) => update("estimated_duration_min", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-            </div>
-
-            {usesPace ? (
-              <div style={styles.twoColumns}>
-                <label style={styles.label}>
-                  Pace from
-                  <input
-                    value={form.pace_min}
-                    onChange={(event) => update("pace_min", event.target.value)}
-                    placeholder="5:30"
-                    style={styles.input}
-                  />
-                </label>
-                <label style={styles.label}>
-                  Pace to
-                  <input
-                    value={form.pace_max}
-                    onChange={(event) => update("pace_max", event.target.value)}
-                    placeholder="6:00"
-                    style={styles.input}
-                  />
-                </label>
-              </div>
-            ) : null}
-
-            {usesSpeed ? (
-              <div style={styles.twoColumns}>
-                <label style={styles.label}>
-                  Speed from
-                  <input
-                    type="number"
-                    value={form.speed_min}
-                    onChange={(event) => update("speed_min", event.target.value)}
-                    placeholder="28"
-                    style={styles.input}
-                  />
-                </label>
-                <label style={styles.label}>
-                  Speed to
-                  <input
-                    type="number"
-                    value={form.speed_max}
-                    onChange={(event) => update("speed_max", event.target.value)}
-                    placeholder="32"
-                    style={styles.input}
-                  />
-                </label>
-              </div>
-            ) : null}
-
-            {usesIntensity ? (
-              <label style={styles.label}>
-                Intensity
+                Who can see this?
                 <select
-                  value={form.intensity_label}
-                  onChange={(event) => update("intensity_label", event.target.value)}
+                  value={form.visibility}
+                  onChange={(event) => update("visibility", event.target.value)}
                   style={styles.input}
                 >
-                  <option value="easy">Easy</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="hard">Hard</option>
-                  <option value="race pace">Race pace</option>
-                  <option value="heavy">Heavy</option>
+                  <option value="public">All users</option>
+                  <option value="private">Only me</option>
+                  <option value="team">My team</option>
+                  <option value="selected">Selected members</option>
+                  <option value="group">Group</option>
                 </select>
               </label>
-            ) : (
-              <div style={styles.infoCard}>
-                <div style={styles.infoTitle}>Intensity hidden</div>
+
+              <label style={styles.label}>
+                Max participants
+                <input
+                  type="number"
+                  min="1"
+                  value={form.max_participants}
+                  onChange={(event) => update("max_participants", event.target.value)}
+                  placeholder="Optional"
+                  style={styles.input}
+                />
+              </label>
+            </section>
+
+            {supportsRoutes ? (
+              <section style={styles.infoCard}>
+                <div style={styles.infoTitle}>Route options</div>
                 <p style={styles.hint}>
-                  Pace or speed already describes the effort, so there is no separate intensity field.
+                  This sport supports routes. Upload GPX, saved routes and Route Wizard come in the route module.
                 </p>
-              </div>
-            )}
-          </section>
+              </section>
+            ) : null}
 
-          <section style={styles.section}>
-            <div style={styles.sectionTitle}>5. Visibility</div>
+            {supportsWorkouts ? (
+              <section style={styles.infoCard}>
+                <div style={styles.infoTitle}>Workout options</div>
+                <p style={styles.hint}>
+                  This sport supports generated workouts. Workout Generator comes in the workout module.
+                </p>
+              </section>
+            ) : null}
 
-            <label style={styles.label}>
-              Who can see this?
-              <select
-                value={form.visibility}
-                onChange={(event) => update("visibility", event.target.value)}
-                style={styles.input}
-              >
-                <option value="public">All users</option>
-                <option value="private">Only me</option>
-                <option value="team">My team</option>
-                <option value="selected">Selected members</option>
-                <option value="group">Group</option>
-              </select>
-            </label>
+            {message ? <div style={styles.message}>{message}</div> : null}
 
-            <label style={styles.label}>
-              Max participants
-              <input
-                type="number"
-                min="1"
-                value={form.max_participants}
-                onChange={(event) => update("max_participants", event.target.value)}
-                placeholder="Optional"
-                style={styles.input}
-              />
-            </label>
-          </section>
-
-          {supportsRoutes ? (
-            <section style={styles.infoCard}>
-              <div style={styles.infoTitle}>Route options</div>
-              <p style={styles.hint}>
-                This sport supports routes. Upload GPX, saved routes and Route Wizard come in the route module.
-              </p>
-            </section>
-          ) : null}
-
-          {supportsWorkouts ? (
-            <section style={styles.infoCard}>
-              <div style={styles.infoTitle}>Workout options</div>
-              <p style={styles.hint}>
-                This sport supports generated workouts. Workout Generator comes in the workout module.
-              </p>
-            </section>
-          ) : null}
-
-          {message ? <div style={styles.message}>{message}</div> : null}
-
-          <button type="submit" disabled={saving} style={styles.submitButton}>
-            {saving ? "Creating..." : "Create Training"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={saving || !availableSportOptions.length}
+              style={styles.submitButton}
+            >
+              {saving ? "Creating..." : "Create Training"}
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );
@@ -606,26 +715,6 @@ const styles = {
     textTransform: "uppercase",
     fontSize: 12,
   },
-  generatedTitleCard: {
-    borderRadius: 22,
-    padding: 16,
-    background: "rgba(0,0,0,0.24)",
-    border: "1px solid rgba(255,255,255,0.10)",
-  },
-  generatedLabel: {
-    color: "rgba(255,255,255,0.48)",
-    fontWeight: 900,
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    marginBottom: 6,
-  },
-  generatedTitle: {
-    color: "white",
-    fontWeight: 950,
-    fontSize: 28,
-    letterSpacing: "-0.04em",
-  },
   label: {
     display: "grid",
     gap: 8,
@@ -681,6 +770,17 @@ const styles = {
     fontWeight: 950,
     cursor: "pointer",
   },
+  resetNameButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.08)",
+    color: "#e4ef16",
+    fontWeight: 900,
+    padding: "0 14px",
+    cursor: "pointer",
+    textAlign: "left",
+  },
   toggleRow: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -733,17 +833,6 @@ const styles = {
     color: "rgba(255,255,255,0.82)",
     lineHeight: 1.45,
   },
-  resetNameButton: {
-    minHeight: 42,
-    borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.24)",
-    background: "rgba(228,239,22,0.08)",
-    color: "#e4ef16",
-    fontWeight: 900,
-    padding: "0 14px",
-    cursor: "pointer",
-    textAlign: "left",
-  },
   submitButton: {
     width: "100%",
     minHeight: 58,
@@ -755,5 +844,15 @@ const styles = {
     fontSize: 17,
     cursor: "pointer",
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+  },
+  stateCard: {
+    borderRadius: 28,
+    padding: 22,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.12)",
+  },
+  stateTitle: {
+    fontSize: 22,
+    fontWeight: 950,
   },
 };
