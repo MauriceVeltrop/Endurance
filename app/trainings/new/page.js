@@ -39,6 +39,8 @@ export default function CreateTrainingPage() {
 
   const [form, setForm] = useState({
     sports: ["running"],
+    title: "",
+    titleEdited: false,
     description: "",
     visibility: "public",
 
@@ -72,6 +74,8 @@ export default function CreateTrainingPage() {
     [selectedSports]
   );
 
+  const trainingTitle = form.titleEdited ? form.title : automaticTitle;
+
   const supportsRoutes = selectedSports.some((sport) => sport.route);
   const supportsWorkouts = selectedSports.some((sport) => sport.workout);
   const usesPace = selectedSports.some((sport) => sport.metric === "pace");
@@ -89,9 +93,17 @@ export default function CreateTrainingPage() {
         ? current.sports.filter((item) => item !== sportId)
         : [...current.sports, sportId];
 
+      const updatedSports = next.length ? next : current.sports;
+      const updatedSelectedSports = sportOptions.filter((sport) =>
+        updatedSports.includes(sport.id)
+      );
+
       return {
         ...current,
-        sports: next.length ? next : current.sports,
+        sports: updatedSports,
+        title: current.titleEdited
+          ? current.title
+          : makeAutomaticTitle(updatedSelectedSports),
       };
     });
   };
@@ -99,6 +111,11 @@ export default function CreateTrainingPage() {
   const saveTraining = async (event) => {
     event.preventDefault();
     setMessage("");
+
+    if (!trainingTitle.trim()) {
+      setMessage("Add a clear training name.");
+      return;
+    }
 
     if (!form.date) {
       setMessage("Choose a training date.");
@@ -139,7 +156,7 @@ export default function CreateTrainingPage() {
 
       const payload = {
         creator_id: user.id,
-        title: automaticTitle,
+        title: trainingTitle.trim(),
         description: form.description.trim(),
         sports: form.sports,
         visibility: form.visibility,
@@ -199,7 +216,7 @@ export default function CreateTrainingPage() {
           <div style={styles.kicker}>Create Training</div>
           <h1 style={styles.title}>Start with the sport.</h1>
           <p style={styles.subtitle}>
-            Choose one or more sports first. Endurance automatically names the session.
+            Choose one or more sports first. Endurance suggests a name, but you can overwrite it.
           </p>
         </header>
 
@@ -224,10 +241,34 @@ export default function CreateTrainingPage() {
               })}
             </div>
 
-            <div style={styles.generatedTitleCard}>
-              <div style={styles.generatedLabel}>Training name</div>
-              <div style={styles.generatedTitle}>{automaticTitle}</div>
-            </div>
+            <label style={styles.label}>
+              Training name
+              <input
+                value={trainingTitle}
+                onChange={(event) => {
+                  update("title", event.target.value);
+                  update("titleEdited", true);
+                }}
+                placeholder={automaticTitle}
+                style={styles.input}
+              />
+            </label>
+
+            {form.titleEdited ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    title: automaticTitle,
+                    titleEdited: false,
+                  }))
+                }
+                style={styles.resetNameButton}
+              >
+                Use automatic name: {automaticTitle}
+              </button>
+            ) : null}
           </section>
 
           <section style={styles.section}>
@@ -691,6 +732,17 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.18)",
     color: "rgba(255,255,255,0.82)",
     lineHeight: 1.45,
+  },
+  resetNameButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.08)",
+    color: "#e4ef16",
+    fontWeight: 900,
+    padding: "0 14px",
+    cursor: "pointer",
+    textAlign: "left",
   },
   submitButton: {
     width: "100%",
