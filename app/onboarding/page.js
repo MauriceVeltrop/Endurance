@@ -11,10 +11,12 @@ export default function OnboardingPage() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
-    name: "",
+    first_name: "",
+    last_name: "",
     email: "",
     avatar_url: "",
     location: "",
@@ -50,9 +52,12 @@ export default function OnboardingPage() {
         .maybeSingle();
 
       if (profile) {
+        const fallbackParts = String(profile.name || "").trim().split(" ");
+
         setForm((current) => ({
           ...current,
-          name: profile.name || "",
+          first_name: profile.first_name || fallbackParts[0] || "",
+          last_name: profile.last_name || fallbackParts.slice(1).join(" ") || "",
           email: profile.email || currentUser.email || "",
           avatar_url: profile.avatar_url || "",
           location: profile.location || "",
@@ -99,21 +104,76 @@ export default function OnboardingPage() {
     });
   };
 
+  const uploadAvatar = async (event) => {
+    const file = event.target.files?.[0];
+    setMessage("");
+
+    if (!file || !user?.id) return;
+
+    if (!file.type.startsWith("image/")) {
+      setMessage("Choose an image file.");
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setMessage("Profile photo is too large. Use an image under 4 MB.");
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+
+      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${user.id}/avatar-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(path);
+
+      if (!data?.publicUrl) {
+        throw new Error("Could not create avatar URL.");
+      }
+
+      update("avatar_url", data.publicUrl);
+    } catch (err) {
+      console.error("Avatar upload error", err);
+      setMessage(err?.message || "Could not upload profile photo.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const save = async (event) => {
     event.preventDefault();
     setMessage("");
 
-    if (!form.name.trim()) return setMessage("Your real name is required.");
+    if (!form.first_name.trim()) return setMessage("First name is required.");
+    if (!form.last_name.trim()) return setMessage("Last name is required.");
     if (!form.email.trim()) return setMessage("Email address is required.");
-    if (!form.avatar_url.trim()) return setMessage("Profile photo URL is required for now.");
+    if (!form.avatar_url.trim()) return setMessage("Profile photo is required.");
     if (!form.sports.length) return setMessage("Choose at least one preferred sport.");
 
     try {
       setSaving(true);
 
+      const firstName = form.first_name.trim();
+      const lastName = form.last_name.trim();
+      const fullName = `${firstName} ${lastName}`;
+
       const profilePayload = {
         id: user.id,
-        name: form.name.trim(),
+        first_name: firstName,
+        last_name: lastName,
+        name: fullName,
         email: form.email.trim(),
         avatar_url: form.avatar_url.trim(),
         location: form.location.trim() || null,
@@ -178,15 +238,27 @@ export default function OnboardingPage() {
           <section style={styles.section}>
             <div style={styles.sectionTitle}>1. Profile</div>
 
-            <label style={styles.label}>
-              Real name
-              <input
-                value={form.name}
-                onChange={(event) => update("name", event.target.value)}
-                placeholder="Your real name"
-                style={styles.input}
-              />
-            </label>
+            <div style={styles.twoColumns}>
+              <label style={styles.label}>
+                First name
+                <input
+                  value={form.first_name}
+                  onChange={(event) => update("first_name", event.target.value)}
+                  placeholder="First name"
+                  style={styles.input}
+                />
+              </label>
+
+              <label style={styles.label}>
+                Last name
+                <input
+                  value={form.last_name}
+                  onChange={(event) => update("last_name", event.target.value)}
+                  placeholder="Last name"
+                  style={styles.input}
+                />
+              </label>
+            </div>
 
             <label style={styles.label}>
               Email address
@@ -199,15 +271,33 @@ export default function OnboardingPage() {
               />
             </label>
 
-            <label style={styles.label}>
-              Profile photo URL
-              <input
-                value={form.avatar_url}
-                onChange={(event) => update("avatar_url", event.target.value)}
-                placeholder="https://..."
-                style={styles.input}
-              />
-            </label>
+            <div style={styles.avatarUploadCard}>
+              <div style={styles.avatarPreviewWrap}>
+                {form.avatar_url ? (
+                  <img src={form.avatar_url} alt="Profile preview" style={styles.avatarPreview} />
+                ) : (
+                  <div style={styles.avatarPlaceholder}>+</div>
+                )}
+              </div>
+
+              <div style={styles.avatarUploadText}>
+                <div style={styles.avatarTitle}>Profile photo</div>
+                <p style={styles.avatarDescription}>
+                  Required for a verified training community. Upload a clear photo of yourself.
+                </p>
+
+                <label style={styles.uploadButton}>
+                  {uploadingAvatar ? "Uploading..." : "Upload photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={uploadAvatar}
+                    disabled={uploadingAvatar}
+                    style={{ display: "none" }}
+                  />
+                </label>
+              </div>
+            </div>
 
             <label style={styles.label}>
               City / region
@@ -260,7 +350,7 @@ export default function OnboardingPage() {
 
           {message ? <div style={styles.message}>{message}</div> : null}
 
-          <button type="submit" disabled={saving} style={styles.primaryButton}>
+          <button type="submit" disabled={saving || uploadingAvatar} style={styles.primaryButton}>
             {saving ? "Saving..." : "Complete onboarding"}
           </button>
         </form>
@@ -326,6 +416,11 @@ const styles = {
     textTransform: "uppercase",
     fontSize: 12,
   },
+  twoColumns: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
   label: {
     display: "grid",
     gap: 8,
@@ -344,6 +439,64 @@ const styles = {
     boxSizing: "border-box",
     fontSize: 16,
     outline: "none",
+  },
+  avatarUploadCard: {
+    borderRadius: 26,
+    padding: 16,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.11)",
+    display: "flex",
+    gap: 16,
+    alignItems: "center",
+  },
+  avatarPreviewWrap: {
+    width: 92,
+    height: 92,
+    borderRadius: "50%",
+    overflow: "hidden",
+    background: "rgba(228,239,22,0.12)",
+    border: "2px solid rgba(228,239,22,0.45)",
+    flex: "0 0 auto",
+    display: "grid",
+    placeItems: "center",
+  },
+  avatarPreview: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  avatarPlaceholder: {
+    color: "#e4ef16",
+    fontSize: 34,
+    fontWeight: 950,
+  },
+  avatarUploadText: {
+    display: "grid",
+    gap: 8,
+    minWidth: 0,
+  },
+  avatarTitle: {
+    fontWeight: 950,
+    fontSize: 18,
+  },
+  avatarDescription: {
+    margin: 0,
+    color: "rgba(255,255,255,0.62)",
+    lineHeight: 1.45,
+    fontSize: 14,
+  },
+  uploadButton: {
+    width: "fit-content",
+    minHeight: 42,
+    borderRadius: 999,
+    padding: "0 14px",
+    background: "#e4ef16",
+    color: "#101406",
+    display: "inline-flex",
+    alignItems: "center",
+    fontWeight: 950,
+    cursor: "pointer",
   },
   sportGrid: {
     display: "flex",
