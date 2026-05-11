@@ -21,9 +21,9 @@ export default function AppHeader({ profile, compact = false }) {
       <div style={styles.actions}>
         {profile?.role ? <span style={styles.roleBadge}>{profile.role}</span> : null}
 
-        {profile?.role === "admin" ? (
-          <button type="button" onClick={() => router.push("/admin")} style={styles.iconButton} aria-label="Open admin">
-            ⚙
+        {["admin", "moderator"].includes(profile?.role) ? (
+          <button type="button" onClick={() => router.push("/admin")} style={styles.adminButton} aria-label="Open admin">
+            Admin
           </button>
         ) : null}
 
@@ -35,7 +35,7 @@ export default function AppHeader({ profile, compact = false }) {
           )}
         </button>
 
-        <button type="button" onClick={signOut} style={styles.iconButton} aria-label="Log out">
+        <button type="button" onClick={signOut} style={styles.logoutButton} aria-label="Log out">
           ⎋
         </button>
       </div>
@@ -56,7 +56,6 @@ const baseButton = {
   border: 0,
   cursor: "pointer",
   fontWeight: 950,
-  fontFamily: "inherit",
 };
 
 const styles = {
@@ -69,7 +68,6 @@ const styles = {
     gap: 14,
   },
   headerCompact: {
-    width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -77,29 +75,24 @@ const styles = {
   },
   logoButton: {
     ...baseButton,
-    flex: "0 1 auto",
-    minWidth: 0,
     background: "transparent",
     padding: 0,
     lineHeight: 0,
   },
   logo: {
-    width: "clamp(150px, 38vw, 220px)",
+    width: "min(220px, 54vw)",
     height: "auto",
     display: "block",
     filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.12))",
   },
   actions: {
-    flex: "0 0 auto",
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
+    gap: 9,
   },
   roleBadge: {
     display: "inline-flex",
     alignItems: "center",
-    justifyContent: "center",
     minHeight: 34,
     borderRadius: 999,
     padding: "0 11px",
@@ -109,7 +102,16 @@ const styles = {
     fontSize: 12,
     fontWeight: 950,
     textTransform: "capitalize",
-    whiteSpace: "nowrap",
+  },
+  adminButton: {
+    ...baseButton,
+    minHeight: 34,
+    borderRadius: 999,
+    padding: "0 11px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 12,
   },
   avatarButton: {
     ...baseButton,
@@ -137,7 +139,7 @@ const styles = {
     fontSize: 13,
     letterSpacing: "-0.02em",
   },
-  iconButton: {
+  logoutButton: {
     ...baseButton,
     width: 42,
     height: 42,
@@ -145,6 +147,6 @@ const styles = {
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.14)",
     color: "rgba(255,255,255,0.82)",
-    fontSize: 18,
+    fontSize: 19,
   },
 };
