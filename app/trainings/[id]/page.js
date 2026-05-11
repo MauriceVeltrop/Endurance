@@ -1,48 +1,62 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-
-const demoTrainings = [
-  {
-    id: "demo-running-evening-tempo",
-    sport: "Running",
-    title: "Evening Tempo Run",
-    time: "Tonight · 19:00",
-    location: "Landgraaf",
-    intensity: "5:30–6:00/km · Easy",
-    joined: 4,
-    description:
-      "A controlled tempo session for runners who want to train together without racing the workout.",
-  },
-  {
-    id: "demo-trail-sunday",
-    sport: "Trail Running",
-    title: "Sunday Trail Session",
-    time: "Sunday · 09:30",
-    location: "Brunssummerheide",
-    intensity: "Moderate · 8 km",
-    joined: 6,
-    description:
-      "A relaxed social trail session over mixed terrain. Focus on endurance, safety and good company.",
-  },
-  {
-    id: "demo-strength-hybrid",
-    sport: "Strength Training",
-    title: "Hybrid Strength",
-    time: "Wednesday · 18:30",
-    location: "Gym",
-    intensity: "Heavy · 60 min",
-    joined: 3,
-    description:
-      "Strength-focused hybrid training session with controlled volume and clear structure.",
-  },
-];
+import { supabase } from "../../../lib/supabase";
+import {
+  formatTrainingIntensity,
+  formatTrainingTime,
+  getPrimarySport,
+  getSportLabel,
+} from "../../../lib/trainingHelpers";
 
 export default function TrainingDetailPage() {
   const params = useParams();
-  const training =
-    demoTrainings.find((item) => item.id === params?.id) || demoTrainings[0];
+  const id = params?.id;
+
+  const [training, setTraining] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState("");
+
+  const loadTraining = async () => {
+    if (!id) return;
+
+    setLoading(true);
+    setErrorText("");
+
+    try {
+      const { data, error } = await supabase
+        .from("training_sessions")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        setErrorText("Training not found.");
+        setTraining(null);
+        return;
+      }
+
+      setTraining(data);
+    } catch (err) {
+      console.error("Training detail error", err);
+      setErrorText(err?.message || "Could not load training.");
+      setTraining(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTraining();
+  }, [id]);
+
+  const sport = getPrimarySport(training);
+  const sportLabel = getSportLabel(sport);
+  const time = training ? formatTrainingTime(training) : "";
+  const intensity = training ? formatTrainingIntensity(training) : "";
 
   return (
     <main style={styles.page}>
@@ -53,22 +67,49 @@ export default function TrainingDetailPage() {
           ← Back to trainings
         </Link>
 
-        <article style={styles.card}>
-          <div style={styles.sportBadge}>{training.sport}</div>
+        {loading ? (
+          <section style={styles.stateCard}>
+            <div style={styles.stateTitle}>Loading training...</div>
+          </section>
+        ) : null}
 
-          <h1 style={styles.title}>{training.title}</h1>
+        {errorText ? (
+          <section style={styles.errorCard}>
+            <div style={styles.stateTitle}>Could not open training</div>
+            <p style={styles.stateText}>{errorText}</p>
+            <button type="button" onClick={loadTraining} style={styles.retryButton}>
+              Try again
+            </button>
+          </section>
+        ) : null}
 
-          <p style={styles.meta}>🕒 {training.time}</p>
-          <p style={styles.meta}>📍 {training.location}</p>
-          <p style={styles.meta}>⚡ {training.intensity}</p>
-          <p style={styles.meta}>👥 {training.joined} joined</p>
+        {!loading && training ? (
+          <article style={styles.card}>
+            {training.teaser_photo_url ? (
+              <img src={training.teaser_photo_url} alt="" style={styles.teaser} />
+            ) : null}
 
-          <p style={styles.description}>{training.description}</p>
+            <div style={styles.sportBadge}>{sportLabel}</div>
 
-          <button type="button" style={styles.joinButton}>
-            Join Training
-          </button>
-        </article>
+            <h1 style={styles.title}>{training.title}</h1>
+
+            <p style={styles.meta}>🕒 {time}</p>
+            <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
+            <p style={styles.meta}>⚡ {intensity}</p>
+            <p style={styles.meta}>👁 {training.visibility}</p>
+            {training.max_participants ? (
+              <p style={styles.meta}>👥 Max {training.max_participants} participants</p>
+            ) : null}
+
+            {training.description ? (
+              <p style={styles.description}>{training.description}</p>
+            ) : null}
+
+            <button type="button" style={styles.joinButton}>
+              Join Training
+            </button>
+          </article>
+        ) : null}
       </section>
     </main>
   );
@@ -104,11 +145,19 @@ const styles = {
   },
   card: {
     borderRadius: 36,
-    padding: "28px 24px",
+    padding: "24px",
     background:
       "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
     border: "1px solid rgba(255,255,255,0.14)",
     boxShadow: "0 30px 90px rgba(0,0,0,0.40)",
+    overflow: "hidden",
+  },
+  teaser: {
+    width: "calc(100% + 48px)",
+    height: 210,
+    objectFit: "cover",
+    display: "block",
+    margin: "-24px -24px 22px",
   },
   sportBadge: {
     display: "inline-flex",
@@ -148,5 +197,36 @@ const styles = {
     fontSize: 17,
     marginTop: 26,
     cursor: "pointer",
+  },
+  stateCard: {
+    borderRadius: 28,
+    padding: 22,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.12)",
+  },
+  errorCard: {
+    borderRadius: 28,
+    padding: 22,
+    background: "rgba(140,20,20,0.18)",
+    border: "1px solid rgba(255,90,90,0.22)",
+  },
+  stateTitle: {
+    fontSize: 22,
+    fontWeight: 950,
+  },
+  stateText: {
+    color: "rgba(255,255,255,0.70)",
+    lineHeight: 1.5,
+  },
+  retryButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    padding: "0 16px",
+    cursor: "pointer",
+    marginTop: 12,
   },
 };
