@@ -21,6 +21,12 @@ export default function AppHeader({ profile, compact = false }) {
       <div style={styles.actions}>
         {profile?.role ? <span style={styles.roleBadge}>{profile.role}</span> : null}
 
+        {["admin", "moderator"].includes(profile?.role) ? (
+          <button type="button" onClick={() => router.push("/admin")} style={styles.adminButton} aria-label="Open admin">
+            Admin
+          </button>
+        ) : null}
+
         <button type="button" onClick={() => router.push("/profile")} style={styles.avatarButton} aria-label="Open profile">
           {profile?.avatar_url ? (
             <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
@@ -96,6 +102,16 @@ const styles = {
     fontSize: 12,
     fontWeight: 950,
     textTransform: "capitalize",
+  },
+  adminButton: {
+    ...baseButton,
+    minHeight: 34,
+    borderRadius: 999,
+    padding: "0 11px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 12,
   },
   avatarButton: {
     ...baseButton,
