@@ -144,7 +144,7 @@ export default function CreateTrainingPage() {
       const user = sessionData?.session?.user;
 
       if (!user?.id) {
-        setMessage("Creating trainings requires login. Auth/onboarding is the next build step.");
+        router.push("/login");
         return;
       }
 
