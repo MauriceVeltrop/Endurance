@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { getCurrentUser, getNextAuthPath, getProfile } from "../../lib/authFlow";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,23 +17,18 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
 
   const checkSession = async () => {
+    setMessage("");
+
     try {
-      const { data } = await supabase.auth.getSession();
-      const user = data?.session?.user;
+      const user = await getCurrentUser();
 
       if (!user?.id) return;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profile?.onboarding_completed) {
-        router.replace("/trainings");
-      } else {
-        router.replace("/onboarding");
-      }
+      const profile = await getProfile(user.id, "id,onboarding_completed,blocked");
+      router.replace(getNextAuthPath(profile));
+    } catch (err) {
+      console.error("Session check error", err);
+      setMessage(err?.message || "Could not check your session. You can still sign in below.");
     } finally {
       setChecking(false);
     }
@@ -72,16 +68,10 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      const { data } = await supabase.auth.getUser();
-      const user = data?.user;
+      const user = await getCurrentUser();
+      const profile = await getProfile(user?.id, "id,onboarding_completed,blocked");
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      router.replace(profile?.onboarding_completed ? "/trainings" : "/onboarding");
+      router.replace(getNextAuthPath(profile));
     } catch (err) {
       console.error("Auth error", err);
       setMessage(err?.message || "Authentication failed.");
@@ -95,7 +85,16 @@ export default function LoginPage() {
       <main style={styles.page}>
         <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
         <section style={styles.card}>
-          <div style={styles.title}>Checking session...</div>
+          <div style={styles.checkingRow}>
+            <div style={styles.spinner} />
+            <div>
+              <div style={styles.checkingTitle}>Checking session...</div>
+              <p style={styles.checkingText}>This should only take a moment.</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => setChecking(false)} style={styles.secondaryButton}>
+            Show login form
+          </button>
         </section>
       </main>
     );
@@ -199,6 +198,40 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.14)",
     boxShadow: "0 30px 90px rgba(0,0,0,0.42)",
     backdropFilter: "blur(22px)",
+  },
+  checkingRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  spinner: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    border: "3px solid rgba(255,255,255,0.18)",
+    borderTopColor: "#e4ef16",
+  },
+  checkingTitle: {
+    color: "white",
+    fontWeight: 950,
+    fontSize: 20,
+  },
+  checkingText: {
+    margin: "6px 0 0",
+    color: "rgba(255,255,255,0.58)",
+    lineHeight: 1.35,
+  },
+  secondaryButton: {
+    width: "100%",
+    minHeight: 50,
+    borderRadius: 20,
+    border: "1px solid rgba(228,239,22,0.22)",
+    background: "rgba(228,239,22,0.08)",
+    color: "#e4ef16",
+    fontWeight: 950,
+    fontSize: 15,
+    cursor: "pointer",
+    marginTop: 18,
   },
   tabs: {
     display: "grid",
