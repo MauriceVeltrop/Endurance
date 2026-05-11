@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
 import {
   formatTrainingIntensity,
@@ -10,17 +11,70 @@ import {
   getSportLabel,
 } from "../../lib/trainingHelpers";
 
+const privilegedRoles = ["admin", "moderator"];
+
 export default function TrainingsPage() {
   const router = useRouter();
+  const [profile, setProfile] = useState(null);
+  const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [trainings, setTrainings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorText, setErrorText] = useState("");
 
+  const canSeeAll = privilegedRoles.includes(profile?.role);
+
+  const preferredSportLabel = useMemo(() => {
+    if (canSeeAll) return "Admin/moderator view: all visible trainings";
+    if (!preferredSportIds.length) return "No preferred sports selected yet";
+    return `Filtered by ${preferredSportIds.length} preferred sport${preferredSportIds.length === 1 ? "" : "s"}`;
+  }, [canSeeAll, preferredSportIds.length]);
+
   const loadTrainings = async () => {
     setErrorText("");
     setRefreshing(true);
+
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData?.user;
+
+      if (!user?.id) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (!profileRow?.onboarding_completed) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      if (profileRow?.blocked) {
+        setProfile(profileRow);
+        setTrainings([]);
+        setErrorText("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
+      setProfile(profileRow);
+
+      const { data: sportRows, error: sportError } = await supabase
+        .from("user_sports")
+        .select("sport_id")
+        .eq("user_id", user.id);
+
+      if (sportError) throw sportError;
+
+      const allowedSports = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
+      setPreferredSportIds(allowedSports);
+
       const now = new Date().toISOString();
       const { data, error } = await supabase
         .from("training_sessions")
@@ -28,10 +82,19 @@ export default function TrainingsPage() {
         .or(`starts_at.gte.${now},starts_at.is.null`)
         .order("starts_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(80);
 
       if (error) throw error;
-      setTrainings(data || []);
+
+      const shouldSeeAll = privilegedRoles.includes(profileRow?.role);
+      const filtered = shouldSeeAll
+        ? data || []
+        : (data || []).filter((training) =>
+            Array.isArray(training.sports) &&
+            training.sports.some((sportId) => allowedSports.includes(sportId))
+          );
+
+      setTrainings(filtered.slice(0, 30));
     } catch (err) {
       console.error(err);
       setErrorText(err?.message || "Could not load training sessions.");
@@ -51,7 +114,7 @@ export default function TrainingsPage() {
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
-        <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
+        <AppHeader profile={profile} compact />
 
         <header style={styles.header}>
           <div style={styles.kicker}>Training Sessions</div>
@@ -63,17 +126,20 @@ export default function TrainingsPage() {
             </button>
           </div>
 
-          <p style={styles.subtitle}>Swipe through upcoming sessions and tap a card to open the training detail.</p>
+          <p style={styles.subtitle}>Swipe through upcoming sessions that match your preferred sports.</p>
 
-          <button type="button" onClick={loadTrainings} disabled={refreshing} style={styles.refreshButton}>
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          <div style={styles.filterRow}>
+            <span style={styles.filterPill}>{preferredSportLabel}</span>
+            <button type="button" onClick={loadTrainings} disabled={refreshing} style={styles.refreshButton}>
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </header>
 
         {loading ? (
           <section style={styles.stateCard}>
             <div style={styles.stateTitle}>Loading trainings...</div>
-            <p style={styles.stateText}>Fetching upcoming sessions from Supabase.</p>
+            <p style={styles.stateText}>Fetching your profile, preferred sports and upcoming sessions.</p>
           </section>
         ) : null}
 
@@ -88,11 +154,20 @@ export default function TrainingsPage() {
         {empty ? (
           <section style={styles.emptyCard}>
             <div style={styles.emptyIcon}>⚡</div>
-            <div style={styles.stateTitle}>No trainings yet</div>
-            <p style={styles.stateText}>Start clean: create the first Endurance training session.</p>
-            <button type="button" onClick={() => router.push("/trainings/new")} style={styles.primaryButton}>
-              Create first training
-            </button>
+            <div style={styles.stateTitle}>{preferredSportIds.length ? "No matching trainings yet" : "Choose your preferred sports"}</div>
+            <p style={styles.stateText}>
+              {preferredSportIds.length
+                ? "Create a new session or broaden your preferred sports in your profile."
+                : "Your feed is filtered by preferred sports. Add sports to your profile first."}
+            </p>
+            <div style={styles.emptyActions}>
+              <button type="button" onClick={() => router.push("/trainings/new")} style={styles.primaryButton}>
+                Create training
+              </button>
+              <button type="button" onClick={() => router.push("/profile")} style={styles.secondaryButton}>
+                Edit profile
+              </button>
+            </div>
           </section>
         ) : null}
 
@@ -170,18 +245,19 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "24px 18px 34px",
+    padding: "18px 18px 34px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 22 },
-  logo: { width: "min(340px, 76vw)", height: "auto", justifySelf: "center", objectFit: "contain" },
   header: { display: "grid", gap: 10 },
   kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
   titleRow: { display: "flex", justifyContent: "space-between", alignItems: "end", gap: 14, flexWrap: "wrap" },
   title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520 },
+  filterRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
+  filterPill: { display: "inline-flex", minHeight: 42, alignItems: "center", borderRadius: 999, padding: "0 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
   createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
-  refreshButton: { width: "fit-content", minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer", marginTop: 6 },
+  refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
   card: { minWidth: 306, maxWidth: 306, minHeight: 300, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
   teaser: { width: "100%", height: 118, objectFit: "cover", display: "block", opacity: 0.92 },
@@ -197,9 +273,11 @@ const styles = {
   stateCard: { borderRadius: 28, padding: 22, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" },
   emptyCard: { borderRadius: 32, padding: 28, background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
   emptyIcon: { width: 54, height: 54, borderRadius: 18, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.14)", border: "1px solid rgba(228,239,22,0.25)", marginBottom: 16, fontSize: 24 },
+  emptyActions: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 20 },
   errorCard: { borderRadius: 28, padding: 22, background: "rgba(140,20,20,0.18)", border: "1px solid rgba(255,90,90,0.22)" },
   stateTitle: { fontSize: 22, fontWeight: 950 },
   stateText: { color: "rgba(255,255,255,0.70)", lineHeight: 1.5, marginBottom: 0 },
   retryButton: { ...baseButton, minHeight: 42, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 16px", marginTop: 12 },
-  primaryButton: { ...baseButton, minHeight: 54, borderRadius: 20, background: "#e4ef16", color: "#101406", padding: "0 18px", marginTop: 20, boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
+  primaryButton: { ...baseButton, minHeight: 54, borderRadius: 20, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
+  secondaryButton: { ...baseButton, minHeight: 54, borderRadius: 20, background: "rgba(255,255,255,0.08)", color: "white", border: "1px solid rgba(255,255,255,0.12)", padding: "0 18px" },
 };
