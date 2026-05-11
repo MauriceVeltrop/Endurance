@@ -24,12 +24,6 @@ export default function TrainingsPage() {
 
   const canSeeAll = privilegedRoles.includes(profile?.role);
 
-  const preferredSportLabel = useMemo(() => {
-    if (canSeeAll) return "Admin/moderator view: all visible trainings";
-    if (!preferredSportIds.length) return "No preferred sports selected yet";
-    return `Filtered by ${preferredSportIds.length} preferred sport${preferredSportIds.length === 1 ? "" : "s"}`;
-  }, [canSeeAll, preferredSportIds.length]);
-
   const loadTrainings = async () => {
     setErrorText("");
     setRefreshing(true);
@@ -131,7 +125,6 @@ export default function TrainingsPage() {
           <p style={styles.subtitle}>Swipe through upcoming sessions that match your preferred sports.</p>
 
           <div style={styles.filterRow}>
-            <span style={styles.filterPill}>{preferredSportLabel}</span>
             <button type="button" onClick={loadTrainings} disabled={refreshing} style={styles.refreshButton}>
               {refreshing ? "Refreshing..." : "Refresh"}
             </button>
@@ -217,7 +210,6 @@ export default function TrainingsPage() {
                   ) : (
                     <div style={styles.teaserFallback}>
                       <div style={styles.pulseLine} />
-                      <span style={styles.teaserSport}>{sportLabel}</span>
                     </div>
                   )}
 
@@ -273,7 +265,7 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 34px",
+    padding: "18px 18px 38px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 22 },
@@ -283,7 +275,6 @@ const styles = {
   title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520 },
   filterRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
-  filterPill: { display: "inline-flex", minHeight: 42, alignItems: "center", borderRadius: 999, padding: "0 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
   dashboardGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 2 },
   dashboardCard: { minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", alignContent: "space-between" },
   dashboardCardWide: { gridColumn: "1 / -1", minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "radial-gradient(circle at 90% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", gap: 5 },
@@ -298,7 +289,6 @@ const styles = {
   teaser: { width: "100%", height: 118, objectFit: "cover", display: "block", opacity: 0.92 },
   teaserFallback: { height: 118, position: "relative", overflow: "hidden", background: "radial-gradient(circle at 76% 20%, rgba(228,239,22,0.25), transparent 30%), linear-gradient(135deg, rgba(228,239,22,0.11), rgba(255,255,255,0.035))", borderBottom: "1px solid rgba(255,255,255,0.08)" },
   pulseLine: { position: "absolute", left: 18, right: 18, top: 56, height: 3, borderRadius: 999, background: "linear-gradient(90deg, rgba(228,239,22,0), rgba(228,239,22,0.95), rgba(255,255,255,0.70), rgba(228,239,22,0))", boxShadow: "0 0 28px rgba(228,239,22,0.26)" },
-  teaserSport: { position: "absolute", left: 18, bottom: 18, borderRadius: 999, padding: "8px 11px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.13)", color: "rgba(255,255,255,0.86)", fontWeight: 950, fontSize: 12 },
   cardContent: { padding: 22, display: "grid", alignContent: "space-between", gap: 20 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", width: "fit-content", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950, fontSize: 13 },
