@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
 import { supabase } from "../../lib/supabase";
 import {
   formatTrainingIntensity,
@@ -109,6 +110,8 @@ export default function TrainingsPage() {
     loadTrainings();
   }, []);
 
+  const nextTraining = trainings[0];
+  const nextTrainingLabel = nextTraining ? formatTrainingTime(nextTraining) : "No session yet";
   const empty = !loading && !errorText && trainings.length === 0;
 
   return (
@@ -135,6 +138,24 @@ export default function TrainingsPage() {
             </button>
           </div>
         </header>
+
+        <section style={styles.dashboardGrid} aria-label="Training dashboard">
+          <div style={styles.dashboardCard}>
+            <span style={styles.dashboardLabel}>Matching</span>
+            <strong style={styles.dashboardValue}>{loading ? "—" : trainings.length}</strong>
+            <span style={styles.dashboardHint}>sessions</span>
+          </div>
+          <div style={styles.dashboardCard}>
+            <span style={styles.dashboardLabel}>Sports</span>
+            <strong style={styles.dashboardValue}>{canSeeAll ? "All" : preferredSportIds.length || "—"}</strong>
+            <span style={styles.dashboardHint}>preferred</span>
+          </div>
+          <div style={styles.dashboardCardWide}>
+            <span style={styles.dashboardLabel}>Next up</span>
+            <strong style={styles.dashboardValueSmall}>{nextTraining?.title || "Create momentum"}</strong>
+            <span style={styles.dashboardHint}>{nextTrainingLabel}</span>
+          </div>
+        </section>
 
         {loading ? (
           <section style={styles.stateCard}>
@@ -192,7 +213,14 @@ export default function TrainingsPage() {
                   }}
                   style={styles.card}
                 >
-                  {training.teaser_photo_url ? <img src={training.teaser_photo_url} alt="" style={styles.teaser} /> : null}
+                  {training.teaser_photo_url ? (
+                    <img src={training.teaser_photo_url} alt="" style={styles.teaser} />
+                  ) : (
+                    <div style={styles.teaserFallback}>
+                      <div style={styles.pulseLine} />
+                      <span style={styles.teaserSport}>{sportLabel}</span>
+                    </div>
+                  )}
 
                   <div style={styles.cardContent}>
                     <div>
@@ -204,6 +232,7 @@ export default function TrainingsPage() {
                       <h2 style={styles.cardTitle}>{training.title}</h2>
                       <p style={styles.meta}>🕒 {time}</p>
                       <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
+                      {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
                       <p style={styles.meta}>⚡ {intensity}</p>
                     </div>
 
@@ -230,6 +259,7 @@ export default function TrainingsPage() {
           </section>
         ) : null}
       </section>
+      <BottomNav />
     </main>
   );
 }
@@ -245,7 +275,7 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 34px",
+    padding: "18px 18px 110px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 22 },
@@ -256,11 +286,21 @@ const styles = {
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520 },
   filterRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
   filterPill: { display: "inline-flex", minHeight: 42, alignItems: "center", borderRadius: 999, padding: "0 14px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
+  dashboardGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 2 },
+  dashboardCard: { minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", alignContent: "space-between" },
+  dashboardCardWide: { gridColumn: "1 / -1", minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "radial-gradient(circle at 90% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", gap: 5 },
+  dashboardLabel: { color: "rgba(255,255,255,0.54)", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.12em" },
+  dashboardValue: { fontSize: 36, letterSpacing: "-0.06em", lineHeight: 0.95 },
+  dashboardValueSmall: { fontSize: 23, letterSpacing: "-0.045em", lineHeight: 1.05 },
+  dashboardHint: { color: "rgba(255,255,255,0.62)", fontSize: 13, fontWeight: 800 },
   createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
   refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
   card: { minWidth: 306, maxWidth: 306, minHeight: 300, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
   teaser: { width: "100%", height: 118, objectFit: "cover", display: "block", opacity: 0.92 },
+  teaserFallback: { height: 118, position: "relative", overflow: "hidden", background: "radial-gradient(circle at 76% 20%, rgba(228,239,22,0.25), transparent 30%), linear-gradient(135deg, rgba(228,239,22,0.11), rgba(255,255,255,0.035))", borderBottom: "1px solid rgba(255,255,255,0.08)" },
+  pulseLine: { position: "absolute", left: 18, right: 18, top: 56, height: 3, borderRadius: 999, background: "linear-gradient(90deg, rgba(228,239,22,0), rgba(228,239,22,0.95), rgba(255,255,255,0.70), rgba(228,239,22,0))", boxShadow: "0 0 28px rgba(228,239,22,0.26)" },
+  teaserSport: { position: "absolute", left: 18, bottom: 18, borderRadius: 999, padding: "8px 11px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.13)", color: "rgba(255,255,255,0.86)", fontWeight: 950, fontSize: 12 },
   cardContent: { padding: 22, display: "grid", alignContent: "space-between", gap: 20 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", width: "fit-content", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950, fontSize: 13 },
