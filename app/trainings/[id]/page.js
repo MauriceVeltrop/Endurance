@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
 const demoTrainings = [
   {
@@ -11,6 +12,8 @@ const demoTrainings = [
     location: "Landgraaf",
     intensity: "5:30–6:00/km · Easy",
     joined: 4,
+    description:
+      "A controlled tempo session for runners who want to train together without racing the workout.",
   },
   {
     id: "demo-trail-sunday",
@@ -20,6 +23,8 @@ const demoTrainings = [
     location: "Brunssummerheide",
     intensity: "Moderate · 8 km",
     joined: 6,
+    description:
+      "A relaxed social trail session over mixed terrain. Focus on endurance, safety and good company.",
   },
   {
     id: "demo-strength-hybrid",
@@ -29,184 +34,119 @@ const demoTrainings = [
     location: "Gym",
     intensity: "Heavy · 60 min",
     joined: 3,
+    description:
+      "Strength-focused hybrid training session with controlled volume and clear structure.",
   },
 ];
 
-export default function TrainingsPage() {
+export default function TrainingDetailPage() {
+  const params = useParams();
+  const training =
+    demoTrainings.find((item) => item.id === params?.id) || demoTrainings[0];
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-        color: "white",
-        padding: "24px 18px 34px",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
-      <section
-        style={{
-          width: "min(960px, 100%)",
-          margin: "0 auto",
-          display: "grid",
-          gap: 22,
-        }}
-      >
-        <img
-          src="/logo-endurance.png"
-          alt="Endurance"
-          style={{
-            width: "min(340px, 76vw)",
-            height: "auto",
-            justifySelf: "center",
-            objectFit: "contain",
-            background: "transparent",
-          }}
-        />
+    <main style={styles.page}>
+      <section style={styles.shell}>
+        <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
 
-        <header
-          style={{
-            display: "grid",
-            gap: 8,
-          }}
-        >
-          <div
-            style={{
-              color: "#e4ef16",
-              fontSize: 13,
-              fontWeight: 950,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-            }}
-          >
-            Training Sessions
-          </div>
+        <Link href="/trainings" style={styles.backLink}>
+          ← Back to trainings
+        </Link>
 
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "clamp(38px, 10vw, 66px)",
-              lineHeight: 0.96,
-              letterSpacing: "-0.065em",
-            }}
-          >
-            Who is training?
-          </h1>
+        <article style={styles.card}>
+          <div style={styles.sportBadge}>{training.sport}</div>
 
-          <p
-            style={{
-              margin: 0,
-              color: "rgba(255,255,255,0.68)",
-              lineHeight: 1.5,
-              maxWidth: 520,
-            }}
-          >
-            Swipe through upcoming sessions and tap a card to open the training detail.
-          </p>
-        </header>
+          <h1 style={styles.title}>{training.title}</h1>
 
-        <section
-          style={{
-            display: "flex",
-            gap: 16,
-            overflowX: "auto",
-            padding: "4px 2px 18px",
-            scrollSnapType: "x mandatory",
-            WebkitOverflowScrolling: "touch",
-          }}
-        >
-          {demoTrainings.map((training) => (
-            <Link
-              key={training.id}
-              href={`/trainings/${training.id}`}
-              style={{
-                minWidth: 292,
-                maxWidth: 292,
-                minHeight: 260,
-                borderRadius: 32,
-                padding: 22,
-                boxSizing: "border-box",
-                textDecoration: "none",
-                color: "white",
-                background:
-                  "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-                border: "1px solid rgba(255,255,255,0.14)",
-                boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
-                scrollSnapAlign: "start",
-                display: "grid",
-                alignContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    width: "fit-content",
-                    borderRadius: 999,
-                    padding: "8px 12px",
-                    background: "rgba(228,239,22,0.12)",
-                    border: "1px solid rgba(228,239,22,0.28)",
-                    color: "#e4ef16",
-                    fontWeight: 950,
-                    fontSize: 13,
-                  }}
-                >
-                  {training.sport}
-                </div>
+          <p style={styles.meta}>🕒 {training.time}</p>
+          <p style={styles.meta}>📍 {training.location}</p>
+          <p style={styles.meta}>⚡ {training.intensity}</p>
+          <p style={styles.meta}>👥 {training.joined} joined</p>
 
-                <h2
-                  style={{
-                    margin: "18px 0 10px",
-                    fontSize: 29,
-                    lineHeight: 1.02,
-                    letterSpacing: "-0.045em",
-                  }}
-                >
-                  {training.title}
-                </h2>
+          <p style={styles.description}>{training.description}</p>
 
-                <p style={metaStyle}>🕒 {training.time}</p>
-                <p style={metaStyle}>📍 {training.location}</p>
-                <p style={metaStyle}>⚡ {training.intensity}</p>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <span style={joinedStyle}>{training.joined} joined</span>
-                <span style={openStyle}>Open →</span>
-              </div>
-            </Link>
-          ))}
-        </section>
+          <button type="button" style={styles.joinButton}>
+            Join Training
+          </button>
+        </article>
       </section>
     </main>
   );
 }
 
-const metaStyle = {
-  margin: "8px 0",
-  color: "rgba(255,255,255,0.70)",
-  fontSize: 15,
-  lineHeight: 1.35,
-};
-
-const joinedStyle = {
-  color: "rgba(255,255,255,0.70)",
-  fontWeight: 800,
-  fontSize: 14,
-};
-
-const openStyle = {
-  color: "#101406",
-  background: "#e4ef16",
-  borderRadius: 999,
-  padding: "9px 12px",
-  fontWeight: 950,
-  fontSize: 13,
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+    color: "white",
+    padding: "24px 18px 34px",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+  shell: {
+    width: "min(720px, 100%)",
+    margin: "0 auto",
+    display: "grid",
+    gap: 20,
+  },
+  logo: {
+    width: "min(320px, 74vw)",
+    height: "auto",
+    justifySelf: "center",
+    objectFit: "contain",
+    background: "transparent",
+  },
+  backLink: {
+    width: "fit-content",
+    color: "#e4ef16",
+    textDecoration: "none",
+    fontWeight: 950,
+  },
+  card: {
+    borderRadius: 36,
+    padding: "28px 24px",
+    background:
+      "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(255,255,255,0.14)",
+    boxShadow: "0 30px 90px rgba(0,0,0,0.40)",
+  },
+  sportBadge: {
+    display: "inline-flex",
+    borderRadius: 999,
+    padding: "8px 12px",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.28)",
+    color: "#e4ef16",
+    fontWeight: 950,
+    fontSize: 13,
+  },
+  title: {
+    margin: "18px 0 14px",
+    fontSize: "clamp(42px, 11vw, 72px)",
+    lineHeight: 0.94,
+    letterSpacing: "-0.065em",
+  },
+  meta: {
+    margin: "9px 0",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 16,
+  },
+  description: {
+    marginTop: 24,
+    color: "rgba(255,255,255,0.74)",
+    fontSize: 17,
+    lineHeight: 1.6,
+  },
+  joinButton: {
+    width: "100%",
+    minHeight: 58,
+    borderRadius: 22,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    fontSize: 17,
+    marginTop: 26,
+    cursor: "pointer",
+  },
 };
