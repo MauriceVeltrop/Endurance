@@ -79,7 +79,7 @@ export default function TrainingsPage() {
       const now = new Date().toISOString();
       const { data, error } = await supabase
         .from("training_sessions")
-        .select("id,title,description,sports,visibility,planning_type,starts_at,flexible_date,flexible_start_time,flexible_end_time,final_starts_at,start_location,distance_km,estimated_duration_min,intensity_label,pace_min,pace_max,speed_min,speed_max,max_participants,teaser_photo_url,created_at")
+        .select("id,title,description,sports,visibility,planning_type,starts_at,flexible_date,flexible_start_time,flexible_end_time,final_starts_at,start_location,distance_km,estimated_duration_min,intensity_label,pace_min,pace_max,speed_min,speed_max,max_participants,teaser_photo_url,route_id,created_at")
         .or(`starts_at.gte.${now},starts_at.is.null`)
         .order("starts_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -240,6 +240,7 @@ export default function TrainingsPage() {
                       <p style={styles.meta}>🕒 {time}</p>
                       <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
                       {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
+                      {training.route_id ? <p style={styles.meta}>🧭 Route connected</p> : null}
                       <p style={styles.meta}>⚡ {intensity}</p>
                     </div>
 
@@ -281,28 +282,27 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 16px 42px",
+    padding: "18px 18px 42px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    overflowX: "hidden",
   },
-  shell: { width: "100%", maxWidth: 960, margin: "0 auto", display: "grid", gap: 20, overflow: "hidden" },
+  shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 22 },
   header: { display: "grid", gap: 10 },
   kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  titleRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "end", gap: 12, width: "100%" },
-  title: { margin: 0, fontSize: "clamp(38px, 11vw, 64px)", lineHeight: 0.96, letterSpacing: "-0.065em", minWidth: 0 },
-  subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520, overflowWrap: "break-word" },
+  titleRow: { display: "flex", justifyContent: "space-between", alignItems: "end", gap: 14, flexWrap: "wrap" },
+  title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
+  subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520 },
   filterRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
-  dashboardGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12, marginTop: 2, width: "100%" },
+  dashboardGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 2 },
   dashboardCard: { minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", alignContent: "space-between" },
   dashboardCardWide: { gridColumn: "1 / -1", minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "radial-gradient(circle at 90% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", gap: 5 },
   dashboardLabel: { color: "rgba(255,255,255,0.54)", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.12em" },
   dashboardValue: { fontSize: 36, letterSpacing: "-0.06em", lineHeight: 0.95 },
   dashboardValueSmall: { fontSize: 23, letterSpacing: "-0.045em", lineHeight: 1.05 },
   dashboardHint: { color: "rgba(255,255,255,0.62)", fontSize: 13, fontWeight: 800 },
-  createButton: { ...baseButton, minHeight: 46, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 15px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)", whiteSpace: "nowrap" },
+  createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
   refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
-  carousel: { display: "flex", gap: 14, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", width: "100%", boxSizing: "border-box" },
-  card: { minWidth: "min(326px, calc(100vw - 58px))", maxWidth: "min(326px, calc(100vw - 58px))", minHeight: 444, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
+  carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
+  card: { minWidth: 326, maxWidth: 326, minHeight: 444, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
   imageWrap: { position: "relative", height: 178, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)", backgroundRepeat: "no-repeat" },
   teaser: { width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: 0.92, filter: "saturate(0.96) contrast(1.08) brightness(0.82)" },
   imageOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.55)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)", pointerEvents: "none" },
