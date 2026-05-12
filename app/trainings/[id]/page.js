@@ -10,7 +10,7 @@ import {
   getPrimarySport,
   getSportLabel,
 } from "../../../lib/trainingHelpers";
-import { getSportImage } from "../../../lib/sportImages";
+import { getTrainingHeroImage } from "../../../lib/sportImages";
 
 function makeGoogleMapsUrl(location) {
   if (!location) return null;
@@ -203,7 +203,7 @@ export default function TrainingDetailPage() {
 
   const primarySport = training ? getPrimarySport(training) : "";
   const sportLabel = training ? getSportLabel(primarySport) : "";
-  const sportImage = training ? getSportImage(primarySport, "detail") : null;
+  const sportImage = training ? getTrainingHeroImage(training, primarySport) : null;
   const allSports = Array.isArray(training?.sports)
     ? training.sports.map((sport) => getSportLabel(sport))
     : [];
@@ -241,12 +241,14 @@ export default function TrainingDetailPage() {
         {!loading && training ? (
           <>
             <article style={styles.heroCard}>
-              <div style={styles.heroImageWrap}>
-                <img
-                  src={training.teaser_photo_url || sportImage?.src}
-                  alt=""
-                  style={{ ...styles.teaser, objectPosition: sportImage?.position || "center center" }}
-                />
+              <div
+                style={{
+                  ...styles.heroImageWrap,
+                  backgroundImage: `url("${sportImage?.src}")`,
+                  backgroundSize: "cover",
+                  backgroundPosition: sportImage?.position || "center center",
+                }}
+              >
                 <div style={styles.heroImageOverlay} />
               </div>
 
