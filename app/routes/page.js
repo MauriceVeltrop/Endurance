@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
-import { getTrainingHeroImage } from "../../lib/sportImages";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
 import { makeSvgPolyline, getElevationStats } from "../../lib/routePreview";
 import { analyzeRouteQuality } from "../../lib/routeQuality";
@@ -161,7 +160,6 @@ export default function RoutesPage() {
         {!loading && routes.length > 0 ? (
           <section style={styles.grid}>
             {routes.map((route) => {
-              const image = getTrainingHeroImage(null, route.sport_id);
               const sportLabel = getSportLabel(route.sport_id);
               const previewLine = makeSvgPolyline(route.route_points, 320, 190, 18);
               const elevationStats = getElevationStats(route.route_points);
@@ -181,25 +179,21 @@ export default function RoutesPage() {
                   }}
                   style={styles.routeCard}
                 >
-                  <div
-                    style={{
-                      ...styles.routeImage,
-                      ...(image?.src
-                        ? {
-                            backgroundImage: `url("${image.src}")`,
-                            backgroundSize: "cover",
-                            backgroundPosition: image.position || "center center",
-                          }
-                        : {}),
-                    }}
-                  >
-                    <div style={styles.routeOverlay} />
+                  <div style={styles.routeImage}>
+                    <div style={styles.mapGrid} />
+                    <div style={styles.mapGlow} />
                     {previewLine ? (
                       <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
-                        <polyline points={previewLine} fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-                        <polyline points={previewLine} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={previewLine} fill="none" stroke="rgba(0,0,0,0.72)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={previewLine} fill="none" stroke="#e4ef16" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx={previewLine.split(" ")[0]?.split(",")[0] || 18} cy={previewLine.split(" ")[0]?.split(",")[1] || 18} r="6" fill="#e4ef16" stroke="#111" strokeWidth="3" />
+                        <circle cx={previewLine.split(" ").at(-1)?.split(",")[0] || 302} cy={previewLine.split(" ").at(-1)?.split(",")[1] || 172} r="6" fill="#fff" stroke="#111" strokeWidth="3" />
                       </svg>
-                    ) : null}
+                    ) : (
+                      <div style={styles.emptyMapPreview}>
+                        Import GPX to show route map
+                      </div>
+                    )}
                   </div>
 
                   <div style={styles.routeBody}>
@@ -296,9 +290,11 @@ const styles = {
   primaryButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px" },
   grid: { display: "grid", gap: 16 },
   routeCard: { overflow: "hidden", borderRadius: 32, background: glass, border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
-  routeImage: { position: "relative", height: 190, background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)", backgroundRepeat: "no-repeat" },
-  routeOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
-  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
+  routeImage: { position: "relative", height: 190, overflow: "hidden", background: "linear-gradient(145deg, #0d1812, #050806)", borderBottom: "1px solid rgba(255,255,255,0.08)" },
+  mapGrid: { position: "absolute", inset: 0, opacity: 0.38, backgroundImage: "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "34px 34px" },
+  mapGlow: { position: "absolute", inset: 0, background: "radial-gradient(circle at 74% 20%, rgba(228,239,22,0.18), transparent 36%), radial-gradient(circle at 18% 78%, rgba(255,255,255,0.07), transparent 32%)" },
+  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 14px 28px rgba(228,239,22,0.28))" },
+  emptyMapPreview: { position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "rgba(255,255,255,0.56)", fontWeight: 900 },
   routeBody: { padding: 20, display: "grid", gap: 14 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
