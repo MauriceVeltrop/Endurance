@@ -10,7 +10,7 @@ import {
   getPrimarySport,
   getSportLabel,
 } from "../../lib/trainingHelpers";
-import { getSportImage } from "../../lib/sportImages";
+import { getTrainingHeroImage } from "../../lib/sportImages";
 
 const privilegedRoles = ["admin", "moderator"];
 
@@ -196,7 +196,7 @@ export default function TrainingsPage() {
             {trainings.map((training) => {
               const primarySport = getPrimarySport(training);
               const sportLabel = getSportLabel(primarySport);
-              const sportImage = getSportImage(primarySport, "card");
+              const sportImage = getTrainingHeroImage(training, primarySport);
               const time = formatTrainingTime(training);
               const intensity = formatTrainingIntensity(training);
 
@@ -214,12 +214,14 @@ export default function TrainingsPage() {
                   }}
                   style={styles.card}
                 >
-                  <div style={styles.imageWrap}>
-                    <img
-                      src={training.teaser_photo_url || sportImage.src}
-                      alt=""
-                      style={{ ...styles.teaser, objectPosition: sportImage.position }}
-                    />
+                  <div
+                    style={{
+                      ...styles.imageWrap,
+                      backgroundImage: `url("${sportImage.src}")`,
+                      backgroundSize: "cover",
+                      backgroundPosition: sportImage.position || "center center",
+                    }}
+                  >
                     <div style={styles.imageOverlay} />
                   </div>
 
@@ -296,7 +298,7 @@ const styles = {
   refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
   card: { minWidth: 326, maxWidth: 326, minHeight: 444, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
-  imageWrap: { position: "relative", height: 178, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "#111" },
+  imageWrap: { position: "relative", height: 178, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,0.08)", backgroundColor: "#111", backgroundRepeat: "no-repeat" },
   teaser: { width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: 0.92, filter: "saturate(0.96) contrast(1.08) brightness(0.82)" },
   imageOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.55)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)", pointerEvents: "none" },
   cardContent: { padding: 22, display: "grid", alignContent: "space-between", gap: 20 },
