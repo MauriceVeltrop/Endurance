@@ -10,7 +10,7 @@ import {
   getPrimarySport,
   getSportLabel,
 } from "../../../lib/trainingHelpers";
-import { getTrainingImage } from "../../../lib/sportImages";
+import { getSportImage } from "../../../lib/sportImages";
 
 function makeGoogleMapsUrl(location) {
   if (!location) return null;
@@ -201,8 +201,9 @@ export default function TrainingDetailPage() {
     }
   };
 
-  const sportLabel = training ? getSportLabel(getPrimarySport(training)) : "";
-  const trainingImage = training ? getTrainingImage(training) : null;
+  const primarySport = training ? getPrimarySport(training) : "";
+  const sportLabel = training ? getSportLabel(primarySport) : "";
+  const sportImage = training ? getSportImage(primarySport, "detail") : null;
   const allSports = Array.isArray(training?.sports)
     ? training.sports.map((sport) => getSportLabel(sport))
     : [];
@@ -240,9 +241,13 @@ export default function TrainingDetailPage() {
         {!loading && training ? (
           <>
             <article style={styles.heroCard}>
-              <div style={styles.teaserWrap}>
-                {trainingImage ? <img src={trainingImage} alt="" style={styles.teaser} /> : null}
-                <div style={styles.teaserOverlay} />
+              <div style={styles.heroImageWrap}>
+                <img
+                  src={training.teaser_photo_url || sportImage?.src}
+                  alt=""
+                  style={{ ...styles.teaser, objectPosition: sportImage?.position || "center center" }}
+                />
+                <div style={styles.heroImageOverlay} />
               </div>
 
               <div style={styles.heroContent}>
@@ -453,22 +458,25 @@ const styles = {
     borderRadius: 36,
     overflow: "hidden",
   },
-  teaserWrap: {
+  heroImageWrap: {
     position: "relative",
-    height: 230,
+    height: 260,
     overflow: "hidden",
-    background: "rgba(0,0,0,0.26)",
+    background: "#111",
   },
   teaser: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
     display: "block",
+    opacity: 0.94,
+    filter: "saturate(0.96) contrast(1.08) brightness(0.80)",
   },
-  teaserOverlay: {
+  heroImageOverlay: {
     position: "absolute",
     inset: 0,
-    background: "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.30))",
+    background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.72)), radial-gradient(circle at 82% 12%, rgba(228,239,22,0.20), transparent 34%)",
+    pointerEvents: "none",
   },
   heroContent: {
     padding: 24,
