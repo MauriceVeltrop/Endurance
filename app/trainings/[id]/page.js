@@ -568,6 +568,9 @@ export default function TrainingDetailPage() {
                       {route.distance_km ? `${route.distance_km} km` : "Distance not set"}
                       {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m elevation` : ""}
                     </span>
+                    <Link href={`/routes/${route.id}`} style={styles.inlineLink}>
+                      Open route
+                    </Link>
                     {route.gpx_file_url ? (
                       <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.inlineLink}>
                         Open GPX
