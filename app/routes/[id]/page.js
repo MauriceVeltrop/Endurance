@@ -9,6 +9,7 @@ import { getSportLabel } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
 import { formatRoutePointSummary } from "../../../lib/gpxUtils";
 import { makeSvgPolyline, getRoutePreviewStats, makeElevationPolyline, getElevationStats } from "../../../lib/routePreview";
+import { analyzeRouteQuality } from "../../../lib/routeQuality";
 
 function makeGoogleMapsSearch(title) {
   if (!title) return null;
@@ -108,6 +109,7 @@ export default function RouteDetailPage() {
   const previewPolyline = useMemo(() => makeSvgPolyline(route?.route_points, 320, 180, 18), [route?.route_points]);
   const elevationPolyline = useMemo(() => makeElevationPolyline(route?.route_points, 320, 90, 10), [route?.route_points]);
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
+  const quality = useMemo(() => analyzeRouteQuality(route), [route]);
 
   return (
     <main style={styles.page}>
@@ -255,6 +257,34 @@ export default function RouteDetailPage() {
               )}
             </section>
 
+            <section style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <div style={styles.kicker}>Route quality</div>
+                  <h2 style={styles.panelTitle}>{quality.verdict}</h2>
+                </div>
+                <div style={styles.qualityScore}>{quality.score}</div>
+              </div>
+
+              <div style={styles.qualityChecks}>
+                {quality.checks.map((check) => (
+                  <div key={check.label} style={styles.qualityCheck}>
+                    <span style={check.status === "good" ? styles.checkGood : check.status === "ok" ? styles.checkOk : styles.checkAttention}>
+                      {check.status}
+                    </span>
+                    <strong>{check.label}</strong>
+                    <p>{check.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div style={styles.suggestionBox}>
+                {quality.suggestions.map((suggestion) => (
+                  <p key={suggestion}>{suggestion}</p>
+                ))}
+              </div>
+            </section>
+
             <section style={styles.actionGrid}>
               {route.gpx_file_url ? (
                 <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.actionCard}>
@@ -370,6 +400,13 @@ const styles = {
   elevationChart: { position: "relative", minHeight: 96, borderRadius: 22, overflow: "hidden", background: "linear-gradient(180deg, rgba(228,239,22,0.10), rgba(255,255,255,0.035))", border: "1px solid rgba(255,255,255,0.10)" },
   elevationSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 8, boxSizing: "border-box", filter: "drop-shadow(0 10px 22px rgba(228,239,22,0.16))" },
   elevationStats: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
+  qualityScore: { minWidth: 58, height: 58, borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#101406", fontWeight: 950, fontSize: 24, boxShadow: "0 18px 38px rgba(228,239,22,0.14)" },
+  qualityChecks: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 },
+  qualityCheck: { borderRadius: 20, padding: 13, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gap: 5 },
+  checkGood: { color: "#e4ef16", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 11, fontWeight: 950 },
+  checkOk: { color: "rgba(255,255,255,0.74)", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 11, fontWeight: 950 },
+  checkAttention: { color: "#ffcc66", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 11, fontWeight: 950 },
+  suggestionBox: { borderRadius: 20, padding: 14, background: "rgba(228,239,22,0.08)", border: "1px solid rgba(228,239,22,0.16)", color: "rgba(255,255,255,0.76)", lineHeight: 1.45 },
   actionGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
   actionCard: { minHeight: 96, borderRadius: 24, padding: 14, textDecoration: "none", color: "white", background: glass, border: "1px solid rgba(255,255,255,0.12)", display: "grid", gap: 8 },
   actionCardMuted: { minHeight: 96, borderRadius: 24, padding: 14, color: "rgba(255,255,255,0.54)", background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gap: 8 },
