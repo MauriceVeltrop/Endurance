@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { getSportLabel } from "../../../lib/trainingHelpers";
 
 const sportOptions = [
   { id: "running", label: "Running", route: true, workout: false, metric: "pace" },
@@ -36,6 +37,7 @@ export default function CreateTrainingPage() {
 
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
+  const [savedRoutes, setSavedRoutes] = useState([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -63,6 +65,7 @@ export default function CreateTrainingPage() {
     speed_max: "",
 
     max_participants: "",
+    route_id: "",
     is_outdoor: true,
   });
 
@@ -88,6 +91,11 @@ export default function CreateTrainingPage() {
   const usesSpeed = selectedSports.some((sport) => sport.metric === "speed");
   const usesIntensity =
     selectedSports.some((sport) => sport.metric === "intensity") && !usesPace && !usesSpeed;
+
+  const compatibleRoutes = useMemo(() => {
+    if (!supportsRoutes) return [];
+    return savedRoutes.filter((route) => form.sports.includes(route.sport_id));
+  }, [savedRoutes, form.sports, supportsRoutes]);
 
   useEffect(() => {
     const loadPreferredSports = async () => {
@@ -126,6 +134,23 @@ export default function CreateTrainingPage() {
         const ids = (sportsRows || []).map((row) => row.sport_id);
         setAllowedSportIds(ids);
 
+        const { data: routeRows, error: routeError } = await supabase
+          .from("routes")
+          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility,creator_id")
+          .or(`visibility.eq.public,creator_id.eq.${user.id}`)
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(80);
+
+        if (routeError) {
+          console.warn("Routes skipped", routeError);
+          setSavedRoutes([]);
+        } else {
+          setSavedRoutes(
+            (routeRows || []).filter((route) => ids.includes(route.sport_id) || route.creator_id === user.id)
+          );
+        }
+
         if (!ids.length) {
           setForm((current) => ({
             ...current,
@@ -148,6 +173,7 @@ export default function CreateTrainingPage() {
             : [firstAllowed],
           title: current.titleEdited ? current.title : firstTitle,
           titleEdited: current.titleEdited,
+          route_id: current.route_id,
         }));
       } catch (err) {
         console.error("Preferred sports load error", err);
@@ -178,9 +204,14 @@ export default function CreateTrainingPage() {
         (sport) => updatedSports.includes(sport.id) && allowedSportIds.includes(sport.id)
       );
 
+      const routeStillMatches = savedRoutes.some(
+        (route) => route.id === current.route_id && updatedSports.includes(route.sport_id)
+      );
+
       return {
         ...current,
         sports: updatedSports,
+        route_id: routeStillMatches ? current.route_id : "",
         title: current.titleEdited
           ? current.title
           : makeAutomaticTitle(updatedSelectedSports),
@@ -273,6 +304,7 @@ export default function CreateTrainingPage() {
         speed_max: usesSpeed && form.speed_max ? Number(form.speed_max) : null,
 
         max_participants: form.max_participants ? Number(form.max_participants) : null,
+        route_id: form.route_id || null,
       };
 
       const { data, error } = await supabase
@@ -603,10 +635,49 @@ export default function CreateTrainingPage() {
             </section>
 
             {supportsRoutes ? (
-              <section style={styles.infoCard}>
-                <div style={styles.infoTitle}>Route options</div>
+              <section style={styles.section}>
+                <div style={styles.sectionTitle}>6. Route</div>
+
+                {compatibleRoutes.length ? (
+                  <label style={styles.label}>
+                    Use saved route
+                    <select
+                      value={form.route_id}
+                      onChange={(event) => {
+                        const routeId = event.target.value;
+                        const route = compatibleRoutes.find((item) => item.id === routeId);
+
+                        setForm((current) => ({
+                          ...current,
+                          route_id: routeId,
+                          distance_km: route?.distance_km || current.distance_km,
+                        }));
+                      }}
+                      style={styles.input}
+                    >
+                      <option value="">No route selected</option>
+                      {compatibleRoutes.map((route) => (
+                        <option key={route.id} value={route.id}>
+                          {route.title} · {getSportLabel(route.sport_id)}
+                          {route.distance_km ? ` · ${route.distance_km} km` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div style={styles.infoCard}>
+                    <div style={styles.infoTitle}>No saved route yet</div>
+                    <p style={styles.hint}>
+                      Create a route first, then connect it to this training. You can still create this training without a route.
+                    </p>
+                    <button type="button" onClick={() => router.push("/routes/new")} style={styles.secondaryButton}>
+                      Create route
+                    </button>
+                  </div>
+                )}
+
                 <p style={styles.hint}>
-                  This sport supports routes. Upload GPX, saved routes and Route Wizard come in the route module.
+                  Route Wizard and GPX upload will build on this route connection.
                 </p>
               </section>
             ) : null}
@@ -832,6 +903,17 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.18)",
     color: "rgba(255,255,255,0.82)",
     lineHeight: 1.45,
+  },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "white",
+    fontWeight: 950,
+    padding: "0 16px",
+    cursor: "pointer",
+    width: "fit-content",
   },
   submitButton: {
     width: "100%",
