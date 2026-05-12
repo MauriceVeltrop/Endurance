@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
@@ -9,11 +8,6 @@ import { getSportLabel } from "../../lib/trainingHelpers";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
 import { makeSvgPolyline, getElevationStats } from "../../lib/routePreview";
 import { analyzeRouteQuality } from "../../lib/routeQuality";
-
-const RouteCardMapPreview = dynamic(
-  () => import("../../components/routes/RouteCardMapPreview"),
-  { ssr: false }
-);
 
 export default function RoutesPage() {
   const router = useRouter();
@@ -185,25 +179,36 @@ export default function RoutesPage() {
                   }}
                   style={styles.routeCard}
                 >
-                  <div
-                    style={{
-                      ...styles.routeImage,
-                      ...(image?.src
-                        ? {
-                            backgroundImage: `url("${image.src}")`,
-                            backgroundSize: "cover",
-                            backgroundPosition: image.position || "center center",
-                          }
-                        : {}),
-                    }}
-                  >
-                    <div style={styles.routeOverlay} />
+                  <div style={styles.routeImage}>
+                    <div style={styles.mapTexture} />
+
                     {previewLine ? (
-                      <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
-                        <polyline points={previewLine} fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-                        <polyline points={previewLine} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                      <svg
+                        viewBox="0 0 320 190"
+                        preserveAspectRatio="xMidYMid meet"
+                        style={styles.routeSvg}
+                      >
+                        <polyline
+                          points={previewLine}
+                          fill="none"
+                          stroke="rgba(0,0,0,0.58)"
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+
+                        <polyline
+                          points={previewLine}
+                          fill="none"
+                          stroke="#e4ef16"
+                          strokeWidth="6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     ) : null}
+
+                    <div style={styles.routeOverlay} />
                   </div>
 
                   <div style={styles.routeBody}>
