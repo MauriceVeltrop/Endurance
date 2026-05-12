@@ -6,6 +6,7 @@ import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
+import { formatRoutePointSummary } from "../../lib/gpxUtils";
 
 export default function RoutesPage() {
   const router = useRouter();
@@ -63,7 +64,7 @@ export default function RoutesPage() {
 
       const { data, error } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
         .or(`visibility.eq.public,creator_id.eq.${user.id}`)
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -202,7 +203,8 @@ export default function RoutesPage() {
                     <div style={styles.routeFacts}>
                       <span>↗ {route.distance_km ? `${route.distance_km} km` : "Distance not set"}</span>
                       <span>⛰ {route.elevation_gain_m ? `${route.elevation_gain_m} m` : "Elevation not set"}</span>
-                      <span>{route.gpx_file_url ? "GPX linked" : "No GPX yet"}</span>
+                      <span>{formatRoutePointSummary(route.route_points)}</span>
+                      <span>{route.gpx_file_url ? "GPX linked" : "No GPX link"}</span>
                     </div>
 
                     <div style={styles.cardActions}>
