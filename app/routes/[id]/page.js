@@ -7,6 +7,7 @@ import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
+import { formatRoutePointSummary } from "../../../lib/gpxUtils";
 
 function makeGoogleMapsSearch(title) {
   if (!title) return null;
@@ -211,7 +212,7 @@ export default function RouteDetailPage() {
               </div>
 
               <p style={styles.panelText}>
-                This placeholder will be replaced by the GPX route viewer and route point editor. The saved route already has the correct database connection for training sessions.
+                {formatRoutePointSummary(route.route_points)}. GPX route viewer and route point editing come next.
               </p>
             </section>
 
