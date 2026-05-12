@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
+import { makeSvgPolyline } from "../../lib/routePreview";
 
 export default function RoutesPage() {
   const router = useRouter();
@@ -161,6 +162,7 @@ export default function RoutesPage() {
             {routes.map((route) => {
               const image = getTrainingHeroImage(null, route.sport_id);
               const sportLabel = getSportLabel(route.sport_id);
+              const previewLine = makeSvgPolyline(route.route_points, 320, 190, 18);
 
               return (
                 <article
@@ -189,6 +191,12 @@ export default function RoutesPage() {
                     }}
                   >
                     <div style={styles.routeOverlay} />
+                    {previewLine ? (
+                      <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
+                        <polyline points={previewLine} fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={previewLine} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
                   </div>
 
                   <div style={styles.routeBody}>
@@ -285,6 +293,7 @@ const styles = {
   routeCard: { overflow: "hidden", borderRadius: 32, background: glass, border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
   routeImage: { position: "relative", height: 190, background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)", backgroundRepeat: "no-repeat" },
   routeOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
+  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
   routeBody: { padding: 20, display: "grid", gap: 14 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
