@@ -19,8 +19,6 @@ export default function AppHeader({ profile, compact = false }) {
       </button>
 
       <div style={styles.actions}>
-        {profile?.role ? <span style={styles.roleBadge}>{profile.role}</span> : null}
-
         <button type="button" onClick={() => router.push("/routes")} style={styles.navButton} aria-label="Open routes">
           Routes
         </button>
@@ -72,10 +70,12 @@ const styles = {
     gap: 14,
   },
   headerCompact: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
+    gap: 10,
+    width: "100%",
+    overflow: "hidden",
   },
   logoButton: {
     ...baseButton,
@@ -84,7 +84,7 @@ const styles = {
     lineHeight: 0,
   },
   logo: {
-    width: "min(220px, 54vw)",
+    width: "min(190px, 44vw)",
     height: "auto",
     display: "block",
     filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.12))",
@@ -92,7 +92,9 @@ const styles = {
   actions: {
     display: "flex",
     alignItems: "center",
-    gap: 9,
+    justifyContent: "flex-end",
+    gap: 6,
+    minWidth: 0,
   },
   roleBadge: {
     display: "inline-flex",
@@ -111,11 +113,12 @@ const styles = {
     ...baseButton,
     minHeight: 34,
     borderRadius: 999,
-    padding: "0 11px",
+    padding: "0 10px",
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.12)",
     color: "rgba(255,255,255,0.86)",
     fontSize: 12,
+    whiteSpace: "nowrap",
   },
   adminButton: {
     ...baseButton,
@@ -129,8 +132,8 @@ const styles = {
   },
   avatarButton: {
     ...baseButton,
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 999,
     overflow: "hidden",
     padding: 0,
@@ -155,8 +158,8 @@ const styles = {
   },
   logoutButton: {
     ...baseButton,
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 999,
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.14)",
