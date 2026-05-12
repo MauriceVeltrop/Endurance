@@ -8,6 +8,7 @@ import { getSportLabel } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
 import { makeSvgPolyline, getElevationStats } from "../../lib/routePreview";
+import { analyzeRouteQuality } from "../../lib/routeQuality";
 
 export default function RoutesPage() {
   const router = useRouter();
@@ -164,6 +165,7 @@ export default function RoutesPage() {
               const sportLabel = getSportLabel(route.sport_id);
               const previewLine = makeSvgPolyline(route.route_points, 320, 190, 18);
               const elevationStats = getElevationStats(route.route_points);
+              const quality = analyzeRouteQuality(route);
 
               return (
                 <article
@@ -204,6 +206,7 @@ export default function RoutesPage() {
                     <div style={styles.cardTop}>
                       <span style={styles.sportBadge}>{sportLabel}</span>
                       <span style={styles.visibilityBadge}>{route.visibility}</span>
+                      <span style={styles.qualityMini}>{quality.score}</span>
                     </div>
 
                     <h2 style={styles.cardTitle}>{route.title}</h2>
@@ -300,6 +303,7 @@ const styles = {
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
   visibilityBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.80)", textTransform: "capitalize", fontWeight: 900 },
+  qualityMini: { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 34, height: 34, borderRadius: 999, background: "#e4ef16", color: "#101406", fontWeight: 950 },
   cardTitle: { margin: 0, fontSize: 30, letterSpacing: "-0.055em", lineHeight: 1 },
   cardText: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 },
   routeFacts: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontWeight: 750 },
