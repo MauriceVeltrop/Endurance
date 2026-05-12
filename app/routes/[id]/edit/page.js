@@ -9,6 +9,7 @@ import { sportOptions } from "../../../../lib/sportsConfig";
 import { getSportLabel } from "../../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../../lib/sportImages";
 import { parseGpxText, formatRoutePointSummary } from "../../../../lib/gpxUtils";
+import { makeSvgPolyline } from "../../../../lib/routePreview";
 
 const routeSports = sportOptions.filter((sport) => sport.route);
 
@@ -42,6 +43,7 @@ export default function EditRoutePage() {
 
   const selectedSport = availableSports.find((sport) => sport.id === form.sport_id);
   const hero = getTrainingHeroImage(null, form.sport_id);
+  const previewPolyline = useMemo(() => makeSvgPolyline(form.route_points, 320, 220, 18), [form.route_points]);
   const canEdit = Boolean(profile?.id && originalRoute?.creator_id === profile.id);
 
   const loadRoute = async () => {
@@ -251,6 +253,12 @@ export default function EditRoutePage() {
             }}
           >
             <div style={styles.previewOverlay} />
+            {previewPolyline ? (
+              <svg viewBox="0 0 320 220" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
+                <polyline points={previewPolyline} fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={previewPolyline} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : null}
           </div>
           <div style={styles.previewBody}>
             <span style={styles.sportBadge}>{selectedSport?.label || getSportLabel(form.sport_id) || "Route sport"}</span>
@@ -383,6 +391,7 @@ const styles = {
   previewCard: { overflow: "hidden", borderRadius: 32, background: glass, border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
   previewImage: { position: "relative", height: 220, background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)" },
   previewOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
+  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
   previewBody: { padding: 20, display: "grid", gap: 10 },
   sportBadge: { display: "inline-flex", width: "fit-content", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
   previewTitle: { margin: 0, fontSize: 32, letterSpacing: "-0.055em" },
