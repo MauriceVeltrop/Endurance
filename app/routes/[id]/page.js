@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
 import { formatRoutePointSummary } from "../../../lib/gpxUtils";
+import { makeSvgPolyline, getRoutePreviewStats } from "../../../lib/routePreview";
 
 function makeGoogleMapsSearch(title) {
   if (!title) return null;
@@ -102,12 +103,9 @@ export default function RouteDetailPage() {
   const mapsUrl = route ? makeGoogleMapsSearch(route.title) : null;
   const canEdit = Boolean(profile?.id && route?.creator_id === profile.id);
 
-  const routePointCount = useMemo(() => {
-    if (!route?.route_points) return 0;
-    if (Array.isArray(route.route_points)) return route.route_points.length;
-    if (Array.isArray(route.route_points?.points)) return route.route_points.points.length;
-    return 0;
-  }, [route?.route_points]);
+  const routePointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
+  const routePointCount = routePointStats.pointCount;
+  const previewPolyline = useMemo(() => makeSvgPolyline(route?.route_points, 320, 180, 18), [route?.route_points]);
 
   return (
     <main style={styles.page}>
@@ -206,13 +204,23 @@ export default function RouteDetailPage() {
               </div>
 
               <div style={styles.routePreview}>
-                <div style={styles.routeLine} />
-                <div style={styles.routeNodeStart} />
-                <div style={styles.routeNodeEnd} />
+                {previewPolyline ? (
+                  <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
+                    <polyline points={previewPolyline} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points={previewPolyline} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <>
+                    <div style={styles.routeLine} />
+                    <div style={styles.routeNodeStart} />
+                    <div style={styles.routeNodeEnd} />
+                  </>
+                )}
               </div>
 
               <p style={styles.panelText}>
-                {formatRoutePointSummary(route.route_points)}. GPX route viewer and route point editing come next.
+                {formatRoutePointSummary(route.route_points)}
+                {routePointStats.hasElevation ? " · elevation data available" : ""}. Route point editing comes next.
               </p>
             </section>
 
@@ -324,6 +332,7 @@ const styles = {
   panelTitle: { margin: 0, fontSize: 26, letterSpacing: "-0.045em" },
   panelText: { margin: 0, color: "rgba(255,255,255,0.66)", lineHeight: 1.5 },
   routePreview: { position: "relative", minHeight: 170, borderRadius: 26, overflow: "hidden", background: "radial-gradient(circle at 82% 18%, rgba(228,239,22,0.14), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025))", border: "1px solid rgba(255,255,255,0.10)" },
+  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.18))" },
   routeLine: { position: "absolute", left: "12%", right: "12%", top: "55%", height: 5, borderRadius: 999, background: "linear-gradient(90deg, rgba(228,239,22,0.95), rgba(255,255,255,0.35))", transform: "rotate(-8deg)" },
   routeNodeStart: { position: "absolute", left: "12%", top: "54%", width: 16, height: 16, borderRadius: 999, background: "#e4ef16", boxShadow: "0 0 24px rgba(228,239,22,0.55)" },
   routeNodeEnd: { position: "absolute", right: "12%", top: "45%", width: 16, height: 16, borderRadius: 999, background: "white", boxShadow: "0 0 24px rgba(255,255,255,0.35)" },
