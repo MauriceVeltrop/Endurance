@@ -10,6 +10,7 @@ import {
   getPrimarySport,
   getSportLabel,
 } from "../../lib/trainingHelpers";
+import { getTrainingImage } from "../../lib/sportImages";
 
 const privilegedRoles = ["admin", "moderator"];
 
@@ -188,6 +189,7 @@ export default function TrainingsPage() {
           <section style={styles.carousel}>
             {trainings.map((training) => {
               const sportLabel = getSportLabel(getPrimarySport(training));
+              const trainingImage = getTrainingImage(training);
               const time = formatTrainingTime(training);
               const intensity = formatTrainingIntensity(training);
 
@@ -205,13 +207,10 @@ export default function TrainingsPage() {
                   }}
                   style={styles.card}
                 >
-                  {training.teaser_photo_url ? (
-                    <img src={training.teaser_photo_url} alt="" style={styles.teaser} />
-                  ) : (
-                    <div style={styles.teaserFallback}>
-                      <div style={styles.pulseLine} />
-                    </div>
-                  )}
+                  <div style={styles.teaserWrap}>
+                    <img src={trainingImage} alt="" style={styles.teaser} />
+                    <div style={styles.teaserShade} />
+                  </div>
 
                   <div style={styles.cardContent}>
                     <div>
@@ -274,7 +273,7 @@ const styles = {
   titleRow: { display: "flex", justifyContent: "space-between", alignItems: "end", gap: 14, flexWrap: "wrap" },
   title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 520 },
-  actionRow: { display: "flex", justifyContent: "flex-start", alignItems: "center", gap: 10, marginTop: 8 },
+  actionRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 6 },
   dashboardGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 2 },
   dashboardCard: { minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", alignContent: "space-between" },
   dashboardCardWide: { gridColumn: "1 / -1", minHeight: 104, borderRadius: 26, padding: 16, boxSizing: "border-box", background: "radial-gradient(circle at 90% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 18px 46px rgba(0,0,0,0.22)", display: "grid", gap: 5 },
@@ -286,9 +285,9 @@ const styles = {
   refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
   card: { minWidth: 306, maxWidth: 306, minHeight: 300, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
-  teaser: { width: "100%", height: 118, objectFit: "cover", display: "block", opacity: 0.92 },
-  teaserFallback: { height: 118, position: "relative", overflow: "hidden", background: "radial-gradient(circle at 76% 20%, rgba(228,239,22,0.25), transparent 30%), linear-gradient(135deg, rgba(228,239,22,0.11), rgba(255,255,255,0.035))", borderBottom: "1px solid rgba(255,255,255,0.08)" },
-  pulseLine: { position: "absolute", left: 18, right: 18, top: 56, height: 3, borderRadius: 999, background: "linear-gradient(90deg, rgba(228,239,22,0), rgba(228,239,22,0.95), rgba(255,255,255,0.70), rgba(228,239,22,0))", boxShadow: "0 0 28px rgba(228,239,22,0.26)" },
+  teaserWrap: { position: "relative", height: 132, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,0.08)" },
+  teaser: { width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: 0.96, transform: "scale(1.01)" },
+  teaserShade: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.34))" },
   cardContent: { padding: 22, display: "grid", alignContent: "space-between", gap: 20 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", width: "fit-content", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950, fontSize: 13 },
