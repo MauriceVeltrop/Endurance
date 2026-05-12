@@ -10,6 +10,7 @@ import {
   getPrimarySport,
   getSportLabel,
 } from "../../../lib/trainingHelpers";
+import { getTrainingImage } from "../../../lib/sportImages";
 
 function makeGoogleMapsUrl(location) {
   if (!location) return null;
@@ -201,6 +202,7 @@ export default function TrainingDetailPage() {
   };
 
   const sportLabel = training ? getSportLabel(getPrimarySport(training)) : "";
+  const trainingImage = training ? getTrainingImage(training) : null;
   const allSports = Array.isArray(training?.sports)
     ? training.sports.map((sport) => getSportLabel(sport))
     : [];
@@ -238,13 +240,10 @@ export default function TrainingDetailPage() {
         {!loading && training ? (
           <>
             <article style={styles.heroCard}>
-              {training.teaser_photo_url ? (
-                <img src={training.teaser_photo_url} alt="" style={styles.teaser} />
-              ) : (
-                <div style={styles.teaserFallback}>
-                  <span>ENDURANCE</span>
-                </div>
-              )}
+              <div style={styles.teaserWrap}>
+                {trainingImage ? <img src={trainingImage} alt="" style={styles.teaser} /> : null}
+                <div style={styles.teaserOverlay} />
+              </div>
 
               <div style={styles.heroContent}>
                 <div style={styles.topRow}>
@@ -454,21 +453,22 @@ const styles = {
     borderRadius: 36,
     overflow: "hidden",
   },
+  teaserWrap: {
+    position: "relative",
+    height: 230,
+    overflow: "hidden",
+    background: "rgba(0,0,0,0.26)",
+  },
   teaser: {
     width: "100%",
-    height: 230,
+    height: "100%",
     objectFit: "cover",
     display: "block",
   },
-  teaserFallback: {
-    height: 160,
-    display: "grid",
-    placeItems: "center",
-    background:
-      "radial-gradient(circle at center, rgba(228,239,22,0.14), transparent 45%), rgba(0,0,0,0.26)",
-    color: "rgba(228,239,22,0.72)",
-    fontWeight: 950,
-    letterSpacing: "0.18em",
+  teaserOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.30))",
   },
   heroContent: {
     padding: 24,
