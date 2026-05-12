@@ -7,7 +7,7 @@ import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
-import { makeSvgPolyline } from "../../lib/routePreview";
+import { makeSvgPolyline, getElevationStats } from "../../lib/routePreview";
 
 export default function RoutesPage() {
   const router = useRouter();
@@ -163,6 +163,7 @@ export default function RoutesPage() {
               const image = getTrainingHeroImage(null, route.sport_id);
               const sportLabel = getSportLabel(route.sport_id);
               const previewLine = makeSvgPolyline(route.route_points, 320, 190, 18);
+              const elevationStats = getElevationStats(route.route_points);
 
               return (
                 <article
@@ -212,6 +213,7 @@ export default function RoutesPage() {
                       <span>↗ {route.distance_km ? `${route.distance_km} km` : "Distance not set"}</span>
                       <span>⛰ {route.elevation_gain_m ? `${route.elevation_gain_m} m` : "Elevation not set"}</span>
                       <span>{formatRoutePointSummary(route.route_points)}</span>
+                      <span>{elevationStats.available ? `Elevation ${elevationStats.min}-${elevationStats.max} m` : "No elevation profile"}</span>
                       <span>{route.gpx_file_url ? "GPX linked" : "No GPX link"}</span>
                     </div>
 
