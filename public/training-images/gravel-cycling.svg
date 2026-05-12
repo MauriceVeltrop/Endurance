@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Bootcamp training image">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Gravel Cycling training image">
 <defs>
   <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-    <stop offset="0" stop-color="#24301b"/>
+    <stop offset="0" stop-color="#29301d"/>
     <stop offset="0.55" stop-color="#132116"/>
     <stop offset="1" stop-color="#050706"/>
   </linearGradient>
@@ -16,9 +16,9 @@
 <rect width="1200" height="700" fill="url(#bg)"/>
 <rect width="1200" height="700" fill="url(#glow)"/>
 <path d="M0 550 C190 470 330 610 510 520 C690 430 810 520 1200 405 L1200 700 L0 700 Z" fill="#000" opacity=".38"/>
-<path d="M75 550 C230 500 350 575 520 520 C720 455 860 555 1120 495" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
+<path d="M70 555 C190 510 285 575 420 520 C585 455 765 585 1120 510" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
 <g opacity=".14" filter="url(#soft)"><circle cx="930" cy="150" r="145" fill="#e4ef16"/></g>
-<g opacity=".34" fill="#2e4827"><path d="M120 515 l115 -220 120 220z"/><path d="M860 515 l145 -265 150 265z"/></g><g fill="none" stroke="#f5f7dc" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".88" transform="translate(390 150)"><circle cx="210" cy="60" r="34" fill="#f5f7dc" stroke="none"/><path d="M185 115 L150 230 L225 270 L305 370"/><path d="M153 230 L80 345"/><path d="M193 130 L100 170"/><path d="M205 132 L310 155"/><path d="M40 430 H430"/></g>
+<g opacity=".35" fill="#9b8c5b"><circle cx="155" cy="545" r="13"/><circle cx="245" cy="510" r="9"/><circle cx="930" cy="535" r="14"/><circle cx="1030" cy="500" r="8"/></g><g fill="none" stroke="#f5f7dc" stroke-width="19" stroke-linecap="round" stroke-linejoin="round" opacity=".88" transform="translate(250 170)"><circle cx="155" cy="315" r="92"/><circle cx="575" cy="315" r="92"/><path d="M155 315 L310 160 L380 315 L155 315 M380 315 L575 315 L450 160 L310 160"/><circle cx="360" cy="58" r="32" fill="#f5f7dc" stroke="none"/><path d="M343 96 L310 160 L450 160 L525 218"/><path d="M450 160 L512 105"/></g>
 <rect x="0" y="0" width="1200" height="700" fill="url(#fade)" opacity="0"/>
 <rect width="1200" height="700" fill="#000" opacity=".08"/>
 </svg>

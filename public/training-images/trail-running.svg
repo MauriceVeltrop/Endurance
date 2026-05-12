@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Bootcamp training image">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Trail Running training image">
 <defs>
   <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-    <stop offset="0" stop-color="#24301b"/>
+    <stop offset="0" stop-color="#1a3c21"/>
     <stop offset="0.55" stop-color="#132116"/>
     <stop offset="1" stop-color="#050706"/>
   </linearGradient>
@@ -16,9 +16,9 @@
 <rect width="1200" height="700" fill="url(#bg)"/>
 <rect width="1200" height="700" fill="url(#glow)"/>
 <path d="M0 550 C190 470 330 610 510 520 C690 430 810 520 1200 405 L1200 700 L0 700 Z" fill="#000" opacity=".38"/>
-<path d="M75 550 C230 500 350 575 520 520 C720 455 860 555 1120 495" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
+<path d="M80 560 C220 498 360 612 500 510 C650 402 820 495 1110 420" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
 <g opacity=".14" filter="url(#soft)"><circle cx="930" cy="150" r="145" fill="#e4ef16"/></g>
-<g opacity=".34" fill="#2e4827"><path d="M120 515 l115 -220 120 220z"/><path d="M860 515 l145 -265 150 265z"/></g><g fill="none" stroke="#f5f7dc" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".88" transform="translate(390 150)"><circle cx="210" cy="60" r="34" fill="#f5f7dc" stroke="none"/><path d="M185 115 L150 230 L225 270 L305 370"/><path d="M153 230 L80 345"/><path d="M193 130 L100 170"/><path d="M205 132 L310 155"/><path d="M40 430 H430"/></g>
+<g opacity=".65" fill="#263f26"><path d="M100 520 l120 -230 120 230z"/><path d="M780 520 l150 -285 155 285z"/><path d="M580 520 l95 -190 105 190z"/></g><g fill="none" stroke="#f5f7dc" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".86" transform="translate(470 145) rotate(-8)"><circle cx="160" cy="65" r="34" fill="#f5f7dc" stroke="none"/><path d="M145 122 L90 210 L178 245 L235 350"/><path d="M96 208 L18 295"/><path d="M176 244 L100 365"/><path d="M150 138 L250 158 L310 105"/></g>
 <rect x="0" y="0" width="1200" height="700" fill="url(#fade)" opacity="0"/>
 <rect width="1200" height="700" fill="#000" opacity=".08"/>
 </svg>

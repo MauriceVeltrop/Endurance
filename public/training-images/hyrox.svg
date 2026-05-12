@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Bootcamp training image">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="HYROX training image">
 <defs>
   <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-    <stop offset="0" stop-color="#24301b"/>
+    <stop offset="0" stop-color="#302c18"/>
     <stop offset="0.55" stop-color="#132116"/>
     <stop offset="1" stop-color="#050706"/>
   </linearGradient>
@@ -16,9 +16,9 @@
 <rect width="1200" height="700" fill="url(#bg)"/>
 <rect width="1200" height="700" fill="url(#glow)"/>
 <path d="M0 550 C190 470 330 610 510 520 C690 430 810 520 1200 405 L1200 700 L0 700 Z" fill="#000" opacity=".38"/>
-<path d="M75 550 C230 500 350 575 520 520 C720 455 860 555 1120 495" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
+<path d="M85 545 C260 510 395 570 555 520 C725 465 875 550 1120 510" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" opacity=".9"/>
 <g opacity=".14" filter="url(#soft)"><circle cx="930" cy="150" r="145" fill="#e4ef16"/></g>
-<g opacity=".34" fill="#2e4827"><path d="M120 515 l115 -220 120 220z"/><path d="M860 515 l145 -265 150 265z"/></g><g fill="none" stroke="#f5f7dc" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".88" transform="translate(390 150)"><circle cx="210" cy="60" r="34" fill="#f5f7dc" stroke="none"/><path d="M185 115 L150 230 L225 270 L305 370"/><path d="M153 230 L80 345"/><path d="M193 130 L100 170"/><path d="M205 132 L310 155"/><path d="M40 430 H430"/></g>
+<g fill="none" stroke="#f5f7dc" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".88" transform="translate(350 145)"><circle cx="250" cy="62" r="36" fill="#f5f7dc" stroke="none"/><path d="M225 118 L190 250 L260 284 L320 400"/><path d="M195 250 L105 360"/><path d="M230 138 L130 160 L88 225"/><path d="M245 145 L342 180 L410 145"/><rect x="35" y="388" width="430" height="42" rx="20" fill="#e4ef16" stroke="none" opacity=".7"/></g>
 <rect x="0" y="0" width="1200" height="700" fill="url(#fade)" opacity="0"/>
 <rect width="1200" height="700" fill="#000" opacity=".08"/>
 </svg>
