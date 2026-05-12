@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import OSMRouteMap from "../../../components/OSMRouteMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
@@ -198,6 +199,21 @@ export default function RouteDetailPage() {
                 </div>
               </div>
             </article>
+
+            <section style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <div style={styles.kicker}>OpenStreetMap</div>
+                  <h2 style={styles.panelTitle}>Route on the map</h2>
+                </div>
+              </div>
+
+              <OSMRouteMap routePoints={route.route_points} title={route.title} />
+
+              <p style={styles.panelText}>
+                The imported GPX route is rendered directly on OpenStreetMap with start and finish markers.
+              </p>
+            </section>
 
             <section style={styles.panel}>
               <div style={styles.panelHeader}>
