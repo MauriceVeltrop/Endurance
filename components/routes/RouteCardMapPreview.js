@@ -1,10 +1,5 @@
 "use client";
 
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from "react-leaflet";
-import L from "leaflet";
-import { useEffect, useMemo } from "react";
-import "leaflet/dist/leaflet.css";
-
 function normalizePoints(routePoints) {
   if (!routePoints) return [];
 
@@ -22,103 +17,95 @@ function normalizePoints(routePoints) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 }
 
-function FitBounds({ positions }) {
-  const map = useMap();
+function createPolyline(points, width = 320, height = 190, padding = 16) {
+  if (!points?.length) return "";
 
-  useEffect(() => {
-    if (!positions?.length) return;
+  const lats = points.map((p) => p.lat);
+  const lngs = points.map((p) => p.lng);
 
-    const bounds = L.latLngBounds(positions);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
 
-    setTimeout(() => {
-      map.invalidateSize(true);
-      map.fitBounds(bounds, {
-        padding: [18, 18],
-        maxZoom: 15,
-        animate: false,
-      });
-    }, 150);
-  }, [map, positions]);
+  const latRange = maxLat - minLat || 0.01;
+  const lngRange = maxLng - minLng || 0.01;
 
-  return null;
+  return points.map((p) => {
+    const x =
+      padding +
+      ((p.lng - minLng) / lngRange) * (width - padding * 2);
+
+    const y =
+      height -
+      padding -
+      ((p.lat - minLat) / latRange) * (height - padding * 2);
+
+    return `${x},${y}`;
+  }).join(" ");
 }
 
 export default function RouteCardMapPreview({ routePoints }) {
-  const positions = useMemo(() => {
-    return normalizePoints(routePoints).map((point) => [point.lat, point.lng]);
-  }, [routePoints]);
+  const points = normalizePoints(routePoints);
 
-  if (positions.length < 2) {
+  if (points.length < 2) {
     return (
       <div style={styles.empty}>
-        Import GPX to show route map
+        No route preview
       </div>
     );
   }
 
-  const start = positions[0];
-  const finish = positions[positions.length - 1];
+  const polyline = createPolyline(points);
+
+  const start = polyline.split(" ")[0]?.split(",");
+  const finish = polyline.split(" ").at(-1)?.split(",");
 
   return (
     <div style={styles.wrapper}>
-      <MapContainer
-        center={start}
-        zoom={13}
-        scrollWheelZoom={false}
-        dragging={false}
-        zoomControl={false}
-        doubleClickZoom={false}
-        attributionControl={false}
-        style={styles.map}
+      <div style={styles.mapTexture} />
+
+      <svg
+        viewBox="0 0 320 190"
+        preserveAspectRatio="xMidYMid meet"
+        style={styles.svg}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-        <Polyline
-          positions={positions}
-          pathOptions={{
-            color: "#000000",
-            weight: 10,
-            opacity: 0.55,
-            lineCap: "round",
-            lineJoin: "round",
-          }}
+        <polyline
+          points={polyline}
+          fill="none"
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
 
-        <Polyline
-          positions={positions}
-          pathOptions={{
-            color: "#e4ef16",
-            weight: 5,
-            opacity: 1,
-            lineCap: "round",
-            lineJoin: "round",
-          }}
+        <polyline
+          points={polyline}
+          fill="none"
+          stroke="#e4ef16"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
 
-        <CircleMarker
-          center={start}
-          radius={6}
-          pathOptions={{
-            color: "#101406",
-            weight: 3,
-            fillColor: "#e4ef16",
-            fillOpacity: 1,
-          }}
+        <circle
+          cx={start?.[0]}
+          cy={start?.[1]}
+          r="6"
+          fill="#e4ef16"
+          stroke="#111"
+          strokeWidth="3"
         />
 
-        <CircleMarker
-          center={finish}
-          radius={6}
-          pathOptions={{
-            color: "#101406",
-            weight: 3,
-            fillColor: "#ffffff",
-            fillOpacity: 1,
-          }}
+        <circle
+          cx={finish?.[0]}
+          cy={finish?.[1]}
+          r="6"
+          fill="#ffffff"
+          stroke="#111"
+          strokeWidth="3"
         />
-
-        <FitBounds positions={positions} />
-      </MapContainer>
+      </svg>
 
       <div style={styles.overlay} />
     </div>
@@ -129,29 +116,44 @@ const styles = {
   wrapper: {
     position: "relative",
     height: 210,
-    width: "100%",
     overflow: "hidden",
-    background: "#050805",
+    background:
+      "linear-gradient(145deg,#0d120d,#040604)",
   },
-  map: {
-    height: "100%",
+
+  mapTexture: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0.22,
+    backgroundImage:
+      "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)",
+    backgroundSize: "28px 28px",
+  },
+
+  svg: {
+    position: "absolute",
+    inset: 0,
     width: "100%",
-    filter: "brightness(0.72) contrast(1.08) saturate(0.85)",
+    height: "100%",
+    filter:
+      "drop-shadow(0 10px 20px rgba(228,239,22,0.28))",
   },
+
   overlay: {
     position: "absolute",
     inset: 0,
-    pointerEvents: "none",
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.48)), radial-gradient(circle at 75% 20%, rgba(228,239,22,0.14), transparent 38%)",
+      "radial-gradient(circle at 75% 20%, rgba(228,239,22,0.14), transparent 34%)",
+    pointerEvents: "none",
   },
+
   empty: {
     height: 210,
     display: "grid",
     placeItems: "center",
-    color: "rgba(255,255,255,0.58)",
-    fontWeight: 900,
+    color: "rgba(255,255,255,0.55)",
+    fontWeight: 800,
     background:
-      "radial-gradient(circle at 74% 20%, rgba(228,239,22,0.16), transparent 36%), linear-gradient(145deg, #0d1812, #050806)",
+      "linear-gradient(145deg,#0d120d,#040604)",
   },
 };
