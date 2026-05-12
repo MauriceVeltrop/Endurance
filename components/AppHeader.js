@@ -21,6 +21,10 @@ export default function AppHeader({ profile, compact = false }) {
       <div style={styles.actions}>
         {profile?.role ? <span style={styles.roleBadge}>{profile.role}</span> : null}
 
+        <button type="button" onClick={() => router.push("/routes")} style={styles.navButton} aria-label="Open routes">
+          Routes
+        </button>
+
         {["admin", "moderator"].includes(profile?.role) ? (
           <button type="button" onClick={() => router.push("/admin")} style={styles.adminButton} aria-label="Open admin">
             Admin
@@ -102,6 +106,16 @@ const styles = {
     fontSize: 12,
     fontWeight: 950,
     textTransform: "capitalize",
+  },
+  navButton: {
+    ...baseButton,
+    minHeight: 34,
+    borderRadius: 999,
+    padding: "0 11px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 12,
   },
   adminButton: {
     ...baseButton,
