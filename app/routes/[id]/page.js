@@ -8,7 +8,7 @@ import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
 import { formatRoutePointSummary } from "../../../lib/gpxUtils";
-import { makeSvgPolyline, getRoutePreviewStats } from "../../../lib/routePreview";
+import { makeSvgPolyline, getRoutePreviewStats, makeElevationPolyline, getElevationStats } from "../../../lib/routePreview";
 
 function makeGoogleMapsSearch(title) {
   if (!title) return null;
@@ -106,6 +106,8 @@ export default function RouteDetailPage() {
   const routePointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
   const routePointCount = routePointStats.pointCount;
   const previewPolyline = useMemo(() => makeSvgPolyline(route?.route_points, 320, 180, 18), [route?.route_points]);
+  const elevationPolyline = useMemo(() => makeElevationPolyline(route?.route_points, 320, 90, 10), [route?.route_points]);
+  const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
 
   return (
     <main style={styles.page}>
@@ -224,6 +226,35 @@ export default function RouteDetailPage() {
               </p>
             </section>
 
+            <section style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <div style={styles.kicker}>Elevation profile</div>
+                  <h2 style={styles.panelTitle}>Climb and terrain</h2>
+                </div>
+              </div>
+
+              {elevationPolyline ? (
+                <>
+                  <div style={styles.elevationChart}>
+                    <svg viewBox="0 0 320 90" preserveAspectRatio="none" style={styles.elevationSvg}>
+                      <polyline points={elevationPolyline} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points={elevationPolyline} fill="none" stroke="#e4ef16" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div style={styles.elevationStats}>
+                    <span>Min {elevationStats.min} m</span>
+                    <span>Max {elevationStats.max} m</span>
+                    <span>Range {elevationStats.range} m</span>
+                  </div>
+                </>
+              ) : (
+                <p style={styles.panelText}>
+                  No elevation data found in this GPX. Routes without elevation still work normally.
+                </p>
+              )}
+            </section>
+
             <section style={styles.actionGrid}>
               {route.gpx_file_url ? (
                 <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.actionCard}>
@@ -336,6 +367,9 @@ const styles = {
   routeLine: { position: "absolute", left: "12%", right: "12%", top: "55%", height: 5, borderRadius: 999, background: "linear-gradient(90deg, rgba(228,239,22,0.95), rgba(255,255,255,0.35))", transform: "rotate(-8deg)" },
   routeNodeStart: { position: "absolute", left: "12%", top: "54%", width: 16, height: 16, borderRadius: 999, background: "#e4ef16", boxShadow: "0 0 24px rgba(228,239,22,0.55)" },
   routeNodeEnd: { position: "absolute", right: "12%", top: "45%", width: 16, height: 16, borderRadius: 999, background: "white", boxShadow: "0 0 24px rgba(255,255,255,0.35)" },
+  elevationChart: { position: "relative", minHeight: 96, borderRadius: 22, overflow: "hidden", background: "linear-gradient(180deg, rgba(228,239,22,0.10), rgba(255,255,255,0.035))", border: "1px solid rgba(255,255,255,0.10)" },
+  elevationSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 8, boxSizing: "border-box", filter: "drop-shadow(0 10px 22px rgba(228,239,22,0.16))" },
+  elevationStats: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
   actionGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
   actionCard: { minHeight: 96, borderRadius: 24, padding: 14, textDecoration: "none", color: "white", background: glass, border: "1px solid rgba(255,255,255,0.12)", display: "grid", gap: 8 },
   actionCardMuted: { minHeight: 96, borderRadius: 24, padding: 14, color: "rgba(255,255,255,0.54)", background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gap: 8 },
