@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 import { sportOptions } from "../../../lib/sportsConfig";
@@ -13,8 +13,7 @@ const routeSports = sportOptions.filter((sport) => sport.route);
 
 export default function NewRoutePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const templateId = searchParams?.get("from");
+  const [templateId, setTemplateId] = useState(null);
 
   const [profile, setProfile] = useState(null);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
@@ -113,8 +112,15 @@ export default function NewRoutePage() {
   };
 
   useEffect(() => {
-    loadAccess();
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setTemplateId(params.get("from"));
+    }
   }, []);
+
+  useEffect(() => {
+    loadAccess();
+  }, [templateId]);
 
   const updateForm = (key, value) => {
     setForm((current) => {
