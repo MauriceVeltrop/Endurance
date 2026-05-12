@@ -8,6 +8,7 @@ import { supabase } from "../../../../lib/supabase";
 import { sportOptions } from "../../../../lib/sportsConfig";
 import { getSportLabel } from "../../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../../lib/sportImages";
+import { parseGpxText, formatRoutePointSummary } from "../../../../lib/gpxUtils";
 
 const routeSports = sportOptions.filter((sport) => sport.route);
 
@@ -31,6 +32,7 @@ export default function EditRoutePage() {
     distance_km: "",
     elevation_gain_m: "",
     gpx_file_url: "",
+    route_points: null,
   });
 
   const availableSports = useMemo(() => {
@@ -83,7 +85,7 @@ export default function EditRoutePage() {
 
       const { data: route, error: routeError } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url")
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points")
         .eq("id", id)
         .maybeSingle();
 
@@ -108,6 +110,7 @@ export default function EditRoutePage() {
         distance_km: route.distance_km ?? "",
         elevation_gain_m: route.elevation_gain_m ?? "",
         gpx_file_url: route.gpx_file_url || "",
+        route_points: route.route_points || null,
       });
     } catch (err) {
       console.error("Route edit load error", err);
@@ -120,6 +123,32 @@ export default function EditRoutePage() {
   useEffect(() => {
     loadRoute();
   }, [id]);
+
+
+  const importGpxFile = async (file) => {
+    if (!file) return;
+
+    setMessage("");
+
+    try {
+      const text = await file.text();
+      const parsed = parseGpxText(text);
+
+      setForm((current) => ({
+        ...current,
+        route_points: parsed,
+        distance_km: parsed.distance_km || current.distance_km,
+        elevation_gain_m: parsed.elevation_gain_m || current.elevation_gain_m,
+      }));
+
+      setMessage(
+        `GPX imported: ${parsed.point_count} points · ${parsed.distance_km} km · ${parsed.elevation_gain_m} m elevation`
+      );
+    } catch (err) {
+      console.error("GPX import error", err);
+      setMessage(err?.message || "Could not import GPX.");
+    }
+  };
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -146,6 +175,7 @@ export default function EditRoutePage() {
           distance_km: form.distance_km ? Number(form.distance_km) : null,
           elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : null,
           gpx_file_url: form.gpx_file_url.trim() || null,
+          route_points: form.route_points || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
@@ -294,8 +324,22 @@ export default function EditRoutePage() {
 
             <label style={styles.field}>
               <span>GPX file URL</span>
-              <input value={form.gpx_file_url} onChange={(event) => updateForm("gpx_file_url", event.target.value)} placeholder="Later replaced by upload" style={styles.input} disabled={!canEdit} />
+              <input value={form.gpx_file_url} onChange={(event) => updateForm("gpx_file_url", event.target.value)} placeholder="Optional external GPX link" style={styles.input} disabled={!canEdit} />
             </label>
+
+            <section style={styles.gpxBox}>
+              <div>
+                <strong>Import GPX file</strong>
+                <p>{formatRoutePointSummary(form.route_points)}</p>
+              </div>
+              <input
+                type="file"
+                accept=".gpx,application/gpx+xml,application/xml,text/xml"
+                onChange={(event) => importGpxFile(event.target.files?.[0])}
+                style={styles.fileInput}
+                disabled={!canEdit}
+              />
+            </section>
 
             <div style={styles.nextBox}>
               <strong>Next route phase</strong>
@@ -347,6 +391,8 @@ const styles = {
   formCard: { borderRadius: 30, padding: 20, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
   field: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontSize: 13, fontWeight: 850 },
   input: { width: "100%", minHeight: 48, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.22)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
+  gpxBox: { gridColumn: "1 / -1", padding: 16, borderRadius: 22, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.10)", display: "grid", gap: 10, color: "rgba(255,255,255,0.74)", lineHeight: 1.45 },
+  fileInput: { width: "100%", color: "rgba(255,255,255,0.72)" },
   nextBox: { gridColumn: "1 / -1", padding: 16, borderRadius: 22, background: "rgba(228,239,22,0.08)", border: "1px solid rgba(228,239,22,0.16)", color: "rgba(255,255,255,0.74)", lineHeight: 1.45 },
   saveButton: { ...baseButton, gridColumn: "1 / -1", minHeight: 52, borderRadius: 999, background: "#e4ef16", color: "#101406", fontSize: 16 },
   deleteButton: { ...baseButton, gridColumn: "1 / -1", minHeight: 48, borderRadius: 999, background: "rgba(120,20,20,0.40)", border: "1px solid rgba(255,80,80,0.24)", color: "white", fontSize: 15 },
