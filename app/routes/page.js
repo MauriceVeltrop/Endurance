@@ -162,7 +162,19 @@ export default function RoutesPage() {
               const sportLabel = getSportLabel(route.sport_id);
 
               return (
-                <article key={route.id} style={styles.routeCard}>
+                <article
+                  key={route.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/routes/${route.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push(`/routes/${route.id}`);
+                    }
+                  }}
+                  style={styles.routeCard}
+                >
                   <div
                     style={{
                       ...styles.routeImage,
@@ -193,9 +205,28 @@ export default function RoutesPage() {
                       <span>{route.gpx_file_url ? "GPX linked" : "No GPX yet"}</span>
                     </div>
 
-                    <button type="button" style={styles.openButton} onClick={() => router.push(`/routes/new?from=${route.id}`)}>
-                      Use as template →
-                    </button>
+                    <div style={styles.cardActions}>
+                      <button
+                        type="button"
+                        style={styles.openButton}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          router.push(`/routes/${route.id}`);
+                        }}
+                      >
+                        Open route →
+                      </button>
+                      <button
+                        type="button"
+                        style={styles.templateButton}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          router.push(`/routes/new?from=${route.id}`);
+                        }}
+                      >
+                        Duplicate
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
@@ -247,5 +278,7 @@ const styles = {
   cardTitle: { margin: 0, fontSize: 30, letterSpacing: "-0.055em", lineHeight: 1 },
   cardText: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 },
   routeFacts: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontWeight: 750 },
+  cardActions: { display: "flex", gap: 10, flexWrap: "wrap" },
   openButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 16px" },
+  templateButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", padding: "0 16px" },
 };
