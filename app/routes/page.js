@@ -216,6 +216,18 @@ export default function RoutesPage() {
                       >
                         Open route →
                       </button>
+                      {route.creator_id === profile?.id ? (
+                        <button
+                          type="button"
+                          style={styles.templateButton}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            router.push(`/routes/${route.id}/edit`);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         style={styles.templateButton}
