@@ -99,6 +99,7 @@ export default function RouteDetailPage() {
   const sportLabel = route ? getSportLabel(route.sport_id) : "";
   const hero = route ? getTrainingHeroImage(null, route.sport_id) : null;
   const mapsUrl = route ? makeGoogleMapsSearch(route.title) : null;
+  const canEdit = Boolean(profile?.id && route?.creator_id === profile.id);
 
   const routePointCount = useMemo(() => {
     if (!route?.route_points) return 0;
@@ -183,6 +184,11 @@ export default function RouteDetailPage() {
                   <button type="button" onClick={() => router.push(`/trainings/new`)} style={styles.primaryButton}>
                     Create training
                   </button>
+                  {canEdit ? (
+                    <button type="button" onClick={() => router.push(`/routes/${route.id}/edit`)} style={styles.secondaryButton}>
+                      Edit route
+                    </button>
+                  ) : null}
                   <button type="button" onClick={() => router.push(`/routes/new?from=${route.id}`)} style={styles.secondaryButton}>
                     Duplicate route
                   </button>
