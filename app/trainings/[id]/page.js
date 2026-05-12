@@ -110,6 +110,7 @@ export default function TrainingDetailPage() {
   const [training, setTraining] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [availability, setAvailability] = useState([]);
+  const [route, setRoute] = useState(null);
   const [user, setUser] = useState(null);
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,23 @@ export default function TrainingDetailPage() {
       }
 
       setTraining(trainingData);
+
+      if (trainingData.route_id) {
+        const { data: routeData, error: routeError } = await supabase
+          .from("routes")
+          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url")
+          .eq("id", trainingData.route_id)
+          .maybeSingle();
+
+        if (routeError) {
+          console.warn("Route load skipped", routeError);
+          setRoute(null);
+        } else {
+          setRoute(routeData || null);
+        }
+      } else {
+        setRoute(null);
+      }
 
       const { data: participantData, error: participantError } = await supabase
         .from("session_participants")
@@ -542,9 +560,25 @@ export default function TrainingDetailPage() {
             <section style={styles.infoGrid}>
               <div style={styles.infoCard}>
                 <div style={styles.infoTitle}>Route</div>
-                <p style={styles.infoText}>
-                  Route preview and GPX connection will be linked here once route building is activated.
-                </p>
+                {route ? (
+                  <div style={styles.routeLinkedBox}>
+                    <strong>{route.title}</strong>
+                    <span>{getSportLabel(route.sport_id)}</span>
+                    <span>
+                      {route.distance_km ? `${route.distance_km} km` : "Distance not set"}
+                      {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m elevation` : ""}
+                    </span>
+                    {route.gpx_file_url ? (
+                      <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.inlineLink}>
+                        Open GPX
+                      </a>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p style={styles.infoText}>
+                    No route connected yet. Saved routes can now be selected while creating a training.
+                  </p>
+                )}
               </div>
 
               <div style={styles.infoCard}>
@@ -798,6 +832,8 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.10)",
   },
   infoTitle: { color: "#e4ef16", fontWeight: 950, marginBottom: 6 },
+  routeLinkedBox: { display: "grid", gap: 6, color: "rgba(255,255,255,0.72)", lineHeight: 1.4, fontSize: 14 },
+  inlineLink: { color: "#e4ef16", fontWeight: 950, textDecoration: "none" },
   infoText: { margin: 0, color: "rgba(255,255,255,0.64)", lineHeight: 1.45, fontSize: 14 },
 };
 
