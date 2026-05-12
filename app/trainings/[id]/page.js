@@ -244,9 +244,13 @@ export default function TrainingDetailPage() {
               <div
                 style={{
                   ...styles.heroImageWrap,
-                  backgroundImage: `url("${sportImage?.src}")`,
-                  backgroundSize: "cover",
-                  backgroundPosition: sportImage?.position || "center center",
+                  ...(sportImage?.src
+                    ? {
+                        backgroundImage: `url("${sportImage.src}")`,
+                        backgroundSize: "cover",
+                        backgroundPosition: sportImage.position || "center center",
+                      }
+                    : {}),
                 }}
               >
                 <div style={styles.heroImageOverlay} />
