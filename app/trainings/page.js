@@ -21,7 +21,8 @@ export default function TrainingsPage() {
   const [trainings, setTrainings] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
   const [loading, setLoading] = useState(true);
-    const [errorText, setErrorText] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorText, setErrorText] = useState("");
 
   const canSeeAll = privilegedRoles.includes(profile?.role);
 
@@ -132,7 +133,6 @@ export default function TrainingsPage() {
           <p style={styles.subtitle}>Swipe through upcoming sessions that match your preferred sports.</p>
 
           <div style={styles.filterRow}>
-            
           </div>
         </header>
 
