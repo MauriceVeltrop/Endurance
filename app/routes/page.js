@@ -319,4 +319,52 @@ const styles = {
   cardActions: { display: "flex", gap: 10, flexWrap: "wrap" },
   openButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 16px" },
   templateButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", padding: "0 16px" },
+  routesPremiumBanner: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 34,
+    minHeight: 220,
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #121712, #050505)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 22px 70px rgba(0,0,0,0.32)",
+  },
+
+  routesPremiumGlow: {
+    position: "absolute",
+    inset: 0,
+    background:
+      "radial-gradient(circle at 84% 18%, rgba(228,239,22,0.18), transparent 24%)",
+  },
+
+  routesPremiumContent: {
+    position: "relative",
+    zIndex: 2,
+    padding: 26,
+    display: "grid",
+    gap: 14,
+  },
+
+  routesPremiumKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+  },
+
+  routesPremiumTitle: {
+    margin: 0,
+    fontSize: "clamp(34px, 9vw, 58px)",
+    lineHeight: 0.92,
+    letterSpacing: "-0.08em",
+  },
+
+  routesPremiumText: {
+    margin: 0,
+    maxWidth: 520,
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.5,
+  },
+
 };
