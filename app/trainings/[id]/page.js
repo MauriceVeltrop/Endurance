@@ -11,8 +11,6 @@ import {
   getSportLabel,
 } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
-import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
-import { getElevationStats, getRoutePreviewStats } from "../../../lib/routePreview";
 
 function makeGoogleMapsUrl(location) {
   if (!location) return null;
@@ -157,7 +155,7 @@ export default function TrainingDetailPage() {
       if (trainingData.route_id) {
         const { data: routeData, error: routeError } = await supabase
           .from("routes")
-          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points")
+          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url")
           .eq("id", trainingData.route_id)
           .maybeSingle();
 
@@ -181,8 +179,32 @@ export default function TrainingDetailPage() {
         console.warn("Participant load skipped", participantError);
         setParticipants([]);
       } else {
-        setParticipants(participantData || []);
-        setJoined(Boolean(currentUser?.id && participantData?.some((p) => p.user_id === currentUser.id)));
+        const participantRows = participantData || [];
+        const participantIds = participantRows.map((row) => row.user_id).filter(Boolean);
+
+        let profileMap = {};
+
+        if (participantIds.length) {
+          const { data: profileRows, error: profileListError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,avatar_url,role")
+            .in("id", participantIds);
+
+          if (profileListError) {
+            console.warn("Participant profiles skipped", profileListError);
+          } else {
+            profileMap = Object.fromEntries((profileRows || []).map((profile) => [profile.id, profile]));
+          }
+        }
+
+        setParticipants(
+          participantRows.map((row) => ({
+            ...row,
+            profile: profileMap[row.user_id] || null,
+          }))
+        );
+
+        setJoined(Boolean(currentUser?.id && participantRows.some((p) => p.user_id === currentUser.id)));
       }
 
       const { data: availabilityData, error: availabilityError } = await supabase
@@ -237,8 +259,6 @@ export default function TrainingDetailPage() {
   const time = training ? formatTrainingTime(training) : "";
   const intensity = training ? formatTrainingIntensity(training) : "";
   const mapsUrl = training ? makeGoogleMapsUrl(training.start_location) : null;
-  const routeStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
-  const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const isFlexible = training?.planning_type === "flexible";
   const availabilitySummary = getAvailabilitySummary(availability);
 
@@ -525,6 +545,59 @@ export default function TrainingDetailPage() {
               </section>
             ) : null}
 
+            <section style={styles.participantsPanel}>
+              <div style={styles.quickHeader}>
+                <div>
+                  <div style={styles.panelKicker}>Participants</div>
+                  <h2 style={styles.panelTitle}>
+                    {participantCount} joined{training.max_participants ? ` / ${training.max_participants}` : ""}
+                  </h2>
+                </div>
+                <span style={joined ? styles.joinedBadge : styles.planBadge}>
+                  {joined ? "Joined" : "Open"}
+                </span>
+              </div>
+
+              {participants.length ? (
+                <div style={styles.participantList}>
+                  {participants.map((participant) => {
+                    const profile = participant.profile;
+                    const displayName =
+                      profile?.name ||
+                      [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+                      (participant.user_id === user?.id ? "You" : "Endurance user");
+                    const initials = displayName
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <div key={participant.id} style={styles.participantCard}>
+                        {profile?.avatar_url ? (
+                          <img src={profile.avatar_url} alt={displayName} style={styles.participantAvatar} />
+                        ) : (
+                          <div style={styles.participantInitials}>{initials}</div>
+                        )}
+
+                        <div style={styles.participantText}>
+                          <strong>{displayName}</strong>
+                          <span>
+                            {participant.user_id === user?.id ? "You" : profile?.role || "user"}
+                          </span>
+                        </div>
+
+                        <span style={styles.participantStatus}>Joined</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={styles.infoText}>No participants yet. Be the first to join this training.</p>
+              )}
+            </section>
+
             <section style={styles.actionGrid}>
               {mapsUrl ? (
                 <a href={mapsUrl} target="_blank" rel="noreferrer" style={styles.actionCard}>
@@ -566,7 +639,7 @@ export default function TrainingDetailPage() {
                 <div style={styles.infoTitle}>Route</div>
                 {route ? (
                   <div style={styles.routeVisualBox}>
-                    <RouteMiniPreview routePoints={route?.route_points} height={190} />
+                    <RouteMiniPreview routePoints={route.route_points} height={190} />
 
                     <div style={styles.routeLinkedBox}>
                       <strong>{route.title}</strong>
@@ -804,6 +877,71 @@ const styles = {
     borderRadius: 999,
     background: "#e4ef16",
     color: "#101406",
+  },
+  participantsPanel: {
+    borderRadius: 32,
+    padding: 20,
+    background: cardBackground,
+    border: "1px solid rgba(255,255,255,0.13)",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
+    display: "grid",
+    gap: 18,
+  },
+  participantList: {
+    display: "grid",
+    gap: 10,
+  },
+  participantCard: {
+    minHeight: 58,
+    borderRadius: 22,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    gridTemplateColumns: "44px minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 11,
+  },
+  participantAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.30)",
+  },
+  participantInitials: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.28)",
+    fontWeight: 950,
+  },
+  participantText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 2,
+    color: "rgba(255,255,255,0.72)",
+  },
+  participantStatus: {
+    borderRadius: 999,
+    padding: "7px 10px",
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    color: "#e4ef16",
+    fontWeight: 950,
+    fontSize: 12,
+  },
+  joinedBadge: {
+    borderRadius: 999,
+    padding: "8px 11px",
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    textTransform: "capitalize",
   },
   actionGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
   actionCard: {
