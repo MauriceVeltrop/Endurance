@@ -38,6 +38,7 @@ export default function CreateTrainingPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [savedRoutes, setSavedRoutes] = useState([]);
+  const [preselectedRoute, setPreselectedRoute] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -142,13 +143,32 @@ export default function CreateTrainingPage() {
           .order("created_at", { ascending: false })
           .limit(80);
 
+        let filteredRoutes = [];
+
         if (routeError) {
           console.warn("Routes skipped", routeError);
           setSavedRoutes([]);
         } else {
-          setSavedRoutes(
-            (routeRows || []).filter((route) => ids.includes(route.sport_id) || route.creator_id === user.id)
-          );
+          filteredRoutes = (routeRows || []).filter((route) => ids.includes(route.sport_id) || route.creator_id === user.id);
+          setSavedRoutes(filteredRoutes);
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const requestedRouteId = params.get("route");
+        const requestedRoute = requestedRouteId
+          ? filteredRoutes.find((route) => route.id === requestedRouteId)
+          : null;
+
+        if (requestedRoute) {
+          setPreselectedRoute(requestedRoute);
+          setForm((current) => ({
+            ...current,
+            sports: [requestedRoute.sport_id],
+            route_id: requestedRoute.id,
+            distance_km: requestedRoute.distance_km || current.distance_km,
+            title: current.titleEdited ? current.title : `${getSportLabel(requestedRoute.sport_id)} Training`,
+            titleEdited: current.titleEdited,
+          }));
         }
 
         if (!ids.length) {
@@ -166,15 +186,21 @@ export default function CreateTrainingPage() {
         const firstSelected = sportOptions.find((sport) => sport.id === firstAllowed);
         const firstTitle = makeAutomaticTitle(firstSelected ? [firstSelected] : []);
 
-        setForm((current) => ({
-          ...current,
-          sports: current.sports.length
-            ? current.sports.filter((sportId) => ids.includes(sportId))
-            : [firstAllowed],
-          title: current.titleEdited ? current.title : firstTitle,
-          titleEdited: current.titleEdited,
-          route_id: current.route_id,
-        }));
+        setForm((current) => {
+          if (requestedRoute) {
+            return current;
+          }
+
+          return {
+            ...current,
+            sports: current.sports.length
+              ? current.sports.filter((sportId) => ids.includes(sportId))
+              : [firstAllowed],
+            title: current.titleEdited ? current.title : firstTitle,
+            titleEdited: current.titleEdited,
+            route_id: current.route_id,
+          };
+        });
       } catch (err) {
         console.error("Preferred sports load error", err);
         setMessage(err?.message || "Could not load your preferred sports.");
@@ -637,6 +663,16 @@ export default function CreateTrainingPage() {
             {supportsRoutes ? (
               <section style={styles.section}>
                 <div style={styles.sectionTitle}>6. Route</div>
+
+                {preselectedRoute ? (
+                  <div style={styles.connectedRouteBox}>
+                    <strong>Route selected</strong>
+                    <span>
+                      {preselectedRoute.title} · {getSportLabel(preselectedRoute.sport_id)}
+                      {preselectedRoute.distance_km ? ` · ${preselectedRoute.distance_km} km` : ""}
+                    </span>
+                  </div>
+                ) : null}
 
                 {compatibleRoutes.length ? (
                   <label style={styles.label}>
