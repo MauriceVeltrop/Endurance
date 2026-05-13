@@ -112,6 +112,7 @@ export default function TrainingDetailPage() {
   const [training, setTraining] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [availability, setAvailability] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [route, setRoute] = useState(null);
   const [user, setUser] = useState(null);
   const [joined, setJoined] = useState(false);
@@ -230,6 +231,36 @@ export default function TrainingDetailPage() {
             note: ownRow.note || "",
           });
         }
+      }
+
+      const { data: inviteData, error: inviteError } = await supabase
+        .from("training_invites")
+        .select("id,invitee_id,created_at")
+        .eq("session_id", id)
+        .order("created_at", { ascending: true });
+
+      if (inviteError) {
+        console.warn("Invites skipped", inviteError);
+        setInvites([]);
+      } else {
+        const rows = inviteData || [];
+        const inviteeIds = rows.map((row) => row.invitee_id).filter(Boolean);
+        let inviteProfileMap = {};
+
+        if (inviteeIds.length) {
+          const { data: inviteProfiles, error: inviteProfilesError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,avatar_url,role")
+            .in("id", inviteeIds);
+
+          if (inviteProfilesError) {
+            console.warn("Invite profiles skipped", inviteProfilesError);
+          } else {
+            inviteProfileMap = Object.fromEntries((inviteProfiles || []).map((profile) => [profile.id, profile]));
+          }
+        }
+
+        setInvites(rows.map((row) => ({ ...row, profile: inviteProfileMap[row.invitee_id] || null })));
       }
     } catch (err) {
       console.error("Training detail error", err);
@@ -586,6 +617,42 @@ export default function TrainingDetailPage() {
                 </div>
               ) : (
                 <p style={styles.infoText}>No participants yet. Be the first to join this training.</p>
+              )}
+            </section>
+
+            <section style={styles.participantsPanel}>
+              <div style={styles.quickHeader}>
+                <div>
+                  <div style={styles.panelKicker}>Invites</div>
+                  <h2 style={styles.panelTitle}>{invites.length} invited</h2>
+                </div>
+              </div>
+
+              {invites.length ? (
+                <div style={styles.participantList}>
+                  {invites.map((invite) => {
+                    const profile = invite.profile;
+                    const name = profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Training partner";
+                    const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+                    return (
+                      <div key={invite.id} style={styles.participantCard}>
+                        {profile?.avatar_url ? (
+                          <img src={profile.avatar_url} alt="" style={styles.participantAvatar} />
+                        ) : (
+                          <div style={styles.participantInitials}>{initials}</div>
+                        )}
+                        <div style={styles.participantText}>
+                          <strong>{name}</strong>
+                          <span>Invited</span>
+                        </div>
+                        <span style={styles.participantStatus}>Invite</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={styles.infoText}>No training partners invited yet.</p>
               )}
             </section>
 
