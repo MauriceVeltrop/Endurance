@@ -240,7 +240,7 @@ export default function TrainingsPage() {
                       <p style={styles.meta}>🕒 {time}</p>
                       <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
                       {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
-                      {training.route_id ? <p style={styles.meta}>🧭 Route connected</p> : null}
+                      {training.route_id ? <p style={styles.meta}>🧭 Route attached</p> : null}
                       <p style={styles.meta}>⚡ {intensity}</p>
                     </div>
 
