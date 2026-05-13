@@ -19,6 +19,7 @@ export default function TrainingsPage() {
   const [profile, setProfile] = useState(null);
   const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [trainings, setTrainings] = useState([]);
+  const [participantCounts, setParticipantCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -199,6 +200,8 @@ export default function TrainingsPage() {
               const sportImage = getTrainingHeroImage(training, primarySport);
               const time = formatTrainingTime(training);
               const intensity = formatTrainingIntensity(training);
+
+              const joinedCount = participantCounts[training.id] || 0;
 
               return (
                 <article
