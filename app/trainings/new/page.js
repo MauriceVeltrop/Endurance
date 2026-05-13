@@ -427,7 +427,8 @@ export default function CreateTrainingPage() {
         if (visibilityError) console.warn("Selected visibility members skipped", visibilityError);
       }
 
-      router.push(`/trainings/${data.id}`);
+      setMessage("Training created. Returning to training overview.");
+      router.push("/trainings");
     } catch (error) {
       console.error("Create training error", error);
       setMessage(error?.message || "Could not create training.");
