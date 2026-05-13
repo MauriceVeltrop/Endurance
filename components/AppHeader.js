@@ -23,6 +23,10 @@ export default function AppHeader({ profile, compact = false }) {
           Routes
         </button>
 
+        <button type="button" onClick={() => router.push("/team")} style={styles.navButton} aria-label="Open team">
+          Team
+        </button>
+
         {["admin", "moderator"].includes(profile?.role) ? (
           <button type="button" onClick={() => router.push("/admin")} style={styles.adminButton} aria-label="Open admin">
             Admin
