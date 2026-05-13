@@ -10,7 +10,44 @@ export default function AppHeader({ profile, compact = false }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     router.replace("/login");
-  };
+  
+  avatarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  },
+
+  avatarFallback: {
+    color: "#e4ef16",
+    fontWeight: 900,
+    fontSize: 14,
+  },
+
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+};
 
   return (
     <header style={compact ? styles.headerCompact : styles.header}>
@@ -45,30 +82,23 @@ export default function AppHeader({ profile, compact = false }) {
         <button
           type="button"
           onClick={() => router.push("/profile")}
-          style={styles.navButton}
+          style={styles.avatarButton}
           aria-label="Open profile"
         >
-          Profile
+          {profile?.avatar_url ? (
+            <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
+          ) : (
+            <span style={styles.avatarFallback}>{initials}</span>
+          )}
         </button>
-
-        {["admin", "moderator"].includes(profile?.role) ? (
-          <button
-            type="button"
-            onClick={() => router.push("/admin")}
-            style={styles.navButton}
-            aria-label="Open admin"
-          >
-            Admin
-          </button>
-        ) : null}
 
         <button
           type="button"
           onClick={signOut}
-          style={styles.signOutButton}
+          style={styles.iconButton}
           aria-label="Log out"
         >
-          Sign out
+          ⎋
         </button>
       </div>
     </header>
@@ -88,6 +118,43 @@ const baseButton = {
   border: 0,
   cursor: "pointer",
   fontWeight: 950,
+
+  avatarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  },
+
+  avatarFallback: {
+    color: "#e4ef16",
+    fontWeight: 900,
+    fontSize: 14,
+  },
+
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
 };
 
 const styles = {
@@ -120,7 +187,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     flexWrap: "wrap",
   },
   roleBadge: {
@@ -148,15 +215,16 @@ const styles = {
     fontWeight: 900,
   },
   navButton: {
-    ...baseButton,
-    minHeight: 34,
+    minWidth: 92,
+    height: 48,
     borderRadius: 999,
-    padding: "0 10px",
-    background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 12,
-    whiteSpace: "nowrap",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 900,
+    fontSize: 15,
+    padding: "0 18px",
+    cursor: "pointer",
   },
   adminButton: {
     ...baseButton,
@@ -204,4 +272,41 @@ const styles = {
     color: "rgba(255,255,255,0.82)",
     fontSize: 19,
   },
+
+  avatarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    cursor: "pointer",
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  },
+
+  avatarFallback: {
+    color: "#e4ef16",
+    fontWeight: 900,
+    fontSize: 14,
+  },
+
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
 };
