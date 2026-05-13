@@ -558,24 +558,35 @@ export default function TrainingDetailPage() {
             </section>
 
             <section style={styles.infoGrid}>
-              <div style={styles.infoCard}>
+              <div style={{ ...styles.infoCard, gridColumn: "1 / -1" }}>
                 <div style={styles.infoTitle}>Route</div>
                 {route ? (
-                  <div style={styles.routeLinkedBox}>
-                    <strong>{route.title}</strong>
-                    <span>{getSportLabel(route.sport_id)}</span>
-                    <span>
-                      {route.distance_km ? `${route.distance_km} km` : "Distance not set"}
-                      {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m elevation` : ""}
-                    </span>
-                    <Link href={`/routes/${route.id}`} style={styles.inlineLink}>
-                      Open route
-                    </Link>
-                    {route.gpx_file_url ? (
-                      <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.inlineLink}>
-                        Open GPX
-                      </a>
-                    ) : null}
+                  <div style={styles.routeVisualBox}>
+                    <RouteMiniPreview routePoints={route.route_points} height={190} />
+
+                    <div style={styles.routeLinkedBox}>
+                      <strong>{route.title}</strong>
+                      <span>{getSportLabel(route.sport_id)}</span>
+                      <span>
+                        {route.distance_km ? `${route.distance_km} km` : "Distance not set"}
+                        {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m elevation` : ""}
+                      </span>
+                      <span>
+                        {routeStats.pointCount ? `${routeStats.pointCount} route points` : "No route points"}
+                        {elevationStats.available ? ` · elevation ${elevationStats.min}-${elevationStats.max} m` : ""}
+                      </span>
+
+                      <div style={styles.routeButtonRow}>
+                        <Link href={`/routes/${route.id}`} style={styles.routeButtonPrimary}>
+                          Open route
+                        </Link>
+                        {route.gpx_file_url ? (
+                          <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.routeButtonSecondary}>
+                            Open GPX
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <p style={styles.infoText}>
@@ -835,7 +846,11 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.10)",
   },
   infoTitle: { color: "#e4ef16", fontWeight: 950, marginBottom: 6 },
-  routeLinkedBox: { display: "grid", gap: 6, color: "rgba(255,255,255,0.72)", lineHeight: 1.4, fontSize: 14 },
+  routeVisualBox: { display: "grid", gap: 14 },
+  routeLinkedBox: { display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", lineHeight: 1.4, fontSize: 14 },
+  routeButtonRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 },
+  routeButtonPrimary: { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 999, background: "#e4ef16", color: "#101406", fontWeight: 950, textDecoration: "none", padding: "0 14px" },
+  routeButtonSecondary: { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", fontWeight: 950, textDecoration: "none", padding: "0 14px" },
   inlineLink: { color: "#e4ef16", fontWeight: 950, textDecoration: "none" },
   infoText: { margin: 0, color: "rgba(255,255,255,0.64)", lineHeight: 1.45, fontSize: 14 },
 };
