@@ -11,6 +11,8 @@ import {
   getSportLabel,
 } from "../../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../../lib/sportImages";
+import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
+import { getElevationStats, getRoutePreviewStats } from "../../../lib/routePreview";
 
 function makeGoogleMapsUrl(location) {
   if (!location) return null;
@@ -155,7 +157,7 @@ export default function TrainingDetailPage() {
       if (trainingData.route_id) {
         const { data: routeData, error: routeError } = await supabase
           .from("routes")
-          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url")
+          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points")
           .eq("id", trainingData.route_id)
           .maybeSingle();
 
@@ -259,6 +261,8 @@ export default function TrainingDetailPage() {
   const time = training ? formatTrainingTime(training) : "";
   const intensity = training ? formatTrainingIntensity(training) : "";
   const mapsUrl = training ? makeGoogleMapsUrl(training.start_location) : null;
+  const routeStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
+  const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const isFlexible = training?.planning_type === "flexible";
   const availabilitySummary = getAvailabilitySummary(availability);
 
@@ -639,7 +643,7 @@ export default function TrainingDetailPage() {
                 <div style={styles.infoTitle}>Route</div>
                 {route ? (
                   <div style={styles.routeVisualBox}>
-                    <RouteMiniPreview routePoints={route.route_points} height={190} />
+                    <RouteMiniPreview routePoints={route?.route_points} height={190} />
 
                     <div style={styles.routeLinkedBox}>
                       <strong>{route.title}</strong>
