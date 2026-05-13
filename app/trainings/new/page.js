@@ -38,6 +38,8 @@ export default function CreateTrainingPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [savedRoutes, setSavedRoutes] = useState([]);
+  const [teamPartners, setTeamPartners] = useState([]);
+  const [selectedInviteIds, setSelectedInviteIds] = useState([]);
   const [preselectedRoute, setPreselectedRoute] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -245,6 +247,18 @@ export default function CreateTrainingPage() {
     });
   };
 
+  const toggleInvite = (personId) => {
+    setSelectedInviteIds((current) =>
+      current.includes(personId)
+        ? current.filter((id) => id !== personId)
+        : [...current, personId]
+    );
+  };
+
+  const displayPartnerName = (person) => {
+    return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || "Training partner";
+  };
+
   const saveTraining = async (event) => {
     event.preventDefault();
     setMessage("");
@@ -340,6 +354,22 @@ export default function CreateTrainingPage() {
         .single();
 
       if (error) throw error;
+
+      if (selectedInviteIds.length) {
+        const inviteRows = selectedInviteIds.map((inviteeId) => ({
+          session_id: data.id,
+          inviter_id: user.id,
+          invitee_id: inviteeId,
+        }));
+
+        const { error: inviteError } = await supabase
+          .from("training_invites")
+          .insert(inviteRows);
+
+        if (inviteError) {
+          console.warn("Training invites skipped", inviteError);
+        }
+      }
 
       router.push(`/trainings/${data.id}`);
     } catch (err) {
@@ -660,9 +690,53 @@ export default function CreateTrainingPage() {
               </label>
             </section>
 
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>6. Invite training partners</div>
+
+              {teamPartners.length ? (
+                <div style={styles.inviteGrid}>
+                  {teamPartners.map((person) => {
+                    const active = selectedInviteIds.includes(person.id);
+                    const initials = displayPartnerName(person)
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <button
+                        type="button"
+                        key={person.id}
+                        onClick={() => toggleInvite(person.id)}
+                        style={active ? styles.inviteActive : styles.inviteButton}
+                      >
+                        {person.avatar_url ? (
+                          <img src={person.avatar_url} alt="" style={styles.inviteAvatar} />
+                        ) : (
+                          <span style={styles.inviteInitials}>{initials}</span>
+                        )}
+                        <span>{displayPartnerName(person)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={styles.infoCard}>
+                  <div style={styles.infoTitle}>No training partners yet</div>
+                  <p style={styles.hint}>
+                    Use Team Up first to connect with people you trust, then invite them to trainings.
+                  </p>
+                  <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
+                    Open Team
+                  </button>
+                </div>
+              )}
+            </section>
+
             {supportsRoutes ? (
               <section style={styles.section}>
-                <div style={styles.sectionTitle}>6. Route</div>
+                <div style={styles.sectionTitle}>7. Route</div>
 
                 {preselectedRoute ? (
                   <div style={styles.connectedRouteBox}>
@@ -867,6 +941,58 @@ const styles = {
     padding: "11px 13px",
     fontWeight: 850,
     cursor: "pointer",
+  },
+  inviteGrid: {
+    display: "grid",
+    gap: 10,
+  },
+  inviteButton: {
+    minHeight: 58,
+    borderRadius: 22,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.055)",
+    color: "rgba(255,255,255,0.78)",
+    display: "grid",
+    gridTemplateColumns: "38px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    textAlign: "left",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  inviteActive: {
+    minHeight: 58,
+    borderRadius: 22,
+    border: "1px solid rgba(228,239,22,0.32)",
+    background: "rgba(228,239,22,0.12)",
+    color: "#e4ef16",
+    display: "grid",
+    gridTemplateColumns: "38px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    textAlign: "left",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  inviteAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.25)",
+  },
+  inviteInitials: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.22)",
+    fontWeight: 950,
   },
   sportActive: {
     borderRadius: 999,
