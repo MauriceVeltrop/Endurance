@@ -113,6 +113,7 @@ export default function TrainingDetailPage() {
   const [participants, setParticipants] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [visibilityMembers, setVisibilityMembers] = useState([]);
   const [route, setRoute] = useState(null);
   const [workout, setWorkout] = useState(null);
   const [user, setUser] = useState(null);
@@ -279,6 +280,44 @@ export default function TrainingDetailPage() {
         }
 
         setInvites(rows.map((row) => ({ ...row, profile: inviteProfileMap[row.invitee_id] || null })));
+      }
+
+      if (trainingData.visibility === "selected") {
+        const { data: visibilityMemberRows, error: visibilityMemberError } = await supabase
+          .from("training_visibility_members")
+          .select("id,user_id,created_at")
+          .eq("session_id", id);
+
+        if (visibilityMemberError) {
+          console.warn("Selected visibility members skipped", visibilityMemberError);
+          setVisibilityMembers([]);
+        } else {
+          const memberRows = visibilityMemberRows || [];
+          const memberIds = memberRows.map((row) => row.user_id).filter(Boolean);
+          let memberProfileMap = {};
+
+          if (memberIds.length) {
+            const { data: memberProfiles, error: memberProfilesError } = await supabase
+              .from("profiles")
+              .select("id,name,first_name,last_name,avatar_url,role")
+              .in("id", memberIds);
+
+            if (memberProfilesError) {
+              console.warn("Selected member profiles skipped", memberProfilesError);
+            } else {
+              memberProfileMap = Object.fromEntries((memberProfiles || []).map((profile) => [profile.id, profile]));
+            }
+          }
+
+          setVisibilityMembers(
+            memberRows.map((row) => ({
+              ...row,
+              profile: memberProfileMap[row.user_id] || null,
+            }))
+          );
+        }
+      } else {
+        setVisibilityMembers([]);
       }
     } catch (err) {
       console.error("Training detail error", err);
@@ -673,6 +712,44 @@ export default function TrainingDetailPage() {
                 <p style={styles.infoText}>No training partners invited yet.</p>
               )}
             </section>
+
+            {training.visibility === "selected" ? (
+              <section style={styles.participantsPanel}>
+                <div style={styles.quickHeader}>
+                  <div>
+                    <div style={styles.panelKicker}>Selected access</div>
+                    <h2 style={styles.panelTitle}>{visibilityMembers.length} selected</h2>
+                  </div>
+                </div>
+
+                {visibilityMembers.length ? (
+                  <div style={styles.participantList}>
+                    {visibilityMembers.map((member) => {
+                      const profile = member.profile;
+                      const name = profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Selected member";
+                      const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+                      return (
+                        <div key={member.id} style={styles.participantCard}>
+                          {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} alt="" style={styles.participantAvatar} />
+                          ) : (
+                            <div style={styles.participantInitials}>{initials}</div>
+                          )}
+                          <div style={styles.participantText}>
+                            <strong>{name}</strong>
+                            <span>Can access this training</span>
+                          </div>
+                          <span style={styles.participantStatus}>Access</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={styles.infoText}>No selected access members found.</p>
+                )}
+              </section>
+            ) : null}
 
             <section style={styles.actionGrid}>
               {mapsUrl ? (
