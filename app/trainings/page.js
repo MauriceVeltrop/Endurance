@@ -21,7 +21,6 @@ export default function TrainingsPage() {
   const [trainings, setTrainings] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [errorText, setErrorText] = useState("");
 
   const canSeeAll = privilegedRoles.includes(profile?.role);
@@ -34,7 +33,6 @@ export default function TrainingsPage() {
 
   const loadTrainings = async () => {
     setErrorText("");
-    setRefreshing(true);
 
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -103,7 +101,6 @@ export default function TrainingsPage() {
       setTrainings([]);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -379,7 +376,6 @@ const styles = {
   dashboardValueSmall: { fontSize: 23, letterSpacing: "-0.045em", lineHeight: 1.05 },
   dashboardHint: { color: "rgba(255,255,255,0.62)", fontSize: 13, fontWeight: 800 },
   createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
-  refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   carousel: { display: "flex", gap: 16, overflowX: "auto", padding: "4px 2px 18px", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" },
   card: { minWidth: 326, maxWidth: 326, minHeight: 444, borderRadius: 32, boxSizing: "border-box", color: "white", background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", scrollSnapAlign: "start", display: "grid", overflow: "hidden", cursor: "pointer", userSelect: "none" },
   imageWrap: { position: "relative", height: 178, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)", backgroundRepeat: "no-repeat" },
