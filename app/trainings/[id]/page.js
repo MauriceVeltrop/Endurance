@@ -114,6 +114,7 @@ export default function TrainingDetailPage() {
   const [availability, setAvailability] = useState([]);
   const [invites, setInvites] = useState([]);
   const [route, setRoute] = useState(null);
+  const [workout, setWorkout] = useState(null);
   const [user, setUser] = useState(null);
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -170,6 +171,23 @@ export default function TrainingDetailPage() {
         }
       } else {
         setRoute(null);
+      }
+
+      if (trainingData.workout_id) {
+        const { data: workoutData, error: workoutError } = await supabase
+          .from("workouts")
+          .select("id,title,description,sport_id,workout_type,level,duration_min,structure,visibility")
+          .eq("id", trainingData.workout_id)
+          .maybeSingle();
+
+        if (workoutError) {
+          console.warn("Workout load skipped", workoutError);
+          setWorkout(null);
+        } else {
+          setWorkout(workoutData || null);
+        }
+      } else {
+        setWorkout(null);
       }
 
       const { data: participantData, error: participantError } = await supabase
@@ -732,9 +750,16 @@ export default function TrainingDetailPage() {
 
               <div style={styles.infoCard}>
                 <div style={styles.infoTitle}>Workout</div>
-                <p style={styles.infoText}>
-                  Workout structures for strength, HYROX, CrossFit and bootcamp will appear here.
-                </p>
+                {workout ? (
+                  <div style={styles.routeLinkedBox}>
+                    <strong>{workout.title}</strong>
+                    <span>{getSportLabel(workout.sport_id)}</span>
+                    <span>{workout.workout_type || "Workout"}{workout.level ? ` · ${workout.level}` : ""}{workout.duration_min ? ` · ${workout.duration_min} min` : ""}</span>
+                    {Array.isArray(workout.structure?.exercises) && workout.structure.exercises.length ? <span>{workout.structure.exercises.length} blocks / exercises</span> : null}
+                  </div>
+                ) : (
+                  <p style={styles.infoText}>No workout connected yet. Saved workouts can now be selected for strength, HYROX, CrossFit and bootcamp trainings.</p>
+                )}
               </div>
 
               <div style={styles.infoCard}>
