@@ -185,8 +185,8 @@ export default function RouteDetailPage() {
                 </div>
 
                 <div style={styles.actionRow}>
-                  <button type="button" onClick={() => router.push(`/trainings/new`)} style={styles.primaryButton}>
-                    Create training
+                  <button type="button" onClick={() => router.push(`/trainings/new?route=${route.id}`)} style={styles.primaryButton}>
+                    Use this route
                   </button>
                   {canEdit ? (
                     <button type="button" onClick={() => router.push(`/routes/${route.id}/edit`)} style={styles.secondaryButton}>
