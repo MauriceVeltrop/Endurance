@@ -277,6 +277,72 @@ export default function TeamPage() {
     }
   };
 
+  const acceptTrainingInvite = async (invite) => {
+    if (!profile?.id || !invite?.session_id) return;
+
+    setMessage("");
+
+    try {
+      setBusyId(invite.id);
+
+      const { error: participantError } = await supabase
+        .from("session_participants")
+        .upsert(
+          {
+            session_id: invite.session_id,
+            user_id: profile.id,
+          },
+          {
+            onConflict: "session_id,user_id",
+          }
+        );
+
+      if (participantError) throw participantError;
+
+      const { error: inviteDeleteError } = await supabase
+        .from("training_invites")
+        .delete()
+        .eq("id", invite.id)
+        .eq("invitee_id", profile.id);
+
+      if (inviteDeleteError) throw inviteDeleteError;
+
+      setMessage("Training invite accepted. You joined the session.");
+      await loadTeam();
+    } catch (err) {
+      console.error("Accept training invite error", err);
+      setMessage(err?.message || "Could not accept training invite.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const declineTrainingInvite = async (invite) => {
+    if (!profile?.id || !invite?.id) return;
+
+    setMessage("");
+
+    try {
+      setBusyId(invite.id);
+
+      const { error } = await supabase
+        .from("training_invites")
+        .delete()
+        .eq("id", invite.id)
+        .eq("invitee_id", profile.id);
+
+      if (error) throw error;
+
+      setMessage("Training invite declined.");
+      await loadTeam();
+    } catch (err) {
+      console.error("Decline training invite error", err);
+      setMessage(err?.message || "Could not decline training invite.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
   const getOtherProfile = (relation) => {
     if (!profile?.id) return null;
     return relation.requester_id === profile.id ? relation.addressee : relation.requester;
@@ -387,13 +453,33 @@ export default function TeamPage() {
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/trainings/${training.id}`)}
-                      style={styles.smallPrimaryButton}
-                    >
-                      Open
-                    </button>
+                    <div style={styles.buttonGroup}>
+                      <button
+                        type="button"
+                        onClick={() => acceptTrainingInvite(invite)}
+                        disabled={busyId === invite.id}
+                        style={styles.smallPrimaryButton}
+                      >
+                        Join
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => declineTrainingInvite(invite)}
+                        disabled={busyId === invite.id}
+                        style={styles.smallGhostButton}
+                      >
+                        Decline
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/trainings/${training.id}`)}
+                        style={styles.smallGhostButton}
+                      >
+                        Open
+                      </button>
+                    </div>
                   </div>
                 );
               })}
