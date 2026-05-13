@@ -12,6 +12,7 @@ export default function TeamPage() {
   const [partners, setPartners] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [trainingInvites, setTrainingInvites] = useState([]);
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +104,61 @@ export default function TeamPage() {
       setPartners(withProfiles.filter((row) => row.status === "accepted"));
       setIncoming(withProfiles.filter((row) => row.status === "pending" && row.addressee_id === user.id));
       setOutgoing(withProfiles.filter((row) => row.status === "pending" && row.requester_id === user.id));
+
+      const { data: inviteRows, error: inviteError } = await supabase
+        .from("training_invites")
+        .select("id,session_id,inviter_id,invitee_id,created_at")
+        .eq("invitee_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (inviteError) {
+        console.warn("Training invites skipped", inviteError);
+        setTrainingInvites([]);
+      } else {
+        const rows = inviteRows || [];
+        const sessionIds = rows.map((row) => row.session_id).filter(Boolean);
+        const inviterIds = rows.map((row) => row.inviter_id).filter(Boolean);
+
+        let sessionMap = {};
+        let inviterMap = {};
+
+        if (sessionIds.length) {
+          const { data: sessions, error: sessionsError } = await supabase
+            .from("training_sessions")
+            .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location")
+            .in("id", sessionIds);
+
+          if (sessionsError) {
+            console.warn("Invited trainings skipped", sessionsError);
+          } else {
+            sessionMap = Object.fromEntries((sessions || []).map((session) => [session.id, session]));
+          }
+        }
+
+        if (inviterIds.length) {
+          const { data: inviters, error: invitersError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,avatar_url,role")
+            .in("id", inviterIds);
+
+          if (invitersError) {
+            console.warn("Invite profiles skipped", invitersError);
+          } else {
+            inviterMap = Object.fromEntries((inviters || []).map((person) => [person.id, person]));
+          }
+        }
+
+        setTrainingInvites(
+          rows
+            .map((row) => ({
+              ...row,
+              training: sessionMap[row.session_id] || null,
+              inviter: inviterMap[row.inviter_id] || null,
+            }))
+            .filter((row) => row.training)
+        );
+      }
     } catch (err) {
       console.error("Team load error", err);
       setMessage(err?.message || "Could not load your team.");
@@ -226,6 +282,27 @@ export default function TeamPage() {
     return relation.requester_id === profile.id ? relation.addressee : relation.requester;
   };
 
+  const displayTrainingTime = (training) => {
+    if (!training) return "Time not set";
+
+    const start = training.final_starts_at || training.starts_at;
+    if (start) {
+      return new Date(start).toLocaleString([], {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    if (training.flexible_date) {
+      return `Flexible · ${training.flexible_date}`;
+    }
+
+    return "Time not set";
+  };
+
   const displayName = (person) => {
     if (!person) return "Endurance user";
     return person.name || [person.first_name, person.last_name].filter(Boolean).join(" ") || person.email || "Endurance user";
@@ -280,6 +357,51 @@ export default function TeamPage() {
         </section>
 
         {message ? <section style={styles.message}>{message}</section> : null}
+
+        <section style={styles.panel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <div style={styles.panelKicker}>Training invites</div>
+              <h2 style={styles.panelTitle}>Invited sessions</h2>
+            </div>
+
+            <span style={styles.countBadge}>{trainingInvites.length}</span>
+          </div>
+
+          {trainingInvites.length ? (
+            <div style={styles.list}>
+              {trainingInvites.map((invite) => {
+                const inviter = invite.inviter;
+                const training = invite.training;
+
+                return (
+                  <div key={invite.id} style={styles.trainingInviteCard}>
+                    <div style={styles.trainingInviteIcon}>⚡</div>
+
+                    <div style={styles.personText}>
+                      <strong>{training.title}</strong>
+                      <span>{displayTrainingTime(training)}</span>
+                      <span>
+                        Invited by {displayName(inviter)}
+                        {training.start_location ? ` · ${training.start_location}` : ""}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/trainings/${training.id}`)}
+                      style={styles.smallPrimaryButton}
+                    >
+                      Open
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={styles.panelText}>No training invites yet.</p>
+          )}
+        </section>
 
         <section style={styles.panel}>
           <div style={styles.panelHeader}>
@@ -481,6 +603,39 @@ const styles = {
   input: { width: "100%", minHeight: 48, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.22)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
   searchButton: { minHeight: 48, borderRadius: 16, border: 0, background: "#e4ef16", color: "#101406", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   list: { display: "grid", gap: 10 },
+  countBadge: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.22)",
+    fontWeight: 950,
+  },
+  trainingInviteCard: {
+    minHeight: 74,
+    borderRadius: 24,
+    padding: 12,
+    background: "rgba(228,239,22,0.075)",
+    border: "1px solid rgba(228,239,22,0.16)",
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 11,
+  },
+  trainingInviteIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.26)",
+    fontWeight: 950,
+  },
   personCard: { minHeight: 64, borderRadius: 24, padding: 10, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gridTemplateColumns: "46px minmax(0, 1fr) auto", alignItems: "center", gap: 11 },
   avatar: { width: 46, height: 46, borderRadius: 999, objectFit: "cover", border: "1px solid rgba(228,239,22,0.30)" },
   initials: { width: 46, height: 46, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.14)", color: "#e4ef16", border: "1px solid rgba(228,239,22,0.28)", fontWeight: 950 },
