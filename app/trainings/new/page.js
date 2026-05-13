@@ -705,6 +705,12 @@ export default function CreateTrainingPage() {
                 </select>
               </label>
 
+              {form.visibility === "team" ? (
+                <p style={styles.hint}>
+                  Team visibility means accepted Team Up partners can see this training.
+                </p>
+              ) : null}
+
               <label style={styles.label}>
                 Max participants
                 <input
