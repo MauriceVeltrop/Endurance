@@ -38,6 +38,7 @@ export default function CreateTrainingPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [savedRoutes, setSavedRoutes] = useState([]);
+  const [savedWorkouts, setSavedWorkouts] = useState([]);
   const [teamPartners, setTeamPartners] = useState([]);
   const [selectedInviteIds, setSelectedInviteIds] = useState([]);
   const [preselectedRoute, setPreselectedRoute] = useState(null);
@@ -69,6 +70,7 @@ export default function CreateTrainingPage() {
 
     max_participants: "",
     route_id: "",
+    workout_id: "",
     is_outdoor: true,
   });
 
@@ -99,6 +101,11 @@ export default function CreateTrainingPage() {
     if (!supportsRoutes) return [];
     return savedRoutes.filter((route) => form.sports.includes(route.sport_id));
   }, [savedRoutes, form.sports, supportsRoutes]);
+
+  const compatibleWorkouts = useMemo(() => {
+    if (!supportsWorkouts) return [];
+    return savedWorkouts.filter((workout) => form.sports.includes(workout.sport_id));
+  }, [savedWorkouts, form.sports, supportsWorkouts]);
 
   useEffect(() => {
     const loadPreferredSports = async () => {
@@ -345,6 +352,7 @@ export default function CreateTrainingPage() {
 
         max_participants: form.max_participants ? Number(form.max_participants) : null,
         route_id: form.route_id || null,
+        workout_id: form.workout_id || null,
       };
 
       const { data, error } = await supabase
@@ -793,11 +801,27 @@ export default function CreateTrainingPage() {
             ) : null}
 
             {supportsWorkouts ? (
-              <section style={styles.infoCard}>
-                <div style={styles.infoTitle}>Workout options</div>
-                <p style={styles.hint}>
-                  This sport supports generated workouts. Workout Generator comes in the workout module.
-                </p>
+              <section style={styles.section}>
+                <div style={styles.sectionTitle}>Workout</div>
+                {compatibleWorkouts.length ? (
+                  <label style={styles.label}>
+                    Use saved workout
+                    <select value={form.workout_id} onChange={(event) => update("workout_id", event.target.value)} style={styles.input}>
+                      <option value="">No workout selected</option>
+                      {compatibleWorkouts.map((workout) => (
+                        <option key={workout.id} value={workout.id}>
+                          {workout.title} · {getSportLabel(workout.sport_id)}{workout.duration_min ? ` · ${workout.duration_min} min` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div style={styles.infoCard}>
+                    <div style={styles.infoTitle}>No saved workout yet</div>
+                    <p style={styles.hint}>Create a workout first, then connect it to this training.</p>
+                    <button type="button" onClick={() => router.push("/workouts/new")} style={styles.secondaryButton}>Create workout</button>
+                  </div>
+                )}
               </section>
             ) : null}
 
