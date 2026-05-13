@@ -275,6 +275,85 @@ const baseButton = {
   border: 0,
   cursor: "pointer",
   fontWeight: 950,
+  communityHero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 36,
+    minHeight: 260,
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #121712, #060706)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 26px 80px rgba(0,0,0,0.34)",
+  },
+
+  communityGlow: {
+    position: "absolute",
+    inset: 0,
+    background:
+      "radial-gradient(circle at 82% 16%, rgba(228,239,22,0.18), transparent 24%), radial-gradient(circle at 12% 88%, rgba(255,255,255,0.08), transparent 30%)",
+  },
+
+  communityContent: {
+    position: "relative",
+    zIndex: 2,
+    padding: 28,
+    display: "grid",
+    gap: 18,
+  },
+
+  communityKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.16em",
+    textTransform: "uppercase",
+  },
+
+  communityTitle: {
+    margin: 0,
+    fontSize: "clamp(40px, 10vw, 66px)",
+    lineHeight: 0.92,
+    letterSpacing: "-0.08em",
+  },
+
+  communityText: {
+    margin: 0,
+    maxWidth: 560,
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.55,
+    fontSize: 15,
+  },
+
+  communityActions: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+
+  communityPrimary: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    padding: "0 18px",
+    cursor: "pointer",
+    fontSize: 15,
+  },
+
+  communitySecondary: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 950,
+    padding: "0 18px",
+    cursor: "pointer",
+    fontSize: 15,
+  },
+
 };
 
 const styles = {
@@ -325,4 +404,83 @@ const styles = {
   retryButton: { ...baseButton, minHeight: 42, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 16px", marginTop: 12 },
   primaryButton: { ...baseButton, minHeight: 54, borderRadius: 20, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
   secondaryButton: { ...baseButton, minHeight: 54, borderRadius: 20, background: "rgba(255,255,255,0.08)", color: "white", border: "1px solid rgba(255,255,255,0.12)", padding: "0 18px" },
+  communityHero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 36,
+    minHeight: 260,
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #121712, #060706)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 26px 80px rgba(0,0,0,0.34)",
+  },
+
+  communityGlow: {
+    position: "absolute",
+    inset: 0,
+    background:
+      "radial-gradient(circle at 82% 16%, rgba(228,239,22,0.18), transparent 24%), radial-gradient(circle at 12% 88%, rgba(255,255,255,0.08), transparent 30%)",
+  },
+
+  communityContent: {
+    position: "relative",
+    zIndex: 2,
+    padding: 28,
+    display: "grid",
+    gap: 18,
+  },
+
+  communityKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.16em",
+    textTransform: "uppercase",
+  },
+
+  communityTitle: {
+    margin: 0,
+    fontSize: "clamp(40px, 10vw, 66px)",
+    lineHeight: 0.92,
+    letterSpacing: "-0.08em",
+  },
+
+  communityText: {
+    margin: 0,
+    maxWidth: 560,
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.55,
+    fontSize: 15,
+  },
+
+  communityActions: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+
+  communityPrimary: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    padding: "0 18px",
+    cursor: "pointer",
+    fontSize: 15,
+  },
+
+  communitySecondary: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 950,
+    padding: "0 18px",
+    cursor: "pointer",
+    fontSize: 15,
+  },
+
 };
