@@ -265,6 +265,8 @@ export default function TrainingDetailPage() {
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const isFlexible = training?.planning_type === "flexible";
   const availabilitySummary = getAvailabilitySummary(availability);
+  const joinedLabel = `${participantCount}${training?.max_participants ? ` / ${training.max_participants}` : ""}`;
+  const primaryCtaLabel = joined ? "Leave training" : isFull ? "Training full" : "Join training";
 
   const joinTraining = async () => {
     setMessage("");
@@ -398,78 +400,63 @@ export default function TrainingDetailPage() {
                 }}
               >
                 <div style={styles.heroImageOverlay} />
-              </div>
 
-              <div style={styles.heroContent}>
-                <div style={styles.topRow}>
+                <div style={styles.heroTopOverlay}>
                   <div style={styles.sportBadge}>{sportLabel}</div>
                   <div style={styles.visibilityBadge}>{training.visibility}</div>
                 </div>
 
-                <h1 style={styles.title}>{training.title}</h1>
-
-                <div style={styles.metaGrid}>
-                  <div style={styles.metaItem}>
-                    <span style={styles.metaIcon}>🕒</span>
-                    <div>
-                      <div style={styles.metaLabel}>Time</div>
-                      <div style={styles.metaValue}>{time}</div>
-                    </div>
+                <div style={styles.heroBottomOverlay}>
+                  <div>
+                    <div style={styles.heroKicker}>{isFlexible ? "Flexible training" : "Training session"}</div>
+                    <h1 style={styles.title}>{training.title}</h1>
                   </div>
 
-                  <div style={styles.metaItem}>
-                    <span style={styles.metaIcon}>📍</span>
-                    <div>
-                      <div style={styles.metaLabel}>Location</div>
-                      <div style={styles.metaValue}>{training.start_location || "Location not set"}</div>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={joinTraining}
+                    disabled={joining || (!joined && isFull)}
+                    style={joined ? styles.leaveButtonFloating : styles.joinButtonFloating}
+                  >
+                    {joining ? "..." : primaryCtaLabel}
+                  </button>
+                </div>
+              </div>
 
-                  <div style={styles.metaItem}>
-                    <span style={styles.metaIcon}>⚡</span>
-                    <div>
-                      <div style={styles.metaLabel}>Effort</div>
-                      <div style={styles.metaValue}>{intensity}</div>
-                    </div>
+              <div style={styles.heroContent}>
+                <div style={styles.statusStrip}>
+                  <div style={styles.statusItem}>
+                    <span>Time</span>
+                    <strong>{time}</strong>
                   </div>
+                  <div style={styles.statusItem}>
+                    <span>Joined</span>
+                    <strong>{joinedLabel}</strong>
+                  </div>
+                  <div style={styles.statusItem}>
+                    <span>Effort</span>
+                    <strong>{intensity || "Not set"}</strong>
+                  </div>
+                </div>
 
-                  <div style={styles.metaItem}>
-                    <span style={styles.metaIcon}>👥</span>
-                    <div>
-                      <div style={styles.metaLabel}>Participants</div>
-                      <div style={styles.metaValue}>
-                        {participantCount}
-                        {training.max_participants ? ` / ${training.max_participants}` : ""} joined
-                      </div>
-                    </div>
+                <div style={styles.locationCard}>
+                  <span style={styles.metaIcon}>📍</span>
+                  <div>
+                    <div style={styles.metaLabel}>Start location</div>
+                    <div style={styles.metaValue}>{training.start_location || "Location not set"}</div>
                   </div>
                 </div>
 
                 {training.description ? <p style={styles.description}>{training.description}</p> : null}
 
                 {message ? <div style={styles.message}>{message}</div> : null}
-
-                <button
-                  type="button"
-                  onClick={joinTraining}
-                  disabled={joining || (!joined && isFull)}
-                  style={joined ? styles.leaveButton : styles.joinButton}
-                >
-                  {joining
-                    ? "Please wait..."
-                    : joined
-                      ? "Leave Training"
-                      : isFull
-                        ? "Training Full"
-                        : "Join Training"}
-                </button>
               </div>
             </article>
 
             <section style={styles.quickPanel}>
               <div style={styles.quickHeader}>
                 <div>
-                  <div style={styles.panelKicker}>Session plan</div>
+                  <div style={styles.panelKicker}>At a glance</div>
                   <h2 style={styles.panelTitle}>{isFlexible ? "Flexible start window" : "Fixed training"}</h2>
                 </div>
                 <span style={styles.planBadge}>{training.planning_type}</span>
@@ -701,6 +688,84 @@ const baseButton = {
   border: 0,
   cursor: "pointer",
   fontWeight: 950,
+  heroTopOverlay: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    zIndex: 2,
+  },
+  heroBottomOverlay: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 18,
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: 14,
+    alignItems: "end",
+    zIndex: 2,
+  },
+  heroKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  statusStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+  },
+  statusItem: {
+    minHeight: 72,
+    borderRadius: 22,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    alignContent: "space-between",
+  },
+  locationCard: {
+    display: "flex",
+    gap: 10,
+    minHeight: 62,
+    alignItems: "center",
+    padding: 13,
+    borderRadius: 22,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+  },
+  joinButtonFloating: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 999,
+    background: "#e4ef16",
+    color: "#101406",
+    fontSize: 15,
+    padding: "0 18px",
+    boxShadow: "0 18px 38px rgba(228,239,22,0.20)",
+    whiteSpace: "nowrap",
+  },
+  leaveButtonFloating: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.14)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    color: "white",
+    fontSize: 15,
+    padding: "0 18px",
+    backdropFilter: "blur(14px)",
+    whiteSpace: "nowrap",
+  },
+
 };
 
 const cardBackground =
@@ -712,7 +777,7 @@ const styles = {
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 42px",
+    padding: "18px 18px 58px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 18 },
@@ -756,7 +821,7 @@ const styles = {
   },
   heroImageWrap: {
     position: "relative",
-    height: 292,
+    height: 390,
     overflow: "hidden",
     background:
       "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
@@ -766,7 +831,7 @@ const styles = {
     position: "absolute",
     inset: 0,
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.66)), radial-gradient(circle at 82% 15%, rgba(228,239,22,0.12), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.32) 38%, rgba(0,0,0,0.82)), radial-gradient(circle at 82% 15%, rgba(228,239,22,0.16), transparent 36%)",
     pointerEvents: "none",
   },
   heroContent: { padding: 22, display: "grid", gap: 18 },
@@ -999,6 +1064,84 @@ const styles = {
   routeButtonSecondary: { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", fontWeight: 950, textDecoration: "none", padding: "0 14px" },
   inlineLink: { color: "#e4ef16", fontWeight: 950, textDecoration: "none" },
   infoText: { margin: 0, color: "rgba(255,255,255,0.64)", lineHeight: 1.45, fontSize: 14 },
+  heroTopOverlay: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    zIndex: 2,
+  },
+  heroBottomOverlay: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 18,
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: 14,
+    alignItems: "end",
+    zIndex: 2,
+  },
+  heroKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  statusStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+  },
+  statusItem: {
+    minHeight: 72,
+    borderRadius: 22,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    alignContent: "space-between",
+  },
+  locationCard: {
+    display: "flex",
+    gap: 10,
+    minHeight: 62,
+    alignItems: "center",
+    padding: 13,
+    borderRadius: 22,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+  },
+  joinButtonFloating: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 999,
+    background: "#e4ef16",
+    color: "#101406",
+    fontSize: 15,
+    padding: "0 18px",
+    boxShadow: "0 18px 38px rgba(228,239,22,0.20)",
+    whiteSpace: "nowrap",
+  },
+  leaveButtonFloating: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.14)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    color: "white",
+    fontSize: 15,
+    padding: "0 18px",
+    backdropFilter: "blur(14px)",
+    whiteSpace: "nowrap",
+  },
+
 };
 
 if (typeof window !== "undefined") {
