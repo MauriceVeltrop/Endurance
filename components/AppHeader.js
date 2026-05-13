@@ -35,6 +35,15 @@ export default function AppHeader({ profile, compact = false }) {
 
         <button
           type="button"
+          onClick={() => router.push("/workouts")}
+          style={styles.navButton}
+          aria-label="Open workouts"
+        >
+          Workouts
+        </button>
+
+        <button
+          type="button"
           onClick={() => router.push("/team")}
           style={styles.navButton}
           aria-label="Open team"
