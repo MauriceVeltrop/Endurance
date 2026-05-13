@@ -12,6 +12,16 @@ function getRoutePoints(routePoints) {
   return [];
 }
 
+function normalizeRoutePoints(routePoints) {
+  return getRoutePoints(routePoints)
+    .map((point) => ({
+      lat: Number(point.lat ?? point.latitude),
+      lon: Number(point.lon ?? point.lng ?? point.longitude),
+      ele: point.ele ?? null,
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+}
+
 function loadLeaflet() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Window unavailable"));
@@ -34,16 +44,15 @@ function loadLeaflet() {
 
     if (existing) {
       existing.addEventListener("load", () => resolve(window.L), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Leaflet failed to load")), { once: true });
       return;
     }
 
     const script = document.createElement("script");
     script.id = LEAFLET_SCRIPT_ID;
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-
     script.onload = () => resolve(window.L);
     script.onerror = () => reject(new Error("Leaflet failed to load"));
-
     document.body.appendChild(script);
   });
 }
@@ -51,104 +60,110 @@ function loadLeaflet() {
 export default function OSMRouteMap({ routePoints, title = "Route" }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const layerRef = useRef(null);
+  const routeLayerRef = useRef(null);
+  const resizeObserverRef = useRef(null);
 
   const [error, setError] = useState("");
 
-  const points = useMemo(() => {
-    return getRoutePoints(routePoints)
-      .map((point) => ({
-        lat: Number(point.lat),
-        lon: Number(point.lon),
-      }))
-      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
-  }, [routePoints]);
+  const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutIds = [];
 
     async function renderMap() {
-      if (!containerRef.current) return;
-      if (points.length < 2) return;
+      if (!containerRef.current || points.length < 2) return;
 
       try {
+        setError("");
         const L = await loadLeaflet();
-
-        if (cancelled) return;
+        if (cancelled || !containerRef.current) return;
 
         if (!mapRef.current) {
           mapRef.current = L.map(containerRef.current, {
             zoomControl: true,
+            attributionControl: true,
             scrollWheelZoom: false,
+            doubleClickZoom: true,
+            dragging: true,
+            tap: true,
           });
 
           L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "&copy; OpenStreetMap contributors",
             maxZoom: 19,
+            crossOrigin: true,
           }).addTo(mapRef.current);
         }
 
-        if (layerRef.current) {
-          layerRef.current.remove();
+        if (routeLayerRef.current) {
+          routeLayerRef.current.remove();
         }
 
         const latLngs = points.map((point) => [point.lat, point.lon]);
+        const bounds = L.latLngBounds(latLngs);
 
         const group = L.layerGroup();
 
-        const shadowLine = L.polyline(latLngs, {
-          color: "#000000",
-          weight: 9,
-          opacity: 0.55,
-        });
+        L.polyline(latLngs, {
+          color: "#050505",
+          weight: 10,
+          opacity: 0.70,
+          lineJoin: "round",
+          lineCap: "round",
+        }).addTo(group);
 
-        const routeLine = L.polyline(latLngs, {
+        L.polyline(latLngs, {
           color: "#e4ef16",
           weight: 5,
           opacity: 1,
-        });
+          lineJoin: "round",
+          lineCap: "round",
+        }).addTo(group);
 
-        const startMarker = L.circleMarker(latLngs[0], {
+        L.circleMarker(latLngs[0], {
           radius: 8,
-          color: "#111111",
+          color: "#101406",
           weight: 3,
           fillColor: "#e4ef16",
           fillOpacity: 1,
-        });
+        }).bindPopup(`${title}<br/>Start`).addTo(group);
 
-        const finishMarker = L.circleMarker(latLngs[latLngs.length - 1], {
+        L.circleMarker(latLngs[latLngs.length - 1], {
           radius: 8,
-          color: "#111111",
+          color: "#101406",
           weight: 3,
           fillColor: "#ffffff",
           fillOpacity: 1,
-        });
-
-        group.addLayer(shadowLine);
-        group.addLayer(routeLine);
-        group.addLayer(startMarker);
-        group.addLayer(finishMarker);
+        }).bindPopup(`${title}<br/>Finish`).addTo(group);
 
         group.addTo(mapRef.current);
+        routeLayerRef.current = group;
 
-        layerRef.current = group;
-
-        const bounds = L.latLngBounds(latLngs);
-
-        setTimeout(() => {
-          if (!mapRef.current) return;
+        const fit = () => {
+          if (!mapRef.current || cancelled) return;
 
           mapRef.current.invalidateSize(true);
-
           mapRef.current.fitBounds(bounds, {
-            padding: [24, 24],
+            padding: [28, 28],
             maxZoom: 15,
             animate: false,
           });
-        }, 300);
+        };
+
+        timeoutIds = [80, 250, 650].map((delay) => window.setTimeout(fit, delay));
+
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect();
+        }
+
+        if ("ResizeObserver" in window) {
+          resizeObserverRef.current = new ResizeObserver(() => fit());
+          resizeObserverRef.current.observe(containerRef.current);
+        }
       } catch (err) {
-        console.error(err);
-        setError("Map failed to load");
+        console.error("OSM route map error", err);
+        setError(err?.message || "Map failed to load");
       }
     }
 
@@ -156,13 +171,29 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
 
     return () => {
       cancelled = true;
+      timeoutIds.forEach((id) => window.clearTimeout(id));
+
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
     };
-  }, [points]);
+  }, [points, title]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   if (points.length < 2) {
     return (
       <div style={styles.empty}>
-        No route points available yet.
+        <strong>No map data yet</strong>
+        <span>Import a GPX file to show this route on OpenStreetMap.</span>
       </div>
     );
   }
@@ -172,17 +203,17 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
       <div ref={containerRef} style={styles.map} />
 
       <div style={styles.legend}>
-        <div style={styles.legendItem}>
+        <span style={styles.legendItem}>
           <span style={styles.startDot} />
           Start
-        </div>
+        </span>
 
-        <div style={styles.legendItem}>
+        <span style={styles.legendItem}>
           <span style={styles.finishDot} />
           Finish
-        </div>
+        </span>
 
-        <div style={styles.osm}>OpenStreetMap</div>
+        <span style={styles.osmLabel}>OpenStreetMap</span>
       </div>
 
       {error ? <div style={styles.error}>{error}</div> : null}
@@ -195,39 +226,38 @@ const styles = {
     display: "grid",
     gap: 12,
   },
-
   map: {
     width: "100%",
-    height: 360,
+    height: 390,
+    minHeight: 390,
     borderRadius: 28,
     overflow: "hidden",
-    border: "1px solid rgba(255,255,255,0.1)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "linear-gradient(145deg, #101811, #050705)",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.34)",
   },
-
   legend: {
     display: "flex",
     alignItems: "center",
-    gap: 16,
+    gap: 14,
     flexWrap: "wrap",
-    color: "rgba(255,255,255,0.75)",
-    fontWeight: 700,
-    fontSize: 14,
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    fontWeight: 850,
   },
-
   legendItem: {
-    display: "flex",
+    display: "inline-flex",
     alignItems: "center",
-    gap: 8,
+    gap: 7,
   },
-
   startDot: {
     width: 10,
     height: 10,
     borderRadius: 999,
     background: "#e4ef16",
     display: "inline-block",
+    boxShadow: "0 0 18px rgba(228,239,22,0.38)",
   },
-
   finishDot: {
     width: 10,
     height: 10,
@@ -235,22 +265,30 @@ const styles = {
     background: "#ffffff",
     display: "inline-block",
   },
-
-  osm: {
+  osmLabel: {
     marginLeft: "auto",
     color: "#e4ef16",
+    fontWeight: 950,
   },
-
   empty: {
-    minHeight: 220,
-    borderRadius: 24,
-    padding: 24,
-    background: "#111111",
-    color: "rgba(255,255,255,0.7)",
+    minHeight: 240,
+    borderRadius: 28,
+    padding: 22,
+    boxSizing: "border-box",
+    background:
+      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.72)",
+    display: "grid",
+    alignContent: "center",
+    gap: 8,
   },
-
   error: {
-    color: "#ff8080",
-    fontWeight: 700,
+    borderRadius: 18,
+    padding: 12,
+    background: "rgba(120,20,20,0.35)",
+    border: "1px solid rgba(255,80,80,0.22)",
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: 850,
   },
 };
