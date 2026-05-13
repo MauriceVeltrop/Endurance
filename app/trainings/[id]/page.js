@@ -155,6 +155,43 @@ export default function TrainingDetailPage() {
         return;
       }
 
+      const isOwner = trainingData.creator_id === currentUser?.id;
+      const isPrivilegedUser = false;
+
+      if (!isOwner && trainingData.visibility === "private") {
+        setTraining(null);
+        setErrorText("This training is private.");
+        return;
+      }
+
+      if (!isOwner && trainingData.visibility === "team") {
+        const { data: partnerRows, error: partnerError } = await supabase
+          .from("training_partners")
+          .select("id")
+          .eq("status", "accepted")
+          .or(`and(requester_id.eq.${currentUser?.id},addressee_id.eq.${trainingData.creator_id}),and(requester_id.eq.${trainingData.creator_id},addressee_id.eq.${currentUser?.id})`);
+
+        if (partnerError || !(partnerRows || []).length) {
+          setTraining(null);
+          setErrorText("This training is only visible to the organizer's Team Up partners.");
+          return;
+        }
+      }
+
+      if (!isOwner && trainingData.visibility === "selected") {
+        const { data: visibilityRows, error: visibilityError } = await supabase
+          .from("training_visibility_members")
+          .select("id")
+          .eq("session_id", trainingData.id)
+          .eq("user_id", currentUser?.id);
+
+        if (visibilityError || !(visibilityRows || []).length) {
+          setTraining(null);
+          setErrorText("This training is only visible to selected members.");
+          return;
+        }
+      }
+
       setTraining(trainingData);
 
       if (trainingData.route_id) {
