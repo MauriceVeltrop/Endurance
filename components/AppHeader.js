@@ -14,35 +14,61 @@ export default function AppHeader({ profile, compact = false }) {
 
   return (
     <header style={compact ? styles.headerCompact : styles.header}>
-      <button type="button" onClick={() => router.push("/trainings")} style={styles.logoButton} aria-label="Go to trainings">
+      <button
+        type="button"
+        onClick={() => router.push("/trainings")}
+        style={styles.logoButton}
+        aria-label="Go to trainings"
+      >
         <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
       </button>
 
       <div style={styles.actions}>
-        <button type="button" onClick={() => router.push("/routes")} style={styles.navButton} aria-label="Open routes">
+        <button
+          type="button"
+          onClick={() => router.push("/routes")}
+          style={styles.navButton}
+          aria-label="Open routes"
+        >
           Routes
         </button>
 
-        <button type="button" onClick={() => router.push("/team")} style={styles.navButton} aria-label="Open team">
+        <button
+          type="button"
+          onClick={() => router.push("/team")}
+          style={styles.navButton}
+          aria-label="Open team"
+        >
           Team
         </button>
 
+        <button
+          type="button"
+          onClick={() => router.push("/profile")}
+          style={styles.navButton}
+          aria-label="Open profile"
+        >
+          Profile
+        </button>
+
         {["admin", "moderator"].includes(profile?.role) ? (
-          <button type="button" onClick={() => router.push("/admin")} style={styles.adminButton} aria-label="Open admin">
+          <button
+            type="button"
+            onClick={() => router.push("/admin")}
+            style={styles.navButton}
+            aria-label="Open admin"
+          >
             Admin
           </button>
         ) : null}
 
-        <button type="button" onClick={() => router.push("/profile")} style={styles.avatarButton} aria-label="Open profile">
-          {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
-          ) : (
-            <span style={styles.avatarFallback}>{initials}</span>
-          )}
-        </button>
-
-        <button type="button" onClick={signOut} style={styles.logoutButton} aria-label="Log out">
-          ⎋
+        <button
+          type="button"
+          onClick={signOut}
+          style={styles.signOutButton}
+          aria-label="Log out"
+        >
+          Sign out
         </button>
       </div>
     </header>
@@ -66,20 +92,16 @@ const baseButton = {
 
 const styles = {
   header: {
-    width: "min(960px, 100%)",
-    margin: "0 auto",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
+    width: "100%",
+    display: "grid",
+    justifyItems: "center",
+    gap: 16,
   },
   headerCompact: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "center",
-    gap: 10,
     width: "100%",
-    overflow: "hidden",
+    display: "grid",
+    justifyItems: "center",
+    gap: 14,
   },
   logoButton: {
     ...baseButton,
@@ -88,17 +110,18 @@ const styles = {
     lineHeight: 0,
   },
   logo: {
-    width: "min(190px, 44vw)",
+    width: "min(280px, 72vw)",
     height: "auto",
     display: "block",
-    filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.12))",
+    filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))",
   },
   actions: {
+    width: "100%",
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 6,
-    minWidth: 0,
+    justifyContent: "center",
+    gap: 10,
+    flexWrap: "wrap",
   },
   roleBadge: {
     display: "inline-flex",
@@ -112,6 +135,17 @@ const styles = {
     fontSize: 12,
     fontWeight: 950,
     textTransform: "capitalize",
+  },
+  signOutButton: {
+    ...baseButton,
+    minHeight: 44,
+    padding: "0 18px",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "white",
+    fontSize: 15,
+    fontWeight: 900,
   },
   navButton: {
     ...baseButton,
