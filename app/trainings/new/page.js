@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 
@@ -25,16 +26,21 @@ const sportOptions = [
 function makeAutomaticTitle(selectedSports) {
   const labels = selectedSports.map((sport) => sport.label);
 
-  if (labels.length === 0) return "Training";
+  if (!labels.length) return "Training";
   if (labels.length === 1) return `${labels[0]} Training`;
   if (labels.length === 2) return `${labels[0]} + ${labels[1]} Training`;
 
   return `${labels.slice(0, -1).join(", ")} + ${labels[labels.length - 1]} Training`;
 }
 
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function CreateTrainingPage() {
   const router = useRouter();
 
+  const [profile, setProfile] = useState(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [savedRoutes, setSavedRoutes] = useState([]);
@@ -51,23 +57,19 @@ export default function CreateTrainingPage() {
     titleEdited: false,
     description: "",
     visibility: "public",
-
-    date: "",
+    date: todayString(),
     time_mode: "fixed",
     time: "",
     flexible_start_time: "",
     flexible_end_time: "",
-
     start_location: "",
     distance_km: "",
     estimated_duration_min: "",
-
     intensity_label: "easy",
     pace_min: "",
     pace_max: "",
     speed_min: "",
     speed_max: "",
-
     max_participants: "",
     route_id: "",
     workout_id: "",
@@ -78,16 +80,11 @@ export default function CreateTrainingPage() {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
 
-  const selectedSports = useMemo(
-    () => availableSportOptions.filter((sport) => form.sports.includes(sport.id)),
-    [availableSportOptions, form.sports]
-  );
+  const selectedSports = useMemo(() => {
+    return availableSportOptions.filter((sport) => form.sports.includes(sport.id));
+  }, [availableSportOptions, form.sports]);
 
-  const automaticTitle = useMemo(
-    () => makeAutomaticTitle(selectedSports),
-    [selectedSports]
-  );
-
+  const automaticTitle = useMemo(() => makeAutomaticTitle(selectedSports), [selectedSports]);
   const trainingTitle = form.titleEdited ? form.title : automaticTitle;
 
   const supportsRoutes = selectedSports.some((sport) => sport.route);
@@ -108,165 +105,208 @@ export default function CreateTrainingPage() {
   }, [savedWorkouts, form.sports, supportsWorkouts]);
 
   useEffect(() => {
-    const loadPreferredSports = async () => {
-      setCheckingAccess(true);
-      setMessage("");
+    loadCreateTrainingData();
+  }, []);
 
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        const user = userData?.user;
+  async function loadCreateTrainingData() {
+    setCheckingAccess(true);
+    setMessage("");
 
-        if (!user?.id) {
-          router.replace("/login");
-          return;
-        }
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData?.user;
 
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("onboarding_completed")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileError) throw profileError;
-
-        if (!profile?.onboarding_completed) {
-          router.replace("/onboarding");
-          return;
-        }
-
-        const { data: sportsRows, error: sportsError } = await supabase
-          .from("user_sports")
-          .select("sport_id")
-          .eq("user_id", user.id);
-
-        if (sportsError) throw sportsError;
-
-        const ids = (sportsRows || []).map((row) => row.sport_id);
-        setAllowedSportIds(ids);
-
-        const { data: routeRows, error: routeError } = await supabase
-          .from("routes")
-          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility,creator_id")
-          .or(`visibility.eq.public,creator_id.eq.${user.id}`)
-          .order("updated_at", { ascending: false, nullsFirst: false })
-          .order("created_at", { ascending: false })
-          .limit(80);
-
-        let filteredRoutes = [];
-
-        if (routeError) {
-          console.warn("Routes skipped", routeError);
-          setSavedRoutes([]);
-        } else {
-          filteredRoutes = (routeRows || []).filter((route) => ids.includes(route.sport_id) || route.creator_id === user.id);
-          setSavedRoutes(filteredRoutes);
-        }
-
-        const params = new URLSearchParams(window.location.search);
-        const requestedRouteId = params.get("route");
-        const requestedRoute = requestedRouteId
-          ? filteredRoutes.find((route) => route.id === requestedRouteId)
-          : null;
-
-        if (requestedRoute) {
-          setPreselectedRoute(requestedRoute);
-          setForm((current) => ({
-            ...current,
-            sports: [requestedRoute.sport_id],
-            route_id: requestedRoute.id,
-            distance_km: requestedRoute.distance_km || current.distance_km,
-            title: current.titleEdited ? current.title : `${getSportLabel(requestedRoute.sport_id)} Training`,
-            titleEdited: current.titleEdited,
-          }));
-        }
-
-        if (!ids.length) {
-          setForm((current) => ({
-            ...current,
-            sports: [],
-            title: "",
-            titleEdited: false,
-          }));
-          setMessage("No preferred sports found. Update your profile before creating a training.");
-          return;
-        }
-
-        const firstAllowed = ids[0];
-        const firstSelected = sportOptions.find((sport) => sport.id === firstAllowed);
-        const firstTitle = makeAutomaticTitle(firstSelected ? [firstSelected] : []);
-
-        setForm((current) => {
-          if (requestedRoute) {
-            return current;
-          }
-
-          return {
-            ...current,
-            sports: current.sports.length
-              ? current.sports.filter((sportId) => ids.includes(sportId))
-              : [firstAllowed],
-            title: current.titleEdited ? current.title : firstTitle,
-            titleEdited: current.titleEdited,
-            route_id: current.route_id,
-          };
-        });
-      } catch (err) {
-        console.error("Preferred sports load error", err);
-        setMessage(err?.message || "Could not load your preferred sports.");
-      } finally {
-        setCheckingAccess(false);
+      if (!user?.id) {
+        router.replace("/login");
+        return;
       }
-    };
 
-    loadPreferredSports();
-  }, [router]);
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .eq("id", user.id)
+        .maybeSingle();
 
-  const update = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
+      if (profileError) throw profileError;
 
-  const toggleSport = (sportId) => {
-    if (!allowedSportIds.includes(sportId)) return;
+      if (!profileRow?.onboarding_completed) {
+        router.replace("/onboarding");
+        return;
+      }
 
+      if (profileRow?.blocked) {
+        setProfile(profileRow);
+        setMessage("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
+      setProfile(profileRow);
+
+      const { data: sportsRows, error: sportsError } = await supabase
+        .from("user_sports")
+        .select("sport_id")
+        .eq("user_id", user.id);
+
+      if (sportsError) throw sportsError;
+
+      const allowedIds = (sportsRows || []).map((row) => row.sport_id).filter(Boolean);
+      setAllowedSportIds(allowedIds);
+
+      if (!allowedIds.length) {
+        setForm((current) => ({
+          ...current,
+          sports: [],
+          title: "",
+          titleEdited: false,
+        }));
+        setMessage("No preferred sports found. Update your profile before creating a training.");
+        return;
+      }
+
+      const firstSport = sportOptions.find((sport) => sport.id === allowedIds[0]);
+
+      setForm((current) => ({
+        ...current,
+        sports: current.sports.length ? current.sports.filter((sportId) => allowedIds.includes(sportId)) : [allowedIds[0]],
+        title: current.titleEdited ? current.title : makeAutomaticTitle(firstSport ? [firstSport] : []),
+      }));
+
+      let filteredRoutes = [];
+
+      const { data: routeRows, error: routeError } = await supabase
+        .from("routes")
+        .select("id,title,sport_id,distance_km,elevation_gain_m,visibility,creator_id")
+        .or(`visibility.eq.public,creator_id.eq.${user.id}`)
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(80);
+
+      if (routeError) {
+        console.warn("Routes skipped", routeError);
+      } else {
+        filteredRoutes = (routeRows || []).filter((route) => allowedIds.includes(route.sport_id) || route.creator_id === user.id);
+        setSavedRoutes(filteredRoutes);
+      }
+
+      const { data: workoutRows, error: workoutError } = await supabase
+        .from("workouts")
+        .select("id,title,sport_id,workout_type,level,duration_min,visibility,creator_id")
+        .or(`visibility.eq.public,creator_id.eq.${user.id}`)
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .limit(80);
+
+      if (workoutError) {
+        console.warn("Workouts skipped", workoutError);
+      } else {
+        setSavedWorkouts(
+          (workoutRows || []).filter((workout) => allowedIds.includes(workout.sport_id) || workout.creator_id === user.id)
+        );
+      }
+
+      const { data: partnerRows, error: partnerError } = await supabase
+        .from("training_partners")
+        .select("id,requester_id,addressee_id,status")
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      if (partnerError) {
+        console.warn("Training partners skipped", partnerError);
+      } else {
+        const partnerIds = (partnerRows || [])
+          .map((relation) => (relation.requester_id === user.id ? relation.addressee_id : relation.requester_id))
+          .filter(Boolean);
+
+        if (partnerIds.length) {
+          const { data: partnerProfiles, error: partnerProfilesError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,avatar_url,role,location")
+            .in("id", partnerIds);
+
+          if (partnerProfilesError) {
+            console.warn("Partner profiles skipped", partnerProfilesError);
+          } else {
+            setTeamPartners(partnerProfiles || []);
+          }
+        }
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const requestedRouteId = params.get("route") || params.get("route_id");
+      const requestedRoute = requestedRouteId
+        ? filteredRoutes.find((route) => route.id === requestedRouteId)
+        : null;
+
+      if (requestedRoute) {
+        setPreselectedRoute(requestedRoute);
+        setForm((current) => ({
+          ...current,
+          sports: [requestedRoute.sport_id],
+          route_id: requestedRoute.id,
+          distance_km: requestedRoute.distance_km || current.distance_km,
+          title: current.titleEdited ? current.title : `${getSportLabel(requestedRoute.sport_id)} Training`,
+        }));
+      }
+    } catch (error) {
+      console.error("Create training setup error", error);
+      setMessage(error?.message || "Could not prepare Create Training.");
+    } finally {
+      setCheckingAccess(false);
+    }
+  }
+
+  function update(key, value) {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function toggleSport(sportId) {
     setForm((current) => {
+      if (!allowedSportIds.includes(sportId)) return current;
+
       const exists = current.sports.includes(sportId);
-      const next = exists
+      const nextSports = exists
         ? current.sports.filter((item) => item !== sportId)
         : [...current.sports, sportId];
 
-      const updatedSports = next.length ? next : current.sports;
-      const updatedSelectedSports = sportOptions.filter(
-        (sport) => updatedSports.includes(sport.id) && allowedSportIds.includes(sport.id)
+      const safeSports = nextSports.length ? nextSports : current.sports;
+      const nextSelectedSports = sportOptions.filter(
+        (sport) => safeSports.includes(sport.id) && allowedSportIds.includes(sport.id)
       );
 
       const routeStillMatches = savedRoutes.some(
-        (route) => route.id === current.route_id && updatedSports.includes(route.sport_id)
+        (route) => route.id === current.route_id && safeSports.includes(route.sport_id)
+      );
+
+      const workoutStillMatches = savedWorkouts.some(
+        (workout) => workout.id === current.workout_id && safeSports.includes(workout.sport_id)
       );
 
       return {
         ...current,
-        sports: updatedSports,
+        sports: safeSports,
         route_id: routeStillMatches ? current.route_id : "",
-        title: current.titleEdited
-          ? current.title
-          : makeAutomaticTitle(updatedSelectedSports),
+        workout_id: workoutStillMatches ? current.workout_id : "",
+        title: current.titleEdited ? current.title : makeAutomaticTitle(nextSelectedSports),
       };
     });
-  };
+  }
 
-  const toggleInvite = (personId) => {
+  function toggleInvite(personId) {
     setSelectedInviteIds((current) =>
       current.includes(personId)
         ? current.filter((id) => id !== personId)
         : [...current, personId]
     );
-  };
+  }
 
-  const displayPartnerName = (person) => {
+  function displayPartnerName(person) {
     return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || "Training partner";
-  };
+  }
 
-  const saveTraining = async (event) => {
+  async function saveTraining(event) {
     event.preventDefault();
     setMessage("");
 
@@ -314,19 +354,18 @@ export default function CreateTrainingPage() {
     try {
       setSaving(true);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const user = sessionData?.session?.user;
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData?.user;
 
       if (!user?.id) {
-        router.push("/login");
+        router.replace("/login");
         return;
       }
 
-      let startsAt = null;
-
-      if (form.time_mode === "fixed" && form.date && form.time) {
-        startsAt = new Date(`${form.date}T${form.time}`).toISOString();
-      }
+      const startsAt =
+        form.time_mode === "fixed" && form.date && form.time
+          ? new Date(`${form.date}T${form.time}`).toISOString()
+          : null;
 
       const payload = {
         creator_id: user.id,
@@ -336,25 +375,18 @@ export default function CreateTrainingPage() {
         visibility: form.visibility,
         planning_type: form.time_mode === "fixed" ? "fixed" : "flexible",
         starts_at: startsAt,
-
         flexible_date: form.time_mode === "flexible" ? form.date : null,
         flexible_start_time: form.time_mode === "flexible" ? form.flexible_start_time || null : null,
         flexible_end_time: form.time_mode === "flexible" ? form.flexible_end_time || null : null,
-
         start_location: form.start_location.trim(),
         is_outdoor: Boolean(form.is_outdoor),
         distance_km: form.distance_km ? Number(form.distance_km) : null,
-        estimated_duration_min: form.estimated_duration_min
-          ? Number(form.estimated_duration_min)
-          : null,
-
+        estimated_duration_min: form.estimated_duration_min ? Number(form.estimated_duration_min) : null,
         intensity_label: usesIntensity ? form.intensity_label || null : null,
-
         pace_min: usesPace ? form.pace_min || null : null,
         pace_max: usesPace ? form.pace_max || null : null,
         speed_min: usesSpeed && form.speed_min ? Number(form.speed_min) : null,
         speed_max: usesSpeed && form.speed_max ? Number(form.speed_max) : null,
-
         max_participants: form.max_participants ? Number(form.max_participants) : null,
         route_id: form.route_id || null,
         workout_id: form.workout_id || null,
@@ -379,9 +411,7 @@ export default function CreateTrainingPage() {
           .from("training_invites")
           .insert(inviteRows);
 
-        if (inviteError) {
-          console.warn("Training invites skipped", inviteError);
-        }
+        if (inviteError) console.warn("Training invites skipped", inviteError);
       }
 
       if (form.visibility === "selected" && selectedInviteIds.length) {
@@ -394,24 +424,36 @@ export default function CreateTrainingPage() {
           .from("training_visibility_members")
           .insert(visibilityRows);
 
-        if (visibilityError) {
-          console.warn("Selected visibility members skipped", visibilityError);
-        }
+        if (visibilityError) console.warn("Selected visibility members skipped", visibilityError);
       }
 
       router.push(`/trainings/${data.id}`);
-    } catch (err) {
-      console.error("Create training error", err);
-      setMessage(err?.message || "Could not create training.");
+    } catch (error) {
+      console.error("Create training error", error);
+      setMessage(error?.message || "Could not create training.");
     } finally {
       setSaving(false);
     }
-  };
+  }
+
+  if (checkingAccess) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.shell}>
+          <AppHeader profile={profile} compact />
+          <section style={styles.stateCard}>
+            <div style={styles.stateTitle}>Preparing Create Training...</div>
+            <p style={styles.hint}>Checking your profile, preferred sports, routes and workouts.</p>
+          </section>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
-        <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
+        <AppHeader profile={profile} compact />
 
         <Link href="/trainings" style={styles.backLink}>
           ← Back to trainings
@@ -421,503 +463,349 @@ export default function CreateTrainingPage() {
           <div style={styles.kicker}>Create Training</div>
           <h1 style={styles.title}>Start with the sport.</h1>
           <p style={styles.subtitle}>
-            You can only create trainings for sports you selected as preferred sports.
+            You can only create trainings for your preferred sports. Routes and workouts appear only when relevant.
           </p>
         </header>
 
-        {checkingAccess ? (
-          <section style={styles.stateCard}>
-            <div style={styles.stateTitle}>Loading your sports...</div>
-            <p style={styles.hint}>Checking your preferred sports before showing the form.</p>
-          </section>
-        ) : (
-          <form onSubmit={saveTraining} style={styles.formCard}>
-            <section style={styles.sectionHero}>
-              <div style={styles.sectionTitle}>1. Your preferred sports</div>
+        {message ? <section style={styles.message}>{message}</section> : null}
 
-              {availableSportOptions.length ? (
-                <div style={styles.sportGrid}>
-                  {availableSportOptions.map((sport) => {
-                    const active = form.sports.includes(sport.id);
+        <form onSubmit={saveTraining} style={styles.form}>
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>1. Sport</div>
 
-                    return (
-                      <button
-                        type="button"
-                        key={sport.id}
-                        onClick={() => toggleSport(sport.id)}
-                        style={active ? styles.sportActive : styles.sportButton}
-                      >
-                        {sport.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={styles.infoCard}>
-                  <div style={styles.infoTitle}>No preferred sports</div>
-                  <p style={styles.hint}>
-                    Complete or update your onboarding before creating a training.
-                  </p>
-                </div>
-              )}
-
-              <label style={styles.label}>
-                Training name
-                <input
-                  value={trainingTitle}
-                  onChange={(event) => {
-                    update("title", event.target.value);
-                    update("titleEdited", true);
-                  }}
-                  placeholder={automaticTitle}
-                  style={styles.input}
-                />
-              </label>
-
-              {form.titleEdited ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((current) => ({
-                      ...current,
-                      title: automaticTitle,
-                      titleEdited: false,
-                    }))
-                  }
-                  style={styles.resetNameButton}
-                >
-                  Use automatic name: {automaticTitle}
-                </button>
-              ) : null}
-            </section>
-
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>2. Description</div>
-
-              <label style={styles.label}>
-                Short description
-                <textarea
-                  value={form.description}
-                  onChange={(event) => update("description", event.target.value)}
-                  placeholder="What kind of session is this?"
-                  style={styles.textarea}
-                />
-              </label>
-            </section>
-
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>3. Date & time</div>
-
-              <label style={styles.label}>
-                Date
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(event) => update("date", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
-              <div style={styles.toggleRow}>
-                <button
-                  type="button"
-                  onClick={() => update("time_mode", "fixed")}
-                  style={form.time_mode === "fixed" ? styles.toggleActive : styles.toggleButton}
-                >
-                  Fixed time
-                </button>
-                <button
-                  type="button"
-                  onClick={() => update("time_mode", "flexible")}
-                  style={form.time_mode === "flexible" ? styles.toggleActive : styles.toggleButton}
-                >
-                  Flexible time
+            {availableSportOptions.length ? (
+              <div style={styles.sportGrid}>
+                {availableSportOptions.map((sport) => {
+                  const active = form.sports.includes(sport.id);
+                  return (
+                    <button
+                      type="button"
+                      key={sport.id}
+                      onClick={() => toggleSport(sport.id)}
+                      style={active ? styles.sportActive : styles.sportButton}
+                    >
+                      {sport.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={styles.infoCard}>
+                <div style={styles.infoTitle}>No preferred sports selected</div>
+                <p style={styles.hint}>Go to your profile and choose at least one preferred sport.</p>
+                <button type="button" onClick={() => router.push("/profile")} style={styles.secondaryButton}>
+                  Open profile
                 </button>
               </div>
+            )}
+          </section>
 
-              {form.time_mode === "fixed" ? (
-                <label style={styles.label}>
-                  Start time
-                  <input
-                    type="time"
-                    value={form.time}
-                    onChange={(event) => update("time", event.target.value)}
-                    style={styles.input}
-                  />
-                </label>
-              ) : (
-                <>
-                  <div style={styles.twoColumns}>
-                    <label style={styles.label}>
-                      Possible from
-                      <input
-                        type="time"
-                        value={form.flexible_start_time}
-                        onChange={(event) => update("flexible_start_time", event.target.value)}
-                        style={styles.input}
-                      />
-                    </label>
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>2. Training details</div>
 
-                    <label style={styles.label}>
-                      Possible until
-                      <input
-                        type="time"
-                        value={form.flexible_end_time}
-                        onChange={(event) => update("flexible_end_time", event.target.value)}
-                        style={styles.input}
-                      />
-                    </label>
-                  </div>
+            <label style={styles.label}>
+              Training name
+              <input
+                value={trainingTitle}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                    titleEdited: true,
+                  }))
+                }
+                style={styles.input}
+              />
+            </label>
 
-                  <p style={styles.hint}>
-                    The date is fixed. Only the start time is flexible.
-                  </p>
-                </>
-              )}
-            </section>
+            <button
+              type="button"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  title: automaticTitle,
+                  titleEdited: false,
+                }))
+              }
+              style={styles.resetNameButton}
+            >
+              Use automatic name: {automaticTitle}
+            </button>
 
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>4. Location & effort</div>
+            <label style={styles.label}>
+              Description
+              <textarea
+                value={form.description}
+                onChange={(event) => update("description", event.target.value)}
+                placeholder="What kind of training is this?"
+                style={styles.textarea}
+              />
+            </label>
 
+            <label style={styles.label}>
+              Visibility
+              <select value={form.visibility} onChange={(event) => update("visibility", event.target.value)} style={styles.input}>
+                <option value="public">Public · all users</option>
+                <option value="team">Team · Team Up partners</option>
+                <option value="selected">Selected members</option>
+                <option value="private">Private · only me</option>
+                <option value="group">Group</option>
+              </select>
+            </label>
+
+            {form.visibility === "team" ? (
+              <p style={styles.hint}>Team visibility means accepted Team Up partners can see this training.</p>
+            ) : null}
+          </section>
+
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>3. Date and time</div>
+
+            <label style={styles.label}>
+              Date
+              <input type="date" value={form.date} onChange={(event) => update("date", event.target.value)} style={styles.input} />
+            </label>
+
+            <div style={styles.toggleRow}>
+              <button type="button" onClick={() => update("time_mode", "fixed")} style={form.time_mode === "fixed" ? styles.toggleActive : styles.toggleButton}>
+                Fixed time
+              </button>
+              <button type="button" onClick={() => update("time_mode", "flexible")} style={form.time_mode === "flexible" ? styles.toggleActive : styles.toggleButton}>
+                Flexible start
+              </button>
+            </div>
+
+            {form.time_mode === "fixed" ? (
               <label style={styles.label}>
-                Start location
-                <input
-                  value={form.start_location}
-                  onChange={(event) => update("start_location", event.target.value)}
-                  placeholder="Landgraaf, Brunssummerheide, gym..."
-                  style={styles.input}
-                />
+                Start time
+                <input type="time" value={form.time} onChange={(event) => update("time", event.target.value)} style={styles.input} />
               </label>
-
+            ) : (
               <div style={styles.twoColumns}>
                 <label style={styles.label}>
-                  Distance km
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.distance_km}
-                    onChange={(event) => update("distance_km", event.target.value)}
-                    style={styles.input}
-                  />
+                  Possible from
+                  <input type="time" value={form.flexible_start_time} onChange={(event) => update("flexible_start_time", event.target.value)} style={styles.input} />
                 </label>
-
                 <label style={styles.label}>
-                  Duration min
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.estimated_duration_min}
-                    onChange={(event) => update("estimated_duration_min", event.target.value)}
-                    style={styles.input}
-                  />
+                  Possible until
+                  <input type="time" value={form.flexible_end_time} onChange={(event) => update("flexible_end_time", event.target.value)} style={styles.input} />
                 </label>
               </div>
+            )}
+          </section>
 
-              {usesPace ? (
-                <div style={styles.twoColumns}>
-                  <label style={styles.label}>
-                    Pace from
-                    <input
-                      value={form.pace_min}
-                      onChange={(event) => update("pace_min", event.target.value)}
-                      placeholder="5:30"
-                      style={styles.input}
-                    />
-                  </label>
-                  <label style={styles.label}>
-                    Pace to
-                    <input
-                      value={form.pace_max}
-                      onChange={(event) => update("pace_max", event.target.value)}
-                      placeholder="6:00"
-                      style={styles.input}
-                    />
-                  </label>
-                </div>
-              ) : null}
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>4. Location and metrics</div>
 
-              {usesSpeed ? (
-                <div style={styles.twoColumns}>
-                  <label style={styles.label}>
-                    Speed from
-                    <input
-                      type="number"
-                      value={form.speed_min}
-                      onChange={(event) => update("speed_min", event.target.value)}
-                      placeholder="28"
-                      style={styles.input}
-                    />
-                  </label>
-                  <label style={styles.label}>
-                    Speed to
-                    <input
-                      type="number"
-                      value={form.speed_max}
-                      onChange={(event) => update("speed_max", event.target.value)}
-                      placeholder="32"
-                      style={styles.input}
-                    />
-                  </label>
-                </div>
-              ) : null}
+            <label style={styles.label}>
+              Start location
+              <input
+                value={form.start_location}
+                onChange={(event) => update("start_location", event.target.value)}
+                placeholder="Landgraaf, Brunssum, trailhead..."
+                style={styles.input}
+              />
+            </label>
 
-              {usesIntensity ? (
+            <div style={styles.twoColumns}>
+              <label style={styles.label}>
+                Distance km
+                <input type="number" min="0" step="0.1" value={form.distance_km} onChange={(event) => update("distance_km", event.target.value)} style={styles.input} />
+              </label>
+              <label style={styles.label}>
+                Duration min
+                <input type="number" min="0" value={form.estimated_duration_min} onChange={(event) => update("estimated_duration_min", event.target.value)} style={styles.input} />
+              </label>
+            </div>
+
+            {usesPace ? (
+              <div style={styles.twoColumns}>
                 <label style={styles.label}>
-                  Intensity
+                  Pace min
+                  <input value={form.pace_min} onChange={(event) => update("pace_min", event.target.value)} placeholder="5:00/km" style={styles.input} />
+                </label>
+                <label style={styles.label}>
+                  Pace max
+                  <input value={form.pace_max} onChange={(event) => update("pace_max", event.target.value)} placeholder="5:45/km" style={styles.input} />
+                </label>
+              </div>
+            ) : null}
+
+            {usesSpeed ? (
+              <div style={styles.twoColumns}>
+                <label style={styles.label}>
+                  Speed min
+                  <input type="number" min="0" step="0.1" value={form.speed_min} onChange={(event) => update("speed_min", event.target.value)} style={styles.input} />
+                </label>
+                <label style={styles.label}>
+                  Speed max
+                  <input type="number" min="0" step="0.1" value={form.speed_max} onChange={(event) => update("speed_max", event.target.value)} style={styles.input} />
+                </label>
+              </div>
+            ) : null}
+
+            {usesIntensity ? (
+              <label style={styles.label}>
+                Intensity
+                <select value={form.intensity_label} onChange={(event) => update("intensity_label", event.target.value)} style={styles.input}>
+                  <option value="easy">Easy</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="hard">Hard</option>
+                  <option value="race">Race effort</option>
+                </select>
+              </label>
+            ) : null}
+
+            <label style={styles.label}>
+              Max participants
+              <input type="number" min="0" value={form.max_participants} onChange={(event) => update("max_participants", event.target.value)} style={styles.input} />
+            </label>
+          </section>
+
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>
+              {form.visibility === "selected" ? "5. Select members" : "5. Invite training partners"}
+            </div>
+
+            {teamPartners.length ? (
+              <div style={styles.inviteGrid}>
+                {teamPartners.map((person) => {
+                  const active = selectedInviteIds.includes(person.id);
+                  const name = displayPartnerName(person);
+                  const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+                  return (
+                    <button
+                      type="button"
+                      key={person.id}
+                      onClick={() => toggleInvite(person.id)}
+                      style={active ? styles.inviteActive : styles.inviteButton}
+                    >
+                      {person.avatar_url ? (
+                        <img src={person.avatar_url} alt="" style={styles.inviteAvatar} />
+                      ) : (
+                        <span style={styles.inviteInitials}>{initials}</span>
+                      )}
+                      <span>{name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={styles.infoCard}>
+                <div style={styles.infoTitle}>No Team Up partners yet</div>
+                <p style={styles.hint}>
+                  You can still create public, private or team trainings. Add partners later through Team Up.
+                </p>
+                <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
+                  Open Team
+                </button>
+              </div>
+            )}
+
+            {form.visibility === "selected" ? (
+              <p style={styles.hint}>
+                Only you and selected Team Up partners can access this training.
+              </p>
+            ) : null}
+          </section>
+
+          {supportsRoutes ? (
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>6. Route</div>
+
+              {preselectedRoute ? (
+                <div style={styles.connectedRouteBox}>
+                  <strong>Route selected</strong>
+                  <span>
+                    {preselectedRoute.title} · {getSportLabel(preselectedRoute.sport_id)}
+                    {preselectedRoute.distance_km ? ` · ${preselectedRoute.distance_km} km` : ""}
+                  </span>
+                </div>
+              ) : null}
+
+              {compatibleRoutes.length ? (
+                <label style={styles.label}>
+                  Use saved route
                   <select
-                    value={form.intensity_label}
-                    onChange={(event) => update("intensity_label", event.target.value)}
+                    value={form.route_id}
+                    onChange={(event) => {
+                      const routeId = event.target.value;
+                      const route = compatibleRoutes.find((item) => item.id === routeId);
+
+                      setPreselectedRoute(route || null);
+                      setForm((current) => ({
+                        ...current,
+                        route_id: routeId,
+                        distance_km: route?.distance_km || current.distance_km,
+                      }));
+                    }}
                     style={styles.input}
                   >
-                    <option value="easy">Easy</option>
-                    <option value="moderate">Moderate</option>
-                    <option value="hard">Hard</option>
-                    <option value="race pace">Race pace</option>
-                    <option value="heavy">Heavy</option>
+                    <option value="">No route selected</option>
+                    {compatibleRoutes.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {route.title} · {getSportLabel(route.sport_id)}
+                        {route.distance_km ? ` · ${route.distance_km} km` : ""}
+                      </option>
+                    ))}
                   </select>
                 </label>
               ) : (
                 <div style={styles.infoCard}>
-                  <div style={styles.infoTitle}>Intensity hidden</div>
-                  <p style={styles.hint}>
-                    Pace or speed already describes the effort, so there is no separate intensity field.
-                  </p>
-                </div>
-              )}
-            </section>
-
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>5. Visibility</div>
-
-              <label style={styles.label}>
-                Who can see this?
-                <select
-                  value={form.visibility}
-                  onChange={(event) => update("visibility", event.target.value)}
-                  style={styles.input}
-                >
-                  <option value="public">All users</option>
-                  <option value="private">Only me</option>
-                  <option value="team">My team</option>
-                  <option value="selected">Selected members</option>
-                  <option value="group">Group</option>
-                </select>
-              </label>
-
-              {form.visibility === "team" ? (
-                <p style={styles.hint}>
-                  Team visibility means accepted Team Up partners can see this training.
-                </p>
-              ) : null}
-
-              <label style={styles.label}>
-                Max participants
-                <input
-                  type="number"
-                  min="1"
-                  value={form.max_participants}
-                  onChange={(event) => update("max_participants", event.target.value)}
-                  placeholder="Optional"
-                  style={styles.input}
-                />
-              </label>
-            </section>
-
-            <section style={styles.section}>
-              <div style={styles.sectionTitle}>6. Invite training partners</div>
-
-              {teamPartners.length ? (
-                <div style={styles.inviteGrid}>
-                  {teamPartners.map((person) => {
-                    const active = selectedInviteIds.includes(person.id);
-                    const initials = displayPartnerName(person)
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
-
-                    return (
-                      <button
-                        type="button"
-                        key={person.id}
-                        onClick={() => toggleInvite(person.id)}
-                        style={active ? styles.inviteActive : styles.inviteButton}
-                      >
-                        {person.avatar_url ? (
-                          <img src={person.avatar_url} alt="" style={styles.inviteAvatar} />
-                        ) : (
-                          <span style={styles.inviteInitials}>{initials}</span>
-                        )}
-                        <span>{displayPartnerName(person)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={styles.infoCard}>
-                  <div style={styles.infoTitle}>No training partners yet</div>
-                  <p style={styles.hint}>
-                    Use Team Up first to connect with people you trust, then invite them to trainings.
-                  </p>
-                  <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
-                    Open Team
+                  <div style={styles.infoTitle}>No saved route yet</div>
+                  <p style={styles.hint}>Create or import a route first, then connect it to this training.</p>
+                  <button type="button" onClick={() => router.push("/routes/new")} style={styles.secondaryButton}>
+                    Create route
                   </button>
                 </div>
               )}
             </section>
+          ) : null}
 
+          {supportsWorkouts ? (
             <section style={styles.section}>
-              <div style={styles.sectionTitle}>
-                {form.visibility === "selected" ? "6. Select members" : "6. Invite training partners"}
-              </div>
+              <div style={styles.sectionTitle}>Workout</div>
 
-              {teamPartners.length ? (
-                <div style={styles.inviteGrid}>
-                  {teamPartners.map((person) => {
-                    const active = selectedInviteIds.includes(person.id);
-                    const initials = displayPartnerName(person)
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
-
-                    return (
-                      <button
-                        type="button"
-                        key={person.id}
-                        onClick={() => toggleInvite(person.id)}
-                        style={active ? styles.inviteActive : styles.inviteButton}
-                      >
-                        {person.avatar_url ? (
-                          <img src={person.avatar_url} alt="" style={styles.inviteAvatar} />
-                        ) : (
-                          <span style={styles.inviteInitials}>{initials}</span>
-                        )}
-                        <span>{displayPartnerName(person)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              {compatibleWorkouts.length ? (
+                <label style={styles.label}>
+                  Use saved workout
+                  <select
+                    value={form.workout_id}
+                    onChange={(event) => update("workout_id", event.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="">No workout selected</option>
+                    {compatibleWorkouts.map((workout) => (
+                      <option key={workout.id} value={workout.id}>
+                        {workout.title} · {getSportLabel(workout.sport_id)}
+                        {workout.duration_min ? ` · ${workout.duration_min} min` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ) : (
                 <div style={styles.infoCard}>
-                  <div style={styles.infoTitle}>No training partners yet</div>
-                  <p style={styles.hint}>
-                    Use Team Up first to connect with people you trust. Selected trainings and invites use your Team Up network.
-                  </p>
-                  <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
-                    Open Team
+                  <div style={styles.infoTitle}>No saved workout yet</div>
+                  <p style={styles.hint}>Create a workout first, then connect it to this training.</p>
+                  <button type="button" onClick={() => router.push("/workouts/new")} style={styles.secondaryButton}>
+                    Create workout
                   </button>
                 </div>
               )}
-
-              {form.visibility === "selected" ? (
-                <p style={styles.hint}>
-                  Only you and the selected Team Up partners will be able to access this training.
-                </p>
-              ) : null}
             </section>
+          ) : null}
 
-            {supportsRoutes ? (
-              <section style={styles.section}>
-                <div style={styles.sectionTitle}>7. Route</div>
-
-                {preselectedRoute ? (
-                  <div style={styles.connectedRouteBox}>
-                    <strong>Route selected</strong>
-                    <span>
-                      {preselectedRoute.title} · {getSportLabel(preselectedRoute.sport_id)}
-                      {preselectedRoute.distance_km ? ` · ${preselectedRoute.distance_km} km` : ""}
-                    </span>
-                  </div>
-                ) : null}
-
-                {compatibleRoutes.length ? (
-                  <label style={styles.label}>
-                    Use saved route
-                    <select
-                      value={form.route_id}
-                      onChange={(event) => {
-                        const routeId = event.target.value;
-                        const route = compatibleRoutes.find((item) => item.id === routeId);
-
-                        setForm((current) => ({
-                          ...current,
-                          route_id: routeId,
-                          distance_km: route?.distance_km || current.distance_km,
-                        }));
-                      }}
-                      style={styles.input}
-                    >
-                      <option value="">No route selected</option>
-                      {compatibleRoutes.map((route) => (
-                        <option key={route.id} value={route.id}>
-                          {route.title} · {getSportLabel(route.sport_id)}
-                          {route.distance_km ? ` · ${route.distance_km} km` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <div style={styles.infoCard}>
-                    <div style={styles.infoTitle}>No saved route yet</div>
-                    <p style={styles.hint}>
-                      Create a route first, then connect it to this training. You can still create this training without a route.
-                    </p>
-                    <button type="button" onClick={() => router.push("/routes/new")} style={styles.secondaryButton}>
-                      Create route
-                    </button>
-                  </div>
-                )}
-
-                <p style={styles.hint}>
-                  Route Wizard and GPX upload will build on this route connection.
-                </p>
-              </section>
-            ) : null}
-
-            {supportsWorkouts ? (
-              <section style={styles.section}>
-                <div style={styles.sectionTitle}>Workout</div>
-                {compatibleWorkouts.length ? (
-                  <label style={styles.label}>
-                    Use saved workout
-                    <select value={form.workout_id} onChange={(event) => update("workout_id", event.target.value)} style={styles.input}>
-                      <option value="">No workout selected</option>
-                      {compatibleWorkouts.map((workout) => (
-                        <option key={workout.id} value={workout.id}>
-                          {workout.title} · {getSportLabel(workout.sport_id)}{workout.duration_min ? ` · ${workout.duration_min} min` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <div style={styles.infoCard}>
-                    <div style={styles.infoTitle}>No saved workout yet</div>
-                    <p style={styles.hint}>Create a workout first, then connect it to this training.</p>
-                    <button type="button" onClick={() => router.push("/workouts/new")} style={styles.secondaryButton}>Create workout</button>
-                  </div>
-                )}
-              </section>
-            ) : null}
-
-            {message ? <div style={styles.message}>{message}</div> : null}
-
-            <button
-              type="submit"
-              disabled={saving || !availableSportOptions.length}
-              style={styles.submitButton}
-            >
-              {saving ? "Creating..." : "Create Training"}
-            </button>
-          </form>
-        )}
+          <button type="submit" disabled={saving || !availableSportOptions.length} style={styles.submitButton}>
+            {saving ? "Creating..." : "Create training"}
+          </button>
+        </form>
       </section>
     </main>
   );
 }
+
+const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
   page: {
@@ -925,26 +813,29 @@ const styles = {
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "24px 18px 34px",
+    padding: "18px 16px 56px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: {
-    width: "min(760px, 100%)",
+    width: "min(860px, 100%)",
     margin: "0 auto",
     display: "grid",
-    gap: 20,
+    gap: 18,
   },
   logo: {
-    width: "min(330px, 76vw)",
+    width: "min(280px, 72vw)",
     height: "auto",
     justifySelf: "center",
-    objectFit: "contain",
   },
   backLink: {
     width: "fit-content",
     color: "#e4ef16",
     textDecoration: "none",
     fontWeight: 950,
+    border: "1px solid rgba(228,239,22,0.24)",
+    borderRadius: 999,
+    padding: "10px 14px",
+    background: "rgba(228,239,22,0.08)",
   },
   header: {
     display: "grid",
@@ -967,73 +858,31 @@ const styles = {
     margin: 0,
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.5,
+    maxWidth: 620,
   },
-  formCard: {
-    borderRadius: 36,
-    padding: 22,
-    background:
-      "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    boxShadow: "0 30px 90px rgba(0,0,0,0.40)",
-    display: "grid",
-    gap: 20,
-  },
-  sectionHero: {
+  form: {
     display: "grid",
     gap: 16,
-    borderRadius: 28,
-    padding: 18,
-    background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 35%), rgba(255,255,255,0.045)",
-    border: "1px solid rgba(228,239,22,0.16)",
   },
   section: {
+    borderRadius: 30,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 14,
   },
   sectionTitle: {
     color: "#e4ef16",
     fontWeight: 950,
-    letterSpacing: "0.06em",
+    letterSpacing: "0.08em",
     textTransform: "uppercase",
-    fontSize: 12,
-  },
-  label: {
-    display: "grid",
-    gap: 8,
-    color: "rgba(255,255,255,0.78)",
-    fontWeight: 850,
     fontSize: 13,
-  },
-  input: {
-    width: "100%",
-    minHeight: 52,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.13)",
-    background: "rgba(0,0,0,0.32)",
-    color: "white",
-    padding: "0 15px",
-    boxSizing: "border-box",
-    fontSize: 16,
-    outline: "none",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: 96,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.13)",
-    background: "rgba(0,0,0,0.32)",
-    color: "white",
-    padding: 15,
-    boxSizing: "border-box",
-    fontSize: 16,
-    outline: "none",
-    resize: "vertical",
   },
   sportGrid: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 9,
+    gap: 10,
   },
   sportButton: {
     borderRadius: 999,
@@ -1041,8 +890,124 @@ const styles = {
     background: "rgba(255,255,255,0.06)",
     color: "rgba(255,255,255,0.76)",
     padding: "11px 13px",
-    fontWeight: 850,
+    fontWeight: 900,
     cursor: "pointer",
+  },
+  sportActive: {
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.40)",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    padding: "11px 13px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  label: {
+    display: "grid",
+    gap: 7,
+    color: "rgba(255,255,255,0.72)",
+    fontWeight: 850,
+    fontSize: 13,
+  },
+  input: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(0,0,0,0.24)",
+    color: "white",
+    padding: "0 12px",
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 15,
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 100,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(0,0,0,0.24)",
+    color: "white",
+    padding: 12,
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 15,
+    resize: "vertical",
+  },
+  resetNameButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.08)",
+    color: "#e4ef16",
+    fontWeight: 900,
+    padding: "0 14px",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  toggleRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+  },
+  toggleButton: {
+    minHeight: 48,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.74)",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  toggleActive: {
+    minHeight: 48,
+    borderRadius: 18,
+    border: "1px solid rgba(228,239,22,0.40)",
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  twoColumns: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  hint: {
+    color: "rgba(255,255,255,0.62)",
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  infoCard: {
+    borderRadius: 22,
+    padding: 16,
+    background: "rgba(228,239,22,0.075)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    display: "grid",
+    gap: 8,
+  },
+  infoTitle: {
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  message: {
+    borderRadius: 18,
+    padding: 14,
+    background: "rgba(228,239,22,0.08)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    color: "rgba(255,255,255,0.82)",
+    lineHeight: 1.45,
+  },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "white",
+    fontWeight: 950,
+    padding: "0 16px",
+    cursor: "pointer",
+    width: "fit-content",
   },
   inviteGrid: {
     display: "grid",
@@ -1096,88 +1061,14 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.22)",
     fontWeight: 950,
   },
-  sportActive: {
-    borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.40)",
-    background: "rgba(228,239,22,0.14)",
-    color: "#e4ef16",
-    padding: "11px 13px",
-    fontWeight: 950,
-    cursor: "pointer",
-  },
-  resetNameButton: {
-    minHeight: 42,
-    borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.24)",
-    background: "rgba(228,239,22,0.08)",
-    color: "#e4ef16",
-    fontWeight: 900,
-    padding: "0 14px",
-    cursor: "pointer",
-    textAlign: "left",
-  },
-  toggleRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-  },
-  toggleButton: {
-    minHeight: 48,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(255,255,255,0.74)",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  toggleActive: {
-    minHeight: 48,
-    borderRadius: 18,
-    border: "1px solid rgba(228,239,22,0.40)",
-    background: "#e4ef16",
-    color: "#101406",
-    fontWeight: 950,
-    cursor: "pointer",
-  },
-  twoColumns: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
-  },
-  hint: {
-    color: "rgba(255,255,255,0.62)",
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  infoCard: {
+  connectedRouteBox: {
     borderRadius: 22,
-    padding: 16,
-    background: "rgba(228,239,22,0.075)",
-    border: "1px solid rgba(228,239,22,0.18)",
-  },
-  infoTitle: {
-    color: "#e4ef16",
-    fontWeight: 950,
-    marginBottom: 6,
-  },
-  message: {
-    borderRadius: 18,
-    padding: 14,
-    background: "rgba(228,239,22,0.08)",
-    border: "1px solid rgba(228,239,22,0.18)",
-    color: "rgba(255,255,255,0.82)",
-    lineHeight: 1.45,
-  },
-  secondaryButton: {
-    minHeight: 42,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.07)",
-    color: "white",
-    fontWeight: 950,
-    padding: "0 16px",
-    cursor: "pointer",
-    width: "fit-content",
+    padding: 15,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "rgba(255,255,255,0.84)",
+    display: "grid",
+    gap: 5,
   },
   submitButton: {
     width: "100%",
