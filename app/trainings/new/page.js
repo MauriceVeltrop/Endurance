@@ -306,6 +306,11 @@ export default function CreateTrainingPage() {
       return;
     }
 
+    if (form.visibility === "selected" && !selectedInviteIds.length) {
+      setMessage("Selected visibility requires at least one selected Team Up partner.");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -376,6 +381,21 @@ export default function CreateTrainingPage() {
 
         if (inviteError) {
           console.warn("Training invites skipped", inviteError);
+        }
+      }
+
+      if (form.visibility === "selected" && selectedInviteIds.length) {
+        const visibilityRows = selectedInviteIds.map((userId) => ({
+          session_id: data.id,
+          user_id: userId,
+        }));
+
+        const { error: visibilityError } = await supabase
+          .from("training_visibility_members")
+          .insert(visibilityRows);
+
+        if (visibilityError) {
+          console.warn("Selected visibility members skipped", visibilityError);
         }
       }
 
@@ -740,6 +760,58 @@ export default function CreateTrainingPage() {
                   </button>
                 </div>
               )}
+            </section>
+
+            <section style={styles.section}>
+              <div style={styles.sectionTitle}>
+                {form.visibility === "selected" ? "6. Select members" : "6. Invite training partners"}
+              </div>
+
+              {teamPartners.length ? (
+                <div style={styles.inviteGrid}>
+                  {teamPartners.map((person) => {
+                    const active = selectedInviteIds.includes(person.id);
+                    const initials = displayPartnerName(person)
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <button
+                        type="button"
+                        key={person.id}
+                        onClick={() => toggleInvite(person.id)}
+                        style={active ? styles.inviteActive : styles.inviteButton}
+                      >
+                        {person.avatar_url ? (
+                          <img src={person.avatar_url} alt="" style={styles.inviteAvatar} />
+                        ) : (
+                          <span style={styles.inviteInitials}>{initials}</span>
+                        )}
+                        <span>{displayPartnerName(person)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={styles.infoCard}>
+                  <div style={styles.infoTitle}>No training partners yet</div>
+                  <p style={styles.hint}>
+                    Use Team Up first to connect with people you trust. Selected trainings and invites use your Team Up network.
+                  </p>
+                  <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
+                    Open Team
+                  </button>
+                </div>
+              )}
+
+              {form.visibility === "selected" ? (
+                <p style={styles.hint}>
+                  Only you and the selected Team Up partners will be able to access this training.
+                </p>
+              ) : null}
             </section>
 
             {supportsRoutes ? (
