@@ -15,12 +15,10 @@ export default function RoutesPage() {
   const [routes, setRoutes] = useState([]);
   const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
 
   const loadRoutes = async () => {
     setMessage("");
-    setRefreshing(true);
 
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -84,7 +82,6 @@ export default function RoutesPage() {
       setRoutes([]);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -114,9 +111,6 @@ export default function RoutesPage() {
           </p>
 
           <div style={styles.actionRow}>
-            <button type="button" onClick={loadRoutes} disabled={refreshing} style={styles.refreshButton}>
-              {refreshing ? "Refreshing..." : "Refresh"}
-            </button>
             <button type="button" onClick={() => router.push("/trainings")} style={styles.secondaryButton}>
               Training sessions
             </button>
@@ -293,7 +287,6 @@ const styles = {
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 620 },
   actionRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
   createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
-  refreshButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   secondaryButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
   statsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   statCard: { minHeight: 112, borderRadius: 26, padding: 16, boxSizing: "border-box", background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", alignContent: "space-between" },
