@@ -130,6 +130,7 @@ export default function TrainingDetailPage() {
   const participantCount = participants.length;
   const isFull = Boolean(training?.max_participants && participantCount >= Number(training.max_participants));
   const routeLine = route ? makeRouteLine(route.route_points) : "";
+  const canManage = Boolean(user?.id && training?.creator_id === user.id);
 
   useEffect(() => {
     loadTraining();
@@ -257,6 +258,39 @@ export default function TrainingDetailPage() {
     }
   }
 
+
+  async function deleteTraining() {
+    if (!user?.id || !training?.id || !canManage) return;
+
+    const confirmed = window.confirm("Delete this training? This cannot be undone.");
+    if (!confirmed) return;
+
+    setBusy(true);
+    setMessage("");
+
+    try {
+      await supabase
+        .from("session_participants")
+        .delete()
+        .eq("session_id", training.id);
+
+      const { error } = await supabase
+        .from("training_sessions")
+        .delete()
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      router.replace("/trainings");
+    } catch (error) {
+      console.error("Delete training error", error);
+      setMessage(error?.message || "Could not delete training.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
@@ -344,6 +378,18 @@ export default function TrainingDetailPage() {
                     <a href={mapsUrl(training.start_location)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
                       Maps
                     </a>
+                  ) : null}
+
+                  {canManage ? (
+                    <>
+                      <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>
+                        Edit
+                      </Link>
+
+                      <button type="button" onClick={deleteTraining} disabled={busy} style={styles.dangerButton}>
+                        Delete
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -553,6 +599,16 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.08)",
     color: "white",
+    padding: "0 18px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  dangerButton: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: "1px solid rgba(255,90,90,0.24)",
+    background: "rgba(255,70,70,0.12)",
+    color: "#ffb4b4",
     padding: "0 18px",
     fontWeight: 950,
     cursor: "pointer",
