@@ -50,6 +50,7 @@ export default function CreateTrainingPage() {
   const [preselectedRoute, setPreselectedRoute] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [locationStatus, setLocationStatus] = useState("");
 
   const [form, setForm] = useState({
     sports: [],
@@ -103,6 +104,64 @@ export default function CreateTrainingPage() {
     if (!supportsWorkouts) return [];
     return savedWorkouts.filter((workout) => form.sports.includes(workout.sport_id));
   }, [savedWorkouts, form.sports, supportsWorkouts]);
+
+
+  async function fillCurrentLocation({ silent = false } = {}) {
+    if (typeof window === "undefined" || !navigator?.geolocation) {
+      if (!silent) setLocationStatus("Current location is not available on this device.");
+      return;
+    }
+
+    try {
+      if (!silent) setLocationStatus("Finding nearest address...");
+
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 9000,
+          maximumAge: 60000,
+        });
+      });
+
+      const { latitude, longitude } = position.coords;
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Reverse geocoding failed");
+
+      const data = await response.json();
+      const address = data?.address || {};
+
+      const parts = [
+        address.road,
+        address.house_number,
+        address.village || address.town || address.city || address.municipality,
+      ].filter(Boolean);
+
+      const nearestAddress = parts.length ? parts.join(" ") : data?.display_name;
+
+      if (nearestAddress) {
+        setForm((current) => ({
+          ...current,
+          startLocation: current.startLocation?.trim() ? current.startLocation : nearestAddress,
+          start_location: current.start_location?.trim() ? current.start_location : nearestAddress,
+        }));
+        setLocationStatus("Nearest address added. You can overwrite it.");
+      } else if (!silent) {
+        setLocationStatus("Could not determine the nearest address.");
+      }
+    } catch (error) {
+      console.warn("Current location skipped", error);
+      if (!silent) setLocationStatus("Could not get current location.");
+    }
+  }
 
   useEffect(() => {
     loadCreateTrainingData();
@@ -606,6 +665,10 @@ export default function CreateTrainingPage() {
                 placeholder="Landgraaf, Brunssum, trailhead..."
                 style={styles.input}
               />
+              <button type="button" onClick={() => fillCurrentLocation()} style={styles.secondaryButton}>
+                Use current location
+              </button>
+              {locationStatus ? <p style={styles.hint}>{locationStatus}</p> : null}
             </label>
 
             <div style={styles.twoColumns}>
