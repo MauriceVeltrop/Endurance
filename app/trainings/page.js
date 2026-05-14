@@ -292,9 +292,6 @@ export default function TrainingsPage() {
       joined: trainings.filter((training) => joinedSessionIds.has(training.id)).length,
     };
   }, [trainings, participantCounts, joinedSessionIds]);
-
-  const nextTraining = visibleTrainings[0];
-  const nextTrainingLabel = nextTraining ? formatTrainingTime(nextTraining) : "No session yet";
   const empty = !loading && !errorText && trainings.length === 0;
 
   return (
@@ -302,41 +299,16 @@ export default function TrainingsPage() {
       <section style={styles.shell}>
         <AppHeader profile={profile} compact />
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Training Sessions</div>
-
-          <div style={styles.titleRow}>
-            <h1 style={styles.title}>Who is training?</h1>
-
-            <button type="button" onClick={openCreateTraining} style={styles.createButton}>
-              + Create
-            </button>
+        <header style={styles.headerCompactHero}>
+          <div>
+            <div style={styles.kicker}>Training Sessions</div>
+            <h1 style={styles.titleCompact}>Who is training?</h1>
           </div>
 
-          <p style={styles.subtitle}>
-            Swipe through upcoming sessions that match your preferred sports.
-          </p>
+          <button type="button" onClick={openCreateTraining} style={styles.createButton}>
+            + Create
+          </button>
         </header>
-
-        <section style={styles.dashboardGrid} aria-label="Training dashboard">
-          <div style={styles.dashboardCard}>
-            <span style={styles.dashboardLabel}>Matching</span>
-            <strong style={styles.dashboardValue}>{loading ? "—" : visibleTrainings.length}</strong>
-            <span style={styles.dashboardHint}>shown · {trainings.length} total</span>
-          </div>
-
-          <div style={styles.dashboardCard}>
-            <span style={styles.dashboardLabel}>Sports</span>
-            <strong style={styles.dashboardValue}>{canSeeAll ? "All" : preferredSportIds.length || "—"}</strong>
-            <span style={styles.dashboardHint}>{preferredSportLabel}</span>
-          </div>
-
-          <div style={styles.dashboardCardWide}>
-            <span style={styles.dashboardLabel}>Next up</span>
-            <strong style={styles.dashboardValueSmall}>{nextTraining?.title || "Create momentum"}</strong>
-            <span style={styles.dashboardHint}>{nextTrainingLabel}</span>
-          </div>
-        </section>
 
         {!loading && !errorText && trainings.length > 0 ? (
           <section style={styles.trainingControls}>
@@ -447,7 +419,13 @@ export default function TrainingsPage() {
         ) : null}
 
         {!loading && !errorText && visibleTrainings.length > 0 ? (
-          <section style={styles.carousel}>
+          <section style={styles.trainingListBlock} aria-label="Training sessions list">
+            <div style={styles.listHeader}>
+              <span style={styles.kicker}>Training Sessions</span>
+              <span style={styles.listCount}>{visibleTrainings.length} shown</span>
+            </div>
+
+            <section style={styles.carousel}>
             {visibleTrainings.map((training) => {
               const primarySport = getPrimarySport(training);
               const sportLabel = getSportLabel(primarySport);
@@ -533,8 +511,23 @@ export default function TrainingsPage() {
                 </article>
               );
             })}
+            </section>
           </section>
         ) : null}
+
+        <section style={styles.dashboardGrid} aria-label="Training dashboard">
+          <div style={styles.dashboardCard}>
+            <span style={styles.dashboardLabel}>Matching</span>
+            <strong style={styles.dashboardValue}>{loading ? "—" : visibleTrainings.length}</strong>
+            <span style={styles.dashboardHint}>shown · {trainings.length} total</span>
+          </div>
+
+          <div style={styles.dashboardCard}>
+            <span style={styles.dashboardLabel}>Preferred Sports</span>
+            <strong style={styles.dashboardValue}>{canSeeAll ? "All" : preferredSportIds.length || "—"}</strong>
+            <span style={styles.dashboardHint}>{preferredSportLabel}</span>
+          </div>
+        </section>
       </section>
     </main>
   );
@@ -838,8 +831,8 @@ const styles = {
     padding: "0 18px",
   },
   trainingControls: {
-    borderRadius: 28,
-    padding: 14,
+    borderRadius: 26,
+    padding: 12,
     background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
     border: "1px solid rgba(255,255,255,0.12)",
     display: "grid",
@@ -847,11 +840,11 @@ const styles = {
   },
   searchRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 140px",
-    gap: 10,
+    gridTemplateColumns: "minmax(0, 1fr) 128px",
+    gap: 8,
   },
   searchInput: {
-    minHeight: 46,
+    minHeight: 44,
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(0,0,0,0.22)",
@@ -861,7 +854,7 @@ const styles = {
     fontSize: 15,
   },
   sortSelect: {
-    minHeight: 46,
+    minHeight: 44,
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(0,0,0,0.22)",
@@ -957,6 +950,35 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.14)",
     borderRadius: 999,
     padding: "10px 13px",
+    fontSize: 13,
+  },
+
+  headerCompactHero: {
+    display: "flex",
+    alignItems: "end",
+    justifyContent: "space-between",
+    gap: 14,
+    marginTop: 2,
+  },
+  titleCompact: {
+    margin: "8px 0 0",
+    fontSize: "clamp(36px, 9.5vw, 58px)",
+    lineHeight: 0.96,
+    letterSpacing: "-0.065em",
+  },
+  trainingListBlock: {
+    display: "grid",
+    gap: 12,
+  },
+  listHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+  listCount: {
+    color: "rgba(255,255,255,0.58)",
+    fontWeight: 850,
     fontSize: 13,
   },
 
