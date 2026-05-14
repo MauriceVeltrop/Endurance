@@ -542,17 +542,20 @@ const baseButton = {
 const styles = {
   page: {
     minHeight: "100vh",
+    overflowX: "hidden",
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 42px",
+    padding: "16px 14px 42px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: {
-    width: "min(960px, 100%)",
+    width: "100%",
+    maxWidth: 960,
     margin: "0 auto",
     display: "grid",
-    gap: 22,
+    gap: 18,
+    overflow: "hidden",
   },
   header: {
     display: "grid",
@@ -574,7 +577,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(38px, 10vw, 66px)",
+    fontSize: "clamp(34px, 9vw, 58px)",
     lineHeight: 0.96,
     letterSpacing: "-0.065em",
   },
@@ -587,8 +590,9 @@ const styles = {
   dashboardGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 12,
+    gap: 10,
     marginTop: 2,
+    minWidth: 0,
   },
   dashboardCard: {
     minHeight: 104,
@@ -638,7 +642,8 @@ const styles = {
   },
   createButton: {
     ...baseButton,
-    minHeight: 48,
+    minHeight: 46,
+    flexShrink: 0,
     borderRadius: 999,
     background: "#e4ef16",
     color: "#101406",
@@ -646,17 +651,17 @@ const styles = {
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
   },
   carousel: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "1fr",
     gap: 16,
-    overflowX: "auto",
-    padding: "4px 2px 18px",
-    scrollSnapType: "x mandatory",
-    WebkitOverflowScrolling: "touch",
+    overflow: "visible",
+    padding: "0 0 8px",
   },
   card: {
-    minWidth: 326,
-    maxWidth: 326,
-    minHeight: 444,
+    width: "100%",
+    minWidth: 0,
+    maxWidth: "100%",
+    minHeight: 0,
     borderRadius: 32,
     boxSizing: "border-box",
     color: "white",
@@ -671,6 +676,7 @@ const styles = {
   cardClickableArea: {
     display: "grid",
     textAlign: "left",
+    width: "100%",
     border: 0,
     padding: 0,
     margin: 0,
@@ -680,7 +686,7 @@ const styles = {
   },
   imageWrap: {
     position: "relative",
-    height: 178,
+    height: 156,
     overflow: "hidden",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
     background:
@@ -742,8 +748,9 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
-    padding: "0 22px 22px",
+    gap: 10,
+    padding: "0 18px 18px",
+    flexWrap: "wrap",
   },
   joined: {
     color: "rgba(255,255,255,0.70)",
@@ -831,7 +838,9 @@ const styles = {
     padding: "0 18px",
   },
   trainingControls: {
-    borderRadius: 26,
+    width: "100%",
+    boxSizing: "border-box",
+    borderRadius: 24,
     padding: 12,
     background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
     border: "1px solid rgba(255,255,255,0.12)",
@@ -840,11 +849,11 @@ const styles = {
   },
   searchRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 128px",
-    gap: 8,
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 10,
   },
   searchInput: {
-    minHeight: 44,
+    minHeight: 46,
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(0,0,0,0.22)",
@@ -854,7 +863,7 @@ const styles = {
     fontSize: 15,
   },
   sortSelect: {
-    minHeight: 44,
+    minHeight: 46,
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(0,0,0,0.22)",
@@ -867,7 +876,9 @@ const styles = {
     display: "flex",
     gap: 8,
     overflowX: "auto",
-    paddingBottom: 2,
+    paddingBottom: 4,
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
   },
   filterButton: {
     minHeight: 40,
@@ -957,18 +968,19 @@ const styles = {
     display: "flex",
     alignItems: "end",
     justifyContent: "space-between",
-    gap: 14,
-    marginTop: 2,
+    gap: 12,
+    marginTop: 0,
   },
   titleCompact: {
-    margin: "8px 0 0",
-    fontSize: "clamp(36px, 9.5vw, 58px)",
+    margin: "6px 0 0",
+    fontSize: "clamp(34px, 9vw, 54px)",
     lineHeight: 0.96,
     letterSpacing: "-0.065em",
   },
   trainingListBlock: {
     display: "grid",
     gap: 12,
+    minWidth: 0,
   },
   listHeader: {
     display: "flex",
