@@ -672,8 +672,9 @@ const styles = {
 
   cardImage: {
     position: "relative",
-    minHeight: 190,
+    minHeight: 0,
     height: "100%",
+    aspectRatio: "4 / 5",
     overflow: "hidden",
     borderRight: "1px solid rgba(255,255,255,0.08)",
     background:
@@ -755,9 +756,13 @@ const styles = {
     width: 24,
     height: 24,
     minWidth: 24,
+    maxWidth: 24,
+    maxHeight: 24,
+    flexShrink: 0,
     borderRadius: "50%",
     objectFit: "cover",
     display: "block",
+    overflow: "hidden",
     border: "1px solid rgba(255,255,255,0.24)",
   },
 
