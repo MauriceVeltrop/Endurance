@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import { getCurrentUser, getNextAuthPath, getProfile } from "../../lib/authFlow";
+import { getCurrentSession } from "../../lib/authFlow";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,20 +19,18 @@ export default function LoginPage() {
 
     async function checkSession() {
       try {
-        const user = await getCurrentUser();
+        const session = await getCurrentSession();
         if (!mounted) return;
-        if (!user?.id) {
-          setChecking(false);
+
+        if (session?.user?.id) {
+          router.replace("/trainings");
           return;
         }
 
-        const profile = await getProfile(user.id);
-        if (!mounted) return;
-        router.replace(getNextAuthPath(profile));
+        setChecking(false);
       } catch (error) {
-        console.error("Session check failed", error);
+        console.error("Session check skipped", error);
         if (mounted) {
-          setMessage(error?.message || "Could not check your session.");
           setChecking(false);
         }
       }
@@ -71,9 +69,7 @@ export default function LoginPage() {
       });
       if (error) throw error;
 
-      const user = await getCurrentUser();
-      const profile = await getProfile(user?.id);
-      router.replace(getNextAuthPath(profile));
+      router.replace("/trainings");
     } catch (error) {
       console.error("Auth error", error);
       setMessage(error?.message || "Authentication failed.");
