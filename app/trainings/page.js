@@ -282,6 +282,9 @@ export default function TrainingsPage() {
               const time = formatTrainingTime(training);
               const intensity = formatTrainingIntensity(training);
               const joinedCount = participantCounts[training.id] || 0;
+              const hasDistance = training.distance_km !== null && training.distance_km !== undefined && training.distance_km !== "";
+              const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+              const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
 
               return (
                 <article key={training.id} style={styles.card}>
@@ -304,32 +307,60 @@ export default function TrainingsPage() {
                       }}
                     >
                       <div style={styles.imageOverlay} />
+
+                      <div style={styles.imageBadges}>
+                        <span style={styles.sportBadge}>{sportLabel}</span>
+                        <span style={styles.visibilityBadge}>{training.visibility}</span>
+                      </div>
+
+                      <div style={styles.imageTitleBlock}>
+                        <h2 style={styles.cardTitle}>{training.title}</h2>
+                        <span style={styles.imageSubtitle}>{time}</span>
+                      </div>
                     </div>
 
                     <div style={styles.cardContent}>
-                      <div>
-                        <div style={styles.cardTop}>
-                          <div style={styles.sportBadge}>{sportLabel}</div>
-                          <div style={styles.visibilityBadge}>{training.visibility}</div>
+                      <div style={styles.metricGrid}>
+                        <div style={styles.metricPill}>
+                          <span>Distance</span>
+                          <strong>{hasDistance ? `${training.distance_km} km` : "Not set"}</strong>
                         </div>
 
-                        <h2 style={styles.cardTitle}>{training.title}</h2>
-                        <p style={styles.meta}>🕒 {time}</p>
+                        <div style={styles.metricPill}>
+                          <span>Joined</span>
+                          <strong>
+                            {joinedCount}
+                            {maxParticipants ? ` / ${maxParticipants}` : ""}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div style={styles.infoStack}>
                         <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
-                        {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
-                        {training.route_id ? <p style={styles.meta}>🧭 Route attached</p> : null}
-                        {training.workout_id ? <p style={styles.meta}>🏋️ Workout attached</p> : null}
                         <p style={styles.meta}>⚡ {intensity}</p>
+                      </div>
+
+                      <div style={styles.featureRow}>
+                        <span style={training.route_id ? styles.featureActive : styles.featureMuted}>
+                          🧭 {training.route_id ? "Route" : "No route"}
+                        </span>
+
+                        <span style={training.workout_id ? styles.featureActive : styles.featureMuted}>
+                          🏋️ {training.workout_id ? "Workout" : "No workout"}
+                        </span>
                       </div>
                     </div>
                   </button>
 
                   <div style={styles.cardFooter}>
-                    <span style={styles.joined}>
-                      {joinedCount ? `${joinedCount} joined` : "No participants yet"}
-                      {" · "}
-                      {training.max_participants ? `Max ${training.max_participants}` : "Open session"}
-                    </span>
+                    <div style={styles.footerText}>
+                      <span style={styles.joined}>
+                        {spotsLeft !== null ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left` : "Open session"}
+                      </span>
+                      <span style={styles.footerSub}>
+                        {joinedCount ? `${joinedCount} joined` : "No participants yet"}
+                      </span>
+                    </div>
 
                     <button
                       type="button"
@@ -470,9 +501,9 @@ const styles = {
     WebkitOverflowScrolling: "touch",
   },
   card: {
-    minWidth: 326,
-    maxWidth: 326,
-    minHeight: 444,
+    minWidth: 334,
+    maxWidth: 334,
+    minHeight: 520,
     borderRadius: 32,
     boxSizing: "border-box",
     color: "white",
@@ -486,6 +517,7 @@ const styles = {
   },
   cardClickableArea: {
     display: "grid",
+    gridTemplateRows: "190px 1fr",
     textAlign: "left",
     border: 0,
     padding: 0,
@@ -496,7 +528,7 @@ const styles = {
   },
   imageWrap: {
     position: "relative",
-    height: 178,
+    minHeight: 190,
     overflow: "hidden",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
     background:
@@ -507,13 +539,38 @@ const styles = {
     position: "absolute",
     inset: 0,
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.55)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.76)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)",
     pointerEvents: "none",
   },
-  cardContent: {
-    padding: 22,
+  imageBadges: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    zIndex: 2,
+  },
+  imageTitleBlock: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 16,
+    zIndex: 2,
     display: "grid",
-    gap: 20,
+    gap: 6,
+  },
+  imageSubtitle: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 14,
+    fontWeight: 850,
+  },
+  cardContent: {
+    padding: 18,
+    display: "grid",
+    gap: 14,
   },
   cardTop: {
     display: "flex",
@@ -543,28 +600,79 @@ const styles = {
     textTransform: "capitalize",
   },
   cardTitle: {
-    margin: "18px 0 10px",
-    fontSize: 29,
-    lineHeight: 1.02,
-    letterSpacing: "-0.045em",
+    margin: 0,
+    fontSize: 30,
+    lineHeight: 1,
+    letterSpacing: "-0.055em",
+    textShadow: "0 10px 30px rgba(0,0,0,0.5)",
+  },
+  metricGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+  },
+  metricPill: {
+    minHeight: 74,
+    borderRadius: 20,
+    padding: 12,
+    background: "rgba(255,255,255,0.065)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    display: "grid",
+    alignContent: "space-between",
+  },
+  infoStack: {
+    display: "grid",
+    gap: 6,
   },
   meta: {
-    margin: "8px 0",
+    margin: 0,
     color: "rgba(255,255,255,0.70)",
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 1.35,
+  },
+  featureRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  featureActive: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+  },
+  featureMuted: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 12,
+    fontWeight: 900,
   },
   cardFooter: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    padding: "0 22px 22px",
+    padding: "0 18px 18px",
+  },
+  footerText: {
+    display: "grid",
+    gap: 3,
   },
   joined: {
-    color: "rgba(255,255,255,0.70)",
-    fontWeight: 800,
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: 950,
     fontSize: 13,
+  },
+  footerSub: {
+    color: "rgba(255,255,255,0.50)",
+    fontWeight: 800,
+    fontSize: 12,
   },
   openButton: {
     ...baseButton,
