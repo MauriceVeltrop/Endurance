@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
+import { uploadTrainingPhoto } from "../../../../lib/trainingPhotos";
 
 function toDateInput(value) {
   if (!value) return "";
@@ -44,10 +45,14 @@ export default function EditTrainingPage() {
     distance_km: "",
     intensity_label: "",
     visibility: "public",
+    teaser_photo_url: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [removePhoto, setRemovePhoto] = useState(false);
 
   const canSave = useMemo(() => {
     return Boolean(user?.id && training?.creator_id === user.id && form.title.trim());
@@ -101,7 +106,11 @@ export default function EditTrainingPage() {
         distance_km: data.distance_km || "",
         intensity_label: data.intensity_label || "",
         visibility: data.visibility || "public",
+        teaser_photo_url: data.teaser_photo_url || "",
       });
+      setPhotoPreview(data.teaser_photo_url || "");
+      setPhotoFile(null);
+      setRemovePhoto(false);
     } catch (error) {
       console.error("Edit training load error", error);
       setMessage(error?.message || "Could not load training.");
@@ -114,6 +123,23 @@ export default function EditTrainingPage() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
+  function chooseTrainingPhoto(file) {
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview(form.teaser_photo_url || "");
+      return;
+    }
+
+    if (!file.type?.startsWith("image/")) {
+      setMessage("Choose an image file for the training photo.");
+      return;
+    }
+
+    setRemovePhoto(false);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
   async function saveTraining(event) {
     event.preventDefault();
     if (!canSave) return;
@@ -123,6 +149,15 @@ export default function EditTrainingPage() {
 
     try {
       const startsAt = combineDateTime(form.date, form.time);
+      let teaserPhotoUrl = form.teaser_photo_url || null;
+
+      if (removePhoto) {
+        teaserPhotoUrl = null;
+      }
+
+      if (photoFile) {
+        teaserPhotoUrl = await uploadTrainingPhoto({ supabase, userId: user.id, file: photoFile });
+      }
 
       const payload = {
         title: form.title.trim(),
@@ -131,6 +166,7 @@ export default function EditTrainingPage() {
         distance_km: form.distance_km === "" ? null : Number(form.distance_km),
         intensity_label: form.intensity_label.trim() || null,
         visibility: form.visibility,
+        teaser_photo_url: teaserPhotoUrl,
         updated_at: new Date().toISOString(),
       };
 
@@ -187,6 +223,38 @@ export default function EditTrainingPage() {
                 Description
                 <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} rows={4} style={styles.textarea} />
               </label>
+
+              <section style={styles.photoSection}>
+                <div style={styles.sectionTitle}>Training photo</div>
+                <label style={styles.photoDrop}>
+                  {photoPreview && !removePhoto ? (
+                    <img src={photoPreview} alt="Training preview" style={styles.photoPreview} />
+                  ) : (
+                    <span style={styles.photoPlaceholder}>Add training photo</span>
+                  )}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
+                    style={styles.hiddenFileInput}
+                  />
+                </label>
+
+                {photoPreview && !removePhoto ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemovePhoto(true);
+                      setPhotoFile(null);
+                      setPhotoPreview("");
+                    }}
+                    style={styles.secondaryLink}
+                  >
+                    Remove photo
+                  </button>
+                ) : null}
+              </section>
 
               <label style={styles.label}>
                 Location
@@ -362,6 +430,45 @@ const styles = {
     textDecoration: "none",
     display: "inline-grid",
     placeItems: "center",
+  },
+  photoSection: {
+    display: "grid",
+    gap: 10,
+  },
+  sectionTitle: {
+    color: "#e4ef16",
+    fontWeight: 950,
+    letterSpacing: "0.10em",
+    textTransform: "uppercase",
+    fontSize: 13,
+  },
+  photoDrop: {
+    position: "relative",
+    minHeight: 170,
+    borderRadius: 24,
+    overflow: "hidden",
+    border: "1px dashed rgba(228,239,22,0.34)",
+    background:
+      "radial-gradient(circle at 80% 20%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035))",
+    cursor: "pointer",
+    display: "grid",
+    placeItems: "center",
+  },
+  photoPreview: {
+    width: "100%",
+    height: 220,
+    objectFit: "cover",
+    display: "block",
+  },
+  photoPlaceholder: {
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  hiddenFileInput: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    cursor: "pointer",
   },
   muted: {
     color: "rgba(255,255,255,0.66)",
