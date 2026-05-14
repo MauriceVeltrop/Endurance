@@ -179,11 +179,11 @@ const styles = {
     padding: 0,
     lineHeight: 0,
     justifySelf: "center",
-    marginLeft: 86,
+    marginLeft: 58,
   },
 
   logo: {
-    width: "min(280px, 62vw)",
+    width: "min(260px, 58vw)",
     height: "auto",
     display: "block",
     filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))",
