@@ -385,8 +385,11 @@ export default function TrainingsPage() {
                 const joinedCount = participantCounts[training.id] || 0;
                 const alreadyJoined = joinedSessionIds.has(training.id);
                 const hasDistance =
-
+                  training.distance_km !== null &&
+                  training.distance_km !== undefined &&
                   training.distance_km !== "";
+                const hasIntensity = intensity && intensity !== "Intensity not set";
+                const hasRouteOrWorkout = Boolean(training.route_id || training.workout_id);
                 const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
                 const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
                 const creator = creatorProfiles[training.creator_id];
@@ -438,20 +441,17 @@ export default function TrainingsPage() {
                         </div>
 
                         <div style={styles.metricRow}>
-                          <span style={styles.metricPill}>↗ {hasDistance ? `${training.distance_km} km` : "Distance —"}</span>
+                          {hasDistance ? <span style={styles.metricPill}>↗ {training.distance_km} km</span> : null}
                           <span style={styles.metricPill}>👥 {joinedCount}{maxParticipants ? `/${maxParticipants}` : ""}</span>
-                          <span style={styles.metricPill}>⚡ {intensity}</span>
+                          {hasIntensity ? <span style={styles.metricPill}>⚡ {intensity}</span> : null}
                         </div>
 
-                        <div style={styles.featureRow}>
-                          <span style={training.route_id ? styles.featureActive : styles.featureMuted}>
-                            🧭 {training.route_id ? "Route" : ""}
-                          </span>
-
-                          <span style={training.workout_id ? styles.featureActive : styles.featureMuted}>
-                            🏋️ {training.workout_id ? "Workout" : ""}
-                          </span>
-                        </div>
+                        {hasRouteOrWorkout ? (
+                          <div style={styles.featureRow}>
+                            {training.route_id ? <span style={styles.featureActive}>🧭 Route</span> : null}
+                            {training.workout_id ? <span style={styles.featureActive}>🏋️ Workout</span> : null}
+                          </div>
+                        ) : null}
                       </div>
                     </button>
 
@@ -657,6 +657,8 @@ const styles = {
 
   cardMain: {
     display: "grid",
+    gridTemplateColumns: "minmax(112px, 34%) minmax(0, 1fr)",
+    alignItems: "stretch",
     textAlign: "left",
     border: 0,
     padding: 0,
@@ -670,9 +672,10 @@ const styles = {
 
   cardImage: {
     position: "relative",
-    height: 142,
+    minHeight: 190,
+    height: "100%",
     overflow: "hidden",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    borderRight: "1px solid rgba(255,255,255,0.08)",
     background:
       "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
     backgroundRepeat: "no-repeat",
@@ -687,9 +690,9 @@ const styles = {
   },
 
   cardBody: {
-    padding: 16,
+    padding: 14,
     display: "grid",
-    gap: 11,
+    gap: 9,
     minWidth: 0,
   },
 
@@ -731,10 +734,45 @@ const styles = {
 
   cardTitle: {
     margin: 0,
-    fontSize: "clamp(27px, 8vw, 34px)",
+    fontSize: "clamp(23px, 6.8vw, 32px)",
     lineHeight: 1,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
+  },
+
+  creatorRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    fontWeight: 850,
+    lineHeight: 1.2,
+  },
+
+  creatorAvatar: {
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    borderRadius: "50%",
+    objectFit: "cover",
+    display: "block",
+    border: "1px solid rgba(255,255,255,0.24)",
+  },
+
+  creatorFallback: {
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.16)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontSize: 11,
+    fontWeight: 950,
   },
 
   metaGrid: {
@@ -793,7 +831,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    padding: "0 16px 16px",
+    padding: "0 14px 14px",
     flexWrap: "wrap",
   },
 
