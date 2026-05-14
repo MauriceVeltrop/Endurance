@@ -14,6 +14,12 @@ import { getTrainingHeroImage } from "../../lib/sportImages";
 
 const privilegedRoles = ["admin", "moderator"];
 
+function getCreatorDisplayName(training) {
+  const creator = training?.creator_profile;
+  const fullName = [creator?.first_name, creator?.last_name].filter(Boolean).join(" ").trim();
+  return fullName || creator?.name || creator?.email || "Endurance member";
+}
+
 export default function TrainingsPage() {
   const router = useRouter();
 
@@ -102,6 +108,27 @@ export default function TrainingsPage() {
       if (error) throw error;
 
       const rows = data || [];
+      const creatorIds = [...new Set(rows.map((training) => training.creator_id).filter(Boolean))];
+      let creatorById = {};
+
+      if (creatorIds.length) {
+        const { data: creatorRows, error: creatorError } = await supabase
+          .from("profiles")
+          .select("id,name,first_name,last_name,email,avatar_url")
+          .in("id", creatorIds);
+
+        if (!creatorError) {
+          creatorById = Object.fromEntries((creatorRows || []).map((creator) => [creator.id, creator]));
+        } else {
+          console.warn("Training creator profiles skipped", creatorError);
+        }
+      }
+
+      const rowsWithCreators = rows.map((training) => ({
+        ...training,
+        creator_profile: creatorById[training.creator_id] || null,
+      }));
+
       const shouldSeeAll = privilegedRoles.includes(profileRow?.role);
 
       let acceptedPartnerIds = new Set();
@@ -124,7 +151,7 @@ export default function TrainingsPage() {
           console.warn("Team visibility partners skipped", partnerError);
         }
 
-        const selectedRows = rows.filter((training) => training.visibility === "selected");
+        const selectedRows = rowsWithCreators.filter((training) => training.visibility === "selected");
 
         if (selectedRows.length) {
           const { data: visibilityRows, error: visibilityError } = await supabase
@@ -142,8 +169,8 @@ export default function TrainingsPage() {
       }
 
       const filtered = shouldSeeAll
-        ? rows
-        : rows.filter((training) => {
+        ? rowsWithCreators
+        : rowsWithCreators.filter((training) => {
             if (training.creator_id === user.id) return true;
             if (training.visibility === "private") return false;
             if (training.visibility === "team" && !acceptedPartnerIds.has(training.creator_id)) return false;
@@ -253,6 +280,7 @@ export default function TrainingsPage() {
         training.title,
         training.description,
         training.start_location,
+        getCreatorDisplayName(training),
         Array.isArray(training.sports) ? training.sports.join(" ") : "",
         training.visibility,
       ]
@@ -471,6 +499,21 @@ export default function TrainingsPage() {
                         </div>
 
                         <h2 style={styles.cardTitle}>{training.title}</h2>
+
+                        <div style={styles.creatorRow}>
+                          {training.creator_profile?.avatar_url ? (
+                            <img
+                              src={training.creator_profile.avatar_url}
+                              alt=""
+                              style={styles.creatorAvatar}
+                            />
+                          ) : (
+                            <span style={styles.creatorAvatarFallback}>
+                              {getCreatorDisplayName(training).slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <span style={styles.creatorText}>Created by {getCreatorDisplayName(training)}</span>
+                        </div>
 
                         <div style={styles.metaGrid}>
                           <span>🕒 {time}</span>
@@ -852,6 +895,46 @@ const styles = {
     lineHeight: 1,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
+  },
+
+  creatorRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+
+  creatorAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.28)",
+    flexShrink: 0,
+  },
+
+  creatorAvatarFallback: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    display: "inline-grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.25)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    flexShrink: 0,
+  },
+
+  creatorText: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color: "rgba(255,255,255,0.66)",
+    fontSize: 13,
+    fontWeight: 850,
   },
 
   metaGrid: {
