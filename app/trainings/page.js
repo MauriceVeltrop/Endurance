@@ -21,6 +21,7 @@ export default function TrainingsPage() {
   const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [trainings, setTrainings] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
+  const [creatorProfiles, setCreatorProfiles] = useState({});
   const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
   const [currentUserId, setCurrentUserId] = useState("");
   const [busySessionId, setBusySessionId] = useState("");
@@ -151,9 +152,38 @@ export default function TrainingsPage() {
             return sports.some((sportId) => allowedSports.includes(sportId));
           });
 
-      setTrainings(filtered.slice(0, 30));
+      const visibleRows = filtered.slice(0, 30);
+      setTrainings(visibleRows);
 
-      const trainingIds = filtered.map((training) => training.id);
+      const creatorIds = [...new Set(visibleRows.map((training) => training.creator_id).filter(Boolean))];
+
+      if (creatorIds.length) {
+        const { data: creatorRows, error: creatorError } = await supabase
+          .from("profiles")
+          .select("id,name,first_name,last_name,avatar_url")
+          .in("id", creatorIds);
+
+        if (!creatorError) {
+          const mappedCreators = {};
+
+          (creatorRows || []).forEach((creator) => {
+            const fullName = [creator.first_name, creator.last_name].filter(Boolean).join(" ").trim();
+            mappedCreators[creator.id] = {
+              ...creator,
+              displayName: fullName || creator.name || "Unknown organizer",
+            };
+          });
+
+          setCreatorProfiles(mappedCreators);
+        } else {
+          console.warn("Creator profiles skipped", creatorError);
+          setCreatorProfiles({});
+        }
+      } else {
+        setCreatorProfiles({});
+      }
+
+      const trainingIds = visibleRows.map((training) => training.id);
 
       if (trainingIds.length) {
         const { data: participantRows, error: participantError } = await supabase
@@ -184,6 +214,7 @@ export default function TrainingsPage() {
       setErrorText(err?.message || "Could not load training sessions.");
       setTrainings([]);
       setParticipantCounts({});
+      setCreatorProfiles({});
     } finally {
       setLoading(false);
     }
@@ -359,6 +390,8 @@ export default function TrainingsPage() {
                   training.distance_km !== "";
                 const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
                 const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
+                const creator = creatorProfiles[training.creator_id];
+                const creatorName = creator?.displayName || (training.creator_id === currentUserId ? "You" : "Organizer");
 
                 return (
                   <article key={training.id} style={styles.card}>
@@ -390,6 +423,15 @@ export default function TrainingsPage() {
                         </div>
 
                         <h2 style={styles.cardTitle}>{training.title}</h2>
+
+                        <div style={styles.creatorRow}>
+                          {creator?.avatar_url ? (
+                            <img src={creator.avatar_url} alt="" style={styles.creatorAvatar} />
+                          ) : (
+                            <span style={styles.creatorFallback}>{creatorName.slice(0, 1).toUpperCase()}</span>
+                          )}
+                          <span>Created by {creatorName}</span>
+                        </div>
 
                         <div style={styles.metaGrid}>
                           <span>🕒 {time}</span>
