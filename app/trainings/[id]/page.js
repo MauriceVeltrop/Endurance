@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { getTrainingHeroImage } from "../../../lib/sportImages";
 
 const sportLabels = {
   running: "Running",
