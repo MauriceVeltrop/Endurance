@@ -149,28 +149,34 @@ const baseButton = {
 const styles = {
   header: {
     width: "100%",
-    display: "grid",
-    justifyItems: "center",
-    gap: 14,
-    position: "relative",
-    zIndex: 20,
-  },
-
-  headerCompact: {
-    width: "100%",
+    maxWidth: "100%",
     display: "grid",
     justifyItems: "center",
     gap: 12,
     position: "relative",
     zIndex: 20,
+    overflow: "visible",
+  },
+
+  headerCompact: {
+    width: "100%",
+    maxWidth: "100%",
+    display: "grid",
+    justifyItems: "center",
+    gap: 12,
+    position: "relative",
+    zIndex: 20,
+    overflow: "visible",
   },
 
   topRow: {
     width: "100%",
+    maxWidth: "100%",
     display: "grid",
-    gridTemplateColumns: "1fr auto",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    boxSizing: "border-box",
   },
 
   logoButton: {
@@ -179,11 +185,13 @@ const styles = {
     padding: 0,
     lineHeight: 0,
     justifySelf: "center",
-    marginLeft: 58,
+    minWidth: 0,
+    transform: "translateX(24px)",
   },
 
   logo: {
-    width: "min(260px, 58vw)",
+    width: "min(245px, 58vw)",
+    maxWidth: "100%",
     height: "auto",
     display: "block",
     filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))",
@@ -193,7 +201,8 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: 9,
+    gap: 8,
+    flexShrink: 0,
   },
 
   menuShell: {
@@ -201,12 +210,13 @@ const styles = {
     display: "grid",
     justifyItems: "center",
     width: "100%",
+    maxWidth: "100%",
   },
 
   menuButton: {
     ...baseButton,
-    minWidth: 150,
-    height: 48,
+    minWidth: 140,
+    height: 46,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.25)",
     background: "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.045))",
@@ -223,8 +233,8 @@ const styles = {
 
   menuButtonOpen: {
     ...baseButton,
-    minWidth: 150,
-    height: 48,
+    minWidth: 140,
+    height: 46,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.42)",
     background: "rgba(228,239,22,0.12)",
@@ -252,8 +262,10 @@ const styles = {
 
   menuPanel: {
     position: "absolute",
-    top: 58,
-    width: "min(430px, calc(100vw - 36px))",
+    top: 56,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: "min(390px, calc(100vw - 32px))",
     borderRadius: 24,
     overflow: "hidden",
     background:
@@ -267,12 +279,12 @@ const styles = {
   menuItem: {
     ...baseButton,
     width: "100%",
-    minHeight: 74,
+    minHeight: 68,
     display: "grid",
-    gridTemplateColumns: "48px minmax(0, 1fr) 22px",
+    gridTemplateColumns: "44px minmax(0, 1fr) 22px",
     alignItems: "center",
     gap: 12,
-    padding: "12px 16px",
+    padding: "10px 14px",
     background: "transparent",
     color: "white",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -280,32 +292,33 @@ const styles = {
   },
 
   menuIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 15,
     display: "grid",
     placeItems: "center",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.20)",
     color: "#e4ef16",
-    fontSize: 22,
+    fontSize: 20,
   },
 
   menuText: {
     display: "grid",
     gap: 3,
+    minWidth: 0,
   },
 
   menuArrow: {
     color: "rgba(255,255,255,0.76)",
-    fontSize: 30,
+    fontSize: 28,
     lineHeight: 1,
   },
 
   avatarButton: {
     ...baseButton,
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.08)",
@@ -325,18 +338,18 @@ const styles = {
   avatarFallback: {
     color: "#e4ef16",
     fontWeight: 950,
-    fontSize: 14,
+    fontSize: 13,
   },
 
   iconButton: {
     ...baseButton,
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.18)",
     background: "rgba(228,239,22,0.08)",
     color: "white",
-    fontSize: 25,
+    fontSize: 23,
     display: "grid",
     placeItems: "center",
     padding: 0,
