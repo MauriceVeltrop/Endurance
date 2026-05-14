@@ -14,12 +14,6 @@ import { getTrainingHeroImage } from "../../lib/sportImages";
 
 const privilegedRoles = ["admin", "moderator"];
 
-function getCreatorDisplayName(training) {
-  const creator = training?.creator_profile;
-  const fullName = [creator?.first_name, creator?.last_name].filter(Boolean).join(" ").trim();
-  return fullName || creator?.name || creator?.email || "Endurance member";
-}
-
 export default function TrainingsPage() {
   const router = useRouter();
 
@@ -32,9 +26,7 @@ export default function TrainingsPage() {
   const [busySessionId, setBusySessionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortMode, setSortMode] = useState("soonest");
 
   const canSeeAll = privilegedRoles.includes(profile?.role);
 
@@ -108,27 +100,6 @@ export default function TrainingsPage() {
       if (error) throw error;
 
       const rows = data || [];
-      const creatorIds = [...new Set(rows.map((training) => training.creator_id).filter(Boolean))];
-      let creatorById = {};
-
-      if (creatorIds.length) {
-        const { data: creatorRows, error: creatorError } = await supabase
-          .from("profiles")
-          .select("id,name,first_name,last_name,email,avatar_url")
-          .in("id", creatorIds);
-
-        if (!creatorError) {
-          creatorById = Object.fromEntries((creatorRows || []).map((creator) => [creator.id, creator]));
-        } else {
-          console.warn("Training creator profiles skipped", creatorError);
-        }
-      }
-
-      const rowsWithCreators = rows.map((training) => ({
-        ...training,
-        creator_profile: creatorById[training.creator_id] || null,
-      }));
-
       const shouldSeeAll = privilegedRoles.includes(profileRow?.role);
 
       let acceptedPartnerIds = new Set();
@@ -151,7 +122,7 @@ export default function TrainingsPage() {
           console.warn("Team visibility partners skipped", partnerError);
         }
 
-        const selectedRows = rowsWithCreators.filter((training) => training.visibility === "selected");
+        const selectedRows = rows.filter((training) => training.visibility === "selected");
 
         if (selectedRows.length) {
           const { data: visibilityRows, error: visibilityError } = await supabase
@@ -169,8 +140,8 @@ export default function TrainingsPage() {
       }
 
       const filtered = shouldSeeAll
-        ? rowsWithCreators
-        : rowsWithCreators.filter((training) => {
+        ? rows
+        : rows.filter((training) => {
             if (training.creator_id === user.id) return true;
             if (training.visibility === "private") return false;
             if (training.visibility === "team" && !acceptedPartnerIds.has(training.creator_id)) return false;
@@ -262,25 +233,14 @@ export default function TrainingsPage() {
   const visibleTrainings = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    const filtered = trainings.filter((training) => {
-      const hasRoute = Boolean(training.route_id);
-      const hasWorkout = Boolean(training.workout_id);
-      const joinedCount = participantCounts[training.id] || 0;
-      const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
-      const isFull = Boolean(maxParticipants && joinedCount >= maxParticipants);
+    if (!query) return trainings;
 
-      if (activeFilter === "routes" && !hasRoute) return false;
-      if (activeFilter === "workouts" && !hasWorkout) return false;
-      if (activeFilter === "open" && isFull) return false;
-      if (activeFilter === "joined" && !joinedSessionIds.has(training.id)) return false;
-
-      if (!query) return true;
-
+    return trainings.filter((training) => {
       const haystack = [
         training.title,
         training.description,
         training.start_location,
-        getCreatorDisplayName(training),
+        Array.isArray(training.sports) ? training.sports.map(getSportLabel).join(" ") : "",
         Array.isArray(training.sports) ? training.sports.join(" ") : "",
         training.visibility,
       ]
@@ -290,36 +250,7 @@ export default function TrainingsPage() {
 
       return haystack.includes(query);
     });
-
-    return [...filtered].sort((a, b) => {
-      if (sortMode === "distance") {
-        return Number(a.distance_km || 999999) - Number(b.distance_km || 999999);
-      }
-
-      if (sortMode === "participants") {
-        return (participantCounts[b.id] || 0) - (participantCounts[a.id] || 0);
-      }
-
-      const aTime = a.final_starts_at || a.starts_at || a.flexible_date || a.created_at || "";
-      const bTime = b.final_starts_at || b.starts_at || b.flexible_date || b.created_at || "";
-
-      return String(aTime).localeCompare(String(bTime));
-    });
-  }, [trainings, searchTerm, activeFilter, sortMode, participantCounts, joinedSessionIds]);
-
-  const filterCounts = useMemo(() => {
-    return {
-      all: trainings.length,
-      open: trainings.filter((training) => {
-        const joinedCount = participantCounts[training.id] || 0;
-        const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
-        return !(maxParticipants && joinedCount >= maxParticipants);
-      }).length,
-      routes: trainings.filter((training) => training.route_id).length,
-      workouts: trainings.filter((training) => training.workout_id).length,
-      joined: trainings.filter((training) => joinedSessionIds.has(training.id)).length,
-    };
-  }, [trainings, participantCounts, joinedSessionIds]);
+  }, [trainings, searchTerm]);
   const empty = !loading && !errorText && trainings.length === 0;
 
   return (
@@ -340,44 +271,12 @@ export default function TrainingsPage() {
 
         {!loading && !errorText && trainings.length > 0 ? (
           <section style={styles.trainingControls}>
-            <div style={styles.searchRow}>
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search trainings, location or sport..."
-                style={styles.searchInput}
-              />
-
-              <select
-                value={sortMode}
-                onChange={(event) => setSortMode(event.target.value)}
-                style={styles.sortSelect}
-              >
-                <option value="soonest">Soonest</option>
-                <option value="distance">Distance</option>
-                <option value="participants">Most joined</option>
-              </select>
-            </div>
-
-            <div style={styles.filterGrid}>
-              {[
-                ["all", "All"],
-                ["open", "Open"],
-                ["routes", "Routes"],
-                ["workouts", "Workouts"],
-                ["joined", "Joined"],
-              ].map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveFilter(key)}
-                  style={activeFilter === key ? styles.filterActive : styles.filterButton}
-                >
-                  <span>{label}</span>
-                  <span style={styles.filterCount}>{filterCounts[key] || 0}</span>
-                </button>
-              ))}
-            </div>
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search trainings, location or sport..."
+              style={styles.searchInput}
+            />
           </section>
         ) : null}
 
@@ -430,18 +329,10 @@ export default function TrainingsPage() {
         {!loading && !errorText && trainings.length > 0 && visibleTrainings.length === 0 ? (
           <section style={styles.emptyCard}>
             <div style={styles.emptyIcon}>🔎</div>
-            <div style={styles.stateTitle}>No trainings match your filters</div>
-            <p style={styles.stateText}>Try another search term, filter or sort mode.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setActiveFilter("all");
-                setSortMode("soonest");
-              }}
-              style={styles.primaryButton}
-            >
-              Reset filters
+            <div style={styles.stateTitle}>No trainings found</div>
+            <p style={styles.stateText}>Try another search term.</p>
+            <button type="button" onClick={() => setSearchTerm("")} style={styles.primaryButton}>
+              Clear search
             </button>
           </section>
         ) : null}
@@ -499,21 +390,6 @@ export default function TrainingsPage() {
                         </div>
 
                         <h2 style={styles.cardTitle}>{training.title}</h2>
-
-                        <div style={styles.creatorRow}>
-                          {training.creator_profile?.avatar_url ? (
-                            <img
-                              src={training.creator_profile.avatar_url}
-                              alt=""
-                              style={styles.creatorAvatar}
-                            />
-                          ) : (
-                            <span style={styles.creatorAvatarFallback}>
-                              {getCreatorDisplayName(training).slice(0, 1).toUpperCase()}
-                            </span>
-                          )}
-                          <span style={styles.creatorText}>Created by {getCreatorDisplayName(training)}</span>
-                        </div>
 
                         <div style={styles.metaGrid}>
                           <span>🕒 {time}</span>
@@ -678,97 +554,20 @@ const styles = {
   trainingControls: {
     width: "100%",
     boxSizing: "border-box",
-    borderRadius: 24,
-    padding: 12,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.12)",
-    display: "grid",
-    gap: 10,
-    overflow: "hidden",
-  },
-
-  searchRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 10,
-    minWidth: 0,
   },
 
   searchInput: {
-    minHeight: 44,
+    minHeight: 46,
     width: "100%",
-    borderRadius: 18,
+    borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.22)",
+    background: "rgba(0,0,0,0.24)",
     color: "white",
-    padding: "0 14px",
+    padding: "0 18px",
     outline: "none",
     fontSize: 15,
     boxSizing: "border-box",
-  },
-
-  sortSelect: {
-    minHeight: 44,
-    width: "100%",
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: "0 12px",
-    outline: "none",
-    fontWeight: 850,
-    boxSizing: "border-box",
-  },
-
-  filterGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 8,
-  },
-
-  filterButton: {
-    minHeight: 40,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(255,255,255,0.72)",
-    padding: "0 10px",
-    fontWeight: 900,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-    minWidth: 0,
-  },
-
-  filterActive: {
-    minHeight: 40,
-    borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.34)",
-    background: "rgba(228,239,22,0.14)",
-    color: "#e4ef16",
-    padding: "0 10px",
-    fontWeight: 950,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-    minWidth: 0,
-  },
-
-  filterCount: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 999,
-    display: "inline-grid",
-    placeItems: "center",
-    background: "rgba(255,255,255,0.10)",
-    fontSize: 12,
-    flexShrink: 0,
+    boxShadow: "inset 0 0 0 1px rgba(228,239,22,0.04)",
   },
 
   trainingListBlock: {
@@ -895,46 +694,6 @@ const styles = {
     lineHeight: 1,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
-  },
-
-  creatorRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
-  },
-
-  creatorAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 999,
-    objectFit: "cover",
-    border: "1px solid rgba(228,239,22,0.28)",
-    flexShrink: 0,
-  },
-
-  creatorAvatarFallback: {
-    width: 26,
-    height: 26,
-    borderRadius: 999,
-    display: "inline-grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.13)",
-    border: "1px solid rgba(228,239,22,0.25)",
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-    flexShrink: 0,
-  },
-
-  creatorText: {
-    minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    color: "rgba(255,255,255,0.66)",
-    fontSize: 13,
-    fontWeight: 850,
   },
 
   metaGrid: {
