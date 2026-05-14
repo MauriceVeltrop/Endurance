@@ -2,134 +2,107 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
-import {
-  formatTrainingIntensity,
-  formatTrainingTime,
-  getPrimarySport,
-  getSportLabel,
-} from "../../../lib/trainingHelpers";
-import { getTrainingHeroImage } from "../../../lib/sportImages";
-import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
-import { getElevationStats, getRoutePreviewStats } from "../../../lib/routePreview";
 
-function makeGoogleMapsUrl(location) {
-  if (!location) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+const sportLabels = {
+  running: "Running",
+  trail_running: "Trail Running",
+  road_cycling: "Road Cycling",
+  gravel_cycling: "Gravel Cycling",
+  mountain_biking: "Mountain Biking",
+  walking: "Walking",
+  kayaking: "Kayaking",
+  strength_training: "Strength Training",
+  crossfit: "CrossFit",
+  hyrox: "HYROX",
+  bootcamp: "Bootcamp",
+  swimming: "Swimming",
+  padel: "Padel",
+};
+
+function getSportLabel(id) {
+  return sportLabels[id] || id || "Training";
 }
 
-function escapeIcs(value = "") {
-  return String(value)
-    .replaceAll("\\", "\\\\")
-    .replaceAll(",", "\\,")
-    .replaceAll(";", "\\;")
-    .replaceAll("\n", "\\n");
+function getPrimarySport(training) {
+  const sports = Array.isArray(training?.sports) ? training.sports : [];
+  return sports[0] || "";
 }
 
-function toIcsDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().replace(/[-:]/g, "").replace(".000Z", "Z");
-}
+function formatTime(training) {
+  if (!training) return "";
 
-function downloadIcs(training) {
   const start = training.final_starts_at || training.starts_at;
-  const startIcs = toIcsDate(start);
 
-  if (!startIcs) {
-    alert("Calendar export is only available when the training has a fixed time.");
-    return;
+  if (start) {
+    try {
+      return new Date(start).toLocaleString([], {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Time set";
+    }
   }
 
-  const startDate = new Date(start);
-  const durationMin = Number(training.estimated_duration_min || 60);
-  const endDate = new Date(startDate.getTime() + durationMin * 60 * 1000);
-  const endIcs = toIcsDate(endDate.toISOString());
-
-  const ics = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Endurance//Training Session//EN",
-    "BEGIN:VEVENT",
-    `UID:${training.id}@endu-rance.nl`,
-    `DTSTAMP:${toIcsDate(new Date().toISOString())}`,
-    `DTSTART:${startIcs}`,
-    `DTEND:${endIcs}`,
-    `SUMMARY:${escapeIcs(training.title)}`,
-    `DESCRIPTION:${escapeIcs(training.description || "Endurance training session")}`,
-    `LOCATION:${escapeIcs(training.start_location || "")}`,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ].join("\r\n");
-
-  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${training.title || "endurance-training"}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function shareTraining(training) {
-  const url = typeof window !== "undefined" ? window.location.href : "";
-  const title = training?.title || "Endurance training";
-  const text = `Join this training on Endurance: ${title}`;
-
-  if (navigator?.share) {
-    navigator.share({ title, text, url }).catch(() => {});
-    return;
+  if (training.flexible_date) {
+    const from = training.flexible_start_time?.slice(0, 5) || "?";
+    const until = training.flexible_end_time?.slice(0, 5) || "?";
+    return `${training.flexible_date} · ${from}–${until}`;
   }
 
-  navigator.clipboard?.writeText(url);
-  alert("Training link copied.");
+  return "Time not set";
 }
 
-function getAvailabilitySummary(items) {
-  if (!items.length) return "No availability responses yet.";
+function formatEffort(training) {
+  if (!training) return "Not set";
 
-  const times = items
-    .filter((item) => item.available_from || item.available_until)
-    .map((item) => {
-      const from = item.available_from?.slice(0, 5) || "?";
-      const until = item.available_until?.slice(0, 5) || "?";
-      return `${from}–${until}`;
-    });
+  if (training.pace_min || training.pace_max) {
+    return [training.pace_min, training.pace_max].filter(Boolean).join(" – ");
+  }
 
-  if (!times.length) return `${items.length} response${items.length === 1 ? "" : "s"} received.`;
+  if (training.speed_min || training.speed_max) {
+    return `${[training.speed_min, training.speed_max].filter(Boolean).join(" – ")} km/h`;
+  }
 
-  return times.slice(0, 3).join(" · ") + (times.length > 3 ? ` +${times.length - 3}` : "");
+  return training.intensity_label || "Not set";
+}
+
+function mapsUrl(location) {
+  if (!location) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
 
 export default function TrainingDetailPage() {
   const params = useParams();
-  const id = params?.id;
+  const router = useRouter();
+  const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
+  const [user, setUser] = useState(null);
   const [training, setTraining] = useState(null);
-  const [participants, setParticipants] = useState([]);
-  const [availability, setAvailability] = useState([]);
-  const [invites, setInvites] = useState([]);
-  const [visibilityMembers, setVisibilityMembers] = useState([]);
   const [route, setRoute] = useState(null);
   const [workout, setWorkout] = useState(null);
-  const [user, setUser] = useState(null);
+  const [participants, setParticipants] = useState([]);
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [savingAvailability, setSavingAvailability] = useState(false);
-  const [errorText, setErrorText] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [availabilityForm, setAvailabilityForm] = useState({
-    available_from: "",
-    available_until: "",
-    note: "",
-  });
+  const [errorText, setErrorText] = useState("");
 
-  const loadTraining = async () => {
+  const primarySport = getPrimarySport(training);
+  const sportLabel = getSportLabel(primarySport);
+  const participantCount = participants.length;
+  const isFull = Boolean(training?.max_participants && participantCount >= Number(training.max_participants));
+
+  useEffect(() => {
+    loadTraining();
+  }, [id]);
+
+  async function loadTraining() {
     if (!id) return;
 
     setLoading(true);
@@ -137,11 +110,16 @@ export default function TrainingDetailPage() {
     setMessage("");
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const currentUser = sessionData?.session?.user || null;
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData?.user || null;
       setUser(currentUser);
 
-      const { data: trainingData, error: trainingError } = await supabase
+      if (!currentUser?.id) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: trainingRow, error: trainingError } = await supabase
         .from("training_sessions")
         .select("*")
         .eq("id", id)
@@ -149,263 +127,70 @@ export default function TrainingDetailPage() {
 
       if (trainingError) throw trainingError;
 
-      if (!trainingData) {
-        setTraining(null);
+      if (!trainingRow) {
         setErrorText("Training not found.");
-        return;
-      }
-
-      const isOwner = trainingData.creator_id === currentUser?.id;
-      const isPrivilegedUser = false;
-
-      if (!isOwner && trainingData.visibility === "private") {
         setTraining(null);
-        setErrorText("This training is private.");
         return;
       }
 
-      if (!isOwner && trainingData.visibility === "team") {
-        const { data: partnerRows, error: partnerError } = await supabase
-          .from("training_partners")
-          .select("id")
-          .eq("status", "accepted")
-          .or(`and(requester_id.eq.${currentUser?.id},addressee_id.eq.${trainingData.creator_id}),and(requester_id.eq.${trainingData.creator_id},addressee_id.eq.${currentUser?.id})`);
+      setTraining(trainingRow);
 
-        if (partnerError || !(partnerRows || []).length) {
-          setTraining(null);
-          setErrorText("This training is only visible to the organizer's Team Up partners.");
-          return;
-        }
-      }
-
-      if (!isOwner && trainingData.visibility === "selected") {
-        const { data: visibilityRows, error: visibilityError } = await supabase
-          .from("training_visibility_members")
-          .select("id")
-          .eq("session_id", trainingData.id)
-          .eq("user_id", currentUser?.id);
-
-        if (visibilityError || !(visibilityRows || []).length) {
-          setTraining(null);
-          setErrorText("This training is only visible to selected members.");
-          return;
-        }
-      }
-
-      setTraining(trainingData);
-
-      if (trainingData.route_id) {
-        const { data: routeData, error: routeError } = await supabase
+      if (trainingRow.route_id) {
+        const { data: routeRow, error: routeError } = await supabase
           .from("routes")
-          .select("id,title,description,sport_id,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points")
-          .eq("id", trainingData.route_id)
+          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility")
+          .eq("id", trainingRow.route_id)
           .maybeSingle();
 
-        if (routeError) {
-          console.warn("Route load skipped", routeError);
-          setRoute(null);
-        } else {
-          setRoute(routeData || null);
-        }
+        if (!routeError) setRoute(routeRow || null);
+        else setRoute(null);
       } else {
         setRoute(null);
       }
 
-      if (trainingData.workout_id) {
-        const { data: workoutData, error: workoutError } = await supabase
+      if (trainingRow.workout_id) {
+        const { data: workoutRow, error: workoutError } = await supabase
           .from("workouts")
-          .select("id,title,description,sport_id,workout_type,level,duration_min,structure,visibility")
-          .eq("id", trainingData.workout_id)
+          .select("id,title,sport_id,workout_type,level,duration_min,visibility,structure")
+          .eq("id", trainingRow.workout_id)
           .maybeSingle();
 
-        if (workoutError) {
-          console.warn("Workout load skipped", workoutError);
-          setWorkout(null);
-        } else {
-          setWorkout(workoutData || null);
-        }
+        if (!workoutError) setWorkout(workoutRow || null);
+        else setWorkout(null);
       } else {
         setWorkout(null);
       }
 
-      const { data: participantData, error: participantError } = await supabase
+      const { data: participantRows, error: participantError } = await supabase
         .from("session_participants")
         .select("id,user_id,created_at")
         .eq("session_id", id)
         .order("created_at", { ascending: true });
 
-      if (participantError) {
-        console.warn("Participant load skipped", participantError);
+      if (!participantError) {
+        const rows = participantRows || [];
+        setParticipants(rows);
+        setJoined(rows.some((row) => row.user_id === currentUser.id));
+      } else {
         setParticipants([]);
-      } else {
-        const participantRows = participantData || [];
-        const participantIds = participantRows.map((row) => row.user_id).filter(Boolean);
-
-        let profileMap = {};
-
-        if (participantIds.length) {
-          const { data: profileRows, error: profileListError } = await supabase
-            .from("profiles")
-            .select("id,name,first_name,last_name,avatar_url,role")
-            .in("id", participantIds);
-
-          if (profileListError) {
-            console.warn("Participant profiles skipped", profileListError);
-          } else {
-            profileMap = Object.fromEntries((profileRows || []).map((profile) => [profile.id, profile]));
-          }
-        }
-
-        setParticipants(
-          participantRows.map((row) => ({
-            ...row,
-            profile: profileMap[row.user_id] || null,
-          }))
-        );
-
-        setJoined(Boolean(currentUser?.id && participantRows.some((p) => p.user_id === currentUser.id)));
+        setJoined(false);
       }
-
-      const { data: availabilityData, error: availabilityError } = await supabase
-        .from("session_availability")
-        .select("id,user_id,available_from,available_until,note,created_at")
-        .eq("session_id", id)
-        .order("created_at", { ascending: true });
-
-      if (availabilityError) {
-        console.warn("Availability load skipped", availabilityError);
-        setAvailability([]);
-      } else {
-        const rows = availabilityData || [];
-        setAvailability(rows);
-
-        const ownRow = rows.find((row) => row.user_id === currentUser?.id);
-        if (ownRow) {
-          setAvailabilityForm({
-            available_from: ownRow.available_from?.slice(0, 5) || "",
-            available_until: ownRow.available_until?.slice(0, 5) || "",
-            note: ownRow.note || "",
-          });
-        }
-      }
-
-      const { data: inviteData, error: inviteError } = await supabase
-        .from("training_invites")
-        .select("id,invitee_id,created_at")
-        .eq("session_id", id)
-        .order("created_at", { ascending: true });
-
-      if (inviteError) {
-        console.warn("Invites skipped", inviteError);
-        setInvites([]);
-      } else {
-        const rows = inviteData || [];
-        const inviteeIds = rows.map((row) => row.invitee_id).filter(Boolean);
-        let inviteProfileMap = {};
-
-        if (inviteeIds.length) {
-          const { data: inviteProfiles, error: inviteProfilesError } = await supabase
-            .from("profiles")
-            .select("id,name,first_name,last_name,avatar_url,role")
-            .in("id", inviteeIds);
-
-          if (inviteProfilesError) {
-            console.warn("Invite profiles skipped", inviteProfilesError);
-          } else {
-            inviteProfileMap = Object.fromEntries((inviteProfiles || []).map((profile) => [profile.id, profile]));
-          }
-        }
-
-        setInvites(rows.map((row) => ({ ...row, profile: inviteProfileMap[row.invitee_id] || null })));
-      }
-
-      if (trainingData.visibility === "selected") {
-        const { data: visibilityMemberRows, error: visibilityMemberError } = await supabase
-          .from("training_visibility_members")
-          .select("id,user_id,created_at")
-          .eq("session_id", id);
-
-        if (visibilityMemberError) {
-          console.warn("Selected visibility members skipped", visibilityMemberError);
-          setVisibilityMembers([]);
-        } else {
-          const memberRows = visibilityMemberRows || [];
-          const memberIds = memberRows.map((row) => row.user_id).filter(Boolean);
-          let memberProfileMap = {};
-
-          if (memberIds.length) {
-            const { data: memberProfiles, error: memberProfilesError } = await supabase
-              .from("profiles")
-              .select("id,name,first_name,last_name,avatar_url,role")
-              .in("id", memberIds);
-
-            if (memberProfilesError) {
-              console.warn("Selected member profiles skipped", memberProfilesError);
-            } else {
-              memberProfileMap = Object.fromEntries((memberProfiles || []).map((profile) => [profile.id, profile]));
-            }
-          }
-
-          setVisibilityMembers(
-            memberRows.map((row) => ({
-              ...row,
-              profile: memberProfileMap[row.user_id] || null,
-            }))
-          );
-        }
-      } else {
-        setVisibilityMembers([]);
-      }
-    } catch (err) {
-      console.error("Training detail error", err);
-      setErrorText(err?.message || "Could not load training.");
+    } catch (error) {
+      console.error("Training detail load error", error);
+      setErrorText(error?.message || "Could not open training.");
       setTraining(null);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  useEffect(() => {
-    loadTraining();
-  }, [id]);
+  async function toggleJoin() {
+    if (!user?.id || !training?.id) return;
 
-  const participantCount = participants.length;
-
-  const isFull = useMemo(() => {
-    if (!training?.max_participants) return false;
-    return participantCount >= Number(training.max_participants);
-  }, [training?.max_participants, participantCount]);
-
-  const primarySport = training ? getPrimarySport(training) : null;
-  const sportLabel = primarySport ? getSportLabel(primarySport) : "";
-  const sportImage = training ? getTrainingHeroImage(training, primarySport) : null;
-  const allSports = Array.isArray(training?.sports)
-    ? training.sports.map((sport) => getSportLabel(sport))
-    : [];
-
-  const time = training ? formatTrainingTime(training) : "";
-  const intensity = training ? formatTrainingIntensity(training) : "";
-  const mapsUrl = training ? makeGoogleMapsUrl(training.start_location) : null;
-  const routeStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
-  const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
-  const isFlexible = training?.planning_type === "flexible";
-  const availabilitySummary = getAvailabilitySummary(availability);
-  const joinedLabel = `${participantCount}${training?.max_participants ? ` / ${training.max_participants}` : ""}`;
-  const primaryCtaLabel = joined ? "Leave training" : isFull ? "Training full" : "Join training";
-
-  const joinTraining = async () => {
     setMessage("");
-
-    if (!user?.id) {
-      setMessage("Login is required to join trainings.");
-      return;
-    }
-
-    if (!training?.id) return;
+    setBusy(true);
 
     try {
-      setJoining(true);
-
       if (joined) {
         const { error } = await supabase
           .from("session_participants")
@@ -421,67 +206,25 @@ export default function TrainingDetailPage() {
           return;
         }
 
-        const { error } = await supabase.from("session_participants").insert({
-          session_id: training.id,
-          user_id: user.id,
-        });
+        const { error } = await supabase
+          .from("session_participants")
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+          });
 
         if (error) throw error;
         setMessage("You joined this training.");
       }
 
       await loadTraining();
-    } catch (err) {
-      console.error("Join/leave error", err);
-      setMessage(err?.message || "Could not update participation.");
+    } catch (error) {
+      console.error("Join training error", error);
+      setMessage(error?.message || "Could not update participation.");
     } finally {
-      setJoining(false);
+      setBusy(false);
     }
-  };
-
-  const saveAvailability = async (event) => {
-    event.preventDefault();
-    setMessage("");
-
-    if (!user?.id) {
-      setMessage("Login is required to share availability.");
-      return;
-    }
-
-    if (!training?.id) return;
-
-    if (!availabilityForm.available_from || !availabilityForm.available_until) {
-      setMessage("Select both available from and available until.");
-      return;
-    }
-
-    try {
-      setSavingAvailability(true);
-
-      const existing = availability.find((row) => row.user_id === user.id);
-      const payload = {
-        session_id: training.id,
-        user_id: user.id,
-        available_from: availabilityForm.available_from,
-        available_until: availabilityForm.available_until,
-        note: availabilityForm.note?.trim() || null,
-      };
-
-      const { error } = existing
-        ? await supabase.from("session_availability").update(payload).eq("id", existing.id)
-        : await supabase.from("session_availability").insert(payload);
-
-      if (error) throw error;
-
-      setMessage("Availability saved.");
-      await loadTraining();
-    } catch (err) {
-      console.error("Availability save error", err);
-      setMessage(err?.message || "Could not save availability.");
-    } finally {
-      setSavingAvailability(false);
-    }
-  };
+  }
 
   return (
     <main style={styles.page}>
@@ -494,16 +237,16 @@ export default function TrainingDetailPage() {
 
         {loading ? (
           <section style={styles.stateCard}>
-            <div style={styles.stateTitle}>Loading training...</div>
-            <p style={styles.stateText}>Opening the training detail.</p>
+            <h1 style={styles.stateTitle}>Loading training...</h1>
+            <p style={styles.muted}>Opening the training session.</p>
           </section>
         ) : null}
 
         {errorText ? (
           <section style={styles.errorCard}>
-            <div style={styles.stateTitle}>Could not open training</div>
-            <p style={styles.stateText}>{errorText}</p>
-            <button type="button" onClick={loadTraining} style={styles.retryButton}>
+            <h1 style={styles.stateTitle}>Could not open training</h1>
+            <p style={styles.muted}>{errorText}</p>
+            <button type="button" onClick={loadTraining} style={styles.secondaryButton}>
               Try again
             </button>
           </section>
@@ -511,377 +254,106 @@ export default function TrainingDetailPage() {
 
         {!loading && training ? (
           <>
-            <article style={styles.heroCard}>
-              <div
-                style={{
-                  ...styles.heroImageWrap,
-                  ...(sportImage?.src
-                    ? {
-                        backgroundImage: `url("${sportImage.src}")`,
-                        backgroundSize: "cover",
-                        backgroundPosition: sportImage.position || "center center",
-                      }
-                    : {}),
-                }}
-              >
-                <div style={styles.heroImageOverlay} />
-
-                <div style={styles.heroTopOverlay}>
-                  <div style={styles.sportBadge}>{sportLabel}</div>
-                  <div style={styles.visibilityBadge}>{training.visibility}</div>
-                </div>
-
-                <div style={styles.heroBottomOverlay}>
-                  <div>
-                    <div style={styles.heroKicker}>{isFlexible ? "Flexible training" : "Training session"}</div>
-                    <h1 style={styles.title}>{training.title}</h1>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={joinTraining}
-                    disabled={joining || (!joined && isFull)}
-                    style={joined ? styles.leaveButtonFloating : styles.joinButtonFloating}
-                  >
-                    {joining ? "..." : primaryCtaLabel}
-                  </button>
-                </div>
-              </div>
+            <article style={styles.hero}>
+              <div style={styles.heroGlow} />
 
               <div style={styles.heroContent}>
-                <div style={styles.statusStrip}>
-                  <div style={styles.statusItem}>
+                <div style={styles.badgeRow}>
+                  <span style={styles.sportBadge}>{sportLabel}</span>
+                  <span style={styles.visibilityBadge}>{training.visibility}</span>
+                </div>
+
+                <h1 style={styles.title}>{training.title}</h1>
+
+                {training.description ? (
+                  <p style={styles.description}>{training.description}</p>
+                ) : null}
+
+                <div style={styles.quickGrid}>
+                  <div style={styles.quickCard}>
                     <span>Time</span>
-                    <strong>{time}</strong>
+                    <strong>{formatTime(training)}</strong>
                   </div>
-                  <div style={styles.statusItem}>
-                    <span>Joined</span>
-                    <strong>{joinedLabel}</strong>
+
+                  <div style={styles.quickCard}>
+                    <span>Start</span>
+                    <strong>{training.start_location || "Location not set"}</strong>
                   </div>
-                  <div style={styles.statusItem}>
+
+                  <div style={styles.quickCard}>
                     <span>Effort</span>
-                    <strong>{intensity || "Not set"}</strong>
+                    <strong>{formatEffort(training)}</strong>
+                  </div>
+
+                  <div style={styles.quickCard}>
+                    <span>Joined</span>
+                    <strong>
+                      {participantCount}
+                      {training.max_participants ? ` / ${training.max_participants}` : ""}
+                    </strong>
                   </div>
                 </div>
-
-                <div style={styles.locationCard}>
-                  <span style={styles.metaIcon}>📍</span>
-                  <div>
-                    <div style={styles.metaLabel}>Start location</div>
-                    <div style={styles.metaValue}>{training.start_location || "Location not set"}</div>
-                  </div>
-                </div>
-
-                {training.description ? <p style={styles.description}>{training.description}</p> : null}
 
                 {message ? <div style={styles.message}>{message}</div> : null}
+
+                <div style={styles.actions}>
+                  <button
+                    type="button"
+                    onClick={toggleJoin}
+                    disabled={busy || (!joined && isFull)}
+                    style={joined ? styles.leaveButton : styles.primaryButton}
+                  >
+                    {busy ? "..." : joined ? "Leave training" : isFull ? "Training full" : "Join training"}
+                  </button>
+
+                  {training.start_location ? (
+                    <a href={mapsUrl(training.start_location)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
+                      Maps
+                    </a>
+                  ) : null}
+                </div>
               </div>
             </article>
 
-            <section style={styles.quickPanel}>
-              <div style={styles.quickHeader}>
-                <div>
-                  <div style={styles.panelKicker}>At a glance</div>
-                  <h2 style={styles.panelTitle}>{isFlexible ? "Flexible start window" : "Fixed training"}</h2>
-                </div>
-                <span style={styles.planBadge}>{training.planning_type}</span>
-              </div>
-
-              <div style={styles.planGrid}>
-                <div style={styles.planItem}>
-                  <span style={styles.planLabel}>Sports</span>
-                  <strong>{allSports.join(" · ") || sportLabel}</strong>
-                </div>
-                <div style={styles.planItem}>
-                  <span style={styles.planLabel}>Distance</span>
-                  <strong>{training.distance_km ? `${training.distance_km} km` : "Not set"}</strong>
-                </div>
-                <div style={styles.planItem}>
-                  <span style={styles.planLabel}>Duration</span>
-                  <strong>{training.estimated_duration_min ? `${training.estimated_duration_min} min` : "Not set"}</strong>
-                </div>
-                <div style={styles.planItem}>
-                  <span style={styles.planLabel}>Availability</span>
-                  <strong>{availabilitySummary}</strong>
-                </div>
-              </div>
-            </section>
-
-            {isFlexible ? (
-              <section style={styles.availabilityCard}>
-                <div>
-                  <div style={styles.panelKicker}>Flexible planning</div>
-                  <h2 style={styles.panelTitle}>Share your availability</h2>
-                  <p style={styles.panelText}>
-                    The selected time window is about possible start time, not the full training duration.
-                  </p>
-                </div>
-
-                <form onSubmit={saveAvailability} style={styles.availabilityForm}>
-                  <label style={styles.field}>
-                    <span>Available from</span>
-                    <input
-                      type="time"
-                      value={availabilityForm.available_from}
-                      onChange={(event) =>
-                        setAvailabilityForm((current) => ({ ...current, available_from: event.target.value }))
-                      }
-                      style={styles.input}
-                    />
-                  </label>
-
-                  <label style={styles.field}>
-                    <span>Available until</span>
-                    <input
-                      type="time"
-                      value={availabilityForm.available_until}
-                      onChange={(event) =>
-                        setAvailabilityForm((current) => ({ ...current, available_until: event.target.value }))
-                      }
-                      style={styles.input}
-                    />
-                  </label>
-
-                  <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-                    <span>Note</span>
-                    <input
-                      value={availabilityForm.note}
-                      onChange={(event) =>
-                        setAvailabilityForm((current) => ({ ...current, note: event.target.value }))
-                      }
-                      placeholder="Example: I can start after work"
-                      style={styles.input}
-                    />
-                  </label>
-
-                  <button type="submit" disabled={savingAvailability} style={styles.saveAvailabilityButton}>
-                    {savingAvailability ? "Saving..." : "Save availability"}
-                  </button>
-                </form>
-              </section>
-            ) : null}
-
-            <section style={styles.participantsPanel}>
-              <div style={styles.quickHeader}>
-                <div>
-                  <div style={styles.panelKicker}>Participants</div>
-                  <h2 style={styles.panelTitle}>
-                    {participantCount} joined{training.max_participants ? ` / ${training.max_participants}` : ""}
-                  </h2>
-                </div>
-                <span style={joined ? styles.joinedBadge : styles.planBadge}>
-                  {joined ? "Joined" : "Open"}
-                </span>
-              </div>
-
-              {participants.length ? (
-                <div style={styles.participantList}>
-                  {participants.map((participant) => {
-                    const profile = participant.profile;
-                    const displayName =
-                      profile?.name ||
-                      [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
-                      (participant.user_id === user?.id ? "You" : "Endurance user");
-                    const initials = displayName
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
-
-                    return (
-                      <div key={participant.id} style={styles.participantCard}>
-                        {profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt={displayName} style={styles.participantAvatar} />
-                        ) : (
-                          <div style={styles.participantInitials}>{initials}</div>
-                        )}
-
-                        <div style={styles.participantText}>
-                          <strong>{displayName}</strong>
-                          <span>
-                            {participant.user_id === user?.id ? "You" : profile?.role || "user"}
-                          </span>
-                        </div>
-
-                        <span style={styles.participantStatus}>Joined</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p style={styles.infoText}>No participants yet. Be the first to join this training.</p>
-              )}
-            </section>
-
-            <section style={styles.participantsPanel}>
-              <div style={styles.quickHeader}>
-                <div>
-                  <div style={styles.panelKicker}>Invites</div>
-                  <h2 style={styles.panelTitle}>{invites.length} invited</h2>
-                </div>
-              </div>
-
-              {invites.length ? (
-                <div style={styles.participantList}>
-                  {invites.map((invite) => {
-                    const profile = invite.profile;
-                    const name = profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Training partner";
-                    const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-
-                    return (
-                      <div key={invite.id} style={styles.participantCard}>
-                        {profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt="" style={styles.participantAvatar} />
-                        ) : (
-                          <div style={styles.participantInitials}>{initials}</div>
-                        )}
-                        <div style={styles.participantText}>
-                          <strong>{name}</strong>
-                          <span>Invited</span>
-                        </div>
-                        <span style={styles.participantStatus}>Invite</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p style={styles.infoText}>No training partners invited yet.</p>
-              )}
-            </section>
-
-            {training.visibility === "selected" ? (
-              <section style={styles.participantsPanel}>
-                <div style={styles.quickHeader}>
-                  <div>
-                    <div style={styles.panelKicker}>Selected access</div>
-                    <h2 style={styles.panelTitle}>{visibilityMembers.length} selected</h2>
-                  </div>
-                </div>
-
-                {visibilityMembers.length ? (
-                  <div style={styles.participantList}>
-                    {visibilityMembers.map((member) => {
-                      const profile = member.profile;
-                      const name = profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Selected member";
-                      const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-
-                      return (
-                        <div key={member.id} style={styles.participantCard}>
-                          {profile?.avatar_url ? (
-                            <img src={profile.avatar_url} alt="" style={styles.participantAvatar} />
-                          ) : (
-                            <div style={styles.participantInitials}>{initials}</div>
-                          )}
-                          <div style={styles.participantText}>
-                            <strong>{name}</strong>
-                            <span>Can access this training</span>
-                          </div>
-                          <span style={styles.participantStatus}>Access</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p style={styles.infoText}>No selected access members found.</p>
-                )}
-              </section>
-            ) : null}
-
-            <section style={styles.actionGrid}>
-              {mapsUrl ? (
-                <a href={mapsUrl} target="_blank" rel="noreferrer" style={styles.actionCard}>
-                  <div style={styles.actionIcon}>🗺️</div>
-                  <div>
-                    <div style={styles.actionTitle}>Open in Maps</div>
-                    <div style={styles.actionText}>Navigate to start location</div>
-                  </div>
-                </a>
-              ) : (
-                <div style={styles.actionCardMuted}>
-                  <div style={styles.actionIcon}>🗺️</div>
-                  <div>
-                    <div style={styles.actionTitle}>No location yet</div>
-                    <div style={styles.actionText}>The organizer did not set a location</div>
-                  </div>
-                </div>
-              )}
-
-              <button type="button" onClick={() => downloadIcs(training)} style={styles.actionCardButton}>
-                <div style={styles.actionIcon}>📅</div>
-                <div>
-                  <div style={styles.actionTitle}>Add to Calendar</div>
-                  <div style={styles.actionText}>Download .ics event</div>
-                </div>
-              </button>
-
-              <button type="button" onClick={() => shareTraining(training)} style={styles.actionCardButton}>
-                <div style={styles.actionIcon}>↗</div>
-                <div>
-                  <div style={styles.actionTitle}>Share training</div>
-                  <div style={styles.actionText}>Send or copy the training link</div>
-                </div>
-              </button>
-            </section>
-
-            <section style={styles.infoGrid}>
-              <div style={{ ...styles.infoCard, gridColumn: "1 / -1" }}>
-                <div style={styles.infoTitle}>Route</div>
+            <section style={styles.grid}>
+              <article style={styles.card}>
+                <div style={styles.cardKicker}>Route</div>
                 {route ? (
-                  <div style={styles.routeVisualBox}>
-                    <RouteMiniPreview routePoints={route?.route_points} height={190} />
-
-                    <div style={styles.routeLinkedBox}>
-                      <strong>{route.title}</strong>
-                      <span>{getSportLabel(route.sport_id)}</span>
-                      <span>
-                        {route.distance_km ? `${route.distance_km} km` : "Distance not set"}
-                        {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m elevation` : ""}
-                      </span>
-                      <span>
-                        {routeStats.pointCount ? `${routeStats.pointCount} route points` : "No route points"}
-                        {elevationStats.available ? ` · elevation ${elevationStats.min}-${elevationStats.max} m` : ""}
-                      </span>
-
-                      <div style={styles.routeButtonRow}>
-                        <Link href={`/routes/${route.id}`} style={styles.routeButtonPrimary}>
-                          Open route
-                        </Link>
-                        {route.gpx_file_url ? (
-                          <a href={route.gpx_file_url} target="_blank" rel="noreferrer" style={styles.routeButtonSecondary}>
-                            Open GPX
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+                  <>
+                    <h2 style={styles.cardTitle}>{route.title}</h2>
+                    <p style={styles.muted}>
+                      {getSportLabel(route.sport_id)}
+                      {route.distance_km ? ` · ${route.distance_km} km` : ""}
+                      {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m+` : ""}
+                    </p>
+                  </>
                 ) : (
-                  <p style={styles.infoText}>
-                    No route connected yet. Saved routes can now be selected while creating a training.
-                  </p>
+                  <p style={styles.muted}>No route connected.</p>
                 )}
-              </div>
+              </article>
 
-              <div style={styles.infoCard}>
-                <div style={styles.infoTitle}>Workout</div>
+              <article style={styles.card}>
+                <div style={styles.cardKicker}>Workout</div>
                 {workout ? (
-                  <div style={styles.routeLinkedBox}>
-                    <strong>{workout.title}</strong>
-                    <span>{getSportLabel(workout.sport_id)}</span>
-                    <span>{workout.workout_type || "Workout"}{workout.level ? ` · ${workout.level}` : ""}{workout.duration_min ? ` · ${workout.duration_min} min` : ""}</span>
-                    {Array.isArray(workout.structure?.exercises) && workout.structure.exercises.length ? <span>{workout.structure.exercises.length} blocks / exercises</span> : null}
-                  </div>
+                  <>
+                    <h2 style={styles.cardTitle}>{workout.title}</h2>
+                    <p style={styles.muted}>
+                      {getSportLabel(workout.sport_id)}
+                      {workout.duration_min ? ` · ${workout.duration_min} min` : ""}
+                    </p>
+                  </>
                 ) : (
-                  <p style={styles.infoText}>No workout connected yet. Saved workouts can now be selected for strength, HYROX, CrossFit and bootcamp trainings.</p>
+                  <p style={styles.muted}>No workout connected.</p>
                 )}
-              </div>
+              </article>
 
-              <div style={styles.infoCard}>
-                <div style={styles.infoTitle}>Weather</div>
-                <p style={styles.infoText}>
-                  Outdoor weather forecast will be shown from 7 days before the session.
+              <article style={styles.card}>
+                <div style={styles.cardKicker}>Participants</div>
+                <h2 style={styles.cardTitle}>{participantCount} joined</h2>
+                <p style={styles.muted}>
+                  Participant profiles will be expanded after the detail page is stable.
                 </p>
-              </div>
+              </article>
             </section>
           </>
         ) : null}
@@ -890,92 +362,7 @@ export default function TrainingDetailPage() {
   );
 }
 
-const baseButton = {
-  border: 0,
-  cursor: "pointer",
-  fontWeight: 950,
-  heroTopOverlay: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    right: 16,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    zIndex: 2,
-  },
-  heroBottomOverlay: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 18,
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    gap: 14,
-    alignItems: "end",
-    zIndex: 2,
-  },
-  heroKicker: {
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
-    marginBottom: 8,
-  },
-  statusStrip: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 10,
-  },
-  statusItem: {
-    minHeight: 72,
-    borderRadius: 22,
-    padding: 14,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    display: "grid",
-    alignContent: "space-between",
-  },
-  locationCard: {
-    display: "flex",
-    gap: 10,
-    minHeight: 62,
-    alignItems: "center",
-    padding: 13,
-    borderRadius: 22,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
-  },
-  joinButtonFloating: {
-    ...baseButton,
-    minHeight: 50,
-    borderRadius: 999,
-    background: "#e4ef16",
-    color: "#101406",
-    fontSize: 15,
-    padding: "0 18px",
-    boxShadow: "0 18px 38px rgba(228,239,22,0.20)",
-    whiteSpace: "nowrap",
-  },
-  leaveButtonFloating: {
-    ...baseButton,
-    minHeight: 50,
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.14)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    color: "white",
-    fontSize: 15,
-    padding: "0 18px",
-    backdropFilter: "blur(14px)",
-    whiteSpace: "nowrap",
-  },
-
-};
-
-const cardBackground =
-  "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
+const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
   page: {
@@ -983,15 +370,19 @@ const styles = {
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 58px",
+    padding: "18px 16px 60px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
-  shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 18 },
+  shell: {
+    width: "min(920px, 100%)",
+    margin: "0 auto",
+    display: "grid",
+    gap: 18,
+  },
   logo: {
-    width: "min(280px, 68vw)",
+    width: "min(280px, 72vw)",
     height: "auto",
-    display: "block",
-    filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.12))",
+    justifySelf: "center",
   },
   backLink: {
     width: "fit-content",
@@ -1006,45 +397,48 @@ const styles = {
   stateCard: {
     borderRadius: 28,
     padding: 22,
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.12)",
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
   },
   errorCard: {
     borderRadius: 28,
     padding: 22,
-    background: "rgba(80,10,10,0.5)",
-    border: "1px solid rgba(255,70,70,0.2)",
+    background: "rgba(140,20,20,0.18)",
+    border: "1px solid rgba(255,90,90,0.22)",
   },
-  stateTitle: { fontSize: 24, fontWeight: 950 },
-  stateText: { color: "rgba(255,255,255,0.70)", lineHeight: 1.45 },
-  retryButton: { ...baseButton, minHeight: 44, borderRadius: 999, padding: "0 16px", background: "#e4ef16", color: "#101406" },
-  heroCard: {
+  stateTitle: {
+    margin: 0,
+    fontSize: 24,
+    letterSpacing: "-0.04em",
+  },
+  hero: {
+    position: "relative",
     overflow: "hidden",
-    borderRadius: 34,
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 36,
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #121712, #060706)",
+    border: "1px solid rgba(255,255,255,0.10)",
     boxShadow: "0 28px 80px rgba(0,0,0,0.34)",
   },
-  heroImageWrap: {
-    position: "relative",
-    height: 390,
-    overflow: "hidden",
-    background:
-      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
-    backgroundRepeat: "no-repeat",
-  },
-  heroImageOverlay: {
+  heroGlow: {
     position: "absolute",
     inset: 0,
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.32) 38%, rgba(0,0,0,0.82)), radial-gradient(circle at 82% 15%, rgba(228,239,22,0.16), transparent 36%)",
-    pointerEvents: "none",
+      "radial-gradient(circle at 84% 18%, rgba(228,239,22,0.18), transparent 28%)",
   },
-  heroContent: { padding: 22, display: "grid", gap: 18 },
-  topRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
+    padding: 24,
+    display: "grid",
+    gap: 18,
+  },
+  badgeRow: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+  },
   sportBadge: {
-    display: "inline-flex",
-    width: "fit-content",
     borderRadius: 999,
     padding: "8px 12px",
     background: "rgba(228,239,22,0.12)",
@@ -1053,304 +447,121 @@ const styles = {
     fontWeight: 950,
   },
   visibilityBadge: {
-    display: "inline-flex",
-    width: "fit-content",
     borderRadius: 999,
     padding: "8px 12px",
-    background: "rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.80)",
-    textTransform: "capitalize",
+    color: "rgba(255,255,255,0.76)",
     fontWeight: 900,
+    textTransform: "capitalize",
   },
-  title: { margin: 0, fontSize: "clamp(34px, 8vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.06em" },
-  metaGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
-  metaItem: {
+  title: {
+    margin: 0,
+    fontSize: "clamp(38px, 10vw, 72px)",
+    lineHeight: 0.94,
+    letterSpacing: "-0.07em",
+  },
+  description: {
+    margin: 0,
+    color: "rgba(255,255,255,0.70)",
+    lineHeight: 1.5,
+  },
+  quickGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 12,
+  },
+  quickCard: {
+    minHeight: 76,
+    borderRadius: 22,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    display: "grid",
+    gap: 6,
+  },
+  actions: {
     display: "flex",
     gap: 10,
-    minHeight: 58,
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 20,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
+    flexWrap: "wrap",
   },
-  metaIcon: { fontSize: 20 },
-  metaLabel: { color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" },
-  metaValue: { color: "rgba(255,255,255,0.86)", fontWeight: 850 },
-  description: { margin: 0, color: "rgba(255,255,255,0.72)", lineHeight: 1.55 },
+  primaryButton: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 18px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  leaveButton: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 18px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 16px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  secondaryLink: {
+    minHeight: 50,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 18px",
+    fontWeight: 950,
+    textDecoration: "none",
+    display: "inline-grid",
+    placeItems: "center",
+  },
   message: {
     borderRadius: 18,
     padding: 12,
     background: "rgba(228,239,22,0.10)",
-    border: "1px solid rgba(228,239,22,0.20)",
+    border: "1px solid rgba(228,239,22,0.18)",
     color: "#e4ef16",
     fontWeight: 850,
   },
-  joinButton: { ...baseButton, minHeight: 52, borderRadius: 999, background: "#e4ef16", color: "#101406", fontSize: 16 },
-  leaveButton: {
-    ...baseButton,
-    minHeight: 52,
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    color: "white",
-    fontSize: 16,
-  },
-  quickPanel: {
-    borderRadius: 30,
-    padding: 20,
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.26)",
+  grid: {
     display: "grid",
-    gap: 16,
-  },
-  quickHeader: { display: "flex", alignItems: "start", justifyContent: "space-between", gap: 14 },
-  panelKicker: { color: "#e4ef16", textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 12, fontWeight: 950 },
-  panelTitle: { margin: "3px 0 0", fontSize: 24, letterSpacing: "-0.045em" },
-  panelText: { margin: "6px 0 0", color: "rgba(255,255,255,0.66)", lineHeight: 1.5 },
-  planBadge: {
-    borderRadius: 999,
-    padding: "8px 12px",
-    color: "#e4ef16",
-    background: "rgba(228,239,22,0.10)",
-    border: "1px solid rgba(228,239,22,0.22)",
-    fontWeight: 950,
-    textTransform: "capitalize",
-  },
-  planGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 },
-  planItem: { padding: 14, borderRadius: 20, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gap: 4 },
-  planLabel: { color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" },
-  availabilityCard: {
-    borderRadius: 30,
-    padding: 20,
-    background:
-      "radial-gradient(circle at 90% 14%, rgba(228,239,22,0.12), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    gap: 16,
-  },
-  availabilityForm: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
-  field: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontSize: 13, fontWeight: 850 },
-  input: {
-    width: "100%",
-    minHeight: 46,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.13)",
-    background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: "0 12px",
-    boxSizing: "border-box",
-    outline: "none",
-    fontSize: 15,
-  },
-  saveAvailabilityButton: {
-    ...baseButton,
-    gridColumn: "1 / -1",
-    minHeight: 50,
-    borderRadius: 999,
-    background: "#e4ef16",
-    color: "#101406",
-  },
-  participantsPanel: {
-    borderRadius: 32,
-    padding: 20,
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
-    display: "grid",
-    gap: 18,
-  },
-  participantList: {
-    display: "grid",
-    gap: 10,
-  },
-  participantCard: {
-    minHeight: 58,
-    borderRadius: 22,
-    padding: 10,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    display: "grid",
-    gridTemplateColumns: "44px minmax(0, 1fr) auto",
-    alignItems: "center",
-    gap: 11,
-  },
-  participantAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    objectFit: "cover",
-    border: "1px solid rgba(228,239,22,0.30)",
-  },
-  participantInitials: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.14)",
-    color: "#e4ef16",
-    border: "1px solid rgba(228,239,22,0.28)",
-    fontWeight: 950,
-  },
-  participantText: {
-    minWidth: 0,
-    display: "grid",
-    gap: 2,
-    color: "rgba(255,255,255,0.72)",
-  },
-  participantStatus: {
-    borderRadius: 999,
-    padding: "7px 10px",
-    background: "rgba(228,239,22,0.10)",
-    border: "1px solid rgba(228,239,22,0.18)",
-    color: "#e4ef16",
-    fontWeight: 950,
-    fontSize: 12,
-  },
-  joinedBadge: {
-    borderRadius: 999,
-    padding: "8px 11px",
-    background: "#e4ef16",
-    color: "#101406",
-    fontWeight: 950,
-    textTransform: "capitalize",
-  },
-  actionGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
-  actionCard: {
-    minHeight: 96,
-    borderRadius: 24,
-    padding: 14,
-    textDecoration: "none",
-    color: "white",
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.12)",
-    display: "grid",
-    gap: 8,
-  },
-  actionCardButton: {
-    ...baseButton,
-    minHeight: 96,
-    borderRadius: 24,
-    padding: 14,
-    textAlign: "left",
-    color: "white",
-    background: cardBackground,
-    border: "1px solid rgba(255,255,255,0.12)",
-    display: "grid",
-    gap: 8,
-  },
-  actionCardMuted: {
-    minHeight: 96,
-    borderRadius: 24,
-    padding: 14,
-    color: "rgba(255,255,255,0.54)",
-    background: "rgba(255,255,255,0.045)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    display: "grid",
-    gap: 8,
-  },
-  actionIcon: { fontSize: 24 },
-  actionTitle: { fontWeight: 950 },
-  actionText: { color: "rgba(255,255,255,0.58)", fontSize: 13, lineHeight: 1.35 },
-  infoGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 },
-  infoCard: {
-    borderRadius: 24,
-    padding: 16,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.10)",
-  },
-  infoTitle: { color: "#e4ef16", fontWeight: 950, marginBottom: 6 },
-  routeVisualBox: { display: "grid", gap: 14 },
-  routeLinkedBox: { display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", lineHeight: 1.4, fontSize: 14 },
-  routeButtonRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 },
-  routeButtonPrimary: { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 999, background: "#e4ef16", color: "#101406", fontWeight: 950, textDecoration: "none", padding: "0 14px" },
-  routeButtonSecondary: { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 40, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", fontWeight: 950, textDecoration: "none", padding: "0 14px" },
-  inlineLink: { color: "#e4ef16", fontWeight: 950, textDecoration: "none" },
-  infoText: { margin: 0, color: "rgba(255,255,255,0.64)", lineHeight: 1.45, fontSize: 14 },
-  heroTopOverlay: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    right: 16,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    zIndex: 2,
-  },
-  heroBottomOverlay: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 18,
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
     gap: 14,
-    alignItems: "end",
-    zIndex: 2,
   },
-  heroKicker: {
+  card: {
+    borderRadius: 28,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 8,
+  },
+  cardKicker: {
     color: "#e4ef16",
     fontSize: 12,
     fontWeight: 950,
-    letterSpacing: "0.14em",
+    letterSpacing: "0.12em",
     textTransform: "uppercase",
-    marginBottom: 8,
   },
-  statusStrip: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 10,
+  cardTitle: {
+    margin: 0,
+    fontSize: 24,
+    letterSpacing: "-0.04em",
   },
-  statusItem: {
-    minHeight: 72,
-    borderRadius: 22,
-    padding: 14,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    display: "grid",
-    alignContent: "space-between",
+  muted: {
+    margin: 0,
+    color: "rgba(255,255,255,0.66)",
+    lineHeight: 1.5,
   },
-  locationCard: {
-    display: "flex",
-    gap: 10,
-    minHeight: 62,
-    alignItems: "center",
-    padding: 13,
-    borderRadius: 22,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
-  },
-  joinButtonFloating: {
-    ...baseButton,
-    minHeight: 50,
-    borderRadius: 999,
-    background: "#e4ef16",
-    color: "#101406",
-    fontSize: 15,
-    padding: "0 18px",
-    boxShadow: "0 18px 38px rgba(228,239,22,0.20)",
-    whiteSpace: "nowrap",
-  },
-  leaveButtonFloating: {
-    ...baseButton,
-    minHeight: 50,
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.14)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    color: "white",
-    fontSize: 15,
-    padding: "0 18px",
-    backdropFilter: "blur(14px)",
-    whiteSpace: "nowrap",
-  },
-
 };
-
-if (typeof window !== "undefined") {
-  // Keep this object client-only friendly for inline style usage.
-}
-
