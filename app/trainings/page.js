@@ -299,10 +299,10 @@ export default function TrainingsPage() {
       <section style={styles.shell}>
         <AppHeader profile={profile} compact />
 
-        <header style={styles.headerCompactHero}>
-          <div>
+        <header style={styles.mobileHero}>
+          <div style={styles.heroText}>
             <div style={styles.kicker}>Training Sessions</div>
-            <h1 style={styles.titleCompact}>Who is training?</h1>
+            <h1 style={styles.title}>Who is training?</h1>
           </div>
 
           <button type="button" onClick={openCreateTraining} style={styles.createButton}>
@@ -331,7 +331,7 @@ export default function TrainingsPage() {
               </select>
             </div>
 
-            <div style={styles.filterRow}>
+            <div style={styles.filterGrid}>
               {[
                 ["all", "All"],
                 ["open", "Open"],
@@ -345,7 +345,7 @@ export default function TrainingsPage() {
                   onClick={() => setActiveFilter(key)}
                   style={activeFilter === key ? styles.filterActive : styles.filterButton}
                 >
-                  {label}
+                  <span>{label}</span>
                   <span style={styles.filterCount}>{filterCounts[key] || 0}</span>
                 </button>
               ))}
@@ -425,92 +425,118 @@ export default function TrainingsPage() {
               <span style={styles.listCount}>{visibleTrainings.length} shown</span>
             </div>
 
-            <section style={styles.carousel}>
-            {visibleTrainings.map((training) => {
-              const primarySport = getPrimarySport(training);
-              const sportLabel = getSportLabel(primarySport);
-              const sportImage = getTrainingHeroImage(training, primarySport);
-              const time = formatTrainingTime(training);
-              const intensity = formatTrainingIntensity(training);
-              const joinedCount = participantCounts[training.id] || 0;
-              const alreadyJoined = joinedSessionIds.has(training.id);
+            <section style={styles.trainingList}>
+              {visibleTrainings.map((training) => {
+                const primarySport = getPrimarySport(training);
+                const sportLabel = getSportLabel(primarySport);
+                const sportImage = getTrainingHeroImage(training, primarySport);
+                const time = formatTrainingTime(training);
+                const intensity = formatTrainingIntensity(training);
+                const joinedCount = participantCounts[training.id] || 0;
+                const alreadyJoined = joinedSessionIds.has(training.id);
+                const hasDistance =
+                  training.distance_km !== null &&
+                  training.distance_km !== undefined &&
+                  training.distance_km !== "";
+                const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+                const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
 
-              return (
-                <article key={training.id} style={styles.card}>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/trainings/${training.id}`)}
-                    style={styles.cardClickableArea}
-                    aria-label={`Open ${training.title}`}
-                  >
-                    <div
-                      style={{
-                        ...styles.imageWrap,
-                        ...(sportImage.src
-                          ? {
-                              backgroundImage: `url("${sportImage.src}")`,
-                              backgroundSize: "cover",
-                              backgroundPosition: sportImage.position || "center center",
-                            }
-                          : {}),
-                      }}
+                return (
+                  <article key={training.id} style={styles.card}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/trainings/${training.id}`)}
+                      style={styles.cardMain}
+                      aria-label={`Open ${training.title}`}
                     >
-                      <div style={styles.imageOverlay} />
-                    </div>
+                      <div
+                        style={{
+                          ...styles.cardImage,
+                          ...(sportImage.src
+                            ? {
+                                backgroundImage: `url("${sportImage.src}")`,
+                                backgroundSize: "cover",
+                                backgroundPosition: sportImage.position || "center center",
+                              }
+                            : {}),
+                        }}
+                      >
+                        <div style={styles.imageOverlay} />
+                      </div>
 
-                    <div style={styles.cardContent}>
-                      <div>
-                        <div style={styles.cardTop}>
-                          <div style={styles.sportBadge}>{sportLabel}</div>
-                          <div style={styles.visibilityBadge}>{training.visibility}</div>
+                      <div style={styles.cardBody}>
+                        <div style={styles.badgeRow}>
+                          <span style={styles.sportBadge}>{sportLabel}</span>
+                          <span style={styles.visibilityBadge}>{training.visibility}</span>
                         </div>
 
                         <h2 style={styles.cardTitle}>{training.title}</h2>
-                        <p style={styles.meta}>🕒 {time}</p>
-                        <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
-                        {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
+
+                        <div style={styles.metaGrid}>
+                          <span>🕒 {time}</span>
+                          <span>📍 {training.start_location || "Location not set"}</span>
+                        </div>
+
+                        <div style={styles.metricRow}>
+                          <span style={styles.metricPill}>↗ {hasDistance ? `${training.distance_km} km` : "Distance —"}</span>
+                          <span style={styles.metricPill}>👥 {joinedCount}{maxParticipants ? `/${maxParticipants}` : ""}</span>
+                          <span style={styles.metricPill}>⚡ {intensity}</span>
+                        </div>
+
                         <div style={styles.featureRow}>
                           <span style={training.route_id ? styles.featureActive : styles.featureMuted}>
                             🧭 {training.route_id ? "Route" : "No route"}
                           </span>
+
                           <span style={training.workout_id ? styles.featureActive : styles.featureMuted}>
                             🏋️ {training.workout_id ? "Workout" : "No workout"}
                           </span>
                         </div>
-                        <p style={styles.meta}>⚡ {intensity}</p>
+                      </div>
+                    </button>
+
+                    <div style={styles.cardFooter}>
+                      <div style={styles.footerText}>
+                        <span style={styles.joined}>
+                          {alreadyJoined
+                            ? "You joined"
+                            : spotsLeft !== null
+                              ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
+                              : "Open session"}
+                        </span>
+                        <span style={styles.footerSub}>
+                          {joinedCount ? `${joinedCount} joined` : "No participants yet"}
+                        </span>
+                      </div>
+
+                      <div style={styles.footerActions}>
+                        <button
+                          type="button"
+                          onClick={() => toggleJoinFromCard(training)}
+                          disabled={busySessionId === training.id || (!alreadyJoined && spotsLeft === 0)}
+                          style={alreadyJoined ? styles.leaveSmallButton : styles.joinSmallButton}
+                        >
+                          {busySessionId === training.id
+                            ? "..."
+                            : alreadyJoined
+                              ? "Leave"
+                              : spotsLeft === 0
+                                ? "Full"
+                                : "Join"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/trainings/${training.id}`)}
+                          style={styles.openButton}
+                        >
+                          Open →
+                        </button>
                       </div>
                     </div>
-                  </button>
-
-                  <div style={styles.cardFooter}>
-                    <span style={styles.joined}>
-                      {joinedCount ? `${joinedCount} joined` : "No participants yet"}
-                      {" · "}
-                      {training.max_participants ? `Max ${training.max_participants}` : "Open session"}
-                    </span>
-
-                    <div style={styles.footerActions}>
-                      <button
-                        type="button"
-                        onClick={() => toggleJoinFromCard(training)}
-                        disabled={busySessionId === training.id || (!alreadyJoined && training.max_participants && joinedCount >= Number(training.max_participants))}
-                        style={alreadyJoined ? styles.leaveSmallButton : styles.joinSmallButton}
-                      >
-                        {busySessionId === training.id ? "..." : alreadyJoined ? "Leave" : training.max_participants && joinedCount >= Number(training.max_participants) ? "Full" : "Join"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/trainings/${training.id}`)}
-                        style={styles.openButton}
-                      >
-                        Open →
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              })}
             </section>
           </section>
         ) : null}
@@ -542,186 +568,272 @@ const baseButton = {
 const styles = {
   page: {
     minHeight: "100vh",
+    width: "100%",
+    maxWidth: "100vw",
     overflowX: "hidden",
     background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+      "radial-gradient(circle at 100% 2%, rgba(228,239,22,0.13), transparent 31%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "16px 14px 42px",
+    padding: "14px 12px 42px",
+    boxSizing: "border-box",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
+
   shell: {
     width: "100%",
-    maxWidth: 960,
+    maxWidth: 860,
     margin: "0 auto",
     display: "grid",
-    gap: 18,
+    gap: 16,
     overflow: "hidden",
+    boxSizing: "border-box",
   },
-  header: {
+
+  mobileHero: {
+    width: "100%",
     display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "end",
     gap: 10,
+    marginTop: 2,
+    boxSizing: "border-box",
   },
+
+  heroText: {
+    minWidth: 0,
+  },
+
   kicker: {
     color: "#e4ef16",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 950,
     letterSpacing: "0.14em",
     textTransform: "uppercase",
   },
-  titleRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "end",
-    gap: 14,
-    flexWrap: "wrap",
-  },
+
   title: {
-    margin: 0,
-    fontSize: "clamp(34px, 9vw, 58px)",
-    lineHeight: 0.96,
-    letterSpacing: "-0.065em",
+    margin: "6px 0 0",
+    fontSize: "clamp(34px, 10vw, 54px)",
+    lineHeight: 0.94,
+    letterSpacing: "-0.07em",
+    maxWidth: "100%",
   },
-  subtitle: {
-    margin: 0,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.5,
-    maxWidth: 520,
-  },
-  dashboardGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginTop: 2,
-    minWidth: 0,
-  },
-  dashboardCard: {
-    minHeight: 104,
-    borderRadius: 26,
-    padding: 16,
-    boxSizing: "border-box",
-    background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 18px 46px rgba(0,0,0,0.22)",
-    display: "grid",
-    alignContent: "space-between",
-  },
-  dashboardCardWide: {
-    gridColumn: "1 / -1",
-    minHeight: 104,
-    borderRadius: 26,
-    padding: 16,
-    boxSizing: "border-box",
-    background:
-      "radial-gradient(circle at 90% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 18px 46px rgba(0,0,0,0.22)",
-    display: "grid",
-    gap: 5,
-  },
-  dashboardLabel: {
-    color: "rgba(255,255,255,0.54)",
-    fontSize: 12,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.12em",
-  },
-  dashboardValue: {
-    fontSize: 36,
-    letterSpacing: "-0.06em",
-    lineHeight: 0.95,
-  },
-  dashboardValueSmall: {
-    fontSize: 23,
-    letterSpacing: "-0.045em",
-    lineHeight: 1.05,
-  },
-  dashboardHint: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 13,
-    fontWeight: 800,
-  },
+
   createButton: {
     ...baseButton,
-    minHeight: 46,
-    flexShrink: 0,
+    minHeight: 44,
+    maxWidth: 108,
     borderRadius: 999,
     background: "#e4ef16",
     color: "#101406",
-    padding: "0 18px",
+    padding: "0 14px",
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
   },
-  carousel: {
+
+  trainingControls: {
+    width: "100%",
+    boxSizing: "border-box",
+    borderRadius: 24,
+    padding: 12,
+    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(255,255,255,0.12)",
+    display: "grid",
+    gap: 10,
+    overflow: "hidden",
+  },
+
+  searchRow: {
     display: "grid",
     gridTemplateColumns: "1fr",
-    gap: 16,
-    overflow: "visible",
-    padding: "0 0 8px",
+    gap: 10,
+    minWidth: 0,
   },
+
+  searchInput: {
+    minHeight: 44,
+    width: "100%",
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 14px",
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+  },
+
+  sortSelect: {
+    minHeight: 44,
+    width: "100%",
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 12px",
+    outline: "none",
+    fontWeight: 850,
+    boxSizing: "border-box",
+  },
+
+  filterGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 8,
+  },
+
+  filterButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.72)",
+    padding: "0 10px",
+    fontWeight: 900,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    minWidth: 0,
+  },
+
+  filterActive: {
+    minHeight: 40,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.34)",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    padding: "0 10px",
+    fontWeight: 950,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    minWidth: 0,
+  },
+
+  filterCount: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 999,
+    display: "inline-grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,0.10)",
+    fontSize: 12,
+    flexShrink: 0,
+  },
+
+  trainingListBlock: {
+    display: "grid",
+    gap: 12,
+    minWidth: 0,
+    width: "100%",
+  },
+
+  listHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+
+  listCount: {
+    color: "rgba(255,255,255,0.58)",
+    fontWeight: 850,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  },
+
+  trainingList: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 14,
+    width: "100%",
+    minWidth: 0,
+  },
+
   card: {
     width: "100%",
     minWidth: 0,
     maxWidth: "100%",
-    minHeight: 0,
-    borderRadius: 32,
+    borderRadius: 28,
     boxSizing: "border-box",
     color: "white",
     background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
     border: "1px solid rgba(255,255,255,0.14)",
     boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
-    scrollSnapAlign: "start",
     display: "grid",
     overflow: "hidden",
-    userSelect: "none",
   },
-  cardClickableArea: {
+
+  cardMain: {
     display: "grid",
     textAlign: "left",
-    width: "100%",
     border: 0,
     padding: 0,
     margin: 0,
     color: "white",
     background: "transparent",
     cursor: "pointer",
+    width: "100%",
+    minWidth: 0,
   },
-  imageWrap: {
+
+  cardImage: {
     position: "relative",
-    height: 156,
+    height: 142,
     overflow: "hidden",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
     background:
       "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
     backgroundRepeat: "no-repeat",
   },
+
   imageOverlay: {
     position: "absolute",
     inset: 0,
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.55)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.52)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)",
     pointerEvents: "none",
   },
-  cardContent: {
-    padding: 22,
+
+  cardBody: {
+    padding: 16,
     display: "grid",
-    gap: 20,
+    gap: 11,
+    minWidth: 0,
   },
-  cardTop: {
+
+  badgeRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    minWidth: 0,
   },
+
   sportBadge: {
     display: "inline-flex",
-    width: "fit-content",
+    minWidth: 0,
+    maxWidth: "70%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
     borderRadius: 999,
-    padding: "8px 12px",
+    padding: "8px 11px",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.28)",
     color: "#e4ef16",
     fontWeight: 950,
     fontSize: 13,
   },
+
   visibilityBadge: {
     borderRadius: 999,
     padding: "8px 10px",
@@ -731,32 +843,121 @@ const styles = {
     fontWeight: 850,
     fontSize: 12,
     textTransform: "capitalize",
+    flexShrink: 0,
   },
+
   cardTitle: {
-    margin: "18px 0 10px",
-    fontSize: 29,
-    lineHeight: 1.02,
-    letterSpacing: "-0.045em",
+    margin: 0,
+    fontSize: "clamp(27px, 8vw, 34px)",
+    lineHeight: 1,
+    letterSpacing: "-0.055em",
+    overflowWrap: "anywhere",
   },
-  meta: {
-    margin: "8px 0",
+
+  metaGrid: {
+    display: "grid",
+    gap: 6,
     color: "rgba(255,255,255,0.70)",
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 1.35,
+    minWidth: 0,
   },
+
+  metricRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  metricPill: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(255,255,255,0.065)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.78)",
+    fontWeight: 850,
+    fontSize: 12,
+  },
+
+  featureRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  featureActive: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+  },
+
+  featureMuted: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 12,
+    fontWeight: 900,
+  },
+
   cardFooter: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    padding: "0 18px 18px",
+    padding: "0 16px 16px",
     flexWrap: "wrap",
   },
+
+  footerText: {
+    display: "grid",
+    gap: 3,
+    minWidth: 0,
+  },
+
   joined: {
-    color: "rgba(255,255,255,0.70)",
-    fontWeight: 800,
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: 950,
     fontSize: 13,
   },
+
+  footerSub: {
+    color: "rgba(255,255,255,0.50)",
+    fontWeight: 800,
+    fontSize: 12,
+  },
+
+  footerActions: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    flexShrink: 0,
+  },
+
+  joinSmallButton: {
+    ...baseButton,
+    color: "#101406",
+    background: "#e4ef16",
+    borderRadius: 999,
+    padding: "10px 13px",
+    fontSize: 13,
+  },
+
+  leaveSmallButton: {
+    ...baseButton,
+    color: "white",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    padding: "10px 13px",
+    fontSize: 13,
+  },
+
   openButton: {
     ...baseButton,
     color: "#101406",
@@ -765,19 +966,64 @@ const styles = {
     padding: "10px 13px",
     fontSize: 13,
   },
+
+  dashboardGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    marginTop: 2,
+    minWidth: 0,
+  },
+
+  dashboardCard: {
+    minHeight: 102,
+    borderRadius: 24,
+    padding: 14,
+    boxSizing: "border-box",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(255,255,255,0.13)",
+    boxShadow: "0 18px 46px rgba(0,0,0,0.22)",
+    display: "grid",
+    alignContent: "space-between",
+    minWidth: 0,
+  },
+
+  dashboardLabel: {
+    color: "rgba(255,255,255,0.54)",
+    fontSize: 11,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+  },
+
+  dashboardValue: {
+    fontSize: 34,
+    letterSpacing: "-0.06em",
+    lineHeight: 0.95,
+  },
+
+  dashboardHint: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    fontWeight: 800,
+    lineHeight: 1.25,
+  },
+
   stateCard: {
     borderRadius: 28,
     padding: 22,
     background: "rgba(255,255,255,0.06)",
     border: "1px solid rgba(255,255,255,0.12)",
   },
+
   emptyCard: {
-    borderRadius: 32,
-    padding: 28,
+    borderRadius: 28,
+    padding: 22,
     background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
     border: "1px solid rgba(255,255,255,0.14)",
     boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
   },
+
   emptyIcon: {
     width: 54,
     height: 54,
@@ -789,27 +1035,32 @@ const styles = {
     marginBottom: 16,
     fontSize: 24,
   },
+
   emptyActions: {
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
     marginTop: 20,
   },
+
   errorCard: {
     borderRadius: 28,
     padding: 22,
     background: "rgba(140,20,20,0.18)",
     border: "1px solid rgba(255,90,90,0.22)",
   },
+
   stateTitle: {
     fontSize: 22,
     fontWeight: 950,
   },
+
   stateText: {
     color: "rgba(255,255,255,0.70)",
     lineHeight: 1.5,
     marginBottom: 0,
   },
+
   retryButton: {
     ...baseButton,
     minHeight: 42,
@@ -819,179 +1070,24 @@ const styles = {
     padding: "0 16px",
     marginTop: 12,
   },
+
   primaryButton: {
     ...baseButton,
-    minHeight: 54,
+    minHeight: 52,
     borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
     padding: "0 18px",
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
   },
+
   secondaryButton: {
     ...baseButton,
-    minHeight: 54,
+    minHeight: 52,
     borderRadius: 20,
     background: "rgba(255,255,255,0.08)",
     color: "white",
     border: "1px solid rgba(255,255,255,0.12)",
     padding: "0 18px",
   },
-  trainingControls: {
-    width: "100%",
-    boxSizing: "border-box",
-    borderRadius: 24,
-    padding: 12,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.12)",
-    display: "grid",
-    gap: 12,
-  },
-  searchRow: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr)",
-    gap: 10,
-  },
-  searchInput: {
-    minHeight: 46,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: "0 14px",
-    outline: "none",
-    fontSize: 15,
-  },
-  sortSelect: {
-    minHeight: 46,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: "0 12px",
-    outline: "none",
-    fontWeight: 850,
-  },
-  filterRow: {
-    display: "flex",
-    gap: 8,
-    overflowX: "auto",
-    paddingBottom: 4,
-    WebkitOverflowScrolling: "touch",
-    scrollbarWidth: "none",
-  },
-  filterButton: {
-    minHeight: 40,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(255,255,255,0.72)",
-    padding: "0 12px",
-    fontWeight: 900,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-  },
-  filterActive: {
-    minHeight: 40,
-    borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.34)",
-    background: "rgba(228,239,22,0.14)",
-    color: "#e4ef16",
-    padding: "0 12px",
-    fontWeight: 950,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
-  },
-  filterCount: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 999,
-    display: "inline-grid",
-    placeItems: "center",
-    background: "rgba(255,255,255,0.10)",
-    fontSize: 12,
-  },
-  featureRow: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    marginTop: 8,
-  },
-  featureActive: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(228,239,22,0.12)",
-    border: "1px solid rgba(228,239,22,0.22)",
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-  },
-  featureMuted: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    color: "rgba(255,255,255,0.52)",
-    fontSize: 12,
-    fontWeight: 900,
-  },
-  footerActions: {
-    display: "flex",
-    gap: 8,
-    alignItems: "center",
-  },
-  joinSmallButton: {
-    ...baseButton,
-    color: "#101406",
-    background: "#e4ef16",
-    borderRadius: 999,
-    padding: "10px 13px",
-    fontSize: 13,
-  },
-  leaveSmallButton: {
-    ...baseButton,
-    color: "white",
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 999,
-    padding: "10px 13px",
-    fontSize: 13,
-  },
-
-  headerCompactHero: {
-    display: "flex",
-    alignItems: "end",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 0,
-  },
-  titleCompact: {
-    margin: "6px 0 0",
-    fontSize: "clamp(34px, 9vw, 54px)",
-    lineHeight: 0.96,
-    letterSpacing: "-0.065em",
-  },
-  trainingListBlock: {
-    display: "grid",
-    gap: 12,
-    minWidth: 0,
-  },
-  listHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-  listCount: {
-    color: "rgba(255,255,255,0.58)",
-    fontWeight: 850,
-    fontSize: 13,
-  },
-
 };
