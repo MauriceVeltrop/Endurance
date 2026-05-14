@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
+import TrainingCard from "../../components/trainings/TrainingCard";
 import { supabase } from "../../lib/supabase";
 import {
   formatTrainingIntensity,
@@ -396,106 +397,23 @@ export default function TrainingsPage() {
                 const creatorName = creator?.displayName || (training.creator_id === currentUserId ? "You" : "Organizer");
 
                 return (
-                  <article key={training.id} style={styles.card}>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/trainings/${training.id}`)}
-                      style={styles.cardMain}
-                      aria-label={`Open ${training.title}`}
-                    >
-                      <div
-                        style={{
-                          ...styles.cardImage,
-                          ...(sportImage.src
-                            ? {
-                                backgroundImage: `url("${sportImage.src}")`,
-                                backgroundSize: "cover",
-    backgroundRepeat: "no-repeat",
-                                backgroundPosition: sportImage.position || "center center",
-                              }
-                            : {}),
-                        }}
-                      >
-                        <div style={styles.imageOverlay} />
-                      </div>
-
-                      <div style={styles.cardBody}>
-                        <div style={styles.badgeRow}>
-                          <span style={styles.sportBadge}>{sportLabel}</span>
-                          <span style={styles.visibilityBadge}>{training.visibility}</span>
-                        </div>
-
-                        <h2 style={styles.cardTitle}>{training.title}</h2>
-
-                        <div style={styles.creatorRow}>
-                          {creator?.avatar_url ? (
-                            <img src={creator.avatar_url} alt="" style={styles.creatorAvatar} />
-                          ) : (
-                            <span style={styles.creatorFallback}>{creatorName.slice(0, 1).toUpperCase()}</span>
-                          )}
-                          <span>Created by {creatorName}</span>
-                        </div>
-
-                        <div style={styles.metaGrid}>
-                          <span>🕒 {time}</span>
-                          <span>📍 {training.start_location || "Location not set"}</span>
-                        </div>
-
-                        <div style={styles.metricRow}>
-                          {hasDistance ? <span style={styles.metricPill}>↗ {training.distance_km} km</span> : null}
-                          <span style={styles.metricPill}>👥 {joinedCount}{maxParticipants ? `/${maxParticipants}` : ""}</span>
-                          {hasIntensity ? <span style={styles.metricPill}>⚡ {intensity}</span> : null}
-                        </div>
-
-                        {hasRouteOrWorkout ? (
-                          <div style={styles.featureRow}>
-                            {training.route_id ? <span style={styles.featureActive}>🧭 Route</span> : null}
-                            {training.workout_id ? <span style={styles.featureActive}>🏋️ Workout</span> : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    </button>
-
-                    <div style={styles.cardFooter}>
-                      <div style={styles.footerText}>
-                        <span style={styles.joined}>
-                          {alreadyJoined
-                            ? "You joined"
-                            : spotsLeft !== null
-                              ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left`
-                              : "Open session"}
-                        </span>
-                        <span style={styles.footerSub}>
-                          {joinedCount ? `${joinedCount} joined` : "No participants yet"}
-                        </span>
-                      </div>
-
-                      <div style={styles.footerActions}>
-                        <button
-                          type="button"
-                          onClick={() => toggleJoinFromCard(training)}
-                          disabled={busySessionId === training.id || (!alreadyJoined && spotsLeft === 0)}
-                          style={alreadyJoined ? styles.leaveSmallButton : styles.joinSmallButton}
-                        >
-                          {busySessionId === training.id
-                            ? "..."
-                            : alreadyJoined
-                              ? "Leave"
-                              : spotsLeft === 0
-                                ? "Full"
-                                : "Join"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/trainings/${training.id}`)}
-                          style={styles.openButton}
-                        >
-                          Open →
-                        </button>
-                      </div>
-                    </div>
-                  </article>
+                  <TrainingCard
+                    key={training.id}
+                    training={training}
+                    sportLabel={sportLabel}
+                    sportImage={sportImage}
+                    creator={creator}
+                    creatorName={creatorName}
+                    time={time}
+                    intensity={intensity}
+                    participantCount={joinedCount}
+                    maxParticipants={maxParticipants}
+                    joined={alreadyJoined}
+                    spotsLeft={spotsLeft}
+                    busy={busySessionId === training.id}
+                    onJoin={() => toggleJoinFromCard(training)}
+                    onOpen={() => router.push(`/trainings/${training.id}`)}
+                  />
                 );
               })}
             </section>
@@ -545,7 +463,7 @@ const styles = {
     maxWidth: 860,
     margin: "0 auto",
     display: "grid",
-    gap: 10,
+    gap: 16,
     overflow: "hidden",
     boxSizing: "border-box",
   },
@@ -607,7 +525,7 @@ const styles = {
     color: "white",
     padding: "0 18px",
     outline: "none",
-    fontSize: 13,
+    fontSize: 15,
     boxSizing: "border-box",
     boxShadow: "inset 0 0 0 1px rgba(228,239,22,0.04)",
   },
@@ -824,7 +742,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.08)",
     color: "rgba(255,255,255,0.52)",
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 900,
   },
 
   cardFooter: {
@@ -913,15 +831,15 @@ const styles = {
   dashboardLabel: {
     color: "rgba(255,255,255,0.54)",
     fontSize: 11,
-    fontWeight: 800,
+    fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
   },
 
   dashboardValue: {
-    fontSize: 22,
+    fontSize: 34,
     letterSpacing: "-0.06em",
-    lineHeight: 1.02,
+    lineHeight: 0.95,
   },
 
   dashboardHint: {
@@ -995,7 +913,7 @@ const styles = {
 
   primaryButton: {
     ...baseButton,
-    minHeight: 42,
+    minHeight: 52,
     borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
@@ -1005,7 +923,7 @@ const styles = {
 
   secondaryButton: {
     ...baseButton,
-    minHeight: 42,
+    minHeight: 52,
     borderRadius: 20,
     background: "rgba(255,255,255,0.08)",
     color: "white",
