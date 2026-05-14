@@ -385,8 +385,7 @@ export default function TrainingsPage() {
                 const joinedCount = participantCounts[training.id] || 0;
                 const alreadyJoined = joinedSessionIds.has(training.id);
                 const hasDistance =
-                  training.distance_km !== null &&
-                  training.distance_km !== undefined &&
+
                   training.distance_km !== "";
                 const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
                 const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
@@ -446,11 +445,11 @@ export default function TrainingsPage() {
 
                         <div style={styles.featureRow}>
                           <span style={training.route_id ? styles.featureActive : styles.featureMuted}>
-                            🧭 {training.route_id ? "Route" : "No route"}
+                            🧭 {training.route_id ? "Route" : ""}
                           </span>
 
                           <span style={training.workout_id ? styles.featureActive : styles.featureMuted}>
-                            🏋️ {training.workout_id ? "Workout" : "No workout"}
+                            🏋️ {training.workout_id ? "Workout" : ""}
                           </span>
                         </div>
                       </div>
@@ -658,8 +657,6 @@ const styles = {
 
   cardMain: {
     display: "grid",
-    gridTemplateColumns: "132px minmax(0, 1fr)",
-    alignItems: "stretch",
     textAlign: "left",
     border: 0,
     padding: 0,
@@ -673,11 +670,9 @@ const styles = {
 
   cardImage: {
     position: "relative",
-    width: "100%",
-    minHeight: 178,
-    height: "100%",
+    height: 142,
     overflow: "hidden",
-    borderRight: "1px solid rgba(255,255,255,0.08)",
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
     background:
       "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
     backgroundRepeat: "no-repeat",
@@ -692,9 +687,9 @@ const styles = {
   },
 
   cardBody: {
-    padding: "14px 14px 10px",
+    padding: 16,
     display: "grid",
-    gap: 8,
+    gap: 11,
     minWidth: 0,
   },
 
@@ -709,120 +704,87 @@ const styles = {
   sportBadge: {
     display: "inline-flex",
     minWidth: 0,
-    maxWidth: "68%",
+    maxWidth: "70%",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     borderRadius: 999,
-    padding: "7px 10px",
+    padding: "8px 11px",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.28)",
     color: "#e4ef16",
     fontWeight: 950,
-    fontSize: 12,
+    fontSize: 13,
   },
 
   visibilityBadge: {
     borderRadius: 999,
-    padding: "7px 9px",
+    padding: "8px 10px",
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.10)",
     color: "rgba(255,255,255,0.72)",
     fontWeight: 850,
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "capitalize",
     flexShrink: 0,
   },
 
   cardTitle: {
     margin: 0,
-    fontSize: "clamp(22px, 6.2vw, 30px)",
-    lineHeight: 0.98,
+    fontSize: "clamp(27px, 8vw, 34px)",
+    lineHeight: 1,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
   },
 
-  creatorRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    color: "rgba(255,255,255,0.72)",
-    fontWeight: 850,
-    fontSize: 12,
-    minWidth: 0,
-  },
-
-  creatorAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 999,
-    objectFit: "cover",
-    border: "1px solid rgba(255,255,255,0.18)",
-    flexShrink: 0,
-  },
-
-  creatorFallback: {
-    width: 24,
-    height: 24,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.14)",
-    border: "1px solid rgba(228,239,22,0.22)",
-    color: "#e4ef16",
-    fontWeight: 950,
-    fontSize: 11,
-    flexShrink: 0,
-  },
-
   metaGrid: {
     display: "grid",
-    gap: 4,
+    gap: 6,
     color: "rgba(255,255,255,0.70)",
-    fontSize: 13,
-    lineHeight: 1.28,
+    fontSize: 14,
+    lineHeight: 1.35,
     minWidth: 0,
   },
 
   metricRow: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
   },
 
   metricPill: {
     borderRadius: 999,
-    padding: "7px 9px",
+    padding: "8px 10px",
     background: "rgba(255,255,255,0.065)",
     border: "1px solid rgba(255,255,255,0.10)",
     color: "rgba(255,255,255,0.78)",
     fontWeight: 850,
-    fontSize: 11,
+    fontSize: 12,
   },
 
   featureRow: {
     display: "flex",
-    gap: 6,
+    gap: 8,
     flexWrap: "wrap",
   },
 
   featureActive: {
     borderRadius: 999,
-    padding: "7px 9px",
+    padding: "8px 10px",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.22)",
     color: "#e4ef16",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 950,
   },
 
   featureMuted: {
     borderRadius: 999,
-    padding: "7px 9px",
+    padding: "8px 10px",
     background: "rgba(255,255,255,0.055)",
     border: "1px solid rgba(255,255,255,0.08)",
     color: "rgba(255,255,255,0.52)",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 900,
   },
 
@@ -831,7 +793,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    padding: "0 14px 14px 146px",
+    padding: "0 16px 16px",
     flexWrap: "wrap",
   },
 
