@@ -16,6 +16,12 @@ export default function AppHeader({ profile, compact = false }) {
 
   const menuItems = [
     {
+      label: "Trainings",
+      description: "Browse all training sessions",
+      icon: "▣",
+      href: "/trainings",
+    },
+    {
       label: "Routes",
       description: "Browse and manage routes",
       icon: "⌁",
