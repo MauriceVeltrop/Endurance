@@ -738,6 +738,46 @@ const styles = {
     overflowWrap: "anywhere",
   },
 
+
+
+  creatorRow: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 13,
+    fontWeight: 850,
+    lineHeight: 1.2,
+    minWidth: 0,
+  },
+
+  creatorAvatar: {
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    maxWidth: 24,
+    borderRadius: 999,
+    objectFit: "cover",
+    display: "block",
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.08)",
+  },
+
+  creatorFallback: {
+    width: 24,
+    height: 24,
+    minWidth: 24,
+    borderRadius: 999,
+    display: "inline-grid",
+    placeItems: "center",
+    border: "1px solid rgba(228,239,22,0.26)",
+    background: "rgba(228,239,22,0.12)",
+    color: "#e4ef16",
+    fontSize: 11,
+    fontWeight: 950,
+  },
+
   metaGrid: {
     display: "grid",
     gap: 6,
