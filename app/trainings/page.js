@@ -658,6 +658,8 @@ const styles = {
 
   cardMain: {
     display: "grid",
+    gridTemplateColumns: "132px minmax(0, 1fr)",
+    alignItems: "stretch",
     textAlign: "left",
     border: 0,
     padding: 0,
@@ -671,9 +673,11 @@ const styles = {
 
   cardImage: {
     position: "relative",
-    height: 142,
+    width: "100%",
+    minHeight: 178,
+    height: "100%",
     overflow: "hidden",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    borderRight: "1px solid rgba(255,255,255,0.08)",
     background:
       "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
     backgroundRepeat: "no-repeat",
@@ -688,9 +692,9 @@ const styles = {
   },
 
   cardBody: {
-    padding: 16,
+    padding: "14px 14px 10px",
     display: "grid",
-    gap: 11,
+    gap: 8,
     minWidth: 0,
   },
 
@@ -705,127 +709,120 @@ const styles = {
   sportBadge: {
     display: "inline-flex",
     minWidth: 0,
-    maxWidth: "70%",
+    maxWidth: "68%",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     borderRadius: 999,
-    padding: "8px 11px",
+    padding: "7px 10px",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.28)",
     color: "#e4ef16",
     fontWeight: 950,
-    fontSize: 13,
+    fontSize: 12,
   },
 
   visibilityBadge: {
     borderRadius: 999,
-    padding: "8px 10px",
+    padding: "7px 9px",
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.10)",
     color: "rgba(255,255,255,0.72)",
     fontWeight: 850,
-    fontSize: 12,
+    fontSize: 11,
     textTransform: "capitalize",
     flexShrink: 0,
   },
 
   cardTitle: {
     margin: 0,
-    fontSize: "clamp(27px, 8vw, 34px)",
-    lineHeight: 1,
+    fontSize: "clamp(22px, 6.2vw, 30px)",
+    lineHeight: 0.98,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
   },
 
-
-
   creatorRow: {
-    display: "inline-flex",
+    display: "flex",
     alignItems: "center",
-    gap: 8,
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 13,
+    gap: 7,
+    color: "rgba(255,255,255,0.72)",
     fontWeight: 850,
-    lineHeight: 1.2,
+    fontSize: 12,
     minWidth: 0,
   },
 
   creatorAvatar: {
     width: 24,
     height: 24,
-    minWidth: 24,
-    maxWidth: 24,
     borderRadius: 999,
     objectFit: "cover",
-    display: "block",
-    overflow: "hidden",
-    border: "1px solid rgba(255,255,255,0.22)",
-    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    flexShrink: 0,
   },
 
   creatorFallback: {
     width: 24,
     height: 24,
-    minWidth: 24,
     borderRadius: 999,
-    display: "inline-grid",
+    display: "grid",
     placeItems: "center",
-    border: "1px solid rgba(228,239,22,0.26)",
-    background: "rgba(228,239,22,0.12)",
+    background: "rgba(228,239,22,0.14)",
+    border: "1px solid rgba(228,239,22,0.22)",
     color: "#e4ef16",
-    fontSize: 11,
     fontWeight: 950,
+    fontSize: 11,
+    flexShrink: 0,
   },
 
   metaGrid: {
     display: "grid",
-    gap: 6,
+    gap: 4,
     color: "rgba(255,255,255,0.70)",
-    fontSize: 14,
-    lineHeight: 1.35,
+    fontSize: 13,
+    lineHeight: 1.28,
     minWidth: 0,
   },
 
   metricRow: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
   },
 
   metricPill: {
     borderRadius: 999,
-    padding: "8px 10px",
+    padding: "7px 9px",
     background: "rgba(255,255,255,0.065)",
     border: "1px solid rgba(255,255,255,0.10)",
     color: "rgba(255,255,255,0.78)",
     fontWeight: 850,
-    fontSize: 12,
+    fontSize: 11,
   },
 
   featureRow: {
     display: "flex",
-    gap: 8,
+    gap: 6,
     flexWrap: "wrap",
   },
 
   featureActive: {
     borderRadius: 999,
-    padding: "8px 10px",
+    padding: "7px 9px",
     background: "rgba(228,239,22,0.12)",
     border: "1px solid rgba(228,239,22,0.22)",
     color: "#e4ef16",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 950,
   },
 
   featureMuted: {
     borderRadius: 999,
-    padding: "8px 10px",
+    padding: "7px 9px",
     background: "rgba(255,255,255,0.055)",
     border: "1px solid rgba(255,255,255,0.08)",
     color: "rgba(255,255,255,0.52)",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 900,
   },
 
@@ -834,7 +831,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
-    padding: "0 16px 16px",
+    padding: "0 14px 14px 146px",
     flexWrap: "wrap",
   },
 
