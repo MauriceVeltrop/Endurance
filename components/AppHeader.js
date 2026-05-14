@@ -60,6 +60,19 @@ export default function AppHeader({ profile, compact = false }) {
       <div style={styles.topRow}>
         <button
           type="button"
+          onClick={() => router.push("/profile")}
+          style={styles.avatarButton}
+          aria-label="Open profile"
+        >
+          {profile?.avatar_url ? (
+            <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
+          ) : (
+            <span style={styles.avatarFallback}>{initials}</span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => router.push("/trainings")}
           style={styles.logoButton}
           aria-label="Go to trainings"
@@ -67,29 +80,19 @@ export default function AppHeader({ profile, compact = false }) {
           <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
         </button>
 
-        <div style={styles.alwaysVisibleActions}>
-          <button
-            type="button"
-            onClick={() => router.push("/profile")}
-            style={styles.avatarButton}
-            aria-label="Open profile"
-          >
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
-            ) : (
-              <span style={styles.avatarFallback}>{initials}</span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={signOut}
-            style={styles.iconButton}
-            aria-label="Log out"
-          >
-            ↪
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={signOut}
+          style={styles.signOutButton}
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" style={styles.signOutIcon}>
+            <path d="M10 7.5V6.25A2.25 2.25 0 0 1 12.25 4h5.5A2.25 2.25 0 0 1 20 6.25v11.5A2.25 2.25 0 0 1 17.75 20h-5.5A2.25 2.25 0 0 1 10 17.75V16.5" />
+            <path d="M4 12h10.75" />
+            <path d="M11.5 8.75 14.75 12l-3.25 3.25" />
+          </svg>
+        </button>
       </div>
 
       <div style={styles.menuShell}>
@@ -173,7 +176,7 @@ const styles = {
     width: "100%",
     maxWidth: "100%",
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gridTemplateColumns: "48px minmax(0, 1fr) 48px",
     alignItems: "center",
     gap: 8,
     boxSizing: "border-box",
@@ -186,23 +189,14 @@ const styles = {
     lineHeight: 0,
     justifySelf: "center",
     minWidth: 0,
-    transform: "translateX(24px)",
   },
 
   logo: {
-    width: "min(245px, 58vw)",
+    width: "min(250px, 62vw)",
     maxWidth: "100%",
     height: "auto",
     display: "block",
     filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))",
-  },
-
-  alwaysVisibleActions: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
-    flexShrink: 0,
   },
 
   menuShell: {
@@ -317,16 +311,17 @@ const styles = {
 
   avatarButton: {
     ...baseButton,
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.08)",
+    border: "2px solid rgba(228,239,22,0.78)",
+    background: "rgba(228,239,22,0.08)",
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
     padding: 0,
-    boxShadow: "0 12px 34px rgba(0,0,0,0.26)",
+    boxShadow: "0 0 0 1px rgba(228,239,22,0.13), 0 0 26px rgba(228,239,22,0.20), 0 12px 34px rgba(0,0,0,0.26)",
+    justifySelf: "start",
   },
 
   avatarImage: {
@@ -341,18 +336,30 @@ const styles = {
     fontSize: 13,
   },
 
-  iconButton: {
+  signOutButton: {
     ...baseButton,
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.18)",
-    background: "rgba(228,239,22,0.08)",
-    color: "white",
-    fontSize: 23,
+    border: "2px solid rgba(228,239,22,0.70)",
+    background:
+      "radial-gradient(circle at 32% 22%, rgba(228,239,22,0.20), transparent 38%), rgba(228,239,22,0.07)",
+    color: "#e4ef16",
     display: "grid",
     placeItems: "center",
     padding: 0,
-    boxShadow: "0 12px 34px rgba(0,0,0,0.26)",
+    boxShadow: "0 0 0 1px rgba(228,239,22,0.10), 0 0 28px rgba(228,239,22,0.18), 0 12px 34px rgba(0,0,0,0.26)",
+    justifySelf: "end",
+  },
+
+  signOutIcon: {
+    width: 27,
+    height: 27,
+    fill: "none",
+    stroke: "#e4ef16",
+    strokeWidth: 2.35,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    filter: "drop-shadow(0 0 8px rgba(228,239,22,0.40))",
   },
 };
