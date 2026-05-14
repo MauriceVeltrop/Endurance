@@ -410,6 +410,7 @@ export default function TrainingsPage() {
                             ? {
                                 backgroundImage: `url("${sportImage.src}")`,
                                 backgroundSize: "cover",
+    backgroundRepeat: "no-repeat",
                                 backgroundPosition: sportImage.position || "center center",
                               }
                             : {}),
@@ -544,7 +545,7 @@ const styles = {
     maxWidth: 860,
     margin: "0 auto",
     display: "grid",
-    gap: 16,
+    gap: 10,
     overflow: "hidden",
     boxSizing: "border-box",
   },
@@ -606,7 +607,7 @@ const styles = {
     color: "white",
     padding: "0 18px",
     outline: "none",
-    fontSize: 15,
+    fontSize: 13,
     boxSizing: "border-box",
     boxShadow: "inset 0 0 0 1px rgba(228,239,22,0.04)",
   },
@@ -672,9 +673,8 @@ const styles = {
 
   cardImage: {
     position: "relative",
-    minHeight: 0,
+    minHeight: 190,
     height: "100%",
-    aspectRatio: "4 / 5",
     overflow: "hidden",
     borderRight: "1px solid rgba(255,255,255,0.08)",
     background:
@@ -756,13 +756,9 @@ const styles = {
     width: 24,
     height: 24,
     minWidth: 24,
-    maxWidth: 24,
-    maxHeight: 24,
-    flexShrink: 0,
     borderRadius: "50%",
     objectFit: "cover",
     display: "block",
-    overflow: "hidden",
     border: "1px solid rgba(255,255,255,0.24)",
   },
 
@@ -828,7 +824,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.08)",
     color: "rgba(255,255,255,0.52)",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 800,
   },
 
   cardFooter: {
@@ -917,15 +913,15 @@ const styles = {
   dashboardLabel: {
     color: "rgba(255,255,255,0.54)",
     fontSize: 11,
-    fontWeight: 900,
+    fontWeight: 800,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
   },
 
   dashboardValue: {
-    fontSize: 34,
+    fontSize: 22,
     letterSpacing: "-0.06em",
-    lineHeight: 0.95,
+    lineHeight: 1.02,
   },
 
   dashboardHint: {
@@ -999,7 +995,7 @@ const styles = {
 
   primaryButton: {
     ...baseButton,
-    minHeight: 52,
+    minHeight: 42,
     borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
@@ -1009,7 +1005,7 @@ const styles = {
 
   secondaryButton: {
     ...baseButton,
-    minHeight: 52,
+    minHeight: 42,
     borderRadius: 20,
     background: "rgba(255,255,255,0.08)",
     color: "white",
