@@ -21,8 +21,14 @@ export default function TrainingsPage() {
   const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [trainings, setTrainings] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
+  const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [busySessionId, setBusySessionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortMode, setSortMode] = useState("soonest");
 
   const canSeeAll = privilegedRoles.includes(profile?.role);
 
@@ -48,6 +54,8 @@ export default function TrainingsPage() {
         router.replace("/login");
         return;
       }
+
+      setCurrentUserId(user.id);
 
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
@@ -121,7 +129,7 @@ export default function TrainingsPage() {
         if (selectedRows.length) {
           const { data: visibilityRows, error: visibilityError } = await supabase
             .from("training_visibility_members")
-            .select("session_id")
+            .select("session_id,user_id")
             .eq("user_id", user.id)
             .in("session_id", selectedRows.map((training) => training.id));
 
@@ -152,15 +160,20 @@ export default function TrainingsPage() {
       if (trainingIds.length) {
         const { data: participantRows, error: participantError } = await supabase
           .from("session_participants")
-          .select("session_id")
+          .select("session_id,user_id")
           .in("session_id", trainingIds);
 
         if (!participantError) {
           const counts = {};
+          const joined = new Set();
+
           (participantRows || []).forEach((row) => {
             counts[row.session_id] = (counts[row.session_id] || 0) + 1;
+            if (row.user_id === user.id) joined.add(row.session_id);
           });
+
           setParticipantCounts(counts);
+          setJoinedSessionIds(joined);
         } else {
           console.warn("Participant counts skipped", participantError);
           setParticipantCounts({});
@@ -178,11 +191,109 @@ export default function TrainingsPage() {
     }
   }
 
+  async function toggleJoinFromCard(training) {
+    if (!currentUserId || !training?.id) return;
+
+    const alreadyJoined = joinedSessionIds.has(training.id);
+    const joinedCount = participantCounts[training.id] || 0;
+    const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+
+    if (!alreadyJoined && maxParticipants && joinedCount >= maxParticipants) return;
+
+    try {
+      setBusySessionId(training.id);
+
+      if (alreadyJoined) {
+        const { error } = await supabase
+          .from("session_participants")
+          .delete()
+          .eq("session_id", training.id)
+          .eq("user_id", currentUserId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_participants")
+          .insert({ session_id: training.id, user_id: currentUserId });
+
+        if (error) throw error;
+      }
+
+      await loadTrainings();
+    } catch (error) {
+      console.error("Quick join error", error);
+      setErrorText(error?.message || "Could not update participation.");
+    } finally {
+      setBusySessionId("");
+    }
+  }
+
   const openCreateTraining = () => {
     router.push("/trainings/new");
   };
 
-  const nextTraining = trainings[0];
+  const visibleTrainings = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    const filtered = trainings.filter((training) => {
+      const hasRoute = Boolean(training.route_id);
+      const hasWorkout = Boolean(training.workout_id);
+      const joinedCount = participantCounts[training.id] || 0;
+      const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+      const isFull = Boolean(maxParticipants && joinedCount >= maxParticipants);
+
+      if (activeFilter === "routes" && !hasRoute) return false;
+      if (activeFilter === "workouts" && !hasWorkout) return false;
+      if (activeFilter === "open" && isFull) return false;
+      if (activeFilter === "joined" && !joinedSessionIds.has(training.id)) return false;
+
+      if (!query) return true;
+
+      const haystack = [
+        training.title,
+        training.description,
+        training.start_location,
+        Array.isArray(training.sports) ? training.sports.join(" ") : "",
+        training.visibility,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "distance") {
+        return Number(a.distance_km || 999999) - Number(b.distance_km || 999999);
+      }
+
+      if (sortMode === "participants") {
+        return (participantCounts[b.id] || 0) - (participantCounts[a.id] || 0);
+      }
+
+      const aTime = a.final_starts_at || a.starts_at || a.flexible_date || a.created_at || "";
+      const bTime = b.final_starts_at || b.starts_at || b.flexible_date || b.created_at || "";
+
+      return String(aTime).localeCompare(String(bTime));
+    });
+  }, [trainings, searchTerm, activeFilter, sortMode, participantCounts, joinedSessionIds]);
+
+  const filterCounts = useMemo(() => {
+    return {
+      all: trainings.length,
+      open: trainings.filter((training) => {
+        const joinedCount = participantCounts[training.id] || 0;
+        const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+        return !(maxParticipants && joinedCount >= maxParticipants);
+      }).length,
+      routes: trainings.filter((training) => training.route_id).length,
+      workouts: trainings.filter((training) => training.workout_id).length,
+      joined: trainings.filter((training) => joinedSessionIds.has(training.id)).length,
+    };
+  }, [trainings, participantCounts, joinedSessionIds]);
+
+  const nextTraining = visibleTrainings[0];
   const nextTrainingLabel = nextTraining ? formatTrainingTime(nextTraining) : "No session yet";
   const empty = !loading && !errorText && trainings.length === 0;
 
@@ -210,8 +321,8 @@ export default function TrainingsPage() {
         <section style={styles.dashboardGrid} aria-label="Training dashboard">
           <div style={styles.dashboardCard}>
             <span style={styles.dashboardLabel}>Matching</span>
-            <strong style={styles.dashboardValue}>{loading ? "—" : trainings.length}</strong>
-            <span style={styles.dashboardHint}>sessions</span>
+            <strong style={styles.dashboardValue}>{loading ? "—" : visibleTrainings.length}</strong>
+            <span style={styles.dashboardHint}>shown · {trainings.length} total</span>
           </div>
 
           <div style={styles.dashboardCard}>
@@ -226,6 +337,49 @@ export default function TrainingsPage() {
             <span style={styles.dashboardHint}>{nextTrainingLabel}</span>
           </div>
         </section>
+
+        {!loading && !errorText && trainings.length > 0 ? (
+          <section style={styles.trainingControls}>
+            <div style={styles.searchRow}>
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search trainings, location or sport..."
+                style={styles.searchInput}
+              />
+
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value)}
+                style={styles.sortSelect}
+              >
+                <option value="soonest">Soonest</option>
+                <option value="distance">Distance</option>
+                <option value="participants">Most joined</option>
+              </select>
+            </div>
+
+            <div style={styles.filterRow}>
+              {[
+                ["all", "All"],
+                ["open", "Open"],
+                ["routes", "Routes"],
+                ["workouts", "Workouts"],
+                ["joined", "Joined"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveFilter(key)}
+                  style={activeFilter === key ? styles.filterActive : styles.filterButton}
+                >
+                  {label}
+                  <span style={styles.filterCount}>{filterCounts[key] || 0}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {loading ? (
           <section style={styles.stateCard}>
@@ -273,15 +427,35 @@ export default function TrainingsPage() {
           </section>
         ) : null}
 
-        {!loading && !errorText && trainings.length > 0 ? (
+        {!loading && !errorText && trainings.length > 0 && visibleTrainings.length === 0 ? (
+          <section style={styles.emptyCard}>
+            <div style={styles.emptyIcon}>🔎</div>
+            <div style={styles.stateTitle}>No trainings match your filters</div>
+            <p style={styles.stateText}>Try another search term, filter or sort mode.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setActiveFilter("all");
+                setSortMode("soonest");
+              }}
+              style={styles.primaryButton}
+            >
+              Reset filters
+            </button>
+          </section>
+        ) : null}
+
+        {!loading && !errorText && visibleTrainings.length > 0 ? (
           <section style={styles.carousel}>
-            {trainings.map((training) => {
+            {visibleTrainings.map((training) => {
               const primarySport = getPrimarySport(training);
               const sportLabel = getSportLabel(primarySport);
               const sportImage = getTrainingHeroImage(training, primarySport);
               const time = formatTrainingTime(training);
               const intensity = formatTrainingIntensity(training);
               const joinedCount = participantCounts[training.id] || 0;
+              const alreadyJoined = joinedSessionIds.has(training.id);
 
               return (
                 <article key={training.id} style={styles.card}>
@@ -304,16 +478,6 @@ export default function TrainingsPage() {
                       }}
                     >
                       <div style={styles.imageOverlay} />
-
-                      <div style={styles.ribbonRow}>
-                        {training.route_id ? (
-                          <div style={styles.statusRibbon}>🧭 Route linked</div>
-                        ) : null}
-
-                        {training.workout_id ? (
-                          <div style={styles.statusRibbonSecondary}>🏋️ Workout linked</div>
-                        ) : null}
-                      </div>
                     </div>
 
                     <div style={styles.cardContent}>
@@ -327,8 +491,14 @@ export default function TrainingsPage() {
                         <p style={styles.meta}>🕒 {time}</p>
                         <p style={styles.meta}>📍 {training.start_location || "Location not set"}</p>
                         {training.distance_km ? <p style={styles.meta}>↗ {training.distance_km} km</p> : null}
-                        {training.route_id ? <p style={styles.meta}>🧭 Route attached</p> : null}
-                        {training.workout_id ? <p style={styles.meta}>🏋️ Workout attached</p> : null}
+                        <div style={styles.featureRow}>
+                          <span style={training.route_id ? styles.featureActive : styles.featureMuted}>
+                            🧭 {training.route_id ? "Route" : "No route"}
+                          </span>
+                          <span style={training.workout_id ? styles.featureActive : styles.featureMuted}>
+                            🏋️ {training.workout_id ? "Workout" : "No workout"}
+                          </span>
+                        </div>
                         <p style={styles.meta}>⚡ {intensity}</p>
                       </div>
                     </div>
@@ -341,13 +511,24 @@ export default function TrainingsPage() {
                       {training.max_participants ? `Max ${training.max_participants}` : "Open session"}
                     </span>
 
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/trainings/${training.id}`)}
-                      style={styles.openButton}
-                    >
-                      Open →
-                    </button>
+                    <div style={styles.footerActions}>
+                      <button
+                        type="button"
+                        onClick={() => toggleJoinFromCard(training)}
+                        disabled={busySessionId === training.id || (!alreadyJoined && training.max_participants && joinedCount >= Number(training.max_participants))}
+                        style={alreadyJoined ? styles.leaveSmallButton : styles.joinSmallButton}
+                      >
+                        {busySessionId === training.id ? "..." : alreadyJoined ? "Leave" : training.max_participants && joinedCount >= Number(training.max_participants) ? "Full" : "Join"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/trainings/${training.id}`)}
+                        style={styles.openButton}
+                      >
+                        Open →
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
@@ -656,48 +837,127 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.12)",
     padding: "0 18px",
   },
-
-  ribbonRow: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
+  trainingControls: {
+    borderRadius: 28,
+    padding: 14,
+    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(255,255,255,0.12)",
+    display: "grid",
+    gap: 12,
+  },
+  searchRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 140px",
+    gap: 10,
+  },
+  searchInput: {
+    minHeight: 46,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 14px",
+    outline: "none",
+    fontSize: 15,
+  },
+  sortSelect: {
+    minHeight: 46,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 12px",
+    outline: "none",
+    fontWeight: 850,
+  },
+  filterRow: {
+    display: "flex",
+    gap: 8,
+    overflowX: "auto",
+    paddingBottom: 2,
+  },
+  filterButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.72)",
+    padding: "0 12px",
+    fontWeight: 900,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  filterActive: {
+    minHeight: 40,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.34)",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    padding: "0 12px",
+    fontWeight: 950,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  filterCount: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 999,
+    display: "inline-grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,0.10)",
+    fontSize: 12,
+  },
+  featureRow: {
     display: "flex",
     gap: 8,
     flexWrap: "wrap",
-    zIndex: 2,
+    marginTop: 8,
   },
-  statusRibbon: {
+  featureActive: {
     borderRadius: 999,
-    padding: "8px 12px",
-    background: "rgba(228,239,22,0.14)",
-    border: "1px solid rgba(228,239,22,0.24)",
+    padding: "8px 10px",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
     color: "#e4ef16",
+    fontSize: 12,
     fontWeight: 950,
-    fontSize: 12,
-    backdropFilter: "blur(10px)",
   },
-  statusRibbonSecondary: {
+  featureMuted: {
     borderRadius: 999,
-    padding: "8px 12px",
-    background: "rgba(255,255,255,0.12)",
-    border: "1px solid rgba(255,255,255,0.16)",
-    color: "white",
+    padding: "8px 10px",
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 12,
     fontWeight: 900,
-    fontSize: 12,
-    backdropFilter: "blur(10px)",
   },
-  participantBar: {
-    width: 120,
-    height: 6,
-    borderRadius: 999,
-    overflow: "hidden",
-    background: "rgba(255,255,255,0.08)",
-    marginTop: 4,
+  footerActions: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
   },
-  participantFill: {
-    height: "100%",
-    borderRadius: 999,
+  joinSmallButton: {
+    ...baseButton,
+    color: "#101406",
     background: "#e4ef16",
+    borderRadius: 999,
+    padding: "10px 13px",
+    fontSize: 13,
+  },
+  leaveSmallButton: {
+    ...baseButton,
+    color: "white",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    padding: "10px 13px",
+    fontSize: 13,
   },
 
 };
