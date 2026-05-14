@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
+import { uploadTrainingPhoto } from "../../../lib/trainingPhotos";
 
 const sportOptions = [
   { id: "running", label: "Running", route: true, workout: false, metric: "pace" },
@@ -51,6 +52,8 @@ export default function CreateTrainingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [locationStatus, setLocationStatus] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
 
   const [form, setForm] = useState({
     sports: [],
@@ -321,6 +324,22 @@ export default function CreateTrainingPage() {
     }));
   }
 
+  function chooseTrainingPhoto(file) {
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview("");
+      return;
+    }
+
+    if (!file.type?.startsWith("image/")) {
+      setMessage("Choose an image file for the training photo.");
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
   function toggleSport(sportId) {
     setForm((current) => {
       if (!allowedSportIds.includes(sportId)) return current;
@@ -426,6 +445,10 @@ export default function CreateTrainingPage() {
           ? new Date(`${form.date}T${form.time}`).toISOString()
           : null;
 
+      const teaserPhotoUrl = photoFile
+        ? await uploadTrainingPhoto({ supabase, userId: user.id, file: photoFile })
+        : null;
+
       const payload = {
         creator_id: user.id,
         title: trainingTitle.trim(),
@@ -449,6 +472,7 @@ export default function CreateTrainingPage() {
         max_participants: form.max_participants ? Number(form.max_participants) : null,
         route_id: form.route_id || null,
         workout_id: form.workout_id || null,
+        teaser_photo_url: teaserPhotoUrl,
       };
 
       const { data, error } = await supabase
@@ -619,7 +643,35 @@ export default function CreateTrainingPage() {
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>3. Date and time</div>
+            <div style={styles.sectionTitle}>3. Training photo</div>
+            <p style={styles.hint}>
+              Optional. This photo will be shown in the training feed and on the detail page. If you skip it, Endurance uses a sport placeholder.
+            </p>
+
+            <label style={styles.photoDrop}>
+              {photoPreview ? (
+                <img src={photoPreview} alt="Training preview" style={styles.photoPreview} />
+              ) : (
+                <span style={styles.photoPlaceholder}>Add training photo</span>
+              )}
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
+                style={styles.hiddenFileInput}
+              />
+            </label>
+
+            {photoPreview ? (
+              <button type="button" onClick={() => chooseTrainingPhoto(null)} style={styles.secondaryButton}>
+                Remove selected photo
+              </button>
+            ) : null}
+          </section>
+
+          <section style={styles.section}>
+            <div style={styles.sectionTitle}>4. Date and time</div>
 
             <label style={styles.label}>
               Date
@@ -655,7 +707,7 @@ export default function CreateTrainingPage() {
           </section>
 
           <section style={styles.section}>
-            <div style={styles.sectionTitle}>4. Location and metrics</div>
+            <div style={styles.sectionTitle}>5. Location and metrics</div>
 
             <label style={styles.label}>
               Start location
@@ -728,7 +780,7 @@ export default function CreateTrainingPage() {
 
           <section style={styles.section}>
             <div style={styles.sectionTitle}>
-              {form.visibility === "selected" ? "5. Select members" : "5. Invite training partners"}
+              {form.visibility === "selected" ? "6. Select members" : "6. Invite training partners"}
             </div>
 
             {teamPartners.length ? (
@@ -776,7 +828,7 @@ export default function CreateTrainingPage() {
 
           {supportsRoutes ? (
             <section style={styles.section}>
-              <div style={styles.sectionTitle}>6. Route</div>
+              <div style={styles.sectionTitle}>7. Route</div>
 
               {preselectedRoute ? (
                 <div style={styles.connectedRouteBox}>
@@ -1145,6 +1197,34 @@ const styles = {
     fontSize: 17,
     cursor: "pointer",
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+  },
+  photoDrop: {
+    position: "relative",
+    minHeight: 170,
+    borderRadius: 24,
+    overflow: "hidden",
+    border: "1px dashed rgba(228,239,22,0.34)",
+    background:
+      "radial-gradient(circle at 80% 20%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035))",
+    cursor: "pointer",
+    display: "grid",
+    placeItems: "center",
+  },
+  photoPreview: {
+    width: "100%",
+    height: 220,
+    objectFit: "cover",
+    display: "block",
+  },
+  photoPlaceholder: {
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  hiddenFileInput: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    cursor: "pointer",
   },
   stateCard: {
     borderRadius: 28,
