@@ -12,6 +12,7 @@ import {
   getSportLabel,
 } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
+import { canUserSeeTraining } from "../../lib/trainingVisibility";
 
 const privilegedRoles = ["admin", "moderator"];
 
