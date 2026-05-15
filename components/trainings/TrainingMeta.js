@@ -11,20 +11,28 @@ export default function TrainingMeta({
   intensity,
   hasRoute,
   hasWorkout,
+  onCreatorClick,
 }) {
   const hasDistance = distanceKm !== null && distanceKm !== undefined && distanceKm !== "";
   const hasIntensity = Boolean(intensity && intensity !== "Intensity not set");
 
   return (
     <div style={styles.wrap}>
-      <div style={styles.creatorRow}>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onCreatorClick?.();
+        }}
+        style={styles.creatorRow}
+      >
         {creator?.avatar_url ? (
           <img src={creator.avatar_url} alt="" style={styles.creatorAvatar} />
         ) : (
           <span style={styles.creatorFallback}>{String(creatorName || "O").slice(0, 1).toUpperCase()}</span>
         )}
         <span style={styles.creatorText}>Created by {creatorName}</span>
-      </div>
+      </button>
 
       <div style={styles.metaLine}>
         <span>🕒 {time}</span>
@@ -49,6 +57,10 @@ const styles = {
     minWidth: 0,
   },
   creatorRow: {
+    border: 0,
+    padding: 0,
+    background: "transparent",
+    cursor: "pointer",
     display: "flex",
     alignItems: "center",
     gap: 8,

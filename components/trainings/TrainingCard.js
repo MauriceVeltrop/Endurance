@@ -19,6 +19,7 @@ export default function TrainingCard({
   busy,
   onJoin,
   onOpen,
+  onCreatorClick,
 }) {
   return (
     <article style={styles.card}>
@@ -49,6 +50,7 @@ export default function TrainingCard({
             intensity={intensity}
             hasRoute={Boolean(training.route_id)}
             hasWorkout={Boolean(training.workout_id)}
+            onCreatorClick={onCreatorClick}
           />
         </div>
       </button>
