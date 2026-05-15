@@ -120,6 +120,10 @@ export default function TrainingDetailPage() {
   const [route, setRoute] = useState(null);
   const [workout, setWorkout] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [teamPartners, setTeamPartners] = useState([]);
+  const [trainingInvites, setTrainingInvites] = useState([]);
+  const [inviteBusyId, setInviteBusyId] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -208,6 +212,58 @@ export default function TrainingDetailPage() {
         setParticipants(rows);
         setJoined(rows.some((row) => row.user_id === currentUser.id));
       }
+
+      if (trainingRow.creator_id === currentUser.id) {
+        const { data: relationRows, error: relationError } = await supabase
+          .from("training_partners")
+          .select("id,requester_id,addressee_id,status")
+          .eq("status", "accepted")
+          .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
+
+        if (relationError) {
+          console.warn("Team partners skipped", relationError);
+          setTeamPartners([]);
+        } else {
+          const partnerIds = (relationRows || [])
+            .map((relation) =>
+              relation.requester_id === currentUser.id
+                ? relation.addressee_id
+                : relation.requester_id
+            )
+            .filter(Boolean);
+
+          if (partnerIds.length) {
+            const { data: partnerRows, error: partnerProfileError } = await supabase
+              .from("profiles")
+              .select("id,name,first_name,last_name,email,avatar_url,role,location")
+              .in("id", partnerIds);
+
+            if (partnerProfileError) {
+              console.warn("Partner profiles skipped", partnerProfileError);
+              setTeamPartners([]);
+            } else {
+              setTeamPartners(partnerRows || []);
+            }
+          } else {
+            setTeamPartners([]);
+          }
+        }
+
+        const { data: inviteRows, error: inviteError } = await supabase
+          .from("training_invites")
+          .select("id,invitee_id,created_at")
+          .eq("session_id", trainingRow.id);
+
+        if (inviteError) {
+          console.warn("Training invites skipped", inviteError);
+          setTrainingInvites([]);
+        } else {
+          setTrainingInvites(inviteRows || []);
+        }
+      } else {
+        setTeamPartners([]);
+        setTrainingInvites([]);
+      }
     } catch (error) {
       console.error("Training detail load error", error);
       setErrorText(error?.message || "Could not open training.");
@@ -289,6 +345,66 @@ export default function TrainingDetailPage() {
       setMessage(error?.message || "Could not delete training.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function displayPartnerName(person) {
+    return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.email || "Training partner";
+  }
+
+  function partnerInitials(person) {
+    return displayPartnerName(person)
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  async function sendTrainingInvite(partnerId) {
+    if (!user?.id || !training?.id || !partnerId || !canManage) return;
+
+    setInviteBusyId(partnerId);
+    setInviteMessage("");
+
+    try {
+      const alreadyInvited = trainingInvites.some((invite) => invite.invitee_id === partnerId);
+      if (alreadyInvited) {
+        setInviteMessage("This training partner has already been invited.");
+        return;
+      }
+
+      const { data: existingParticipant } = await supabase
+        .from("session_participants")
+        .select("id")
+        .eq("session_id", training.id)
+        .eq("user_id", partnerId)
+        .maybeSingle();
+
+      if (existingParticipant?.id) {
+        setInviteMessage("This training partner has already joined.");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("training_invites")
+        .insert({
+          session_id: training.id,
+          inviter_id: user.id,
+          invitee_id: partnerId,
+        })
+        .select("id,invitee_id,created_at")
+        .single();
+
+      if (error) throw error;
+
+      setTrainingInvites((current) => [...current, data]);
+      setInviteMessage("Training invite sent.");
+    } catch (error) {
+      console.error("Training invite error", error);
+      setInviteMessage(error?.message || "Could not send training invite.");
+    } finally {
+      setInviteBusyId("");
     }
   }
 
@@ -395,6 +511,69 @@ export default function TrainingDetailPage() {
                 </div>
               </div>
             </article>
+
+            {canManage ? (
+              <section style={styles.inviteCard}>
+                <div style={styles.inviteHeader}>
+                  <div>
+                    <div style={styles.cardKicker}>Team Up</div>
+                    <h2 style={styles.inviteTitle}>Invite training partners</h2>
+                  </div>
+                  <span style={styles.inviteCount}>{trainingInvites.length}</span>
+                </div>
+
+                {inviteMessage ? <div style={styles.inviteMessage}>{inviteMessage}</div> : null}
+
+                {teamPartners.length ? (
+                  <div style={styles.inviteList}>
+                    {teamPartners.map((partner) => {
+                      const invited = trainingInvites.some((invite) => invite.invitee_id === partner.id);
+                      const isParticipant = participants.some((participant) => participant.user_id === partner.id);
+
+                      return (
+                        <div key={partner.id} style={styles.invitePerson}>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/profile/${partner.id}`)}
+                            style={styles.invitePersonMain}
+                          >
+                            {partner.avatar_url ? (
+                              <img src={partner.avatar_url} alt="" style={styles.inviteAvatar} />
+                            ) : (
+                              <span style={styles.inviteFallback}>{partnerInitials(partner)}</span>
+                            )}
+
+                            <span style={styles.inviteText}>
+                              <strong>{displayPartnerName(partner)}</strong>
+                              <span>{partner.location || partner.role || "Team Up partner"}</span>
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => sendTrainingInvite(partner.id)}
+                            disabled={invited || isParticipant || inviteBusyId === partner.id}
+                            style={invited || isParticipant ? styles.invitedButton : styles.inviteButton}
+                          >
+                            {inviteBusyId === partner.id
+                              ? "..."
+                              : isParticipant
+                                ? "Joined"
+                                : invited
+                                  ? "Invited"
+                                  : "Invite"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={styles.muted}>
+                    No accepted Team Up partners yet. Add partners from the Team page first.
+                  </p>
+                )}
+              </section>
+            ) : null}
 
             <section style={styles.grid}>
               <article style={styles.card}>
@@ -603,6 +782,118 @@ const styles = {
     padding: "0 18px",
     fontWeight: 950,
     cursor: "pointer",
+  },
+  inviteCard: {
+    borderRadius: 30,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
+  },
+  inviteHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  inviteTitle: {
+    margin: "4px 0 0",
+    fontSize: 24,
+    letterSpacing: "-0.05em",
+  },
+  inviteCount: {
+    minWidth: 38,
+    height: 38,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  inviteMessage: {
+    borderRadius: 18,
+    padding: 12,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    color: "#e4ef16",
+    fontWeight: 850,
+  },
+  inviteList: {
+    display: "grid",
+    gap: 10,
+  },
+  invitePerson: {
+    minHeight: 70,
+    borderRadius: 24,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  invitePersonMain: {
+    border: 0,
+    background: "transparent",
+    color: "white",
+    padding: 0,
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  inviteAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.28)",
+    flexShrink: 0,
+  },
+  inviteFallback: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.26)",
+    fontWeight: 950,
+    flexShrink: 0,
+  },
+  inviteText: {
+    display: "grid",
+    gap: 2,
+    color: "rgba(255,255,255,0.64)",
+    minWidth: 0,
+  },
+  inviteButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 16px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  invitedButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.72)",
+    padding: "0 16px",
+    fontWeight: 950,
+    cursor: "not-allowed",
   },
   dangerButton: {
     minHeight: 50,
