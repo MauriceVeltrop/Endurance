@@ -121,6 +121,7 @@ export default function TrainingDetailPage() {
   const [route, setRoute] = useState(null);
   const [workout, setWorkout] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [participantProfiles, setParticipantProfiles] = useState({});
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -258,11 +259,32 @@ export default function TrainingDetailPage() {
 
       if (participantError) {
         setParticipants([]);
+        setParticipantProfiles({});
         setJoined(false);
       } else {
         const rows = participantRows || [];
         setParticipants(rows);
         setJoined(rows.some((row) => row.user_id === currentUser.id));
+
+        const participantUserIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))];
+
+        if (participantUserIds.length) {
+          const { data: profileRows, error: profileRowsError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,email,avatar_url,role,location")
+            .in("id", participantUserIds);
+
+          if (profileRowsError) {
+            console.warn("Participant profiles skipped", profileRowsError);
+            setParticipantProfiles({});
+          } else {
+            setParticipantProfiles(
+              Object.fromEntries((profileRows || []).map((profile) => [profile.id, profile]))
+            );
+          }
+        } else {
+          setParticipantProfiles({});
+        }
       }
     } catch (error) {
       console.error("Training detail load error", error);
@@ -346,6 +368,19 @@ export default function TrainingDetailPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function displayParticipantName(person) {
+    return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.email || "Endurance athlete";
+  }
+
+  function participantInitials(person) {
+    return displayParticipantName(person)
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
   }
 
   return (
@@ -511,9 +546,36 @@ export default function TrainingDetailPage() {
               <article style={styles.card}>
                 <div style={styles.cardKicker}>Participants</div>
                 <h2 style={styles.cardTitle}>{participantCount} joined</h2>
-                <p style={styles.muted}>
-                  Participant profiles will be expanded after the detail page is stable.
-                </p>
+
+                {participants.length ? (
+                  <div style={styles.participantList}>
+                    {participants.map((participant) => {
+                      const person = participantProfiles[participant.user_id];
+
+                      return (
+                        <button
+                          key={participant.id}
+                          type="button"
+                          onClick={() => router.push(`/profile/${participant.user_id}`)}
+                          style={styles.participantRow}
+                        >
+                          {person?.avatar_url ? (
+                            <img src={person.avatar_url} alt="" style={styles.participantAvatar} />
+                          ) : (
+                            <span style={styles.participantFallback}>{participantInitials(person)}</span>
+                          )}
+
+                          <span style={styles.participantText}>
+                            <strong>{displayParticipantName(person)}</strong>
+                            <span>{person?.location || person?.role || "Training participant"}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={styles.muted}>No participants yet.</p>
+                )}
               </article>
             </section>
           </>
@@ -711,6 +773,48 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 8,
+  },
+  participantList: {
+    display: "grid",
+    gap: 10,
+  },
+  participantRow: {
+    width: "100%",
+    border: 0,
+    borderRadius: 22,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 10,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  participantAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.28)",
+  },
+  participantFallback: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  participantText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 3,
+    color: "rgba(255,255,255,0.62)",
   },
   routePreview: {
     position: "relative",
