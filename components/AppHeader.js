@@ -41,11 +41,11 @@ export default function AppHeader({ profile, compact = false }) {
     },
   ];
 
-  if (["admin", "moderator"].includes(profile?.role)) {
+  if (profile?.role === "moderator") {
     menuItems.push({
       label: "Admin",
       description: "Manage users and roles",
-      icon: "★",
+      icon: "⚡",
       href: "/admin",
     });
   }
