@@ -5,282 +5,567 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
 
+const allowedRoles = ["admin", "moderator"];
 const roleOptions = ["user", "organizer", "moderator", "admin"];
+
+function displayName(user) {
+  return user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Endurance user";
+}
+
+function initials(user) {
+  return displayName(user)
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 export default function AdminPage() {
   const router = useRouter();
-  const [currentProfile, setCurrentProfile] = useState(null);
+
+  const [profile, setProfile] = useState(null);
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState("");
-  const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const [message, setMessage] = useState("");
 
   const filteredUsers = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    if (!value) return users;
+    const q = query.trim().toLowerCase();
+    if (!q) return users;
 
-    return users.filter((user) => {
-      const haystack = `${user.name || ""} ${user.email || ""} ${user.location || ""} ${user.role || ""}`.toLowerCase();
-      return haystack.includes(value);
-    });
-  }, [users, query]);
-
-  const loadAdmin = async () => {
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData?.user;
-
-      if (!user?.id) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-
-      if (!profile?.onboarding_completed) {
-        router.replace("/onboarding");
-        return;
-      }
-
-      if (!profile || !["admin", "moderator"].includes(profile.role)) {
-        setCurrentProfile(profile || null);
-        setUsers([]);
-        setMessage("Admin access is required for this page.");
-        return;
-      }
-
-      setCurrentProfile(profile);
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,name,email,avatar_url,location,role,onboarding_completed,blocked,created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (err) {
-      console.error("Admin load error", err);
-      setMessage(err?.message || "Could not load admin page.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    return users.filter((user) =>
+      [
+        user.name,
+        user.email,
+        user.first_name,
+        user.last_name,
+        user.location,
+        user.role,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [query, users]);
 
   useEffect(() => {
     loadAdmin();
   }, []);
 
-  const updateRole = async (profileId, role) => {
+  async function loadAdmin() {
+    setLoading(true);
     setMessage("");
-    setSavingId(profileId);
 
     try {
-      if (currentProfile?.role !== "admin") {
-        setMessage("Only admins can change roles. Moderators can view this page.");
+      const { data: userData } = await supabase.auth.getUser();
+      const authUser = userData?.user;
+
+      if (!authUser?.id) {
+        router.replace("/login");
         return;
       }
 
-      const { error } = await supabase
+      const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
-        .update({ role })
-        .eq("id", profileId);
+        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .eq("id", authUser.id)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
-      setUsers((items) => items.map((item) => (item.id === profileId ? { ...item, role } : item)));
-      setMessage("Role updated.");
-    } catch (err) {
-      console.error("Role update error", err);
-      setMessage(err?.message || "Could not update role.");
-    } finally {
-      setSavingId("");
-    }
-  };
-
-  const toggleBlocked = async (profileId, blocked) => {
-    setMessage("");
-    setSavingId(profileId);
-
-    try {
-      if (currentProfile?.role !== "admin") {
-        setMessage("Only admins can block or unblock users.");
+      if (!profileRow?.onboarding_completed) {
+        router.replace("/onboarding");
         return;
       }
 
+      if (!allowedRoles.includes(profileRow?.role)) {
+        setProfile(profileRow || null);
+        setMessage("You do not have access to the Admin page.");
+        setUsers([]);
+        return;
+      }
+
+      setProfile(profileRow);
+
+      const { data: userRows, error: usersError } = await supabase
+        .from("profiles")
+        .select("id,name,email,avatar_url,location,role,blocked,onboarding_completed,created_at,first_name,last_name")
+        .order("created_at", { ascending: false })
+        .limit(250);
+
+      if (usersError) throw usersError;
+
+      setUsers(userRows || []);
+    } catch (error) {
+      console.error("Admin load error", error);
+      setMessage(error?.message || "Could not load Admin page.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function canEditUser(targetUser) {
+    if (!profile || !targetUser) return false;
+    if (profile.id === targetUser.id) return false;
+
+    if (profile.role === "admin") return true;
+
+    if (profile.role === "moderator") {
+      return !["admin", "moderator"].includes(targetUser.role);
+    }
+
+    return false;
+  }
+
+  function canSetRole(targetUser, nextRole) {
+    if (!canEditUser(targetUser)) return false;
+
+    if (profile.role === "admin") return roleOptions.includes(nextRole);
+
+    if (profile.role === "moderator") {
+      return ["user", "organizer"].includes(nextRole);
+    }
+
+    return false;
+  }
+
+  async function updateRole(targetUser, nextRole) {
+    if (!canSetRole(targetUser, nextRole)) {
+      setMessage("You cannot assign that role.");
+      return;
+    }
+
+    setBusyId(targetUser.id);
+    setMessage("");
+
+    try {
       const { error } = await supabase
         .from("profiles")
-        .update({ blocked: !blocked })
-        .eq("id", profileId);
+        .update({ role: nextRole })
+        .eq("id", targetUser.id);
 
       if (error) throw error;
 
-      setUsers((items) => items.map((item) => (item.id === profileId ? { ...item, blocked: !blocked } : item)));
-      setMessage(!blocked ? "User blocked." : "User unblocked.");
-    } catch (err) {
-      console.error("Block update error", err);
-      setMessage(err?.message || "Could not update blocked status.");
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === targetUser.id ? { ...user, role: nextRole } : user
+        )
+      );
+      setMessage(`Role updated for ${displayName(targetUser)}.`);
+    } catch (error) {
+      console.error("Role update error", error);
+      setMessage(error?.message || "Could not update role.");
     } finally {
-      setSavingId("");
+      setBusyId("");
     }
-  };
+  }
+
+  async function toggleBlocked(targetUser) {
+    if (!canEditUser(targetUser)) {
+      setMessage("You cannot change this user.");
+      return;
+    }
+
+    setBusyId(targetUser.id);
+    setMessage("");
+
+    try {
+      const nextBlocked = !targetUser.blocked;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ blocked: nextBlocked })
+        .eq("id", targetUser.id);
+
+      if (error) throw error;
+
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === targetUser.id ? { ...user, blocked: nextBlocked } : user
+        )
+      );
+
+      setMessage(nextBlocked ? "User blocked." : "User unblocked.");
+    } catch (error) {
+      console.error("Block user error", error);
+      setMessage(error?.message || "Could not update user status.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function createPlaceholderUser() {
+    setMessage("Adding users directly requires Supabase Auth admin/server support. For now, create accounts via sign-up, then manage roles here.");
+  }
 
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
-        <AppHeader profile={currentProfile} compact />
+        <AppHeader profile={profile} compact />
 
-        <button type="button" onClick={() => router.push("/trainings")} style={styles.backButton}>
-          ← Back to trainings
-        </button>
-
-        <header style={styles.headerCard}>
+        <header style={styles.header}>
           <div style={styles.kicker}>Admin</div>
-          <h1 style={styles.title}>User roles & access.</h1>
+          <div style={styles.titleRow}>
+            <h1 style={styles.title}>Manage Endurance.</h1>
+            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
+              Trainings
+            </button>
+          </div>
           <p style={styles.subtitle}>
-            Start simple: manage verified platform roles without touching training feed RLS or group logic.
+            Manage users, roles and access for the verified Endurance community.
           </p>
         </header>
 
-        {message ? <div style={message.includes("updated") || message.includes("blocked") || message.includes("unblocked") ? styles.successMessage : styles.message}>{message}</div> : null}
+        {message ? <section style={styles.message}>{message}</section> : null}
 
-        {loading ? (
-          <section style={styles.stateCard}>
-            <div style={styles.stateTitle}>Loading admin...</div>
-          </section>
-        ) : null}
+        {allowedRoles.includes(profile?.role) ? (
+          <>
+            <section style={styles.statsGrid}>
+              <div style={styles.statCard}>
+                <span style={styles.statLabel}>Users</span>
+                <strong style={styles.statValue}>{loading ? "…" : users.length}</strong>
+                <span style={styles.statHint}>total profiles</span>
+              </div>
 
-        {!loading && ["admin", "moderator"].includes(currentProfile?.role) ? (
-          <section style={styles.panel}>
-            <div style={styles.toolbar}>
-              <label style={styles.searchLabel}>
-                Search users
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Name, email, role or location"
-                  style={styles.input}
-                />
-              </label>
+              <div style={styles.statCard}>
+                <span style={styles.statLabel}>Blocked</span>
+                <strong style={styles.statValue}>{loading ? "…" : users.filter((user) => user.blocked).length}</strong>
+                <span style={styles.statHint}>restricted accounts</span>
+              </div>
+            </section>
 
-              <button type="button" onClick={loadAdmin} style={styles.refreshButton}>
-                Refresh
-              </button>
-            </div>
+            <section style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <div style={styles.panelKicker}>Users</div>
+                  <h2 style={styles.panelTitle}>Role management</h2>
+                </div>
 
-            <div style={styles.userList}>
-              {filteredUsers.map((item) => (
-                <article key={item.id} style={styles.userCard}>
-                  <div style={styles.identity}>
-                    <div style={styles.avatar}>
-                      {item.avatar_url ? <img src={item.avatar_url} alt="" style={styles.avatarImage} /> : getInitials(item.name || item.email)}
-                    </div>
-                    <div>
-                      <h2 style={styles.userName}>{item.name || "Unnamed user"}</h2>
-                      <p style={styles.userMeta}>{item.email}</p>
-                      <p style={styles.userMeta}>{item.location || "No location"}</p>
-                    </div>
-                  </div>
+                <button type="button" onClick={createPlaceholderUser} style={styles.secondaryButton}>
+                  Add user
+                </button>
+              </div>
 
-                  <div style={styles.statusRow}>
-                    <span style={item.onboarding_completed ? styles.goodPill : styles.warnPill}>
-                      {item.onboarding_completed ? "Onboarded" : "Needs onboarding"}
-                    </span>
-                    <span style={item.blocked ? styles.blockedPill : styles.goodPill}>
-                      {item.blocked ? "Blocked" : "Active"}
-                    </span>
-                  </div>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search name, email, location or role..."
+                style={styles.searchInput}
+              />
 
-                  <div style={styles.controls}>
-                    <label style={styles.controlLabel}>
-                      Role
-                      <select
-                        value={item.role || "user"}
-                        disabled={currentProfile?.role !== "admin" || savingId === item.id}
-                        onChange={(event) => updateRole(item.id, event.target.value)}
-                        style={styles.select}
-                      >
-                        {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
-                      </select>
-                    </label>
+              {loading ? (
+                <p style={styles.panelText}>Loading users...</p>
+              ) : filteredUsers.length ? (
+                <div style={styles.userList}>
+                  {filteredUsers.map((user) => {
+                    const editable = canEditUser(user);
 
-                    <button
-                      type="button"
-                      disabled={currentProfile?.role !== "admin" || savingId === item.id || item.id === currentProfile?.id}
-                      onClick={() => toggleBlocked(item.id, item.blocked)}
-                      style={item.blocked ? styles.unblockButton : styles.blockButton}
-                    >
-                      {savingId === item.id ? "Saving..." : item.blocked ? "Unblock" : "Block"}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+                    return (
+                      <article key={user.id} style={user.blocked ? styles.userCardBlocked : styles.userCard}>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/profile/${user.id}`)}
+                          style={styles.userMain}
+                        >
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt="" style={styles.avatar} />
+                          ) : (
+                            <span style={styles.initials}>{initials(user)}</span>
+                          )}
+
+                          <span style={styles.userText}>
+                            <strong>{displayName(user)}</strong>
+                            <span>{user.email || "No email"}</span>
+                            <small>{user.location || "Location not set"}</small>
+                          </span>
+                        </button>
+
+                        <div style={styles.userControls}>
+                          <select
+                            value={user.role || "user"}
+                            disabled={!editable || busyId === user.id}
+                            onChange={(event) => updateRole(user, event.target.value)}
+                            style={styles.roleSelect}
+                          >
+                            {roleOptions.map((role) => (
+                              <option key={role} value={role} disabled={!canSetRole(user, role)}>
+                                {role}
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => toggleBlocked(user)}
+                            disabled={!editable || busyId === user.id}
+                            style={user.blocked ? styles.unblockButton : styles.blockButton}
+                          >
+                            {busyId === user.id ? "..." : user.blocked ? "Unblock" : "Block"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={styles.panelText}>No users found.</p>
+              )}
+            </section>
+          </>
         ) : null}
       </section>
     </main>
   );
 }
 
-function getInitials(value) {
-  return String(value)
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "E";
-}
-
-const baseButton = { border: 0, cursor: "pointer", fontWeight: 950 };
+const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 18px 34px",
+    padding: "18px 16px 42px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    overflowX: "hidden",
   },
-  shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 18 },
-  backButton: { ...baseButton, justifySelf: "start", borderRadius: 999, padding: "10px 13px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.84)" },
-  headerCard: { borderRadius: 32, padding: 22, background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))", border: "1px solid rgba(255,255,255,0.14)" },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  title: { margin: "10px 0 0", fontSize: "clamp(34px, 8vw, 60px)", lineHeight: 0.98, letterSpacing: "-0.06em" },
-  subtitle: { margin: "14px 0 0", color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
-  panel: { display: "grid", gap: 14 },
-  toolbar: { display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap" },
-  searchLabel: { display: "grid", gap: 8, flex: "1 1 260px", color: "rgba(255,255,255,0.76)", fontSize: 13, fontWeight: 850 },
-  input: { width: "100%", minHeight: 52, borderRadius: 18, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 14px", boxSizing: "border-box", fontSize: 16, outline: "none" },
-  refreshButton: { ...baseButton, minHeight: 52, borderRadius: 18, padding: "0 16px", background: "#e4ef16", color: "#101406" },
-  userList: { display: "grid", gap: 12 },
-  userCard: { display: "grid", gap: 14, borderRadius: 26, padding: 16, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" },
-  identity: { display: "flex", gap: 12, alignItems: "center" },
-  avatar: { width: 54, height: 54, borderRadius: 18, display: "grid", placeItems: "center", overflow: "hidden", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.22)", color: "#e4ef16", fontWeight: 950 },
-  avatarImage: { width: "100%", height: "100%", objectFit: "cover" },
-  userName: { margin: 0, fontSize: 19, letterSpacing: "-0.02em" },
-  userMeta: { margin: "4px 0 0", color: "rgba(255,255,255,0.62)", fontSize: 13 },
-  statusRow: { display: "flex", gap: 8, flexWrap: "wrap" },
-  goodPill: { borderRadius: 999, padding: "7px 10px", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.22)", color: "#e4ef16", fontSize: 12, fontWeight: 900 },
-  warnPill: { borderRadius: 999, padding: "7px 10px", background: "rgba(255,180,60,0.12)", border: "1px solid rgba(255,180,60,0.22)", color: "#ffd083", fontSize: 12, fontWeight: 900 },
-  blockedPill: { borderRadius: 999, padding: "7px 10px", background: "rgba(255,60,60,0.14)", border: "1px solid rgba(255,80,80,0.22)", color: "#ffb2b2", fontSize: 12, fontWeight: 900 },
-  controls: { display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end" },
-  controlLabel: { display: "grid", gap: 8, color: "rgba(255,255,255,0.76)", fontSize: 13, fontWeight: 850 },
-  select: { minHeight: 46, borderRadius: 16, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 12px", fontSize: 15 },
-  blockButton: { ...baseButton, minHeight: 46, borderRadius: 16, background: "rgba(255,60,60,0.16)", border: "1px solid rgba(255,80,80,0.22)", color: "#ffb2b2", padding: "0 14px" },
-  unblockButton: { ...baseButton, minHeight: 46, borderRadius: 16, background: "rgba(228,239,22,0.13)", border: "1px solid rgba(228,239,22,0.24)", color: "#e4ef16", padding: "0 14px" },
-  message: { borderRadius: 18, padding: 14, background: "rgba(255,120,80,0.12)", border: "1px solid rgba(255,160,120,0.22)", color: "rgba(255,255,255,0.86)", fontWeight: 800 },
-  successMessage: { borderRadius: 18, padding: 14, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.25)", color: "#e4ef16", fontWeight: 900 },
-  stateCard: { borderRadius: 28, padding: 22, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" },
-  stateTitle: { fontSize: 22, fontWeight: 950 },
+  shell: {
+    width: "100%",
+    maxWidth: 980,
+    margin: "0 auto",
+    display: "grid",
+    gap: 18,
+  },
+  header: {
+    display: "grid",
+    gap: 10,
+  },
+  kicker: {
+    color: "#e4ef16",
+    fontSize: 13,
+    fontWeight: 950,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+  },
+  titleRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "end",
+    gap: 12,
+  },
+  title: {
+    margin: 0,
+    fontSize: "clamp(38px, 11vw, 64px)",
+    lineHeight: 0.96,
+    letterSpacing: "-0.065em",
+  },
+  subtitle: {
+    margin: 0,
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.5,
+    maxWidth: 660,
+  },
+  primaryButton: {
+    minHeight: 46,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 16px",
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 15px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  message: {
+    borderRadius: 20,
+    padding: 14,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    color: "#e4ef16",
+    fontWeight: 850,
+    lineHeight: 1.45,
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  statCard: {
+    minHeight: 112,
+    borderRadius: 26,
+    padding: 16,
+    boxSizing: "border-box",
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    alignContent: "space-between",
+  },
+  statLabel: {
+    color: "rgba(255,255,255,0.54)",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+  },
+  statValue: {
+    fontSize: 42,
+    letterSpacing: "-0.06em",
+    lineHeight: 0.95,
+  },
+  statHint: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 13,
+    fontWeight: 800,
+  },
+  panel: {
+    borderRadius: 30,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
+  },
+  panelHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  panelKicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  panelTitle: {
+    margin: 0,
+    fontSize: 25,
+    letterSpacing: "-0.05em",
+  },
+  panelText: {
+    margin: 0,
+    color: "rgba(255,255,255,0.66)",
+    lineHeight: 1.45,
+  },
+  searchInput: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 16px",
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 15,
+  },
+  userList: {
+    display: "grid",
+    gap: 10,
+  },
+  userCard: {
+    minHeight: 78,
+    borderRadius: 24,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 10,
+  },
+  userCardBlocked: {
+    minHeight: 78,
+    borderRadius: 24,
+    padding: 10,
+    background: "rgba(255,70,70,0.10)",
+    border: "1px solid rgba(255,90,90,0.18)",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 10,
+  },
+  userMain: {
+    border: 0,
+    background: "transparent",
+    color: "white",
+    padding: 0,
+    display: "grid",
+    gridTemplateColumns: "48px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 11,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.30)",
+  },
+  initials: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    border: "1px solid rgba(228,239,22,0.28)",
+    fontWeight: 950,
+  },
+  userText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 2,
+    color: "rgba(255,255,255,0.66)",
+  },
+  userControls: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  roleSelect: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(0,0,0,0.28)",
+    color: "white",
+    padding: "0 12px",
+    fontWeight: 900,
+  },
+  blockButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(255,90,90,0.22)",
+    background: "rgba(255,70,70,0.10)",
+    color: "#ffb4b4",
+    padding: "0 14px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  unblockButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.12)",
+    color: "#e4ef16",
+    padding: "0 14px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
 };
