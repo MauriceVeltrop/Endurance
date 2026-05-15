@@ -413,6 +413,7 @@ export default function TrainingsPage() {
                     busy={busySessionId === training.id}
                     onJoin={() => toggleJoinFromCard(training)}
                     onOpen={() => router.push(`/trainings/${training.id}`)}
+                    onCreatorClick={() => router.push(`/profile/${training.creator_id}`)}
                   />
                 );
               })}
