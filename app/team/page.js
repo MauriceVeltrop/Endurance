@@ -285,19 +285,25 @@ export default function TeamPage() {
     try {
       setBusyId(invite.id);
 
-      const { error: participantError } = await supabase
+      const { data: existingParticipant, error: existingParticipantError } = await supabase
         .from("session_participants")
-        .upsert(
-          {
+        .select("id")
+        .eq("session_id", invite.session_id)
+        .eq("user_id", profile.id)
+        .maybeSingle();
+
+      if (existingParticipantError) throw existingParticipantError;
+
+      if (!existingParticipant?.id) {
+        const { error: participantError } = await supabase
+          .from("session_participants")
+          .insert({
             session_id: invite.session_id,
             user_id: profile.id,
-          },
-          {
-            onConflict: "session_id,user_id",
-          }
-        );
+          });
 
-      if (participantError) throw participantError;
+        if (participantError) throw participantError;
+      }
 
       const { error: inviteDeleteError } = await supabase
         .from("training_invites")
@@ -518,14 +524,24 @@ export default function TeamPage() {
                     <strong>{displayName(person)}</strong>
                     <span>{person.location || person.role || "Endurance user"}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => sendRequest(person.id)}
-                    disabled={busyId === person.id}
-                    style={styles.smallPrimaryButton}
-                  >
-                    Team Up
-                  </button>
+                  <div style={styles.buttonGroup}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/profile/${person.id}`)}
+                      style={styles.smallGhostButton}
+                    >
+                      Profile
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => sendRequest(person.id)}
+                      disabled={busyId === person.id}
+                      style={styles.smallPrimaryButton}
+                    >
+                      Team Up
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -553,6 +569,14 @@ export default function TeamPage() {
                       <span>wants to Team Up</span>
                     </div>
                     <div style={styles.buttonGroup}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/profile/${person?.id}`)}
+                        style={styles.smallGhostButton}
+                      >
+                        Profile
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => updateRequest(relation.id, "accepted")}
@@ -599,14 +623,24 @@ export default function TeamPage() {
                       <strong>{displayName(person)}</strong>
                       <span>{person?.location || person?.role || "Training partner"}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removePartner(relation.id)}
-                      disabled={busyId === relation.id}
-                      style={styles.smallGhostButton}
-                    >
-                      Remove
-                    </button>
+                    <div style={styles.buttonGroup}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/profile/${person?.id}`)}
+                        style={styles.smallGhostButton}
+                      >
+                        Profile
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => removePartner(relation.id)}
+                        disabled={busyId === relation.id}
+                        style={styles.smallGhostButton}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -636,14 +670,24 @@ export default function TeamPage() {
                       <strong>{displayName(person)}</strong>
                       <span>Waiting for response</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removePartner(relation.id)}
-                      disabled={busyId === relation.id}
-                      style={styles.smallGhostButton}
-                    >
-                      Cancel
-                    </button>
+                    <div style={styles.buttonGroup}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/profile/${person?.id}`)}
+                        style={styles.smallGhostButton}
+                      >
+                        Profile
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => removePartner(relation.id)}
+                        disabled={busyId === relation.id}
+                        style={styles.smallGhostButton}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -707,7 +751,7 @@ const styles = {
     background: "rgba(228,239,22,0.075)",
     border: "1px solid rgba(228,239,22,0.16)",
     display: "grid",
-    gridTemplateColumns: "46px minmax(0, 1fr) auto",
+    gridTemplateColumns: "46px minmax(0, 1fr)",
     alignItems: "center",
     gap: 11,
   },
@@ -722,11 +766,11 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.26)",
     fontWeight: 950,
   },
-  personCard: { minHeight: 64, borderRadius: 24, padding: 10, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gridTemplateColumns: "46px minmax(0, 1fr) auto", alignItems: "center", gap: 11 },
+  personCard: { minHeight: 64, borderRadius: 24, padding: 10, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.08)", display: "grid", gridTemplateColumns: "46px minmax(0, 1fr)", alignItems: "center", gap: 11 },
   avatar: { width: 46, height: 46, borderRadius: 999, objectFit: "cover", border: "1px solid rgba(228,239,22,0.30)" },
   initials: { width: 46, height: 46, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.14)", color: "#e4ef16", border: "1px solid rgba(228,239,22,0.28)", fontWeight: 950 },
   personText: { minWidth: 0, display: "grid", gap: 2, color: "rgba(255,255,255,0.66)" },
-  buttonGroup: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" },
+  buttonGroup: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-start", gridColumn: "1 / -1" },
   smallPrimaryButton: { minHeight: 38, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 12px", fontWeight: 950, cursor: "pointer" },
   smallGhostButton: { minHeight: 38, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", padding: "0 12px", fontWeight: 950, cursor: "pointer" },
 };
