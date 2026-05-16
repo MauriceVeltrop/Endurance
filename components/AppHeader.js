@@ -22,6 +22,12 @@ export default function AppHeader({ profile, compact = false }) {
       href: "/trainings",
     },
     {
+      label: "Availability",
+      description: "Set when you can train",
+      icon: "◷",
+      href: "/availability",
+    },
+    {
       label: "Routes",
       description: "Browse and manage routes",
       icon: "⌁",
