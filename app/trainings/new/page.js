@@ -26,6 +26,13 @@ function todayString() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function nextHourString() {
+  const date = new Date();
+  date.setHours(date.getHours() + 1);
+  date.setMinutes(0, 0, 0);
+  return date.toTimeString().slice(0, 5);
+}
+
 function defaultTitle(sportId) {
   return `${getSportLabel(sportId)} Training`;
 }
@@ -60,8 +67,8 @@ export default function CreateTrainingPage() {
     description: "",
     planning_type: "fixed",
     date: todayString(),
-    start_time: "09:00",
-    flexible_start_time: "09:00",
+    start_time: nextHourString(),
+    flexible_start_time: nextHourString(),
     flexible_end_time: "11:00",
     start_location: "",
     distance_km: "",
@@ -287,10 +294,31 @@ export default function CreateTrainingPage() {
           invitee_id: inviteeId,
         }));
 
-        await supabase.from("training_invites").insert(inviteRows);
+        const { error: inviteError } = await supabase
+          .from("training_invites")
+          .insert(inviteRows);
+
+        if (inviteError) {
+          console.warn("Training invites skipped", inviteError);
+        }
+
+        if (form.visibility === "selected") {
+          const visibilityRows = inviteTargets.map((userId) => ({
+            session_id: trainingRow.id,
+            user_id: userId,
+          }));
+
+          const { error: visibilityError } = await supabase
+            .from("training_visibility_members")
+            .insert(visibilityRows);
+
+          if (visibilityError) {
+            console.warn("Selected visibility members skipped", visibilityError);
+          }
+        }
       }
 
-      router.push(`/trainings/${trainingRow.id}`);
+      router.replace(`/trainings/${trainingRow.id}`);
     } catch (error) {
       console.error("Create training error", error);
       setMessage(error?.message || "Could not create training.");
