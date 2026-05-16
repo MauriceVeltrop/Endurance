@@ -128,8 +128,14 @@ export default function TrainingDetailPage() {
     available_until: "",
     note: "",
   });
+  const [finalTimeForm, setFinalTimeForm] = useState({
+    date: "",
+    time: "",
+  });
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [finalTimeBusy, setFinalTimeBusy] = useState(false);
+  const [finalTimeMessage, setFinalTimeMessage] = useState("");
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -296,6 +302,17 @@ export default function TrainingDetailPage() {
       }
 
       if (trainingRow.planning_type === "flexible") {
+        setFinalTimeForm({
+          date:
+            trainingRow.final_starts_at
+              ? new Date(trainingRow.final_starts_at).toISOString().slice(0, 10)
+              : trainingRow.flexible_date || "",
+          time:
+            trainingRow.final_starts_at
+              ? new Date(trainingRow.final_starts_at).toTimeString().slice(0, 5)
+              : "",
+        });
+
         const { data: availabilityData, error: availabilityError } = await supabase
           .from("session_availability")
           .select("id,session_id,user_id,available_from,available_until,note,created_at")
@@ -322,6 +339,10 @@ export default function TrainingDetailPage() {
           available_from: "",
           available_until: "",
           note: "",
+        });
+        setFinalTimeForm({
+          date: "",
+          time: "",
         });
       }
     } catch (error) {
@@ -517,6 +538,76 @@ export default function TrainingDetailPage() {
     }));
   }
 
+  function updateFinalTimeForm(key, value) {
+    setFinalTimeForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function setFinalStartTime() {
+    if (!canManage || !training?.id) return;
+
+    setFinalTimeBusy(true);
+    setFinalTimeMessage("");
+
+    try {
+      if (!finalTimeForm.date || !finalTimeForm.time) {
+        setFinalTimeMessage("Choose a final date and start time.");
+        return;
+      }
+
+      const finalStartsAt = new Date(`${finalTimeForm.date}T${finalTimeForm.time}:00`).toISOString();
+
+      const { error } = await supabase
+        .from("training_sessions")
+        .update({
+          final_starts_at: finalStartsAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      setFinalTimeMessage("Final start time set.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Final start time error", error);
+      setFinalTimeMessage(error?.message || "Could not set final start time.");
+    } finally {
+      setFinalTimeBusy(false);
+    }
+  }
+
+  async function clearFinalStartTime() {
+    if (!canManage || !training?.id) return;
+
+    setFinalTimeBusy(true);
+    setFinalTimeMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("training_sessions")
+        .update({
+          final_starts_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      setFinalTimeMessage("Final start time cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Clear final start time error", error);
+      setFinalTimeMessage(error?.message || "Could not clear final start time.");
+    } finally {
+      setFinalTimeBusy(false);
+    }
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
@@ -624,66 +715,127 @@ export default function TrainingDetailPage() {
             {training.planning_type === "flexible" ? (
               <section style={styles.availabilityCard}>
                 <div style={styles.cardKicker}>Flexible planning</div>
-                <h2 style={styles.cardTitle}>When can you train?</h2>
+                <h2 style={styles.cardTitle}>Find the best time</h2>
 
                 <p style={styles.muted}>
-                  Add your availability for this session. The organizer can use this to choose the final start time.
+                  Participants can share availability. The organizer can then set the final start time.
                 </p>
 
-                {availabilityMessage ? (
-                  <div style={styles.availabilityMessage}>{availabilityMessage}</div>
+                {training.final_starts_at ? (
+                  <div style={styles.finalTimeBanner}>
+                    Final start: {formatTime(training)}
+                  </div>
                 ) : null}
 
-                <div style={styles.availabilityForm}>
-                  <label style={styles.availabilityLabel}>
-                    From
-                    <input
-                      type="time"
-                      value={availabilityForm.available_from}
-                      onChange={(event) => updateAvailabilityForm("available_from", event.target.value)}
-                      style={styles.availabilityInput}
-                    />
-                  </label>
+                {canManage ? (
+                  <div style={styles.finalTimeBox}>
+                    <div style={styles.cardKicker}>Organizer</div>
+                    <div style={styles.availabilityForm}>
+                      <label style={styles.availabilityLabel}>
+                        Date
+                        <input
+                          type="date"
+                          value={finalTimeForm.date}
+                          onChange={(event) => updateFinalTimeForm("date", event.target.value)}
+                          style={styles.availabilityInput}
+                        />
+                      </label>
 
-                  <label style={styles.availabilityLabel}>
-                    Until
-                    <input
-                      type="time"
-                      value={availabilityForm.available_until}
-                      onChange={(event) => updateAvailabilityForm("available_until", event.target.value)}
-                      style={styles.availabilityInput}
-                    />
-                  </label>
+                      <label style={styles.availabilityLabel}>
+                        Final start
+                        <input
+                          type="time"
+                          value={finalTimeForm.time}
+                          onChange={(event) => updateFinalTimeForm("time", event.target.value)}
+                          style={styles.availabilityInput}
+                        />
+                      </label>
+                    </div>
 
-                  <label style={styles.availabilityLabelFull}>
-                    Note
-                    <input
-                      value={availabilityForm.note}
-                      onChange={(event) => updateAvailabilityForm("note", event.target.value)}
-                      placeholder="Optional, e.g. easy pace only"
-                      style={styles.availabilityInput}
-                    />
-                  </label>
-                </div>
+                    {finalTimeMessage ? (
+                      <div style={styles.availabilityMessage}>{finalTimeMessage}</div>
+                    ) : null}
 
-                <div style={styles.availabilityActions}>
-                  <button
-                    type="button"
-                    onClick={saveSessionAvailability}
-                    disabled={availabilityBusy}
-                    style={styles.primaryButton}
-                  >
-                    {availabilityBusy ? "Saving..." : "Save availability"}
-                  </button>
+                    <div style={styles.availabilityActions}>
+                      <button
+                        type="button"
+                        onClick={setFinalStartTime}
+                        disabled={finalTimeBusy}
+                        style={styles.primaryButton}
+                      >
+                        {finalTimeBusy ? "Saving..." : "Set final time"}
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={clearSessionAvailability}
-                    disabled={availabilityBusy}
-                    style={styles.secondaryButton}
-                  >
-                    Clear
-                  </button>
+                      <button
+                        type="button"
+                        onClick={clearFinalStartTime}
+                        disabled={finalTimeBusy}
+                        style={styles.secondaryButton}
+                      >
+                        Clear final time
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div style={styles.finalTimeBox}>
+                  <div style={styles.cardKicker}>Your availability</div>
+
+                  {availabilityMessage ? (
+                    <div style={styles.availabilityMessage}>{availabilityMessage}</div>
+                  ) : null}
+
+                  <div style={styles.availabilityForm}>
+                    <label style={styles.availabilityLabel}>
+                      From
+                      <input
+                        type="time"
+                        value={availabilityForm.available_from}
+                        onChange={(event) => updateAvailabilityForm("available_from", event.target.value)}
+                        style={styles.availabilityInput}
+                      />
+                    </label>
+
+                    <label style={styles.availabilityLabel}>
+                      Until
+                      <input
+                        type="time"
+                        value={availabilityForm.available_until}
+                        onChange={(event) => updateAvailabilityForm("available_until", event.target.value)}
+                        style={styles.availabilityInput}
+                      />
+                    </label>
+
+                    <label style={styles.availabilityLabelFull}>
+                      Note
+                      <input
+                        value={availabilityForm.note}
+                        onChange={(event) => updateAvailabilityForm("note", event.target.value)}
+                        placeholder="Optional, e.g. easy pace only"
+                        style={styles.availabilityInput}
+                      />
+                    </label>
+                  </div>
+
+                  <div style={styles.availabilityActions}>
+                    <button
+                      type="button"
+                      onClick={saveSessionAvailability}
+                      disabled={availabilityBusy}
+                      style={styles.primaryButton}
+                    >
+                      {availabilityBusy ? "Saving..." : "Save availability"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={clearSessionAvailability}
+                      disabled={availabilityBusy}
+                      style={styles.secondaryButton}
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
 
                 {availabilityRows.length ? (
@@ -880,6 +1032,76 @@ export default function TrainingDetailPage() {
       ...current,
       [key]: value,
     }));
+  }
+
+  function updateFinalTimeForm(key, value) {
+    setFinalTimeForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function setFinalStartTime() {
+    if (!canManage || !training?.id) return;
+
+    setFinalTimeBusy(true);
+    setFinalTimeMessage("");
+
+    try {
+      if (!finalTimeForm.date || !finalTimeForm.time) {
+        setFinalTimeMessage("Choose a final date and start time.");
+        return;
+      }
+
+      const finalStartsAt = new Date(`${finalTimeForm.date}T${finalTimeForm.time}:00`).toISOString();
+
+      const { error } = await supabase
+        .from("training_sessions")
+        .update({
+          final_starts_at: finalStartsAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      setFinalTimeMessage("Final start time set.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Final start time error", error);
+      setFinalTimeMessage(error?.message || "Could not set final start time.");
+    } finally {
+      setFinalTimeBusy(false);
+    }
+  }
+
+  async function clearFinalStartTime() {
+    if (!canManage || !training?.id) return;
+
+    setFinalTimeBusy(true);
+    setFinalTimeMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("training_sessions")
+        .update({
+          final_starts_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      setFinalTimeMessage("Final start time cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Clear final start time error", error);
+      setFinalTimeMessage(error?.message || "Could not clear final start time.");
+    } finally {
+      setFinalTimeBusy(false);
+    }
   }
 
   return (
@@ -1111,6 +1333,22 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 14,
+  },
+  finalTimeBanner: {
+    borderRadius: 20,
+    padding: 14,
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  finalTimeBox: {
+    borderRadius: 24,
+    padding: 14,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    display: "grid",
+    gap: 12,
   },
   availabilityMessage: {
     borderRadius: 18,
