@@ -108,6 +108,10 @@ export default function TrainingDetailPage() {
     available_until: "",
     note: "",
   });
+  const [finalStartForm, setFinalStartForm] = useState({
+    date: "",
+    time: "",
+  });
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -159,6 +163,22 @@ export default function TrainingDetailPage() {
       }
 
       setTraining(trainingRow);
+
+      const finalStart = trainingRow.final_starts_at || trainingRow.starts_at || "";
+      if (finalStart) {
+        const finalDate = new Date(finalStart);
+        if (!Number.isNaN(finalDate.getTime())) {
+          setFinalStartForm({
+            date: finalDate.toISOString().slice(0, 10),
+            time: finalDate.toTimeString().slice(0, 5),
+          });
+        }
+      } else {
+        setFinalStartForm({
+          date: trainingRow.flexible_date || "",
+          time: trainingRow.flexible_start_time?.slice(0, 5) || "",
+        });
+      }
 
       if (trainingRow.route_id) {
         const { data: routeRow } = await supabase
@@ -407,6 +427,48 @@ export default function TrainingDetailPage() {
     }
   }
 
+  function updateFinalStartForm(key, value) {
+    setFinalStartForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function saveFinalStartTime() {
+    if (!canManage || !training?.id || training.planning_type !== "flexible") return;
+
+    setBusy(true);
+    setMessage("");
+
+    try {
+      if (!finalStartForm.date || !finalStartForm.time) {
+        setMessage("Choose a final date and start time.");
+        return;
+      }
+
+      const finalStartsAt = new Date(`${finalStartForm.date}T${finalStartForm.time}:00`).toISOString();
+
+      const { error } = await supabase
+        .from("training_sessions")
+        .update({
+          final_starts_at: finalStartsAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", training.id)
+        .eq("creator_id", user.id);
+
+      if (error) throw error;
+
+      setMessage("Final start time saved.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Final start time error", error);
+      setMessage(error?.message || "Could not save final start time.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function addToCalendar() {
     if (!training) return;
 
@@ -650,6 +712,47 @@ export default function TrainingDetailPage() {
                     <span>Share a time frame so others know when you are available.</span>
                   </div>
                 )}
+
+                {canManage ? (
+                  <div style={styles.finalTimeBox}>
+                    <div style={styles.cardKicker}>Organizer final time</div>
+                    <h3 style={styles.smallTitle}>Set the final start time</h3>
+                    <p style={styles.muted}>
+                      Once this is set, calendar export becomes available for everyone.
+                    </p>
+
+                    <div style={styles.flexGrid}>
+                      <label style={styles.label}>
+                        Final date
+                        <input
+                          type="date"
+                          value={finalStartForm.date}
+                          onChange={(event) => updateFinalStartForm("date", event.target.value)}
+                          style={styles.input}
+                        />
+                      </label>
+
+                      <label style={styles.label}>
+                        Final time
+                        <input
+                          type="time"
+                          value={finalStartForm.time}
+                          onChange={(event) => updateFinalStartForm("time", event.target.value)}
+                          style={styles.input}
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={saveFinalStartTime}
+                      disabled={busy}
+                      style={styles.primaryButton}
+                    >
+                      {busy ? "Saving..." : "Save final time"}
+                    </button>
+                  </div>
+                ) : null}
               </section>
             ) : null}
 
