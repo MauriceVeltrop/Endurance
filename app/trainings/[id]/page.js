@@ -123,6 +123,14 @@ export default function TrainingDetailPage() {
   const [workout, setWorkout] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [participantProfiles, setParticipantProfiles] = useState({});
+  const [sessionAvailabilityRows, setSessionAvailabilityRows] = useState([]);
+  const [sessionAvailabilityForm, setSessionAvailabilityForm] = useState({
+    available_from: "",
+    available_until: "",
+    note: "",
+  });
+  const [sessionAvailabilityBusy, setSessionAvailabilityBusy] = useState(false);
+  const [sessionAvailabilityMessage, setSessionAvailabilityMessage] = useState("");
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -287,6 +295,36 @@ export default function TrainingDetailPage() {
           setParticipantProfiles({});
         }
       }
+
+      if (trainingRow.planning_type === "flexible") {
+        const { data: availabilityData, error: availabilityError } = await supabase
+          .from("session_availability")
+          .select("id,session_id,user_id,available_from,available_until,note,created_at")
+          .eq("session_id", trainingRow.id)
+          .order("created_at", { ascending: true });
+
+        if (availabilityError) {
+          console.warn("Session availability skipped", availabilityError);
+          setSessionAvailabilityRows([]);
+        } else {
+          const rows = availabilityData || [];
+          setSessionAvailabilityRows(rows);
+
+          const ownRow = rows.find((row) => row.user_id === currentUser.id);
+          setSessionAvailabilityForm({
+            available_from: ownRow?.available_from?.slice(0, 5) || "",
+            available_until: ownRow?.available_until?.slice(0, 5) || "",
+            note: ownRow?.note || "",
+          });
+        }
+      } else {
+        setSessionAvailabilityRows([]);
+        setSessionAvailabilityForm({
+          available_from: "",
+          available_until: "",
+          note: "",
+        });
+      }
     } catch (error) {
       console.error("Training detail load error", error);
       setErrorText(error?.message || "Could not open training.");
@@ -382,6 +420,102 @@ export default function TrainingDetailPage() {
       .join("")
       .slice(0, 2)
       .toUpperCase();
+  }
+
+  function updateSessionAvailabilityForm(key, value) {
+    setSessionAvailabilityForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function saveSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setSessionAvailabilityBusy(true);
+    setSessionAvailabilityMessage("");
+
+    try {
+      if (!sessionAvailabilityForm.available_from || !sessionAvailabilityForm.available_until) {
+        setSessionAvailabilityMessage("Choose both a start and end time.");
+        return;
+      }
+
+      if (sessionAvailabilityForm.available_from >= sessionAvailabilityForm.available_until) {
+        setSessionAvailabilityMessage("End time must be after start time.");
+        return;
+      }
+
+      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .update({
+            available_from: sessionAvailabilityForm.available_from,
+            available_until: sessionAvailabilityForm.available_until,
+            note: sessionAvailabilityForm.note.trim() || null,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_availability")
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+            available_from: sessionAvailabilityForm.available_from,
+            available_until: sessionAvailabilityForm.available_until,
+            note: sessionAvailabilityForm.note.trim() || null,
+          });
+
+        if (error) throw error;
+      }
+
+      setSessionAvailabilityMessage("Your time frame has been saved.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability save error", error);
+      setSessionAvailabilityMessage(error?.message || "Could not save your time frame.");
+    } finally {
+      setSessionAvailabilityBusy(false);
+    }
+  }
+
+  async function clearSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setSessionAvailabilityBusy(true);
+    setSessionAvailabilityMessage("");
+
+    try {
+      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .delete()
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      }
+
+      setSessionAvailabilityForm({
+        available_from: "",
+        available_until: "",
+        note: "",
+      });
+      setSessionAvailabilityMessage("Your time frame has been cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability clear error", error);
+      setSessionAvailabilityMessage(error?.message || "Could not clear your time frame.");
+    } finally {
+      setSessionAvailabilityBusy(false);
+    }
   }
 
   function addToCalendar() {
@@ -549,6 +683,110 @@ export default function TrainingDetailPage() {
               </div>
             </article>
 
+            {training.planning_type === "flexible" ? (
+              <section style={styles.flexTimeCard}>
+                <div style={styles.cardKicker}>Flexible time frame</div>
+
+                <h2 style={styles.flexTitle}>When are you available?</h2>
+
+                <p style={styles.flexDescription}>
+                  This is specific for this training. It does not need to exist in your general Availability calendar.
+                </p>
+
+                {sessionAvailabilityMessage ? (
+                  <div style={styles.flexMessage}>{sessionAvailabilityMessage}</div>
+                ) : null}
+
+                <div style={styles.flexGrid}>
+                  <label style={styles.flexField}>
+                    <span style={styles.flexLabel}>Available from</span>
+                    <input
+                      type="time"
+                      value={sessionAvailabilityForm.available_from}
+                      onChange={(event) => updateSessionAvailabilityForm("available_from", event.target.value)}
+                      style={styles.flexInput}
+                    />
+                  </label>
+
+                  <label style={styles.flexField}>
+                    <span style={styles.flexLabel}>Available until</span>
+                    <input
+                      type="time"
+                      value={sessionAvailabilityForm.available_until}
+                      onChange={(event) => updateSessionAvailabilityForm("available_until", event.target.value)}
+                      style={styles.flexInput}
+                    />
+                  </label>
+                </div>
+
+                <label style={styles.flexField}>
+                  <span style={styles.flexLabel}>Note (optional)</span>
+                  <input
+                    value={sessionAvailabilityForm.note}
+                    onChange={(event) => updateSessionAvailabilityForm("note", event.target.value)}
+                    placeholder="E.g. easy pace only"
+                    style={styles.flexInput}
+                  />
+                </label>
+
+                <div style={styles.flexButtons}>
+                  <button
+                    type="button"
+                    onClick={saveSessionAvailability}
+                    disabled={sessionAvailabilityBusy}
+                    style={styles.primaryButton}
+                  >
+                    {sessionAvailabilityBusy ? "Saving..." : "Save time frame"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={clearSessionAvailability}
+                    disabled={sessionAvailabilityBusy}
+                    style={styles.secondaryButton}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {sessionAvailabilityRows.length ? (
+                  <div style={styles.flexList}>
+                    {sessionAvailabilityRows.map((row) => {
+                      const person = participantProfiles[row.user_id];
+
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => router.push(`/profile/${row.user_id}`)}
+                          style={styles.flexRow}
+                        >
+                          {person?.avatar_url ? (
+                            <img src={person.avatar_url} alt="" style={styles.participantAvatar} />
+                          ) : (
+                            <span style={styles.participantFallback}>{participantInitials(person)}</span>
+                          )}
+
+                          <span style={styles.flexText}>
+                            <strong>{displayParticipantName(person)}</strong>
+                            <span>
+                              {row.available_from?.slice(0, 5)} – {row.available_until?.slice(0, 5)}
+                              {row.note ? ` · ${row.note}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={styles.flexEmptyState}>
+                    <strong>No time frames shared yet.</strong>
+                    <span>Share a time frame so others know when you are available.</span>
+                  </div>
+                )}
+              </section>
+            ) : null}
+
             <section style={styles.grid}>
               <article style={styles.card}>
                 <div style={styles.cardKicker}>Route</div>
@@ -614,7 +852,103 @@ export default function TrainingDetailPage() {
                     {participants.map((participant) => {
                       const person = participantProfiles[participant.user_id];
 
-                      function addToCalendar() {
+                      function updateSessionAvailabilityForm(key, value) {
+    setSessionAvailabilityForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function saveSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setSessionAvailabilityBusy(true);
+    setSessionAvailabilityMessage("");
+
+    try {
+      if (!sessionAvailabilityForm.available_from || !sessionAvailabilityForm.available_until) {
+        setSessionAvailabilityMessage("Choose both a start and end time.");
+        return;
+      }
+
+      if (sessionAvailabilityForm.available_from >= sessionAvailabilityForm.available_until) {
+        setSessionAvailabilityMessage("End time must be after start time.");
+        return;
+      }
+
+      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .update({
+            available_from: sessionAvailabilityForm.available_from,
+            available_until: sessionAvailabilityForm.available_until,
+            note: sessionAvailabilityForm.note.trim() || null,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_availability")
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+            available_from: sessionAvailabilityForm.available_from,
+            available_until: sessionAvailabilityForm.available_until,
+            note: sessionAvailabilityForm.note.trim() || null,
+          });
+
+        if (error) throw error;
+      }
+
+      setSessionAvailabilityMessage("Your time frame has been saved.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability save error", error);
+      setSessionAvailabilityMessage(error?.message || "Could not save your time frame.");
+    } finally {
+      setSessionAvailabilityBusy(false);
+    }
+  }
+
+  async function clearSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setSessionAvailabilityBusy(true);
+    setSessionAvailabilityMessage("");
+
+    try {
+      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .delete()
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      }
+
+      setSessionAvailabilityForm({
+        available_from: "",
+        available_until: "",
+        note: "",
+      });
+      setSessionAvailabilityMessage("Your time frame has been cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability clear error", error);
+      setSessionAvailabilityMessage(error?.message || "Could not clear your time frame.");
+    } finally {
+      setSessionAvailabilityBusy(false);
+    }
+  }
+
+  function addToCalendar() {
     if (!training) return;
 
     try {
@@ -789,7 +1123,7 @@ const styles = {
   },
   quickGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: 12,
   },
   quickCard: {
