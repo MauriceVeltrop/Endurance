@@ -25,7 +25,11 @@ export default function TeamPage() {
   const [partners, setPartners] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [knownRelationIds, setKnownRelationIds] = useState(new Set());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -35,6 +39,7 @@ export default function TeamPage() {
 
   async function loadTeam() {
     setLoading(true);
+    setNotice("");
 
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -45,11 +50,13 @@ export default function TeamPage() {
         return;
       }
 
-      const { data: profileRow } = await supabase
+      const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
         .select("id,name,email,avatar_url,role,onboarding_completed")
         .eq("id", user.id)
         .maybeSingle();
+
+      if (profileError) throw profileError;
 
       if (!profileRow?.onboarding_completed) {
         router.replace("/onboarding");
@@ -58,27 +65,26 @@ export default function TeamPage() {
 
       setProfile(profileRow);
 
-      const { data: rows } = await supabase
+      const { data: rows, error: relationError } = await supabase
         .from("training_partners")
         .select("*")
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
         .order("created_at", { ascending: false });
 
-      const partnerRows = rows || [];
+      if (relationError) throw relationError;
 
-      const ids = [
-        ...new Set(
-          partnerRows.flatMap((row) => [row.requester_id, row.addressee_id])
-        ),
+      const relations = rows || [];
+      const relationUserIds = [
+        ...new Set(relations.flatMap((row) => [row.requester_id, row.addressee_id])),
       ].filter(Boolean);
 
       let peopleMap = {};
 
-      if (ids.length) {
+      if (relationUserIds.length) {
         const { data: people } = await supabase
           .from("profiles")
           .select("id,name,first_name,last_name,email,avatar_url,location,role")
-          .in("id", ids);
+          .in("id", relationUserIds);
 
         peopleMap = Object.fromEntries((people || []).map((person) => [person.id, person]));
       }
@@ -86,12 +92,12 @@ export default function TeamPage() {
       const accepted = [];
       const incomingRows = [];
       const outgoingRows = [];
+      const knownIds = new Set([user.id]);
 
-      for (const row of partnerRows) {
-        const otherId =
-          row.requester_id === user.id ? row.addressee_id : row.requester_id;
-
+      for (const row of relations) {
+        const otherId = row.requester_id === user.id ? row.addressee_id : row.requester_id;
         const other = peopleMap[otherId];
+        knownIds.add(otherId);
 
         if (row.status === "accepted") {
           accepted.push({ ...row, other });
@@ -107,16 +113,84 @@ export default function TeamPage() {
       setPartners(accepted);
       setIncoming(incomingRows);
       setOutgoing(outgoingRows);
+      setKnownRelationIds(knownIds);
     } catch (error) {
-      console.error(error);
-      setNotice("Could not load Team page.");
+      console.error("Team load error", error);
+      setNotice(error?.message || "Could not load Team page.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function searchPeople(event) {
+    event?.preventDefault?.();
+
+    if (!profile?.id) return;
+
+    const query = searchTerm.trim();
+
+    if (query.length < 2) {
+      setSearchResults([]);
+      setNotice("Type at least 2 characters to search.");
+      return;
+    }
+
+    setSearching(true);
+    setNotice("");
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,name,first_name,last_name,email,avatar_url,location,role,onboarding_completed,blocked")
+        .or(`name.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .eq("onboarding_completed", true)
+        .eq("blocked", false)
+        .limit(20);
+
+      if (error) throw error;
+
+      setSearchResults(
+        (data || []).filter((person) => person.id !== profile.id)
+      );
+    } catch (error) {
+      console.error("Profile search error", error);
+      setNotice(error?.message || "Could not search users.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function sendTeamUpRequest(personId) {
+    if (!profile?.id || !personId || busyId) return;
+
+    setBusyId(personId);
+    setNotice("");
+
+    try {
+      const { error } = await supabase
+        .from("training_partners")
+        .insert({
+          requester_id: profile.id,
+          addressee_id: personId,
+          status: "pending",
+        });
+
+      if (error) throw error;
+
+      setNotice("Team Up request sent.");
+      setSearchResults((current) => current.filter((person) => person.id !== personId));
+      await loadTeam();
+    } catch (error) {
+      console.error("Team Up request error", error);
+      setNotice(error?.message || "Could not send Team Up request.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   async function respond(id, status) {
     setBusyId(id);
+    setNotice("");
 
     try {
       const { error } = await supabase
@@ -126,16 +200,11 @@ export default function TeamPage() {
 
       if (error) throw error;
 
-      setNotice(
-        status === "accepted"
-          ? "Team Up request accepted."
-          : "Team Up request rejected."
-      );
-
+      setNotice(status === "accepted" ? "Team Up request accepted." : "Team Up request rejected.");
       await loadTeam();
     } catch (error) {
-      console.error(error);
-      setNotice("Could not update Team Up request.");
+      console.error("Team request update error", error);
+      setNotice(error?.message || "Could not update Team Up request.");
     } finally {
       setBusyId("");
     }
@@ -143,6 +212,7 @@ export default function TeamPage() {
 
   async function removePartner(id) {
     setBusyId(id);
+    setNotice("");
 
     try {
       const { error } = await supabase
@@ -155,12 +225,16 @@ export default function TeamPage() {
       setNotice("Training partner removed.");
       await loadTeam();
     } catch (error) {
-      console.error(error);
-      setNotice("Could not remove training partner.");
+      console.error("Remove partner error", error);
+      setNotice(error?.message || "Could not remove training partner.");
     } finally {
       setBusyId("");
     }
   }
+
+  const availableSearchResults = useMemo(() => {
+    return searchResults.filter((person) => !knownRelationIds.has(person.id));
+  }, [searchResults, knownRelationIds]);
 
   return (
     <main style={styles.page}>
@@ -169,29 +243,88 @@ export default function TeamPage() {
 
         <header style={styles.header}>
           <div style={styles.kicker}>Team</div>
-          <h1 style={styles.title}>Train together</h1>
+          <h1 style={styles.title}>Find training partners</h1>
           <p style={styles.subtitle}>
-            Your Team Up connections, requests and future training partners.
+            Team Up with people first. Then invite them to real training sessions.
           </p>
         </header>
 
         {notice ? <section style={styles.notice}>{notice}</section> : null}
 
         <section style={styles.stats}>
-          <div style={styles.statCard}>
+          <button type="button" style={styles.statCard}>
             <span>Partners</span>
             <strong>{partners.length}</strong>
-          </div>
+          </button>
 
-          <div style={styles.statCard}>
+          <button type="button" style={incoming.length ? styles.statHot : styles.statCard}>
             <span>Incoming</span>
             <strong>{incoming.length}</strong>
-          </div>
+          </button>
 
-          <div style={styles.statCard}>
+          <button type="button" style={styles.statCard}>
             <span>Outgoing</span>
             <strong>{outgoing.length}</strong>
+          </button>
+        </section>
+
+        <section style={styles.searchCard}>
+          <div>
+            <div style={styles.kicker}>Search</div>
+            <h2 style={styles.sectionTitle}>Add someone to your Team</h2>
+            <p style={styles.muted}>Search by name or email. Requests appear in their Inbox and Team page.</p>
           </div>
+
+          <form onSubmit={searchPeople} style={styles.searchRow}>
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search athlete..."
+              style={styles.searchInput}
+            />
+
+            <button type="submit" disabled={searching} style={styles.primaryButton}>
+              {searching ? "Searching..." : "Search"}
+            </button>
+          </form>
+
+          {availableSearchResults.length ? (
+            <div style={styles.grid}>
+              {availableSearchResults.map((person) => (
+                <article key={person.id} style={styles.personCard}>
+                  <div style={styles.personRow}>
+                    {person.avatar_url ? (
+                      <img src={person.avatar_url} alt="" style={styles.avatar} />
+                    ) : (
+                      <div style={styles.avatarFallback}>{initials(person)}</div>
+                    )}
+
+                    <div style={styles.personText}>
+                      <strong>{displayName(person)}</strong>
+                      <span>{person.location || person.role || "Endurance member"}</span>
+                    </div>
+                  </div>
+
+                  <div style={styles.actions}>
+                    <button type="button" onClick={() => router.push(`/profile/${person.id}`)} style={styles.secondaryButton}>
+                      Profile
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => sendTeamUpRequest(person.id)}
+                      disabled={busyId === person.id}
+                      style={styles.primaryButton}
+                    >
+                      Team Up
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : searchResults.length ? (
+            <p style={styles.muted}>Only existing Team Up relations were found.</p>
+          ) : null}
         </section>
 
         {loading ? (
@@ -199,43 +332,31 @@ export default function TeamPage() {
         ) : (
           <>
             <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>Your training partners</h2>
-              </div>
+              <h2 style={styles.sectionTitle}>Your training partners</h2>
 
               {partners.length ? (
                 <div style={styles.grid}>
                   {partners.map((item) => (
-                    <article key={item.id} style={styles.partnerCard}>
+                    <article key={item.id} style={styles.personCard}>
                       <div style={styles.personRow}>
                         {item.other?.avatar_url ? (
                           <img src={item.other.avatar_url} alt="" style={styles.avatar} />
                         ) : (
-                          <div style={styles.avatarFallback}>
-                            {initials(item.other)}
-                          </div>
+                          <div style={styles.avatarFallback}>{initials(item.other)}</div>
                         )}
 
                         <div style={styles.personText}>
                           <strong>{displayName(item.other)}</strong>
-                          <span>{item.other?.location || "Endurance member"}</span>
+                          <span>{item.other?.location || "Training partner"}</span>
                         </div>
                       </div>
 
                       <div style={styles.actions}>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/profile/${item.other.id}`)}
-                          style={styles.secondaryButton}
-                        >
+                        <button type="button" onClick={() => router.push(`/profile/${item.other.id}`)} style={styles.secondaryButton}>
                           Profile
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => router.push("/trainings/new")}
-                          style={styles.primaryButton}
-                        >
+                        <button type="button" onClick={() => router.push("/trainings/new")} style={styles.primaryButton}>
                           Invite to training
                         </button>
 
@@ -252,16 +373,12 @@ export default function TeamPage() {
                   ))}
                 </div>
               ) : (
-                <section style={styles.card}>
-                  No training partners yet.
-                </section>
+                <section style={styles.card}>No training partners yet. Search above to Team Up.</section>
               )}
             </section>
 
             <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>Incoming requests</h2>
-              </div>
+              <h2 style={styles.sectionTitle}>Incoming requests</h2>
 
               {incoming.length ? (
                 <div style={styles.grid}>
@@ -271,9 +388,7 @@ export default function TeamPage() {
                         {item.other?.avatar_url ? (
                           <img src={item.other.avatar_url} alt="" style={styles.avatar} />
                         ) : (
-                          <div style={styles.avatarFallback}>
-                            {initials(item.other)}
-                          </div>
+                          <div style={styles.avatarFallback}>{initials(item.other)}</div>
                         )}
 
                         <div style={styles.personText}>
@@ -305,16 +420,12 @@ export default function TeamPage() {
                   ))}
                 </div>
               ) : (
-                <section style={styles.card}>
-                  No incoming Team Up requests.
-                </section>
+                <section style={styles.card}>No incoming Team Up requests.</section>
               )}
             </section>
 
             <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>Outgoing requests</h2>
-              </div>
+              <h2 style={styles.sectionTitle}>Outgoing requests</h2>
 
               {outgoing.length ? (
                 <div style={styles.grid}>
@@ -325,9 +436,7 @@ export default function TeamPage() {
                   ))}
                 </div>
               ) : (
-                <section style={styles.card}>
-                  No pending outgoing requests.
-                </section>
+                <section style={styles.card}>No pending outgoing requests.</section>
               )}
             </section>
           </>
@@ -347,8 +456,8 @@ const styles = {
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
     padding: "18px 16px 44px",
-    fontFamily:
-      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    overflowX: "hidden",
   },
   shell: {
     width: "100%",
@@ -398,22 +507,62 @@ const styles = {
     padding: 14,
     background: glass,
     border: "1px solid rgba(255,255,255,0.12)",
+    color: "white",
     display: "grid",
     alignContent: "space-between",
+    textAlign: "left",
+  },
+  statHot: {
+    minHeight: 84,
+    borderRadius: 24,
+    padding: 14,
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.28)",
+    color: "white",
+    display: "grid",
+    alignContent: "space-between",
+    textAlign: "left",
+    boxShadow: "0 0 34px rgba(228,239,22,0.10)",
+  },
+  searchCard: {
+    borderRadius: 30,
+    padding: 18,
+    background:
+      "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(228,239,22,0.24)",
+    display: "grid",
+    gap: 14,
+  },
+  searchRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: 10,
+  },
+  searchInput: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 14px",
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 15,
   },
   section: {
     display: "grid",
     gap: 12,
   },
-  sectionHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   sectionTitle: {
     margin: 0,
     fontSize: 28,
     letterSpacing: "-0.05em",
+  },
+  muted: {
+    margin: 0,
+    color: "rgba(255,255,255,0.66)",
+    lineHeight: 1.45,
   },
   grid: {
     display: "grid",
@@ -434,7 +583,7 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  partnerCard: {
+  personCard: {
     borderRadius: 28,
     padding: 18,
     background: glass,
