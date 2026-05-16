@@ -98,20 +98,39 @@ export default function TrainingsPage() {
       const allowedSports = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
       setPreferredSportIds(allowedSports);
 
-      const now = new Date().toISOString();
+      const now = new Date();
 
       const { data, error } = await supabase
         .from("training_sessions")
         .select("id,creator_id,title,description,sports,visibility,planning_type,starts_at,flexible_date,flexible_start_time,flexible_end_time,final_starts_at,start_location,distance_km,estimated_duration_min,intensity_label,pace_min,pace_max,speed_min,speed_max,max_participants,teaser_photo_url,route_id,workout_id,created_at")
-        .or(`starts_at.gte.${now},starts_at.is.null`)
-        .order("starts_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(80);
+        .limit(120);
 
       if (error) throw error;
 
-      const rows = data || [];
+      const rawRows = data || [];
       const shouldSeeAll = privilegedRoles.includes(profileRow?.role);
+
+      const rows = rawRows
+        .filter((training) => {
+          const startValue = training.final_starts_at || training.starts_at || null;
+          const createdValue = training.created_at ? new Date(training.created_at) : null;
+          const createdRecently =
+            createdValue && now.getTime() - createdValue.getTime() < 1000 * 60 * 60 * 24;
+
+          if (training.creator_id === user.id && createdRecently) return true;
+          if (!startValue) return true;
+
+          const startDate = new Date(startValue);
+          if (Number.isNaN(startDate.getTime())) return true;
+
+          return startDate >= now;
+        })
+        .sort((a, b) => {
+          const aStart = new Date(a.final_starts_at || a.starts_at || a.created_at || 0).getTime();
+          const bStart = new Date(b.final_starts_at || b.starts_at || b.created_at || 0).getTime();
+          return aStart - bStart;
+        });
 
       let acceptedPartnerIds = new Set();
       let selectedVisibilitySessionIds = new Set();
@@ -136,16 +155,30 @@ export default function TrainingsPage() {
         const selectedRows = rows.filter((training) => training.visibility === "selected");
 
         if (selectedRows.length) {
+          const selectedSessionIds = selectedRows.map((training) => training.id);
+
           const { data: visibilityRows, error: visibilityError } = await supabase
             .from("training_visibility_members")
             .select("session_id,user_id")
             .eq("user_id", user.id)
-            .in("session_id", selectedRows.map((training) => training.id));
+            .in("session_id", selectedSessionIds);
 
           if (!visibilityError) {
             selectedVisibilitySessionIds = new Set((visibilityRows || []).map((row) => row.session_id));
           } else {
             console.warn("Selected visibility filter skipped", visibilityError);
+          }
+
+          const { data: inviteRows, error: inviteVisibilityError } = await supabase
+            .from("training_invites")
+            .select("session_id,invitee_id")
+            .eq("invitee_id", user.id)
+            .in("session_id", selectedSessionIds);
+
+          if (!inviteVisibilityError) {
+            (inviteRows || []).forEach((row) => selectedVisibilitySessionIds.add(row.session_id));
+          } else {
+            console.warn("Invite visibility filter skipped", inviteVisibilityError);
           }
         }
       }
