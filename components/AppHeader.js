@@ -17,43 +17,31 @@ export default function AppHeader({ profile, compact = false }) {
   const menuItems = [
     {
       label: "Trainings",
-      description: "Browse all training sessions",
+      description: "Find, create and join sessions",
       icon: "▣",
       href: "/trainings",
     },
     {
-      label: "Availability",
-      description: "Set when you can train",
-      icon: "◷",
-      href: "/availability",
-    },
-    {
-      label: "Routes",
-      description: "Browse and manage routes",
-      icon: "⌁",
-      href: "/routes",
-    },
-    {
-      label: "Workouts",
-      description: "Create and manage workouts",
-      icon: "▰",
-      href: "/workouts",
-    },
-    {
       label: "Inbox",
-      description: "Messages, invites and actions",
+      description: "Invites, requests and messages",
       icon: "✉",
       href: "/inbox",
     },
     {
       label: "Team",
-      description: "Team Up partners",
+      description: "Training partners",
       icon: "◎",
       href: "/team",
     },
+    {
+      label: "Profile",
+      description: "Your sports and identity",
+      icon: "●",
+      href: "/profile",
+    },
   ];
 
-  if (profile?.role === "moderator") {
+  if (["admin", "moderator"].includes(profile?.role)) {
     menuItems.push({
       label: "Admin",
       description: "Manage users and roles",
