@@ -207,9 +207,6 @@ export default function AvailabilityPage() {
           <div style={styles.kicker}>Availability</div>
           <div style={styles.titleRow}>
             <h1 style={styles.title}>When can you train?</h1>
-            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
-              Trainings
-            </button>
           </div>
           <p style={styles.subtitle}>
             Add your personal training availability. This will later power flexible training planning and smarter Team Up matching.
@@ -354,8 +351,6 @@ const styles = {
   },
   titleRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "end",
     gap: 12,
   },
   title: {
