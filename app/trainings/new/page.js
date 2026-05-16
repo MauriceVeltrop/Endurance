@@ -298,6 +298,17 @@ export default function CreateTrainingPage() {
 
       if (error) throw error;
 
+      const { error: creatorJoinError } = await supabase
+        .from("session_participants")
+        .insert({
+          session_id: trainingRow.id,
+          user_id: profile.id,
+        });
+
+      if (creatorJoinError) {
+        console.warn("Creator auto-join skipped", creatorJoinError);
+      }
+
       const inviteTargets =
         form.visibility === "selected"
           ? selectedInviteIds
