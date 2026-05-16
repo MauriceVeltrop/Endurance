@@ -73,50 +73,6 @@ function formatEffort(training) {
   return training.intensity_label || "Not set";
 }
 
-function timeToMinutes(value) {
-  if (!value) return null;
-  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-  return hours * 60 + minutes;
-}
-
-function isInsideFlexibleWindow(training, from, until) {
-  if (!training?.flexible_start_time || !training?.flexible_end_time) return true;
-
-  const windowStart = timeToMinutes(training.flexible_start_time);
-  const windowEnd = timeToMinutes(training.flexible_end_time);
-  const availableStart = timeToMinutes(from);
-  const availableEnd = timeToMinutes(until);
-
-  if (
-    windowStart === null ||
-    windowEnd === null ||
-    availableStart === null ||
-    availableEnd === null
-  ) {
-    return true;
-  }
-
-  return availableStart >= windowStart && availableEnd <= windowEnd;
-}
-
-function isFinalTimeInsideFlexibleWindow(training, time) {
-  if (!training?.flexible_start_time || !training?.flexible_end_time || !time) return true;
-
-  const windowStart = timeToMinutes(training.flexible_start_time);
-  const windowEnd = timeToMinutes(training.flexible_end_time);
-  const finalTime = timeToMinutes(time);
-
-  if (windowStart === null || windowEnd === null || finalTime === null) return true;
-
-  return finalTime >= windowStart && finalTime <= windowEnd;
-}
-
-function formatWindow(training) {
-  if (!training?.flexible_start_time || !training?.flexible_end_time) return "";
-  return `${training.flexible_start_time.slice(0, 5)} – ${training.flexible_end_time.slice(0, 5)}`;
-}
-
 function mapsUrl(location) {
   if (!location) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
@@ -147,6 +103,8 @@ export default function TrainingDetailPage() {
   const [participants, setParticipants] = useState([]);
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [sessionAvailabilityRows, setSessionAvailabilityRows] = useState([]);
+  const [inviteResponses, setInviteResponses] = useState([]);
+  const [inviteResponseProfiles, setInviteResponseProfiles] = useState({});
   const [sessionAvailabilityForm, setSessionAvailabilityForm] = useState({
     available_from: "",
     available_until: "",
@@ -269,6 +227,35 @@ export default function TrainingDetailPage() {
         setParticipantProfiles(Object.fromEntries((profileRows || []).map((profile) => [profile.id, profile])));
       } else {
         setParticipantProfiles({});
+      }
+
+      if (trainingRow.creator_id === currentUser.id) {
+        const { data: inviteRows } = await supabase
+          .from("training_invites")
+          .select("id,session_id,invitee_id,status,response_note,created_at")
+          .eq("session_id", trainingRow.id)
+          .order("created_at", { ascending: true });
+
+        const responses = inviteRows || [];
+        setInviteResponses(responses);
+
+        const responseUserIds = [...new Set(responses.map((row) => row.invitee_id).filter(Boolean))];
+
+        if (responseUserIds.length) {
+          const { data: responseProfiles } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,email,avatar_url,role,location")
+            .in("id", responseUserIds);
+
+          setInviteResponseProfiles(
+            Object.fromEntries((responseProfiles || []).map((profile) => [profile.id, profile]))
+          );
+        } else {
+          setInviteResponseProfiles({});
+        }
+      } else {
+        setInviteResponses([]);
+        setInviteResponseProfiles({});
       }
 
       if (trainingRow.planning_type === "flexible") {
@@ -399,17 +386,6 @@ export default function TrainingDetailPage() {
         return;
       }
 
-      if (
-        !isInsideFlexibleWindow(
-          training,
-          sessionAvailabilityForm.available_from,
-          sessionAvailabilityForm.available_until
-        )
-      ) {
-        setAvailabilityMessage(`Choose a time frame inside the organizer window: ${formatWindow(training)}.`);
-        return;
-      }
-
       const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
 
       if (existing?.id) {
@@ -498,11 +474,6 @@ export default function TrainingDetailPage() {
     try {
       if (!finalStartForm.date || !finalStartForm.time) {
         setMessage("Choose a final date and start time.");
-        return;
-      }
-
-      if (!isFinalTimeInsideFlexibleWindow(training, finalStartForm.time)) {
-        setMessage(`Choose a final time inside the flexible window: ${formatWindow(training)}.`);
         return;
       }
 
@@ -690,16 +661,10 @@ export default function TrainingDetailPage() {
                 <div style={styles.cardKicker}>Flexible time frame</div>
                 <h2 style={styles.sectionTitle}>When are you available?</h2>
                 <p style={styles.muted}>
-                  Organizer start window: {formatWindow(training) || "not set"}. Share when you are available within this window.
-                  This is separate from your general Availability calendar.
+                  This is specific for this training and separate from your general Availability calendar.
                 </p>
 
                 {availabilityMessage ? <div style={styles.message}>{availabilityMessage}</div> : null}
-
-                <div style={styles.windowBox}>
-                  <strong>Flexible start window</strong>
-                  <span>{formatWindow(training) || "No window set"}</span>
-                </div>
 
                 <div style={styles.flexGrid}>
                   <label style={styles.label}>
@@ -856,6 +821,37 @@ export default function TrainingDetailPage() {
                 <p style={styles.muted}>No participants yet.</p>
               )}
             </section>
+
+            {canManage && inviteResponses.length ? (
+              <section style={styles.card}>
+                <div style={styles.cardKicker}>Invite responses</div>
+                <h2 style={styles.sectionTitle}>Responses</h2>
+
+                <div style={styles.list}>
+                  {inviteResponses.map((response) => {
+                    const person = inviteResponseProfiles[response.invitee_id];
+
+                    return (
+                      <div key={response.id} style={styles.responseRow}>
+                        {person?.avatar_url ? (
+                          <img src={person.avatar_url} alt="" style={styles.avatar} />
+                        ) : (
+                          <span style={styles.avatarFallback}>{initials(person)}</span>
+                        )}
+
+                        <span style={styles.personText}>
+                          <strong>{displayName(person)}</strong>
+                          <span>
+                            {(response.status || "pending").toUpperCase()}
+                            {response.response_note ? ` · ${response.response_note}` : ""}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             {(route || workout) ? (
               <section style={styles.toolsGrid}>
@@ -1159,6 +1155,18 @@ const styles = {
   list: {
     display: "grid",
     gap: 10,
+  },
+  responseRow: {
+    width: "100%",
+    borderRadius: 22,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 10,
+    textAlign: "left",
   },
   personRow: {
     width: "100%",
