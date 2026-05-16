@@ -50,6 +50,11 @@ function initials(person) {
     .toUpperCase();
 }
 
+function getInviteProfileId() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("invite") || "";
+}
+
 export default function CreateTrainingPage() {
   const router = useRouter();
 
@@ -162,7 +167,20 @@ export default function CreateTrainingPage() {
           .select("id,name,first_name,last_name,email,avatar_url,role,location")
           .in("id", partnerIds);
 
-        setPartners(partnerRows || []);
+        const loadedPartners = partnerRows || [];
+        setPartners(loadedPartners);
+
+        const inviteProfileId = getInviteProfileId();
+        const invitedPartner = loadedPartners.find((person) => person.id === inviteProfileId);
+
+        if (invitedPartner) {
+          setSelectedInviteIds([invitedPartner.id]);
+          setForm((current) => ({
+            ...current,
+            visibility: "selected",
+          }));
+          setMessage(`Invite prepared for ${displayName(invitedPartner)}.`);
+        }
       } else {
         setPartners([]);
       }
@@ -582,7 +600,7 @@ export default function CreateTrainingPage() {
                 {[
                   ["public", "Public", "All Endurance users"],
                   ["team", "Team", "Team Up partners"],
-                  ["selected", "Selected", "Only selected people"],
+                  ["selected", "Selected", "Only invited people"],
                   ["private", "Private", "Only me"],
                 ].map(([value, label, description]) => (
                   <button
@@ -613,6 +631,7 @@ export default function CreateTrainingPage() {
             <section style={styles.card}>
               <div style={styles.cardKicker}>Step 6</div>
               <h2 style={styles.cardTitle}>Invite people</h2>
+              <p style={styles.muted}>Selected people receive an invite in their Inbox.</p>
 
               {partners.length ? (
                 <div style={styles.partnerList}>
