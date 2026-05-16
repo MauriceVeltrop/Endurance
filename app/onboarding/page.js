@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { sportOptions } from "../../lib/sportsConfig";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const editMode = searchParams.get("edit") === "1";
 
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState("");
   const [currentRole, setCurrentRole] = useState("user");
@@ -34,6 +33,11 @@ export default function OnboardingPage() {
 
   const checkUser = async () => {
     try {
+      const isEditMode =
+        typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("edit") === "1";
+
+      setEditMode(isEditMode);
       const { data } = await supabase.auth.getUser();
       const currentUser = data?.user;
 
@@ -69,7 +73,7 @@ export default function OnboardingPage() {
           birth_date: profile.birth_date || "",
         }));
 
-        if (profile.onboarding_completed && !editMode) {
+        if (profile.onboarding_completed && !isEditMode) {
           router.replace(editMode ? `/profile/${user.id}` : "/trainings");
         }
       }
@@ -92,7 +96,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     checkUser();
-  }, [editMode]);
+  }, []);
 
   const update = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
