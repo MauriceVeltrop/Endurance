@@ -103,8 +103,6 @@ export default function TrainingDetailPage() {
   const [participants, setParticipants] = useState([]);
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [sessionAvailabilityRows, setSessionAvailabilityRows] = useState([]);
-  const [inviteResponses, setInviteResponses] = useState([]);
-  const [inviteResponseProfiles, setInviteResponseProfiles] = useState({});
   const [sessionAvailabilityForm, setSessionAvailabilityForm] = useState({
     available_from: "",
     available_until: "",
@@ -227,35 +225,6 @@ export default function TrainingDetailPage() {
         setParticipantProfiles(Object.fromEntries((profileRows || []).map((profile) => [profile.id, profile])));
       } else {
         setParticipantProfiles({});
-      }
-
-      if (trainingRow.creator_id === currentUser.id) {
-        const { data: inviteRows } = await supabase
-          .from("training_invites")
-          .select("id,session_id,invitee_id,status,response_note,created_at")
-          .eq("session_id", trainingRow.id)
-          .order("created_at", { ascending: true });
-
-        const responses = inviteRows || [];
-        setInviteResponses(responses);
-
-        const responseUserIds = [...new Set(responses.map((row) => row.invitee_id).filter(Boolean))];
-
-        if (responseUserIds.length) {
-          const { data: responseProfiles } = await supabase
-            .from("profiles")
-            .select("id,name,first_name,last_name,email,avatar_url,role,location")
-            .in("id", responseUserIds);
-
-          setInviteResponseProfiles(
-            Object.fromEntries((responseProfiles || []).map((profile) => [profile.id, profile]))
-          );
-        } else {
-          setInviteResponseProfiles({});
-        }
-      } else {
-        setInviteResponses([]);
-        setInviteResponseProfiles({});
       }
 
       if (trainingRow.planning_type === "flexible") {
@@ -656,6 +625,33 @@ export default function TrainingDetailPage() {
               ) : null}
             </article>
 
+            {canManage && sessionAvailabilityRows.length ? (
+              <section style={styles.card}>
+                <div style={styles.cardKicker}>Flexible planning</div>
+                <h2 style={styles.sectionTitle}>Availability overview</h2>
+
+                <div style={styles.availabilityList}>
+                  {buildAvailabilitySummary(
+                    sessionAvailabilityRows,
+                    participantProfiles
+                  ).map((item) => (
+                    <div key={item.id} style={styles.availabilityRow}>
+                      <div style={styles.availabilityTop}>
+                        <strong>{item.name}</strong>
+                        <span style={styles.availabilityTime}>
+                          {item.from} – {item.until}
+                        </span>
+                      </div>
+
+                      {item.note ? (
+                        <p style={styles.availabilityNote}>{item.note}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             {training.planning_type === "flexible" ? (
               <section style={styles.flexTimeCard}>
                 <div style={styles.cardKicker}>Flexible time frame</div>
@@ -821,37 +817,6 @@ export default function TrainingDetailPage() {
                 <p style={styles.muted}>No participants yet.</p>
               )}
             </section>
-
-            {canManage && inviteResponses.length ? (
-              <section style={styles.card}>
-                <div style={styles.cardKicker}>Invite responses</div>
-                <h2 style={styles.sectionTitle}>Responses</h2>
-
-                <div style={styles.list}>
-                  {inviteResponses.map((response) => {
-                    const person = inviteResponseProfiles[response.invitee_id];
-
-                    return (
-                      <div key={response.id} style={styles.responseRow}>
-                        {person?.avatar_url ? (
-                          <img src={person.avatar_url} alt="" style={styles.avatar} />
-                        ) : (
-                          <span style={styles.avatarFallback}>{initials(person)}</span>
-                        )}
-
-                        <span style={styles.personText}>
-                          <strong>{displayName(person)}</strong>
-                          <span>
-                            {(response.status || "pending").toUpperCase()}
-                            {response.response_note ? ` · ${response.response_note}` : ""}
-                          </span>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
 
             {(route || workout) ? (
               <section style={styles.toolsGrid}>
@@ -1155,18 +1120,6 @@ const styles = {
   list: {
     display: "grid",
     gap: 10,
-  },
-  responseRow: {
-    width: "100%",
-    borderRadius: 22,
-    padding: 10,
-    background: "rgba(255,255,255,0.055)",
-    color: "white",
-    display: "grid",
-    gridTemplateColumns: "46px minmax(0, 1fr)",
-    alignItems: "center",
-    gap: 10,
-    textAlign: "left",
   },
   personRow: {
     width: "100%",
