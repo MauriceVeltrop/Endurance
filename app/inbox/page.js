@@ -36,14 +36,12 @@ export default function InboxPage() {
   const [busyId, setBusyId] = useState("");
   const [notice, setNotice] = useState("");
 
-  const counts = useMemo(() => {
-    return {
-      all: trainingInvites.length + teamRequests.length + messages.length,
-      invites: trainingInvites.length,
-      team: teamRequests.length,
-      messages: messages.length,
-    };
-  }, [trainingInvites.length, teamRequests.length, messages.length]);
+  const counts = useMemo(() => ({
+    all: trainingInvites.length + teamRequests.length + messages.length,
+    invites: trainingInvites.length,
+    team: teamRequests.length,
+    messages: messages.length,
+  }), [trainingInvites.length, teamRequests.length, messages.length]);
 
   useEffect(() => {
     loadInbox();
@@ -114,7 +112,7 @@ export default function InboxPage() {
     if (sessionIds.length) {
       const { data: sessions } = await supabase
         .from("training_sessions")
-        .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location")
+        .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location,distance_km,visibility")
         .in("id", sessionIds);
 
       sessionMap = Object.fromEntries((sessions || []).map((session) => [session.id, session]));
@@ -295,7 +293,7 @@ export default function InboxPage() {
     }
   }
 
-  function visibleItems() {
+  function getVisibleItems() {
     const items = [];
 
     if (activeTab === "all" || activeTab === "invites") {
@@ -319,7 +317,7 @@ export default function InboxPage() {
     return items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   }
 
-  const items = visibleItems();
+  const items = getVisibleItems();
 
   return (
     <main style={styles.page}>
@@ -328,11 +326,28 @@ export default function InboxPage() {
 
         <header style={styles.header}>
           <div style={styles.kicker}>Inbox</div>
-          <h1 style={styles.title}>Messages & actions</h1>
+          <h1 style={styles.title}>What needs your attention?</h1>
           <p style={styles.subtitle}>
-            One place for training invites, Team Up requests and unread messages.
+            Training invites, Team Up requests and messages in one simple place.
           </p>
         </header>
+
+        <section style={styles.summaryGrid}>
+          <button type="button" onClick={() => setActiveTab("invites")} style={counts.invites ? styles.summaryHot : styles.summaryCard}>
+            <span>Invites</span>
+            <strong>{counts.invites}</strong>
+          </button>
+
+          <button type="button" onClick={() => setActiveTab("team")} style={counts.team ? styles.summaryHot : styles.summaryCard}>
+            <span>Team Up</span>
+            <strong>{counts.team}</strong>
+          </button>
+
+          <button type="button" onClick={() => setActiveTab("messages")} style={counts.messages ? styles.summaryHot : styles.summaryCard}>
+            <span>Messages</span>
+            <strong>{counts.messages}</strong>
+          </button>
+        </section>
 
         <section style={styles.tabs}>
           {[
@@ -403,7 +418,7 @@ export default function InboxPage() {
                     </div>
 
                     <h2 style={styles.itemTitle}>{displayName(request.requester)}</h2>
-                    <p style={styles.itemText}>wants to Team Up with you.</p>
+                    <p style={styles.itemText}>wants to become your training partner.</p>
 
                     <div style={styles.actions}>
                       <button type="button" onClick={() => router.push(`/profile/${request.requester_id}`)} style={styles.secondaryButton}>
@@ -446,9 +461,12 @@ export default function InboxPage() {
             })}
           </section>
         ) : (
-          <section style={styles.card}>
+          <section style={styles.emptyCard}>
             <h2 style={styles.itemTitle}>Inbox is empty</h2>
-            <p style={styles.itemText}>Training invites, Team Up requests and messages will appear here.</p>
+            <p style={styles.itemText}>You are all caught up. New invites, Team Up requests and messages will appear here.</p>
+            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
+              Go to trainings
+            </button>
           </section>
         )}
       </section>
@@ -497,6 +515,36 @@ const styles = {
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.5,
     maxWidth: 660,
+  },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+  },
+  summaryCard: {
+    minHeight: 86,
+    borderRadius: 24,
+    padding: 14,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "white",
+    display: "grid",
+    alignContent: "space-between",
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  summaryHot: {
+    minHeight: 86,
+    borderRadius: 24,
+    padding: 14,
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.28)",
+    color: "white",
+    display: "grid",
+    alignContent: "space-between",
+    textAlign: "left",
+    cursor: "pointer",
+    boxShadow: "0 0 34px rgba(228,239,22,0.10)",
   },
   tabs: {
     display: "flex",
@@ -563,6 +611,14 @@ const styles = {
     display: "grid",
     gap: 12,
     boxShadow: "0 0 36px rgba(228,239,22,0.10)",
+  },
+  emptyCard: {
+    borderRadius: 30,
+    padding: 22,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
   },
   itemTop: {
     display: "flex",
