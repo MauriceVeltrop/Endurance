@@ -406,9 +406,6 @@ export default function TeamPage() {
           <div style={styles.kicker}>Team Up</div>
           <div style={styles.titleRow}>
             <h1 style={styles.title}>Build your team.</h1>
-            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
-              Trainings
-            </button>
           </div>
           <p style={styles.subtitle}>
             Training partners are the foundation for team-only sessions, invites and trusted profile visibility.
@@ -426,11 +423,29 @@ export default function TeamPage() {
             <strong style={styles.statValue}>{loading ? "…" : totalOpenRequests}</strong>
             <span style={styles.statHint}>open</span>
           </div>
+
+          <div style={trainingInvites.length ? styles.statCardActive : styles.statCard}>
+            <span style={styles.statLabel}>Invites</span>
+            <strong style={styles.statValue}>{loading ? "…" : trainingInvites.length}</strong>
+            <span style={styles.statHint}>training sessions</span>
+          </div>
         </section>
 
         {message ? <section style={styles.message}>{message}</section> : null}
 
-        <section style={styles.panel}>
+        {trainingInvites.length ? (
+          <section style={styles.inviteAlert}>
+            <div>
+              <div style={styles.panelKicker}>Action needed</div>
+              <h2 style={styles.inviteAlertTitle}>
+                You have {trainingInvites.length} training invite{trainingInvites.length === 1 ? "" : "s"}
+              </h2>
+              <p style={styles.panelText}>Open, join or decline them below.</p>
+            </div>
+          </section>
+        ) : null}
+
+        <section style={trainingInvites.length ? styles.panelActive : styles.panel}>
           <div style={styles.panelHeader}>
             <div>
               <div style={styles.panelKicker}>Training invites</div>
@@ -714,7 +729,7 @@ const styles = {
   shell: { width: "100%", maxWidth: 960, margin: "0 auto", display: "grid", gap: 18 },
   header: { display: "grid", gap: 10 },
   kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  titleRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "end", gap: 12 },
+  titleRow: { display: "grid", gap: 12 },
   title: { margin: 0, fontSize: "clamp(38px, 11vw, 64px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 620 },
   primaryButton: { minHeight: 46, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 16px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
