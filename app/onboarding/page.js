@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { sportOptions } from "../../lib/sportsConfig";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editMode = searchParams.get("edit") === "1";
 
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState("");
+  const [currentRole, setCurrentRole] = useState("user");
 
   const [form, setForm] = useState({
     first_name: "",
@@ -54,6 +57,8 @@ export default function OnboardingPage() {
       if (profile) {
         const fallbackParts = String(profile.name || "").trim().split(" ");
 
+        setCurrentRole(profile.role || "user");
+
         setForm((current) => ({
           ...current,
           first_name: profile.first_name || fallbackParts[0] || "",
@@ -64,8 +69,8 @@ export default function OnboardingPage() {
           birth_date: profile.birth_date || "",
         }));
 
-        if (profile.onboarding_completed) {
-          router.replace("/trainings");
+        if (profile.onboarding_completed && !editMode) {
+          router.replace(editMode ? `/profile/${user.id}` : "/trainings");
         }
       }
 
@@ -87,7 +92,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     checkUser();
-  }, []);
+  }, [editMode]);
 
   const update = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -178,7 +183,7 @@ export default function OnboardingPage() {
         avatar_url: form.avatar_url.trim(),
         location: form.location.trim() || null,
         birth_date: form.birth_date || null,
-        role: "user",
+        role: currentRole || "user",
         onboarding_completed: true,
       };
 
@@ -201,7 +206,7 @@ export default function OnboardingPage() {
 
       if (sportsError) throw sportsError;
 
-      router.replace("/trainings");
+      router.replace(editMode ? `/profile/${user.id}` : "/trainings");
     } catch (err) {
       console.error("Onboarding error", err);
       setMessage(err?.message || "Could not complete onboarding.");
