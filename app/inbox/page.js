@@ -34,6 +34,7 @@ export default function InboxPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [declineNotes, setDeclineNotes] = useState({});
   const [notice, setNotice] = useState("");
 
   const counts = useMemo(() => ({
@@ -89,12 +90,25 @@ export default function InboxPage() {
   }
 
   async function loadTrainingInvites(userId) {
-    const { data: inviteRows, error } = await supabase
+    let { data: inviteRows, error } = await supabase
       .from("training_invites")
-      .select("id,session_id,inviter_id,invitee_id,created_at")
+      .select("id,session_id,inviter_id,invitee_id,status,response_note,created_at")
       .eq("invitee_id", userId)
+      .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(50);
+
+    if (error) {
+      const fallback = await supabase
+        .from("training_invites")
+        .select("id,session_id,inviter_id,invitee_id,created_at")
+        .eq("invitee_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      inviteRows = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       console.warn("Training invites skipped", error);
@@ -241,13 +255,24 @@ export default function InboxPage() {
         }
       }
 
-      const { error: deleteError } = await supabase
+      const { error: responseError } = await supabase
         .from("training_invites")
-        .delete()
+        .update({
+          status: "accepted",
+          response_note: null,
+        })
         .eq("id", invite.id)
         .eq("invitee_id", profile.id);
 
-      if (deleteError) throw deleteError;
+      if (responseError) {
+        const { error: deleteError } = await supabase
+          .from("training_invites")
+          .delete()
+          .eq("id", invite.id)
+          .eq("invitee_id", profile.id);
+
+        if (deleteError) throw deleteError;
+      }
 
       router.push(`/trainings/${invite.session_id}`);
     } catch (error) {
@@ -265,13 +290,26 @@ export default function InboxPage() {
     setNotice("");
 
     try {
-      const { error } = await supabase
+      const note = (declineNotes[invite.id] || "").trim();
+
+      const { error: responseError } = await supabase
         .from("training_invites")
-        .delete()
+        .update({
+          status: "declined",
+          response_note: note || null,
+        })
         .eq("id", invite.id)
         .eq("invitee_id", profile.id);
 
-      if (error) throw error;
+      if (responseError) {
+        const { error: deleteError } = await supabase
+          .from("training_invites")
+          .delete()
+          .eq("id", invite.id)
+          .eq("invitee_id", profile.id);
+
+        if (deleteError) throw deleteError;
+      }
 
       setNotice("Training invite declined.");
       await loadInbox();
@@ -406,6 +444,18 @@ export default function InboxPage() {
                       Invited by {displayName(invite.inviter)}
                       {training?.start_location ? ` · ${training.start_location}` : ""}
                     </p>
+
+                    <textarea
+                      value={declineNotes[invite.id] || ""}
+                      onChange={(event) =>
+                        setDeclineNotes((current) => ({
+                          ...current,
+                          [invite.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Optional note if you decline..."
+                      style={styles.noteInput}
+                    />
 
                     <div style={styles.actions}>
                       <button type="button" onClick={() => router.push(`/trainings/${invite.session_id}`)} style={styles.secondaryButton}>
@@ -664,6 +714,20 @@ const styles = {
     margin: 0,
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.45,
+  },
+  noteInput: {
+    width: "100%",
+    minHeight: 74,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: 12,
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+    fontSize: 14,
+    resize: "vertical",
+    outline: "none",
   },
   actions: {
     display: "flex",
