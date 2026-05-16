@@ -9,8 +9,6 @@ export default function TrainingMeta({
   participantCount,
   maxParticipants,
   intensity,
-  hasRoute,
-  hasWorkout,
   onCreatorClick,
 }) {
   const hasDistance = distanceKm !== null && distanceKm !== undefined && distanceKm !== "";
@@ -31,20 +29,20 @@ export default function TrainingMeta({
         ) : (
           <span style={styles.creatorFallback}>{String(creatorName || "O").slice(0, 1).toUpperCase()}</span>
         )}
-        <span style={styles.creatorText}>Created by {creatorName}</span>
+        <span style={styles.creatorText}>Hosted by {creatorName}</span>
       </button>
 
-      <div style={styles.metaLine}>
+      <div style={styles.infoStack}>
         <span>🕒 {time}</span>
         <span>📍 {location || "Location not set"}</span>
       </div>
 
       <div style={styles.metricRow}>
-        {hasDistance ? <span style={styles.metricPill}>↗ {distanceKm} km</span> : null}
-        <span style={styles.metricPill}>👥 {participantCount}{maxParticipants ? `/${maxParticipants}` : ""}</span>
-        {hasIntensity ? <span style={styles.metricPill}>⚡ {intensity}</span> : null}
-        {hasRoute ? <span style={styles.featurePill}>🧭 Route</span> : null}
-        {hasWorkout ? <span style={styles.featurePill}>🏋️ Workout</span> : null}
+        {hasDistance ? <span style={styles.metricPill}>{distanceKm} km</span> : null}
+        <span style={styles.metricPill}>
+          {participantCount}{maxParticipants ? `/${maxParticipants}` : ""} joined
+        </span>
+        {hasIntensity ? <span style={styles.metricPill}>{intensity}</span> : null}
       </div>
     </div>
   );
@@ -73,65 +71,49 @@ const styles = {
   creatorAvatar: {
     width: 24,
     height: 24,
-    minWidth: 24,
-    maxWidth: 24,
-    maxHeight: 24,
-    flexShrink: 0,
-    borderRadius: "50%",
+    borderRadius: 999,
     objectFit: "cover",
-    display: "block",
-    overflow: "hidden",
-    border: "1px solid rgba(255,255,255,0.24)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    flexShrink: 0,
   },
   creatorFallback: {
     width: 24,
     height: 24,
-    minWidth: 24,
-    borderRadius: "50%",
+    borderRadius: 999,
     display: "grid",
     placeItems: "center",
-    background: "rgba(228,239,22,0.16)",
-    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.12)",
     color: "#e4ef16",
-    fontSize: 11,
+    border: "1px solid rgba(228,239,22,0.22)",
     fontWeight: 950,
+    flexShrink: 0,
   },
   creatorText: {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  metaLine: {
+  infoStack: {
     display: "grid",
-    gap: 5,
-    color: "rgba(255,255,255,0.68)",
+    gap: 4,
+    color: "rgba(255,255,255,0.70)",
     fontSize: 13,
-    lineHeight: 1.28,
+    fontWeight: 800,
+    lineHeight: 1.25,
     minWidth: 0,
   },
   metricRow: {
     display: "flex",
+    gap: 7,
     flexWrap: "wrap",
-    gap: 6,
   },
   metricPill: {
     borderRadius: 999,
-    padding: "7px 9px",
-    background: "rgba(255,255,255,0.065)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    color: "rgba(255,255,255,0.78)",
-    fontWeight: 850,
+    padding: "6px 9px",
+    background: "rgba(255,255,255,0.07)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    color: "rgba(255,255,255,0.76)",
     fontSize: 12,
-    lineHeight: 1,
-  },
-  featurePill: {
-    borderRadius: 999,
-    padding: "7px 9px",
-    background: "rgba(228,239,22,0.11)",
-    border: "1px solid rgba(228,239,22,0.20)",
-    color: "#e4ef16",
     fontWeight: 900,
-    fontSize: 12,
-    lineHeight: 1,
   },
 };
