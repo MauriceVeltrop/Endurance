@@ -73,6 +73,50 @@ function formatEffort(training) {
   return training.intensity_label || "Not set";
 }
 
+function timeToMinutes(value) {
+  if (!value) return null;
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function isInsideFlexibleWindow(training, from, until) {
+  if (!training?.flexible_start_time || !training?.flexible_end_time) return true;
+
+  const windowStart = timeToMinutes(training.flexible_start_time);
+  const windowEnd = timeToMinutes(training.flexible_end_time);
+  const availableStart = timeToMinutes(from);
+  const availableEnd = timeToMinutes(until);
+
+  if (
+    windowStart === null ||
+    windowEnd === null ||
+    availableStart === null ||
+    availableEnd === null
+  ) {
+    return true;
+  }
+
+  return availableStart >= windowStart && availableEnd <= windowEnd;
+}
+
+function isFinalTimeInsideFlexibleWindow(training, time) {
+  if (!training?.flexible_start_time || !training?.flexible_end_time || !time) return true;
+
+  const windowStart = timeToMinutes(training.flexible_start_time);
+  const windowEnd = timeToMinutes(training.flexible_end_time);
+  const finalTime = timeToMinutes(time);
+
+  if (windowStart === null || windowEnd === null || finalTime === null) return true;
+
+  return finalTime >= windowStart && finalTime <= windowEnd;
+}
+
+function formatWindow(training) {
+  if (!training?.flexible_start_time || !training?.flexible_end_time) return "";
+  return `${training.flexible_start_time.slice(0, 5)} – ${training.flexible_end_time.slice(0, 5)}`;
+}
+
 function mapsUrl(location) {
   if (!location) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
@@ -355,6 +399,17 @@ export default function TrainingDetailPage() {
         return;
       }
 
+      if (
+        !isInsideFlexibleWindow(
+          training,
+          sessionAvailabilityForm.available_from,
+          sessionAvailabilityForm.available_until
+        )
+      ) {
+        setAvailabilityMessage(`Choose a time frame inside the organizer window: ${formatWindow(training)}.`);
+        return;
+      }
+
       const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
 
       if (existing?.id) {
@@ -443,6 +498,11 @@ export default function TrainingDetailPage() {
     try {
       if (!finalStartForm.date || !finalStartForm.time) {
         setMessage("Choose a final date and start time.");
+        return;
+      }
+
+      if (!isFinalTimeInsideFlexibleWindow(training, finalStartForm.time)) {
+        setMessage(`Choose a final time inside the flexible window: ${formatWindow(training)}.`);
         return;
       }
 
@@ -630,10 +690,16 @@ export default function TrainingDetailPage() {
                 <div style={styles.cardKicker}>Flexible time frame</div>
                 <h2 style={styles.sectionTitle}>When are you available?</h2>
                 <p style={styles.muted}>
-                  This is specific for this training and separate from your general Availability calendar.
+                  Organizer start window: {formatWindow(training) || "not set"}. Share when you are available within this window.
+                  This is separate from your general Availability calendar.
                 </p>
 
                 {availabilityMessage ? <div style={styles.message}>{availabilityMessage}</div> : null}
+
+                <div style={styles.windowBox}>
+                  <strong>Flexible start window</strong>
+                  <span>{formatWindow(training) || "No window set"}</span>
+                </div>
 
                 <div style={styles.flexGrid}>
                   <label style={styles.label}>
