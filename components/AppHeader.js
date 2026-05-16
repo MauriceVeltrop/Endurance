@@ -1,34 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function AppHeader({ profile, compact = false }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [inviteCount, setInviteCount] = useState(0);
   const initials = getInitials(profile?.name || profile?.email || "E");
-
-  useEffect(() => {
-    loadInviteCount();
-  }, [profile?.id]);
-
-  async function loadInviteCount() {
-    if (!profile?.id) {
-      setInviteCount(0);
-      return;
-    }
-
-    const { count, error } = await supabase
-      .from("training_invites")
-      .select("id", { count: "exact", head: true })
-      .eq("invitee_id", profile.id);
-
-    if (!error) {
-      setInviteCount(count || 0);
-    }
-  }
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -61,8 +40,14 @@ export default function AppHeader({ profile, compact = false }) {
       href: "/workouts",
     },
     {
+      label: "Inbox",
+      description: "Messages, invites and actions",
+      icon: "✉",
+      href: "/inbox",
+    },
+    {
       label: "Team",
-      description: "Team Up partners and invites",
+      description: "Team Up partners",
       icon: "◎",
       href: "/team",
     },
@@ -146,12 +131,7 @@ export default function AppHeader({ profile, compact = false }) {
               >
                 <span style={styles.menuIcon}>{item.icon}</span>
                 <span style={styles.menuText}>
-                  <strong>
-                    {item.label}
-                    {item.href === "/team" && inviteCount > 0 ? (
-                      <span style={styles.inviteMiniBadge}>{inviteCount}</span>
-                    ) : null}
-                  </strong>
+                  <strong>{item.label}</strong>
                   <small>{item.description}</small>
                 </span>
                 <span style={styles.menuArrow}>›</span>
