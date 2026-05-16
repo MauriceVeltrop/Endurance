@@ -353,8 +353,6 @@ const styles = {
   },
   titleRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "end",
     gap: 12,
   },
   title: {
