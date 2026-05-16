@@ -321,6 +321,11 @@ export default function TrainingsPage() {
           </section>
         ) : null}
 
+        <section style={styles.mvpFocusStrip}>
+          <strong>Endurance beta</strong>
+          <span>Focus: create a training, invite people, agree a time, train together.</span>
+        </section>
+
         {!loading && trainingInviteCount > 0 ? (
           <section style={styles.inviteBanner}>
             <div>
