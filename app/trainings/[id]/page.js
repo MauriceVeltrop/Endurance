@@ -122,6 +122,14 @@ export default function TrainingDetailPage() {
   const [workout, setWorkout] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [participantProfiles, setParticipantProfiles] = useState({});
+  const [availabilityRows, setAvailabilityRows] = useState([]);
+  const [availabilityForm, setAvailabilityForm] = useState({
+    available_from: "",
+    available_until: "",
+    note: "",
+  });
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -286,6 +294,36 @@ export default function TrainingDetailPage() {
           setParticipantProfiles({});
         }
       }
+
+      if (trainingRow.planning_type === "flexible") {
+        const { data: availabilityData, error: availabilityError } = await supabase
+          .from("session_availability")
+          .select("id,session_id,user_id,available_from,available_until,note,created_at")
+          .eq("session_id", trainingRow.id)
+          .order("created_at", { ascending: true });
+
+        if (availabilityError) {
+          console.warn("Session availability skipped", availabilityError);
+          setAvailabilityRows([]);
+        } else {
+          const rows = availabilityData || [];
+          setAvailabilityRows(rows);
+
+          const ownRow = rows.find((row) => row.user_id === currentUser.id);
+          setAvailabilityForm({
+            available_from: ownRow?.available_from?.slice(0, 5) || "",
+            available_until: ownRow?.available_until?.slice(0, 5) || "",
+            note: ownRow?.note || "",
+          });
+        }
+      } else {
+        setAvailabilityRows([]);
+        setAvailabilityForm({
+          available_from: "",
+          available_until: "",
+          note: "",
+        });
+      }
     } catch (error) {
       console.error("Training detail load error", error);
       setErrorText(error?.message || "Could not open training.");
@@ -381,6 +419,102 @@ export default function TrainingDetailPage() {
       .join("")
       .slice(0, 2)
       .toUpperCase();
+  }
+
+  async function saveSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setAvailabilityBusy(true);
+    setAvailabilityMessage("");
+
+    try {
+      if (!availabilityForm.available_from || !availabilityForm.available_until) {
+        setAvailabilityMessage("Choose both a start and end time.");
+        return;
+      }
+
+      if (availabilityForm.available_from >= availabilityForm.available_until) {
+        setAvailabilityMessage("End time must be after start time.");
+        return;
+      }
+
+      const existing = availabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .update({
+            available_from: availabilityForm.available_from,
+            available_until: availabilityForm.available_until,
+            note: availabilityForm.note.trim() || null,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_availability")
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+            available_from: availabilityForm.available_from,
+            available_until: availabilityForm.available_until,
+            note: availabilityForm.note.trim() || null,
+          });
+
+        if (error) throw error;
+      }
+
+      setAvailabilityMessage("Availability saved.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability save error", error);
+      setAvailabilityMessage(error?.message || "Could not save availability.");
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  }
+
+  async function clearSessionAvailability() {
+    if (!user?.id || !training?.id) return;
+
+    setAvailabilityBusy(true);
+    setAvailabilityMessage("");
+
+    try {
+      const existing = availabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .delete()
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      }
+
+      setAvailabilityForm({
+        available_from: "",
+        available_until: "",
+        note: "",
+      });
+      setAvailabilityMessage("Availability cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability clear error", error);
+      setAvailabilityMessage(error?.message || "Could not clear availability.");
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  }
+
+  function updateAvailabilityForm(key, value) {
+    setAvailabilityForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
   }
 
   return (
@@ -487,6 +621,106 @@ export default function TrainingDetailPage() {
               </div>
             </article>
 
+            {training.planning_type === "flexible" ? (
+              <section style={styles.availabilityCard}>
+                <div style={styles.cardKicker}>Flexible planning</div>
+                <h2 style={styles.cardTitle}>When can you train?</h2>
+
+                <p style={styles.muted}>
+                  Add your availability for this session. The organizer can use this to choose the final start time.
+                </p>
+
+                {availabilityMessage ? (
+                  <div style={styles.availabilityMessage}>{availabilityMessage}</div>
+                ) : null}
+
+                <div style={styles.availabilityForm}>
+                  <label style={styles.availabilityLabel}>
+                    From
+                    <input
+                      type="time"
+                      value={availabilityForm.available_from}
+                      onChange={(event) => updateAvailabilityForm("available_from", event.target.value)}
+                      style={styles.availabilityInput}
+                    />
+                  </label>
+
+                  <label style={styles.availabilityLabel}>
+                    Until
+                    <input
+                      type="time"
+                      value={availabilityForm.available_until}
+                      onChange={(event) => updateAvailabilityForm("available_until", event.target.value)}
+                      style={styles.availabilityInput}
+                    />
+                  </label>
+
+                  <label style={styles.availabilityLabelFull}>
+                    Note
+                    <input
+                      value={availabilityForm.note}
+                      onChange={(event) => updateAvailabilityForm("note", event.target.value)}
+                      placeholder="Optional, e.g. easy pace only"
+                      style={styles.availabilityInput}
+                    />
+                  </label>
+                </div>
+
+                <div style={styles.availabilityActions}>
+                  <button
+                    type="button"
+                    onClick={saveSessionAvailability}
+                    disabled={availabilityBusy}
+                    style={styles.primaryButton}
+                  >
+                    {availabilityBusy ? "Saving..." : "Save availability"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={clearSessionAvailability}
+                    disabled={availabilityBusy}
+                    style={styles.secondaryButton}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {availabilityRows.length ? (
+                  <div style={styles.availabilityList}>
+                    {availabilityRows.map((row) => {
+                      const person = participantProfiles[row.user_id];
+
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => router.push(`/profile/${row.user_id}`)}
+                          style={styles.availabilityRow}
+                        >
+                          {person?.avatar_url ? (
+                            <img src={person.avatar_url} alt="" style={styles.participantAvatar} />
+                          ) : (
+                            <span style={styles.participantFallback}>{participantInitials(person)}</span>
+                          )}
+
+                          <span style={styles.availabilityText}>
+                            <strong>{displayParticipantName(person)}</strong>
+                            <span>
+                              {row.available_from?.slice(0, 5)} – {row.available_until?.slice(0, 5)}
+                              {row.note ? ` · ${row.note}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={styles.muted}>No availability shared yet.</p>
+                )}
+              </section>
+            ) : null}
+
             <section style={styles.grid}>
               <article style={styles.card}>
                 <div style={styles.cardKicker}>Route</div>
@@ -552,7 +786,103 @@ export default function TrainingDetailPage() {
                     {participants.map((participant) => {
                       const person = participantProfiles[participant.user_id];
 
-                      return (
+                      async function saveSessionAvailability() {
+    if (!user?.id || !training?.id || training.planning_type !== "flexible") return;
+
+    setAvailabilityBusy(true);
+    setAvailabilityMessage("");
+
+    try {
+      if (!availabilityForm.available_from || !availabilityForm.available_until) {
+        setAvailabilityMessage("Choose both a start and end time.");
+        return;
+      }
+
+      if (availabilityForm.available_from >= availabilityForm.available_until) {
+        setAvailabilityMessage("End time must be after start time.");
+        return;
+      }
+
+      const existing = availabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .update({
+            available_from: availabilityForm.available_from,
+            available_until: availabilityForm.available_until,
+            note: availabilityForm.note.trim() || null,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_availability")
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+            available_from: availabilityForm.available_from,
+            available_until: availabilityForm.available_until,
+            note: availabilityForm.note.trim() || null,
+          });
+
+        if (error) throw error;
+      }
+
+      setAvailabilityMessage("Availability saved.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability save error", error);
+      setAvailabilityMessage(error?.message || "Could not save availability.");
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  }
+
+  async function clearSessionAvailability() {
+    if (!user?.id || !training?.id) return;
+
+    setAvailabilityBusy(true);
+    setAvailabilityMessage("");
+
+    try {
+      const existing = availabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .delete()
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      }
+
+      setAvailabilityForm({
+        available_from: "",
+        available_until: "",
+        note: "",
+      });
+      setAvailabilityMessage("Availability cleared.");
+      await loadTraining();
+    } catch (error) {
+      console.error("Session availability clear error", error);
+      setAvailabilityMessage(error?.message || "Could not clear availability.");
+    } finally {
+      setAvailabilityBusy(false);
+    }
+  }
+
+  function updateAvailabilityForm(key, value) {
+    setAvailabilityForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  return (
                         <button
                           key={participant.id}
                           type="button"
@@ -773,6 +1103,83 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 8,
+  },
+  availabilityCard: {
+    borderRadius: 30,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
+  },
+  availabilityMessage: {
+    borderRadius: 18,
+    padding: 12,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    color: "#e4ef16",
+    fontWeight: 850,
+  },
+  availabilityForm: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+  },
+  availabilityLabel: {
+    display: "grid",
+    gap: 6,
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 13,
+    fontWeight: 850,
+  },
+  availabilityLabelFull: {
+    display: "grid",
+    gap: 6,
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 13,
+    fontWeight: 850,
+    gridColumn: "1 / -1",
+  },
+  availabilityInput: {
+    width: "100%",
+    minHeight: 46,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(0,0,0,0.24)",
+    color: "white",
+    padding: "0 12px",
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 15,
+  },
+  availabilityActions: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  availabilityList: {
+    display: "grid",
+    gap: 10,
+  },
+  availabilityRow: {
+    width: "100%",
+    border: 0,
+    borderRadius: 22,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 10,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  availabilityText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 3,
+    color: "rgba(255,255,255,0.62)",
   },
   participantList: {
     display: "grid",
