@@ -225,6 +225,22 @@ export default function InboxPage() {
         if (joinError) throw joinError;
       }
 
+      if (invite.training?.visibility === "selected") {
+        const { error: visibilityError } = await supabase
+          .from("training_visibility_members")
+          .upsert(
+            {
+              session_id: invite.session_id,
+              user_id: profile.id,
+            },
+            { onConflict: "session_id,user_id" }
+          );
+
+        if (visibilityError) {
+          console.warn("Selected visibility handoff skipped", visibilityError);
+        }
+      }
+
       const { error: deleteError } = await supabase
         .from("training_invites")
         .delete()
@@ -233,8 +249,7 @@ export default function InboxPage() {
 
       if (deleteError) throw deleteError;
 
-      setNotice("Training invite accepted.");
-      await loadInbox();
+      router.push(`/trainings/${invite.session_id}`);
     } catch (error) {
       console.error("Accept invite error", error);
       setNotice(error?.message || "Could not accept invite.");
@@ -397,7 +412,7 @@ export default function InboxPage() {
                         Open
                       </button>
                       <button type="button" onClick={() => acceptTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.primaryButton}>
-                        Accept
+                        Accept & open
                       </button>
                       <button type="button" onClick={() => declineTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.dangerButton}>
                         Decline
@@ -425,7 +440,7 @@ export default function InboxPage() {
                         Profile
                       </button>
                       <button type="button" onClick={() => respondTeamRequest(request, "accepted")} disabled={busyId === request.id} style={styles.primaryButton}>
-                        Accept
+                        Accept & open
                       </button>
                       <button type="button" onClick={() => respondTeamRequest(request, "rejected")} disabled={busyId === request.id} style={styles.dangerButton}>
                         Reject
