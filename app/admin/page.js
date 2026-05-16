@@ -223,16 +223,10 @@ export default function AdminPage() {
           <div>
             <div style={styles.kicker}>MVP stability</div>
             <h2 style={styles.systemCheckTitle}>Run system check</h2>
-            <p style={styles.muted}>
-              Use this after Supabase hardening and every deploy.
-            </p>
+            <p style={styles.muted}>Validate database, RLS and beta flow after every deploy.</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push("/admin/system-check")}
-            style={styles.primaryButton}
-          >
+          <button type="button" onClick={() => router.push("/admin/system-check")} style={styles.primaryButton}>
             Open check
           </button>
         </section>
