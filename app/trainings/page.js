@@ -25,6 +25,7 @@ export default function TrainingsPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
+  const [trainingInviteCount, setTrainingInviteCount] = useState(0);
   const [currentUserId, setCurrentUserId] = useState("");
   const [busySessionId, setBusySessionId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,13 @@ export default function TrainingsPage() {
       }
 
       setCurrentUserId(user.id);
+
+      const { count: inviteCount } = await supabase
+        .from("training_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("invitee_id", user.id);
+
+      setTrainingInviteCount(inviteCount || 0);
 
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
@@ -310,6 +318,22 @@ export default function TrainingsPage() {
               placeholder="Search trainings, location or sport..."
               style={styles.searchInput}
             />
+          </section>
+        ) : null}
+
+        {!loading && trainingInviteCount > 0 ? (
+          <section style={styles.inviteBanner}>
+            <div>
+              <div style={styles.kicker}>Training invites</div>
+              <strong style={styles.inviteBannerTitle}>
+                You have {trainingInviteCount} invite{trainingInviteCount === 1 ? "" : "s"}
+              </strong>
+              <p style={styles.inviteBannerText}>Open Team to join or decline invited sessions.</p>
+            </div>
+
+            <button type="button" onClick={() => router.push("/team")} style={styles.createButton}>
+              Open Team
+            </button>
           </section>
         ) : null}
 
