@@ -219,6 +219,24 @@ export default function AdminPage() {
           </p>
         </header>
 
+        <section style={styles.systemCheckCard}>
+          <div>
+            <div style={styles.kicker}>MVP stability</div>
+            <h2 style={styles.systemCheckTitle}>Run system check</h2>
+            <p style={styles.muted}>
+              Use this after Supabase hardening and every deploy.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/admin/system-check")}
+            style={styles.primaryButton}
+          >
+            Open check
+          </button>
+        </section>
+
         {message ? <section style={styles.message}>{message}</section> : null}
 
         {allowedRoles.includes(profile?.role) ? (
