@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import PlanningPoll from "../../../components/trainings/PlanningPoll";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
 
 const sportLabels = {
@@ -625,7 +626,14 @@ export default function TrainingDetailPage() {
               ) : null}
             </article>
 
-            {canManage && sessionAvailabilityRows.length ? (
+            <PlanningPoll
+              training={training}
+              user={user}
+              canManage={canManage}
+              onChanged={loadTraining}
+            />
+
+            {false && canManage && sessionAvailabilityRows.length ? (
               <section style={styles.card}>
                 <div style={styles.cardKicker}>Flexible planning</div>
                 <h2 style={styles.sectionTitle}>Availability overview</h2>
@@ -652,7 +660,7 @@ export default function TrainingDetailPage() {
               </section>
             ) : null}
 
-            {training.planning_type === "flexible" ? (
+            {false && training.planning_type === "flexible" ? (
               <section style={styles.flexTimeCard}>
                 <div style={styles.cardKicker}>Flexible time frame</div>
                 <h2 style={styles.sectionTitle}>When are you available?</h2>
