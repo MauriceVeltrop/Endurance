@@ -34,6 +34,17 @@ function formatJoined(value) {
   }
 }
 
+function generateTemporaryPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const symbols = "!@#";
+  let password = "Endurance-";
+  for (let i = 0; i < 8; i += 1) {
+    password += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  password += symbols[Math.floor(Math.random() * symbols.length)];
+  return password;
+}
+
 export default function AdminPage() {
   const router = useRouter();
 
@@ -42,12 +53,15 @@ export default function AdminPage() {
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [createMode, setCreateMode] = useState("auth");
   const [inviteForm, setInviteForm] = useState({
     first_name: "",
     last_name: "",
     email: "",
     role: "user",
+    temporary_password: generateTemporaryPassword(),
   });
+  const [lastCreated, setLastCreated] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
@@ -175,7 +189,17 @@ export default function AdminPage() {
     }));
   }
 
-  async function createInvitedUser(event) {
+  function resetCreateForm() {
+    setInviteForm({
+      first_name: "",
+      last_name: "",
+      email: "",
+      role: "user",
+      temporary_password: generateTemporaryPassword(),
+    });
+  }
+
+  async function createOrInviteUser(event) {
     event.preventDefault();
 
     if (!isAllowed) {
@@ -187,6 +211,7 @@ export default function AdminPage() {
     const lastName = inviteForm.last_name.trim();
     const email = inviteForm.email.trim().toLowerCase();
     const role = inviteForm.role || "user";
+    const temporaryPassword = inviteForm.temporary_password.trim();
 
     if (!firstName) return setMessage("First name is required.");
     if (!lastName) return setMessage("Last name is required.");
@@ -195,38 +220,73 @@ export default function AdminPage() {
       return setMessage("You cannot assign that role.");
     }
 
+    if (createMode === "auth" && temporaryPassword.length < 8) {
+      return setMessage("Temporary password must be at least 8 characters.");
+    }
+
     setBusyId("create-user");
     setMessage("");
+    setLastCreated(null);
 
     try {
-      const { error } = await supabase
-        .from("admin_user_invites")
-        .upsert(
-          {
+      if (createMode === "auth") {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+
+        if (!token) throw new Error("No active session.");
+
+        const response = await fetch("/api/admin/create-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             first_name: firstName,
             last_name: lastName,
             email,
             role,
-            invited_by: profile.id,
-            status: "pending",
-          },
-          { onConflict: "email" }
-        );
+            temporary_password: temporaryPassword,
+          }),
+        });
 
-      if (error) throw error;
+        const payload = await response.json();
 
-      setInviteForm({
-        first_name: "",
-        last_name: "",
-        email: "",
-        role: "user",
-      });
+        if (!response.ok) {
+          throw new Error(payload?.error || "Could not create user.");
+        }
 
-      setMessage(`Invite prepared for ${firstName} ${lastName}.`);
+        setLastCreated({
+          email,
+          temporary_password: temporaryPassword,
+          role,
+        });
+        setMessage(`User created for ${firstName} ${lastName}. Share the temporary password discreetly.`);
+      } else {
+        const { error } = await supabase
+          .from("admin_user_invites")
+          .upsert(
+            {
+              first_name: firstName,
+              last_name: lastName,
+              email,
+              role,
+              invited_by: profile.id,
+              status: "pending",
+            },
+            { onConflict: "email" }
+          );
+
+        if (error) throw error;
+
+        setMessage(`Invite prepared for ${firstName} ${lastName}.`);
+      }
+
+      resetCreateForm();
       await loadAdmin();
     } catch (error) {
       console.error("Create invited user error", error);
-      setMessage(error?.message || "Could not prepare invited user.");
+      setMessage(error?.message || "Could not create user.");
     } finally {
       setBusyId("");
     }
@@ -312,6 +372,21 @@ export default function AdminPage() {
 
         {message ? <section style={styles.message}>{message}</section> : null}
 
+        {lastCreated ? (
+          <section style={styles.passwordNotice}>
+            <div>
+              <div style={styles.kicker}>Temporary login</div>
+              <strong>{lastCreated.email}</strong>
+              <p style={styles.muted}>
+                Temporary password: <span style={styles.passwordText}>{lastCreated.temporary_password}</span>
+              </p>
+              <p style={styles.mutedSmall}>
+                Share this discreetly. The user can change it after logging in.
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         {!isAllowed && !loading ? (
           <section style={styles.card}>
             <h2 style={styles.cardTitle}>No access</h2>
@@ -339,14 +414,31 @@ export default function AdminPage() {
                 <div style={styles.iconInline}>👤＋</div>
                 <div>
                   <div style={styles.kicker}>Add user</div>
-                  <h2 style={styles.cardTitle}>Prepare invited user</h2>
+                  <h2 style={styles.cardTitle}>Create user</h2>
                   <p style={styles.muted}>
-                    Add first name, last name, email and role. When the user signs up with this email, onboarding applies these rights.
+                    Create an account with a temporary password, or prepare an invite for onboarding.
                   </p>
                 </div>
               </div>
 
-              <form onSubmit={createInvitedUser} style={styles.inviteForm}>
+              <div style={styles.modeSwitch}>
+                <button
+                  type="button"
+                  onClick={() => setCreateMode("auth")}
+                  style={createMode === "auth" ? styles.modeActive : styles.modeButton}
+                >
+                  Create login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateMode("invite")}
+                  style={createMode === "invite" ? styles.modeActive : styles.modeButton}
+                >
+                  Invite only
+                </button>
+              </div>
+
+              <form onSubmit={createOrInviteUser} style={styles.inviteForm}>
                 <div style={styles.twoColumns}>
                   <label style={styles.label}>
                     First name
@@ -401,14 +493,35 @@ export default function AdminPage() {
                     </select>
                   </label>
 
-                  <div style={styles.roleInfo}>
-                    <span style={styles.infoIcon}>ⓘ</span>
-                    <span>Roles determine the level of access within the platform.</span>
-                  </div>
+                  {createMode === "auth" ? (
+                    <label style={styles.label}>
+                      Temporary password
+                      <div style={styles.passwordRow}>
+                        <input
+                          type="text"
+                          value={inviteForm.temporary_password}
+                          onChange={(event) => updateInviteForm("temporary_password", event.target.value)}
+                          style={styles.input}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateInviteForm("temporary_password", generateTemporaryPassword())}
+                          style={styles.smallButton}
+                        >
+                          Generate
+                        </button>
+                      </div>
+                    </label>
+                  ) : (
+                    <div style={styles.roleInfo}>
+                      <span style={styles.infoIcon}>ⓘ</span>
+                      <span>The user signs up later with this email. Onboarding applies the selected role.</span>
+                    </div>
+                  )}
                 </div>
 
                 <button type="submit" disabled={busyId === "create-user"} style={styles.primaryButtonWide}>
-                  👤＋ {busyId === "create-user" ? "Saving..." : "Add invited user"}
+                  👤＋ {busyId === "create-user" ? "Saving..." : createMode === "auth" ? "Create user" : "Add invited user"}
                 </button>
               </form>
             </section>
@@ -507,7 +620,9 @@ export default function AdminPage() {
                         </button>
 
                         <div style={styles.userControls}>
-                          <span style={styles.statusPill}>{user.blocked ? "Blocked" : "Active"}</span>
+                          <span style={user.blocked ? styles.blockedPill : styles.statusPill}>
+                            {user.blocked ? "Blocked" : "Active"}
+                          </span>
 
                           <select
                             value={user.role || "user"}
@@ -545,7 +660,7 @@ export default function AdminPage() {
             <section style={styles.infoCard}>
               <span style={styles.infoIconLarge}>ⓘ</span>
               <p style={styles.muted}>
-                Invited users receive their role automatically when they sign up with the invited email and complete onboarding.
+                Users with a temporary password should change it themselves after logging in. Share temporary passwords discreetly and outside public channels.
               </p>
             </section>
           </>
@@ -609,6 +724,26 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.18)",
     color: "#e4ef16",
     fontWeight: 850,
+  },
+  passwordNotice: {
+    borderRadius: 24,
+    padding: 18,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    display: "grid",
+    gap: 8,
+  },
+  passwordText: {
+    color: "#e4ef16",
+    fontWeight: 950,
+    letterSpacing: "0.02em",
+    wordBreak: "break-all",
+  },
+  mutedSmall: {
+    margin: 0,
+    color: "rgba(255,255,255,0.58)",
+    lineHeight: 1.45,
+    fontSize: 13,
   },
   card: {
     borderRadius: 28,
@@ -683,6 +818,33 @@ const styles = {
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.48,
   },
+  modeSwitch: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+    padding: 4,
+    borderRadius: 999,
+    background: "rgba(0,0,0,0.22)",
+    border: "1px solid rgba(255,255,255,0.10)",
+  },
+  modeButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: 0,
+    background: "transparent",
+    color: "rgba(255,255,255,0.68)",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  modeActive: {
+    minHeight: 42,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
   inviteForm: {
     display: "grid",
     gap: 14,
@@ -704,9 +866,11 @@ const styles = {
     color: "rgba(255,255,255,0.86)",
     fontSize: 14,
     fontWeight: 850,
+    minWidth: 0,
   },
   input: {
     width: "100%",
+    minWidth: 0,
     minHeight: 54,
     borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.12)",
@@ -716,6 +880,21 @@ const styles = {
     boxSizing: "border-box",
     fontSize: 16,
     outline: "none",
+  },
+  passwordRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0,1fr) auto",
+    gap: 8,
+  },
+  smallButton: {
+    minHeight: 54,
+    borderRadius: 16,
+    border: "1px solid rgba(228,239,22,0.24)",
+    background: "rgba(228,239,22,0.10)",
+    color: "#e4ef16",
+    padding: "0 12px",
+    fontWeight: 950,
+    cursor: "pointer",
   },
   roleInfo: {
     minHeight: 54,
@@ -729,10 +908,6 @@ const styles = {
     alignItems: "center",
     gap: 10,
     lineHeight: 1.35,
-  },
-  infoIcon: {
-    color: "rgba(255,255,255,0.80)",
-    fontSize: 22,
   },
   primaryButton: {
     minHeight: 52,
@@ -782,6 +957,7 @@ const styles = {
     display: "grid",
     alignContent: "space-between",
     gap: 8,
+    minWidth: 0,
   },
   statIconLime: {
     color: "#e4ef16",
@@ -818,6 +994,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 16,
+    overflow: "hidden",
   },
   managementHeader: {
     display: "flex",
@@ -833,6 +1010,7 @@ const styles = {
   },
   searchInput: {
     width: "100%",
+    minWidth: 0,
     minHeight: 48,
     borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.13)",
@@ -853,7 +1031,7 @@ const styles = {
     background: "rgba(255,255,255,0.045)",
     border: "1px solid rgba(255,255,255,0.075)",
     display: "grid",
-    gridTemplateColumns: "minmax(0,1fr) auto",
+    gridTemplateColumns: "minmax(0,1fr)",
     gap: 12,
     alignItems: "center",
   },
@@ -863,7 +1041,7 @@ const styles = {
     background: "rgba(255,70,70,0.10)",
     border: "1px solid rgba(255,90,90,0.18)",
     display: "grid",
-    gridTemplateColumns: "minmax(0,1fr) auto",
+    gridTemplateColumns: "minmax(0,1fr)",
     gap: 12,
     alignItems: "center",
   },
@@ -901,19 +1079,19 @@ const styles = {
   userText: {
     minWidth: 0,
     display: "grid",
-    gap: 2,
+    gap: 3,
     color: "rgba(255,255,255,0.66)",
     overflowWrap: "anywhere",
+    wordBreak: "break-word",
   },
   userControls: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))",
     gap: 8,
-    flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "flex-end",
   },
   statusPill: {
-    minHeight: 32,
+    minHeight: 38,
     borderRadius: 999,
     display: "grid",
     placeItems: "center",
@@ -924,8 +1102,21 @@ const styles = {
     fontWeight: 900,
     fontSize: 12,
   },
+  blockedPill: {
+    minHeight: 38,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    padding: "0 10px",
+    color: "#ffb4b4",
+    background: "rgba(255,70,70,0.10)",
+    border: "1px solid rgba(255,90,90,0.18)",
+    fontWeight: 900,
+    fontSize: 12,
+  },
   roleSelect: {
     minHeight: 38,
+    width: "100%",
     borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.13)",
     background: "rgba(0,0,0,0.28)",
@@ -967,5 +1158,6 @@ const styles = {
     color: "rgba(255,255,255,0.72)",
     fontSize: 30,
   },
+  "@media (max-width: 760px)": {},
 };
 
