@@ -350,10 +350,13 @@ export default function CreateTrainingPage() {
 
       const { error: creatorJoinError } = await supabase
         .from("session_participants")
-        .insert({
-          session_id: trainingRow.id,
-          user_id: profile.id,
-        });
+        .upsert(
+          {
+            session_id: trainingRow.id,
+            user_id: profile.id,
+          },
+          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+        );
 
       if (creatorJoinError) {
         console.warn("Creator auto-join skipped", creatorJoinError);
@@ -392,7 +395,7 @@ export default function CreateTrainingPage() {
 
         const { error: inviteError } = await supabase
           .from("training_invites")
-          .insert(inviteRows);
+          .upsert(inviteRows, { onConflict: "session_id,invitee_id", ignoreDuplicates: true });
 
         if (inviteError) {
           console.warn("Training invites skipped", inviteError);
@@ -406,7 +409,7 @@ export default function CreateTrainingPage() {
 
           const { error: visibilityError } = await supabase
             .from("training_visibility_members")
-            .insert(visibilityRows);
+            .upsert(visibilityRows, { onConflict: "session_id,user_id", ignoreDuplicates: true });
 
           if (visibilityError) {
             console.warn("Selected visibility members skipped", visibilityError);
