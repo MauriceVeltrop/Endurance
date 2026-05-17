@@ -126,11 +126,14 @@ export default function PublicProfilePage() {
     setMessage("");
 
     try {
-      const { error } = await supabase.from("training_partners").insert({
-        requester_id: viewer.id,
-        addressee_id: profile.id,
-        status: "pending",
-      });
+      const { error } = await supabase.from("training_partners").upsert(
+        {
+          requester_id: viewer.id,
+          addressee_id: profile.id,
+          status: "pending",
+        },
+        { onConflict: "requester_id,addressee_id", ignoreDuplicates: true }
+      );
 
       if (error) throw error;
 
