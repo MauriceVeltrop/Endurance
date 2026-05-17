@@ -127,7 +127,9 @@ export default function AdminPage() {
   }
 
   function canSetRole(targetUser, nextRole) {
-    if (!canEditUser(targetUser)) return false;
+    if (!targetUser || !profile) return false;
+
+    if (targetUser.id !== "new-user" && !canEditUser(targetUser)) return false;
 
     if (profile.role === "admin") return roleOptions.includes(nextRole);
 
@@ -296,6 +298,7 @@ export default function AdminPage() {
           </button>
         </section>
 
+        {allowedRoles.includes(profile?.role) ? (
         <section style={styles.inviteCard}>
           <div>
             <div style={styles.kicker}>Add user</div>
@@ -362,6 +365,8 @@ export default function AdminPage() {
           </form>
         </section>
 
+        ) : null}
+
         {message ? <section style={styles.message}>{message}</section> : null}
 
         {allowedRoles.includes(profile?.role) ? (
@@ -387,7 +392,7 @@ export default function AdminPage() {
                   <h2 style={styles.panelTitle}>Role management</h2>
                 </div>
 
-                <button type="button" onClick={createPlaceholderUser} style={styles.secondaryButton}>
+                <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={styles.secondaryButton}>
                   Add user
                 </button>
               </div>
