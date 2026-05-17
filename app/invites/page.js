@@ -53,17 +53,21 @@ export default function InvitesPage() {
 
       const { error } = await supabase
         .from("session_participants")
-        .insert({
-          session_id: invite.session_id,
-          user_id: user.id,
-        });
+        .upsert(
+          {
+            session_id: invite.session_id,
+            user_id: user.id,
+          },
+          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+        );
 
       if (error) throw error;
 
       await supabase
         .from("training_invites")
-        .delete()
-        .eq("id", invite.id);
+        .update({ status: "accepted", response_note: null })
+        .eq("id", invite.id)
+        .eq("invitee_id", user.id);
 
       loadInvites();
     } catch (error) {
@@ -74,10 +78,14 @@ export default function InvitesPage() {
 
   async function declineInvite(invite) {
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+
       await supabase
         .from("training_invites")
-        .delete()
-        .eq("id", invite.id);
+        .update({ status: "declined" })
+        .eq("id", invite.id)
+        .eq("invitee_id", user?.id);
 
       loadInvites();
     } catch (error) {
