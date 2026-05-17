@@ -11,11 +11,61 @@ function json(status, body) {
   return NextResponse.json(body, { status });
 }
 
+async function findAuthUserByEmail(adminClient, email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await adminClient.auth.admin.listUsers({
+      page,
+      perPage: 100,
+    });
+
+    if (error) throw error;
+
+    const user = (data?.users || []).find(
+      (item) => String(item.email || "").trim().toLowerCase() === normalizedEmail
+    );
+
+    if (user) return user;
+
+    if (!data?.users?.length || data.users.length < 100) return null;
+  }
+
+  return null;
+}
+
+async function saveInviteRecord(adminClient, payload) {
+  const { data: existingInvite, error: lookupError } = await adminClient
+    .from("admin_user_invites")
+    .select("id")
+    .eq("email", payload.email)
+    .maybeSingle();
+
+  if (lookupError) throw lookupError;
+
+  if (existingInvite?.id) {
+    const { error } = await adminClient
+      .from("admin_user_invites")
+      .update(payload)
+      .eq("id", existingInvite.id);
+
+    if (error) throw error;
+
+    return;
+  }
+
+  const { error } = await adminClient
+    .from("admin_user_invites")
+    .insert(payload);
+
+  if (error) throw error;
+}
+
 export async function POST(request) {
   try {
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       return json(500, {
-        error: "Missing Supabase environment variables. Add SUPABASE_SERVICE_ROLE_KEY in Vercel.",
+        error: "Missing Supabase environment variables. Add SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.",
       });
     }
 
@@ -74,7 +124,9 @@ export async function POST(request) {
     const requestedRole = String(body.role || "user").trim();
 
     if (!firstName || !lastName || !email || !password) {
-      return json(400, { error: "First name, last name, email and temporary password are required." });
+      return json(400, {
+        error: "First name, last name, email and temporary password are required.",
+      });
     }
 
     if (password.length < 8) {
@@ -90,25 +142,50 @@ export async function POST(request) {
     }
 
     const fullName = `${firstName} ${lastName}`;
+    let authUser = null;
+    let createdNewAuthUser = false;
 
-    const { data: createdUser, error: createError } =
-      await adminClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          name: fullName,
-        },
-      });
+    const existingAuthUser = await findAuthUserByEmail(adminClient, email);
 
-    if (createError) throw createError;
+    if (existingAuthUser?.id) {
+      const { data: updatedUser, error: updateAuthError } =
+        await adminClient.auth.admin.updateUserById(existingAuthUser.id, {
+          password,
+          email_confirm: true,
+          user_metadata: {
+            ...(existingAuthUser.user_metadata || {}),
+            first_name: firstName,
+            last_name: lastName,
+            name: fullName,
+          },
+        });
 
-    const createdId = createdUser?.user?.id;
+      if (updateAuthError) throw updateAuthError;
+
+      authUser = updatedUser?.user || existingAuthUser;
+    } else {
+      const { data: createdUser, error: createError } =
+        await adminClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            name: fullName,
+          },
+        });
+
+      if (createError) throw createError;
+
+      authUser = createdUser?.user;
+      createdNewAuthUser = true;
+    }
+
+    const createdId = authUser?.id;
 
     if (!createdId) {
-      return json(500, { error: "User was not created." });
+      return json(500, { error: "Auth user was not created or found." });
     }
 
     const { error: profileError } = await adminClient
@@ -129,30 +206,29 @@ export async function POST(request) {
 
     if (profileError) throw profileError;
 
-    await adminClient
-      .from("admin_user_invites")
-      .upsert(
-        {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          role: requestedRole,
-          status: "accepted",
-          invited_by: requesterId,
-          accepted_user_id: createdId,
-          accepted_at: new Date().toISOString(),
-        },
-        { onConflict: "email" }
-      );
+    await saveInviteRecord(adminClient, {
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      role: requestedRole,
+      status: "accepted",
+      invited_by: requesterId,
+      accepted_user_id: createdId,
+      accepted_at: new Date().toISOString(),
+    });
 
     return json(200, {
       id: createdId,
       email,
       role: requestedRole,
-      message: "User created with temporary password.",
+      created_new_auth_user: createdNewAuthUser,
+      message: createdNewAuthUser
+        ? "User created with temporary password."
+        : "Existing auth user updated and profile saved.",
     });
   } catch (error) {
     console.error("Admin create user error", error);
+
     return json(500, {
       error: error?.message || "Could not create user.",
     });
