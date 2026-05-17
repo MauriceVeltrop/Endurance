@@ -23,6 +23,16 @@ function toMinutes(value) {
   return hours * 60 + minutes;
 }
 
+function minutesToTime(value) {
+  const hours = String(Math.floor(value / 60)).padStart(2, "0");
+  const minutes = String(value % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function formatTime(value) {
+  return value?.slice(0, 5) || "--:--";
+}
+
 function insideWindow(option, from, until) {
   const start = toMinutes(option.window_start);
   const end = toMinutes(option.window_end);
@@ -34,7 +44,71 @@ function insideWindow(option, from, until) {
 }
 
 function formatOption(option) {
-  return `${option.starts_on} · ${option.window_start?.slice(0, 5)}–${option.window_end?.slice(0, 5)}`;
+  return `${option.starts_on} · ${formatTime(option.window_start)}–${formatTime(option.window_end)}`;
+}
+
+function getOverlapSegments(option, optionResponses) {
+  const available = optionResponses.filter(
+    (row) => row.status === "available" && row.available_from && row.available_until
+  );
+
+  const optionStart = toMinutes(option.window_start);
+  const optionEnd = toMinutes(option.window_end);
+  if (optionStart === null || optionEnd === null || optionStart >= optionEnd || !available.length) return [];
+
+  const points = new Set([optionStart, optionEnd]);
+  for (const response of available) {
+    const from = toMinutes(response.available_from);
+    const until = toMinutes(response.available_until);
+    if (from !== null && until !== null && from < until) {
+      points.add(Math.max(optionStart, from));
+      points.add(Math.min(optionEnd, until));
+    }
+  }
+
+  const sorted = [...points].sort((a, b) => a - b);
+  const rawSegments = [];
+
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const start = sorted[index];
+    const end = sorted[index + 1];
+    if (start >= end) continue;
+
+    const active = available.filter((response) => {
+      const from = toMinutes(response.available_from);
+      const until = toMinutes(response.available_until);
+      return from !== null && until !== null && from <= start && until >= end;
+    });
+
+    if (active.length) {
+      rawSegments.push({
+        start,
+        end,
+        active,
+        key: active.map((row) => row.user_id).sort().join("|"),
+      });
+    }
+  }
+
+  const merged = [];
+  for (const segment of rawSegments) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.end === segment.start && previous.key === segment.key) {
+      previous.end = segment.end;
+    } else {
+      merged.push({ ...segment });
+    }
+  }
+
+  return merged
+    .map((segment) => ({
+      ...segment,
+      count: segment.active.length,
+      duration: segment.end - segment.start,
+      startText: minutesToTime(segment.start),
+      endText: minutesToTime(segment.end),
+    }))
+    .sort((a, b) => b.count - a.count || b.duration - a.duration || a.start - b.start);
 }
 
 export default function PlanningPoll({ training, user, canManage, onChanged, onOptionsLoaded }) {
@@ -55,6 +129,23 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
     }
     return map;
   }, [options, responses]);
+
+  const overlapSummary = useMemo(() => {
+    const rows = [];
+    for (const option of options) {
+      const optionResponses = groupedResponses[option.id] || [];
+      const segments = getOverlapSegments(option, optionResponses);
+      if (segments[0]) {
+        rows.push({ option, segment: segments[0] });
+      }
+    }
+    return rows.sort(
+      (a, b) =>
+        b.segment.count - a.segment.count ||
+        b.segment.duration - a.segment.duration ||
+        `${a.option.starts_on}${a.segment.start}`.localeCompare(`${b.option.starts_on}${b.segment.start}`)
+    );
+  }, [options, groupedResponses]);
 
   useEffect(() => {
     if (training?.id && user?.id) {
@@ -160,6 +251,16 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
     }));
   }
 
+  function useOverlapSuggestion(option, segment) {
+    setFinalForms((current) => ({
+      ...current,
+      [option.id]: {
+        date: option.starts_on,
+        time: segment.startText,
+      },
+    }));
+  }
+
   async function saveResponse(option, status = "available") {
     if (!user?.id) return;
 
@@ -255,9 +356,7 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
       <section style={styles.card}>
         <div style={styles.kicker}>Planning poll</div>
         <h2 style={styles.title}>No time options yet</h2>
-        <p style={styles.muted}>
-          This flexible training was created before Planning Poll v2 or has no options.
-        </p>
+        <p style={styles.muted}>This flexible training was created before Planning Poll v2 or has no options.</p>
       </section>
     );
   }
@@ -265,14 +364,40 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
   return (
     <section style={styles.wrap}>
       <div style={styles.header}>
-        <div style={styles.kicker}>Flexible Planning v2</div>
-        <h2 style={styles.title}>Time options</h2>
-        <p style={styles.muted}>
-          Respond within the proposed windows. The organizer chooses the final start time.
-        </p>
+        <div>
+          <div style={styles.kicker}>Flexible planning</div>
+          <h2 style={styles.title}>Best start time</h2>
+        </div>
+        <p style={styles.muted}>Compact overview of who can join each option. Highest overlap is shown first.</p>
       </div>
 
       {message ? <div style={styles.message}>{message}</div> : null}
+
+      {canManage && overlapSummary.length ? (
+        <div style={styles.bestBox}>
+          <div style={styles.bestHeader}>
+            <span style={styles.kicker}>Most overlap</span>
+            <span style={styles.bestHint}>{overlapSummary[0].segment.count} participant(s)</span>
+          </div>
+          <div style={styles.bestGrid}>
+            {overlapSummary.slice(0, 3).map(({ option, segment }, index) => (
+              <button
+                key={`${option.id}-${segment.startText}`}
+                type="button"
+                onClick={() => useOverlapSuggestion(option, segment)}
+                style={index === 0 ? styles.bestButtonPrimary : styles.bestButton}
+              >
+                <span style={styles.bestRank}>#{index + 1}</span>
+                <strong>{option.starts_on}</strong>
+                <span>
+                  {segment.startText}–{segment.endText}
+                </span>
+                <small>{segment.count} available</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div style={styles.optionList}>
         {options.map((option) => {
@@ -280,21 +405,26 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
           const form = forms[option.id] || {};
           const finalForm = finalForms[option.id] || {};
           const own = optionResponses.find((row) => row.user_id === user?.id);
-          const availableCount = optionResponses.filter((row) => row.status === "available").length;
-          const declinedCount = optionResponses.filter((row) => row.status === "declined").length;
+          const availableResponses = optionResponses.filter((row) => row.status === "available");
+          const declinedResponses = optionResponses.filter((row) => row.status === "declined");
+          const segments = getOverlapSegments(option, optionResponses);
+          const bestSegment = segments[0];
 
           return (
             <article key={option.id} style={styles.optionCard}>
               <div style={styles.optionTop}>
-                <div>
+                <div style={styles.optionDateBlock}>
                   <div style={styles.optionDate}>{option.starts_on}</div>
-                  <div style={styles.optionWindow}>
-                    {option.window_start?.slice(0, 5)} – {option.window_end?.slice(0, 5)}
-                  </div>
+                  <div style={styles.optionWindow}>{formatTime(option.window_start)} – {formatTime(option.window_end)}</div>
                 </div>
 
-                <div style={styles.countPill}>
-                  {availableCount} available · {declinedCount} declined
+                <div style={styles.scoreStack}>
+                  <div style={styles.countPill}>{availableResponses.length}/{optionResponses.length || "–"} available</div>
+                  {bestSegment ? (
+                    <div style={styles.overlapPill}>
+                      Best {bestSegment.startText}–{bestSegment.endText} · {bestSegment.count}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -302,7 +432,7 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
                 <div style={styles.responseBox}>
                   <div style={styles.inputGrid}>
                     <label style={styles.label}>
-                      Available from
+                      From
                       <input
                         type="time"
                         value={form.available_from || ""}
@@ -314,7 +444,7 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
                     </label>
 
                     <label style={styles.label}>
-                      Available until
+                      Until
                       <input
                         type="time"
                         value={form.available_until || ""}
@@ -326,118 +456,73 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
                     </label>
                   </div>
 
-                  <label style={styles.label}>
-                    Preference
+                  <div style={styles.compactResponseActions}>
                     <select
                       value={form.preference || "possible"}
                       onChange={(event) => updateForm(option.id, "preference", event.target.value)}
-                      style={styles.input}
+                      style={styles.compactSelect}
                     >
                       <option value="best">Best</option>
                       <option value="possible">Possible</option>
                       <option value="not_preferred">Not preferred</option>
                     </select>
-                  </label>
-
-                  <label style={styles.label}>
-                    Note
-                    <textarea
-                      value={form.note || ""}
-                      onChange={(event) => updateForm(option.id, "note", event.target.value)}
-                      placeholder="Optional note..."
-                      style={styles.textarea}
-                    />
-                  </label>
-
-                  <div style={styles.actions}>
-                    <button
-                      type="button"
-                      onClick={() => saveResponse(option, "available")}
-                      disabled={busyId === option.id}
-                      style={styles.primaryButton}
-                    >
-                      {own?.status === "available" ? "Update availability" : "I can make this"}
+                    <button type="button" onClick={() => saveResponse(option, "available")} disabled={busyId === option.id} style={styles.primaryButton}>
+                      {own?.status === "available" ? "Update" : "Available"}
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => saveResponse(option, "declined")}
-                      disabled={busyId === option.id}
-                      style={styles.dangerButton}
-                    >
-                      Decline option
+                    <button type="button" onClick={() => saveResponse(option, "declined")} disabled={busyId === option.id} style={styles.dangerButton}>
+                      Decline
                     </button>
                   </div>
                 </div>
               ) : null}
 
               {canManage ? (
-                <div style={styles.organizerBox}>
-                  <div style={styles.responseList}>
-                    {optionResponses.length ? (
-                      optionResponses.map((response) => {
-                        const person = profiles[response.user_id];
-
-                        return (
-                          <div key={response.id} style={styles.responseRow}>
-                            {person?.avatar_url ? (
-                              <img src={person.avatar_url} alt="" style={styles.avatar} />
-                            ) : (
-                              <span style={styles.avatarFallback}>{initials(person)}</span>
-                            )}
-
-                            <span style={styles.responseText}>
-                              <strong>{displayName(person)}</strong>
-                              <span>
-                                {(response.status || "pending").toUpperCase()}
-                                {response.available_from && response.available_until
-                                  ? ` · ${response.available_from.slice(0, 5)}–${response.available_until.slice(0, 5)}`
-                                  : ""}
-                                {response.preference ? ` · ${response.preference}` : ""}
-                                {response.note ? ` · ${response.note}` : ""}
+                <div style={styles.organizerCompact}>
+                  <div style={styles.peoplePanel}>
+                    {availableResponses.length ? (
+                      <div style={styles.avatarGrid}>
+                        {availableResponses.map((response) => {
+                          const person = profiles[response.user_id];
+                          return (
+                            <div key={response.id} style={styles.personChip} title={displayName(person)}>
+                              {person?.avatar_url ? <img src={person.avatar_url} alt="" style={styles.avatar} /> : <span style={styles.avatarFallback}>{initials(person)}</span>}
+                              <span style={styles.personText}>
+                                <strong>{displayName(person)}</strong>
+                                <small>
+                                  {formatTime(response.available_from)}–{formatTime(response.available_until)}
+                                  {response.preference === "best" ? " · best" : ""}
+                                </small>
                               </span>
-                            </span>
-                          </div>
-                        );
-                      })
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
-                      <p style={styles.muted}>No responses yet.</p>
+                      <p style={styles.muted}>No availability yet.</p>
                     )}
+
+                    {declinedResponses.length ? (
+                      <div style={styles.declinedLine}>
+                        Declined: {declinedResponses.map((response) => displayName(profiles[response.user_id])).join(", ")}
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div style={styles.finalBox}>
-                    <div style={styles.kicker}>Set final start</div>
-                    <div style={styles.inputGrid}>
-                      <label style={styles.label}>
-                        Date
-                        <input
-                          type="date"
-                          value={finalForm.date || option.starts_on}
-                          onChange={(event) => updateFinalForm(option.id, "date", event.target.value)}
-                          style={styles.input}
-                        />
-                      </label>
-
-                      <label style={styles.label}>
-                        Time
-                        <input
-                          type="time"
-                          value={finalForm.time || ""}
-                          min={option.window_start?.slice(0, 5)}
-                          max={option.window_end?.slice(0, 5)}
-                          onChange={(event) => updateFinalForm(option.id, "time", event.target.value)}
-                          style={styles.input}
-                        />
-                      </label>
+                  <div style={styles.finalCompact}>
+                    <div style={styles.finalText}>
+                      <span>Final start</span>
+                      <strong>{finalForm.date || option.starts_on}</strong>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setFinalStart(option)}
-                      disabled={busyId === `final-${option.id}`}
-                      style={styles.primaryButton}
-                    >
-                      Choose this final time
+                    <input
+                      type="time"
+                      value={finalForm.time || ""}
+                      min={option.window_start?.slice(0, 5)}
+                      max={option.window_end?.slice(0, 5)}
+                      onChange={(event) => updateFinalForm(option.id, "time", event.target.value)}
+                      style={styles.timeInput}
+                    />
+                    <button type="button" onClick={() => setFinalStart(option)} disabled={busyId === `final-${option.id}`} style={styles.primaryButtonWide}>
+                      Choose
                     </button>
                   </div>
                 </div>
@@ -454,12 +539,16 @@ const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255
 
 const styles = {
   wrap: {
+    width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
     borderRadius: 32,
-    padding: 18,
+    padding: 16,
     background: glass,
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
-    gap: 16,
+    gap: 14,
+    overflow: "hidden",
   },
   card: {
     borderRadius: 30,
@@ -482,14 +571,14 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(30px, 8vw, 48px)",
+    fontSize: "clamp(28px, 7vw, 44px)",
     lineHeight: 0.95,
     letterSpacing: "-0.065em",
   },
   muted: {
     margin: 0,
     color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.45,
+    lineHeight: 1.35,
   },
   message: {
     borderRadius: 18,
@@ -499,156 +588,285 @@ const styles = {
     color: "#e4ef16",
     fontWeight: 850,
   },
+  bestBox: {
+    borderRadius: 24,
+    padding: 12,
+    background: "rgba(228,239,22,0.075)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    display: "grid",
+    gap: 10,
+  },
+  bestHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  bestHint: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: 850,
+  },
+  bestGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))",
+    gap: 8,
+  },
+  bestButton: {
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    background: "rgba(0,0,0,0.18)",
+    color: "white",
+    padding: 10,
+    textAlign: "left",
+    display: "grid",
+    gap: 2,
+    cursor: "pointer",
+  },
+  bestButtonPrimary: {
+    border: "1px solid rgba(228,239,22,0.34)",
+    borderRadius: 18,
+    background: "rgba(228,239,22,0.13)",
+    color: "white",
+    padding: 10,
+    textAlign: "left",
+    display: "grid",
+    gap: 2,
+    cursor: "pointer",
+  },
+  bestRank: {
+    color: "#e4ef16",
+    fontSize: 11,
+    fontWeight: 950,
+  },
   optionList: {
     display: "grid",
-    gap: 14,
+    gap: 10,
+    minWidth: 0,
   },
   optionCard: {
-    borderRadius: 26,
-    padding: 16,
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+    borderRadius: 24,
+    padding: 12,
     background: "rgba(255,255,255,0.055)",
     border: "1px solid rgba(255,255,255,0.10)",
     display: "grid",
-    gap: 14,
+    gap: 10,
+    overflow: "hidden",
   },
   optionTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "flex-start",
-    flexWrap: "wrap",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: 10,
+    alignItems: "start",
+  },
+  optionDateBlock: {
+    minWidth: 0,
   },
   optionDate: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 950,
     letterSpacing: "-0.04em",
+    whiteSpace: "nowrap",
   },
   optionWindow: {
     color: "#e4ef16",
+    fontSize: 18,
     fontWeight: 950,
+    whiteSpace: "nowrap",
+  },
+  scoreStack: {
+    display: "grid",
+    justifyItems: "end",
+    gap: 5,
+    minWidth: 0,
   },
   countPill: {
     borderRadius: 999,
-    padding: "7px 10px",
+    padding: "7px 9px",
     background: "rgba(228,239,22,0.10)",
     color: "#e4ef16",
     border: "1px solid rgba(228,239,22,0.18)",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 900,
+    whiteSpace: "nowrap",
+  },
+  overlapPill: {
+    borderRadius: 999,
+    padding: "5px 8px",
+    background: "rgba(255,255,255,0.07)",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 10,
+    fontWeight: 850,
+    whiteSpace: "nowrap",
   },
   responseBox: {
     display: "grid",
-    gap: 12,
-  },
-  organizerBox: {
-    display: "grid",
-    gap: 14,
+    gap: 10,
   },
   inputGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-    gap: 10,
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 8,
   },
   label: {
     display: "grid",
-    gap: 7,
+    gap: 6,
     color: "rgba(255,255,255,0.82)",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 850,
   },
   input: {
     width: "100%",
-    minHeight: 48,
-    borderRadius: 16,
+    minWidth: 0,
+    minHeight: 44,
+    borderRadius: 15,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(0,0,0,0.22)",
     color: "white",
-    padding: "0 12px",
-    boxSizing: "border-box",
-    fontSize: 15,
-    outline: "none",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: 72,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: 12,
+    padding: "0 10px",
     boxSizing: "border-box",
     fontSize: 14,
-    fontFamily: "inherit",
-    resize: "vertical",
     outline: "none",
   },
-  actions: {
-    display: "flex",
-    flexWrap: "wrap",
+  compactResponseActions: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto auto",
     gap: 8,
+    alignItems: "center",
+  },
+  compactSelect: {
+    width: "100%",
+    minWidth: 0,
+    minHeight: 42,
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 10px",
+    boxSizing: "border-box",
+    fontSize: 13,
+    outline: "none",
   },
   primaryButton: {
-    minHeight: 44,
+    minHeight: 42,
     borderRadius: 999,
     border: 0,
     background: "#e4ef16",
     color: "#101406",
-    padding: "0 15px",
+    padding: "0 13px",
     fontWeight: 950,
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   dangerButton: {
-    minHeight: 44,
+    minHeight: 42,
     borderRadius: 999,
     border: "1px solid rgba(255,90,90,0.18)",
     background: "rgba(255,70,70,0.10)",
     color: "#ffb4b4",
-    padding: "0 15px",
+    padding: "0 13px",
     fontWeight: 950,
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
-  responseList: {
+  organizerCompact: {
     display: "grid",
-    gap: 9,
-  },
-  responseRow: {
-    display: "grid",
-    gridTemplateColumns: "42px minmax(0, 1fr)",
     gap: 10,
+  },
+  peoplePanel: {
+    display: "grid",
+    gap: 8,
+    minWidth: 0,
+  },
+  avatarGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: 8,
+    minWidth: 0,
+  },
+  personChip: {
+    minWidth: 0,
+    borderRadius: 16,
+    padding: 8,
+    background: "rgba(0,0,0,0.17)",
+    display: "grid",
+    gridTemplateColumns: "34px minmax(0, 1fr)",
+    gap: 8,
     alignItems: "center",
-    borderRadius: 18,
-    padding: 10,
-    background: "rgba(0,0,0,0.16)",
   },
   avatar: {
-    width: 42,
-    height: 42,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     objectFit: "cover",
   },
   avatarFallback: {
-    width: 42,
-    height: 42,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     display: "grid",
     placeItems: "center",
     background: "rgba(228,239,22,0.12)",
     color: "#e4ef16",
+    fontSize: 11,
     fontWeight: 950,
   },
-  responseText: {
+  personText: {
     minWidth: 0,
     display: "grid",
-    gap: 2,
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 14,
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 13,
   },
-  finalBox: {
-    borderRadius: 22,
-    padding: 14,
+  declinedLine: {
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 12,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  finalCompact: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 96px auto",
+    gap: 8,
+    alignItems: "center",
+    borderRadius: 18,
+    padding: 10,
     background: "rgba(228,239,22,0.075)",
     border: "1px solid rgba(228,239,22,0.18)",
+    minWidth: 0,
+  },
+  finalText: {
+    minWidth: 0,
     display: "grid",
-    gap: 12,
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    fontWeight: 850,
+  },
+  timeInput: {
+    width: "100%",
+    minWidth: 0,
+    minHeight: 40,
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    padding: "0 8px",
+    boxSizing: "border-box",
+    fontSize: 14,
+    outline: "none",
+  },
+  primaryButtonWide: {
+    minHeight: 40,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 14px",
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
 };
