@@ -260,10 +260,13 @@ export default function AdminPage() {
           const keyRef = payload?.debug?.env?.service_key_ref
             ? ` Key ref: ${payload.debug.env.service_key_ref}.`
             : "";
+          const keyType = payload?.debug?.env?.service_key_type
+            ? ` Key type: ${payload.debug.env.service_key_type}.`
+            : "";
           const expectedRef = payload?.debug?.env?.expected_project_ref
             ? ` URL ref: ${payload.debug.env.expected_project_ref}.`
             : "";
-          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}${keyRef}${expectedRef}`);
+          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}${keyRef}${keyType}${expectedRef}`);
         }
 
         setLastCreated({
