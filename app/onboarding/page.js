@@ -15,6 +15,7 @@ export default function OnboardingPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [message, setMessage] = useState("");
   const [currentRole, setCurrentRole] = useState("user");
+  const [adminInvite, setAdminInvite] = useState(null);
 
   const [form, setForm] = useState({
     first_name: "",
@@ -51,6 +52,28 @@ export default function OnboardingPage() {
         ...current,
         email: currentUser.email || "",
       }));
+
+      const inviteEmail = (currentUser.email || "").trim().toLowerCase();
+
+      if (inviteEmail) {
+        const { data: invite } = await supabase
+          .from("admin_user_invites")
+          .select("id,first_name,last_name,email,role,status")
+          .eq("email", inviteEmail)
+          .eq("status", "pending")
+          .maybeSingle();
+
+        if (invite) {
+          setAdminInvite(invite);
+          setCurrentRole(invite.role || "user");
+          setForm((current) => ({
+            ...current,
+            first_name: invite.first_name || current.first_name,
+            last_name: invite.last_name || current.last_name,
+            email: invite.email || current.email,
+          }));
+        }
+      }
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -209,6 +232,17 @@ export default function OnboardingPage() {
         .insert(rows);
 
       if (sportsError) throw sportsError;
+
+      if (adminInvite?.id) {
+        await supabase
+          .from("admin_user_invites")
+          .update({
+            status: "accepted",
+            accepted_user_id: user.id,
+            accepted_at: new Date().toISOString(),
+          })
+          .eq("id", adminInvite.id);
+      }
 
       router.replace(editMode ? `/profile/${user.id}` : "/trainings");
     } catch (err) {
