@@ -50,15 +50,35 @@ function createUserClient(token) {
 }
 
 function createServiceClient() {
+  const usesModernSecretKey = isModernSecretKey(supabaseServiceRoleKey);
+
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+      detectSessionInUrl: false,
     },
     global: {
       headers: {
         apikey: supabaseServiceRoleKey,
-        Authorization: `Bearer ${supabaseServiceRoleKey}`,
+        ...(usesModernSecretKey
+          ? {}
+          : { Authorization: `Bearer ${supabaseServiceRoleKey}` }),
+      },
+      fetch: async (input, init = {}) => {
+        if (!usesModernSecretKey) {
+          return fetch(input, init);
+        }
+
+        const headers = new Headers(init.headers || {});
+        headers.set("apikey", supabaseServiceRoleKey);
+        headers.delete("authorization");
+        headers.delete("Authorization");
+
+        return fetch(input, {
+          ...init,
+          headers,
+        });
       },
     },
   });
@@ -205,7 +225,7 @@ export async function POST(request) {
     if (smokeError) {
       return json(500, {
         error:
-          `Admin secret smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. Check that SUPABASE_SERVICE_ROLE_KEY is the Secret key starting with sb_secret_ from project ${getProjectRefFromUrl(supabaseUrl)} and redeploy.`,
+          `Admin secret smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. For sb_secret_ keys the API must use apikey without Bearer Authorization. This patch applies that fix.`,
         debug: {
           ...debug,
           smoke_error: {
