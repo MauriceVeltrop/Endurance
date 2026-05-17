@@ -229,7 +229,7 @@ export default function OnboardingPage() {
 
       const { error: sportsError } = await supabase
         .from("user_sports")
-        .insert(rows);
+        .upsert(rows, { onConflict: "user_id,sport_id", ignoreDuplicates: true });
 
       if (sportsError) throw sportsError;
 
