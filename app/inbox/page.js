@@ -221,23 +221,17 @@ export default function InboxPage() {
     setNotice("");
 
     try {
-      const { data: existing } = await supabase
+      const { error: joinError } = await supabase
         .from("session_participants")
-        .select("id")
-        .eq("session_id", invite.session_id)
-        .eq("user_id", profile.id)
-        .maybeSingle();
-
-      if (!existing?.id) {
-        const { error: joinError } = await supabase
-          .from("session_participants")
-          .insert({
+        .upsert(
+          {
             session_id: invite.session_id,
             user_id: profile.id,
-          });
+          },
+          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+        );
 
-        if (joinError) throw joinError;
-      }
+      if (joinError) throw joinError;
 
       if (invite.training?.visibility === "selected") {
         const { error: visibilityError } = await supabase
