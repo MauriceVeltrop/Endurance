@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import PlanningPoll from "../../../components/trainings/PlanningPoll";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
+import { getTrainingHeroImage } from "../../../lib/sportImages";
 
 const sportLabels = {
   running: "Running",
@@ -145,6 +146,7 @@ export default function TrainingDetailPage() {
 
   const primarySport = getPrimarySport(training);
   const sportLabel = getSportLabel(primarySport);
+  const heroImage = getTrainingHeroImage(training, primarySport);
   const participantCount = participants.length;
   const isFull = Boolean(training?.max_participants && participantCount >= Number(training.max_participants));
   const canManage = Boolean(user?.id && training?.creator_id === user.id);
@@ -478,8 +480,12 @@ export default function TrainingDetailPage() {
         {!loading && training ? (
           <>
             <article style={styles.hero}>
-              {training.teaser_photo_url ? (
-                <img src={training.teaser_photo_url} alt="" style={styles.heroPhoto} />
+              {heroImage?.src ? (
+                <img
+                  src={heroImage.src}
+                  alt=""
+                  style={{ ...styles.heroPhoto, objectPosition: heroImage.position || "center center" }}
+                />
               ) : (
                 <div style={styles.heroArt} aria-hidden="true">
                   <span>{sportLabel.slice(0, 2).toUpperCase()}</span>
