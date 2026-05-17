@@ -97,9 +97,9 @@ export default function AdminPage() {
     loadAdmin();
   }, []);
 
-  async function loadAdmin() {
+  async function loadAdmin(options = {}) {
     setLoading(true);
-    setMessage("");
+    if (!options.keepMessage) setMessage("");
 
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -253,7 +253,8 @@ export default function AdminPage() {
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload?.error || "Could not create user.");
+          const debugText = payload?.debug ? ` Stage: ${payload.debug.stage || "unknown"}.` : "";
+          throw new Error(`${payload?.error || "Could not create user."}${debugText}`);
         }
 
         setLastCreated({
@@ -261,7 +262,11 @@ export default function AdminPage() {
           temporary_password: temporaryPassword,
           role,
         });
-        setMessage(`User created for ${firstName} ${lastName}. Share the temporary password discreetly.`);
+        setMessage(
+          payload?.warning
+            ? `User saved, but with warning: ${payload.warning}`
+            : `User created for ${firstName} ${lastName}. Share the temporary password discreetly.`
+        );
       } else {
         const { error } = await supabase
           .from("admin_user_invites")
@@ -283,7 +288,7 @@ export default function AdminPage() {
       }
 
       resetCreateForm();
-      await loadAdmin();
+      await loadAdmin({ keepMessage: true });
     } catch (error) {
       console.error("Create invited user error", error);
       setMessage(error?.message || "Could not create user.");
