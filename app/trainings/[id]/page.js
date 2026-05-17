@@ -142,6 +142,7 @@ export default function TrainingDetailPage() {
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [planningOptionsStatus, setPlanningOptionsStatus] = useState("unknown");
   const [errorText, setErrorText] = useState("");
 
   const primarySport = getPrimarySport(training);
@@ -539,9 +540,9 @@ export default function TrainingDetailPage() {
               <TrainingStat label="Athletes" value={`${participantCount}${training.max_participants ? ` / ${training.max_participants}` : ""}`} />
             </section>
 
-            <PlanningPoll training={training} user={user} canManage={canManage} onChanged={loadTraining} />
+            <PlanningPoll training={training} user={user} canManage={canManage} onChanged={loadTraining} onOptionsLoaded={(hasOptions) => setPlanningOptionsStatus(hasOptions ? "has-options" : "none")} />
 
-            {training.planning_type === "flexible" && !hasFinalTime ? (
+            {training.planning_type === "flexible" && !hasFinalTime && !canManage && planningOptionsStatus === "none" ? (
               <section style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
@@ -570,21 +571,6 @@ export default function TrainingDetailPage() {
                   <button type="button" onClick={clearSessionAvailability} disabled={availabilityBusy} style={styles.secondaryButton}>Clear</button>
                 </div>
 
-                {canManage ? (
-                  <div style={styles.finalTimeBox}>
-                    <div style={styles.cardKicker}>Organizer</div>
-                    <h3 style={styles.smallTitle}>Set final start time</h3>
-                    <div style={styles.formGrid}>
-                      <label style={styles.label}>Date
-                        <input type="date" value={finalStartForm.date} onChange={(event) => updateFinalStartForm("date", event.target.value)} style={styles.input} />
-                      </label>
-                      <label style={styles.label}>Time
-                        <input type="time" value={finalStartForm.time} onChange={(event) => updateFinalStartForm("time", event.target.value)} style={styles.input} />
-                      </label>
-                    </div>
-                    <button type="button" onClick={saveFinalStartTime} disabled={busy} style={styles.primaryButton}>{busy ? "Saving..." : "Save final time"}</button>
-                  </div>
-                ) : null}
               </section>
             ) : null}
 
