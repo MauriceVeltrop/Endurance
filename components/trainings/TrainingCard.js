@@ -20,9 +20,11 @@ export default function TrainingCard({
   onJoin,
   onOpen,
   onCreatorClick,
+  actionNeeded = false,
+  actionLabel = "Time to decide",
 }) {
   return (
-    <article style={styles.card}>
+    <article style={actionNeeded ? styles.cardActionNeeded : styles.card}>
       <button
         type="button"
         onClick={onOpen}
@@ -35,6 +37,7 @@ export default function TrainingCard({
           <div style={styles.topRow}>
             <span style={styles.sportBadge}>{sportLabel}</span>
             <span style={styles.visibilityBadge}>{training.visibility}</span>
+            {actionNeeded ? <span style={styles.actionBadge}>⚡ {actionLabel}</span> : null}
           </div>
 
           <h2 style={styles.title}>{training.title}</h2>
