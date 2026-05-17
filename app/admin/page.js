@@ -253,8 +253,11 @@ export default function AdminPage() {
         const payload = await response.json();
 
         if (!response.ok) {
-          const debugText = payload?.debug ? ` Stage: ${payload.debug.stage || "unknown"}.` : "";
-          throw new Error(`${payload?.error || "Could not create user."}${debugText}`);
+          const stage = payload?.debug?.stage ? ` Stage: ${payload.debug.stage}.` : "";
+          const claim = payload?.debug?.env?.service_role_claim
+            ? ` Service key role: ${payload.debug.env.service_role_claim}.`
+            : "";
+          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}`);
         }
 
         setLastCreated({
@@ -262,11 +265,7 @@ export default function AdminPage() {
           temporary_password: temporaryPassword,
           role,
         });
-        setMessage(
-          payload?.warning
-            ? `User saved, but with warning: ${payload.warning}`
-            : `User created for ${firstName} ${lastName}. Share the temporary password discreetly.`
-        );
+        setMessage(`User created for ${firstName} ${lastName}. Share the temporary password discreetly.`);
       } else {
         const { error } = await supabase
           .from("admin_user_invites")
