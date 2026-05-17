@@ -37,7 +37,7 @@ function formatOption(option) {
   return `${option.starts_on} · ${option.window_start?.slice(0, 5)}–${option.window_end?.slice(0, 5)}`;
 }
 
-export default function PlanningPoll({ training, user, canManage, onChanged }) {
+export default function PlanningPoll({ training, user, canManage, onChanged, onOptionsLoaded }) {
   const [options, setOptions] = useState([]);
   const [responses, setResponses] = useState([]);
   const [profiles, setProfiles] = useState({});
@@ -77,11 +77,13 @@ export default function PlanningPoll({ training, user, canManage, onChanged }) {
         console.warn("Planning poll options not available", optionError);
         setOptions([]);
         setResponses([]);
+        onOptionsLoaded?.(false);
         return;
       }
 
       const loadedOptions = optionRows || [];
       setOptions(loadedOptions);
+      onOptionsLoaded?.(loadedOptions.length > 0);
 
       const { data: responseRows, error: responseError } = await supabase
         .from("training_time_responses")
@@ -134,6 +136,7 @@ export default function PlanningPoll({ training, user, canManage, onChanged }) {
     } catch (error) {
       console.error("Planning poll load error", error);
       setMessage(error?.message || "Could not load planning options.");
+      onOptionsLoaded?.(false);
     }
   }
 
