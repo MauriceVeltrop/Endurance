@@ -27,6 +27,12 @@ export default function AdminPage() {
   const [profile, setProfile] = useState(null);
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState("");
+  const [inviteForm, setInviteForm] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    role: "user",
+  });
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
@@ -197,8 +203,67 @@ export default function AdminPage() {
     }
   }
 
-  async function createPlaceholderUser() {
-    setMessage("Adding users directly requires Supabase Auth admin/server support. For now, create accounts via sign-up, then manage roles here.");
+  function updateInviteForm(key, value) {
+    setInviteForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function createInvitedUser(event) {
+    event.preventDefault();
+
+    if (!profile || !allowedRoles.includes(profile.role)) {
+      setMessage("You do not have access to add users.");
+      return;
+    }
+
+    const firstName = inviteForm.first_name.trim();
+    const lastName = inviteForm.last_name.trim();
+    const email = inviteForm.email.trim().toLowerCase();
+    const role = inviteForm.role || "user";
+
+    if (!firstName) return setMessage("First name is required.");
+    if (!lastName) return setMessage("Last name is required.");
+    if (!email) return setMessage("Email address is required.");
+    if (!canSetRole({ id: "new-user", role: "user" }, role)) {
+      return setMessage("You cannot assign that role.");
+    }
+
+    setBusyId("create-user");
+    setMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("admin_user_invites")
+        .upsert(
+          {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            role,
+            invited_by: profile.id,
+            status: "pending",
+          },
+          { onConflict: "email" }
+        );
+
+      if (error) throw error;
+
+      setInviteForm({
+        first_name: "",
+        last_name: "",
+        email: "",
+        role: "user",
+      });
+
+      setMessage(`Invite prepared for ${firstName} ${lastName}. They can sign up with ${email} and will receive role: ${role}.`);
+    } catch (error) {
+      console.error("Create invited user error", error);
+      setMessage(error?.message || "Could not prepare invited user.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   return (
@@ -229,6 +294,69 @@ export default function AdminPage() {
           <button type="button" onClick={() => router.push("/admin/system-check")} style={styles.primaryButton}>
             Open check
           </button>
+        </section>
+
+        <section style={styles.inviteCard}>
+          <div>
+            <div style={styles.kicker}>Add user</div>
+            <h2 style={styles.systemCheckTitle}>Prepare invited user</h2>
+            <p style={styles.muted}>
+              Add first name, last name, email and role. When the user signs up with this email, onboarding applies these rights.
+            </p>
+          </div>
+
+          <form onSubmit={createInvitedUser} style={styles.inviteForm}>
+            <div style={styles.inviteGrid}>
+              <label style={styles.label}>
+                First name
+                <input
+                  value={inviteForm.first_name}
+                  onChange={(event) => updateInviteForm("first_name", event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+
+              <label style={styles.label}>
+                Last name
+                <input
+                  value={inviteForm.last_name}
+                  onChange={(event) => updateInviteForm("last_name", event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+
+              <label style={styles.label}>
+                Email
+                <input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={(event) => updateInviteForm("email", event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+
+              <label style={styles.label}>
+                Role
+                <select
+                  value={inviteForm.role}
+                  onChange={(event) => updateInviteForm("role", event.target.value)}
+                  style={styles.input}
+                >
+                  {roleOptions
+                    .filter((role) => profile?.role === "admin" || ["user", "organizer"].includes(role))
+                    .map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+
+            <button type="submit" disabled={busyId === "create-user"} style={styles.primaryButton}>
+              {busyId === "create-user" ? "Saving..." : "Add invited user"}
+            </button>
+          </form>
         </section>
 
         {message ? <section style={styles.message}>{message}</section> : null}
