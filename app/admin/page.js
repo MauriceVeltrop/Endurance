@@ -21,12 +21,27 @@ function initials(user) {
     .toUpperCase();
 }
 
+function formatJoined(value) {
+  if (!value) return "Unknown";
+  try {
+    return new Date(value).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "Unknown";
+  }
+}
+
 export default function AdminPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState(null);
   const [users, setUsers] = useState([]);
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [inviteForm, setInviteForm] = useState({
     first_name: "",
     last_name: "",
@@ -37,12 +52,16 @@ export default function AdminPage() {
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
 
+  const isAllowed = allowedRoles.includes(profile?.role);
+
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
 
-    return users.filter((user) =>
-      [
+    return users.filter((user) => {
+      if (roleFilter !== "all" && user.role !== roleFilter) return false;
+      if (!q) return true;
+
+      return [
         user.name,
         user.email,
         user.first_name,
@@ -53,9 +72,12 @@ export default function AdminPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(q)
-    );
-  }, [query, users]);
+        .includes(q);
+    });
+  }, [query, roleFilter, users]);
+
+  const blockedCount = users.filter((user) => user.blocked).length;
+  const adminCount = users.filter((user) => user.role === "admin").length;
 
   useEffect(() => {
     loadAdmin();
@@ -87,14 +109,13 @@ export default function AdminPage() {
         return;
       }
 
+      setProfile(profileRow || null);
+
       if (!allowedRoles.includes(profileRow?.role)) {
-        setProfile(profileRow || null);
         setMessage("You do not have access to the Admin page.");
         setUsers([]);
         return;
       }
-
-      setProfile(profileRow);
 
       const { data: userRows, error: usersError } = await supabase
         .from("profiles")
@@ -105,6 +126,13 @@ export default function AdminPage() {
       if (usersError) throw usersError;
 
       setUsers(userRows || []);
+
+      const { count } = await supabase
+        .from("admin_user_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+
+      setPendingInviteCount(count || 0);
     } catch (error) {
       console.error("Admin load error", error);
       setMessage(error?.message || "Could not load Admin page.");
@@ -127,7 +155,7 @@ export default function AdminPage() {
   }
 
   function canSetRole(targetUser, nextRole) {
-    if (!targetUser || !profile) return false;
+    if (!profile || !targetUser) return false;
 
     if (targetUser.id !== "new-user" && !canEditUser(targetUser)) return false;
 
@@ -138,6 +166,70 @@ export default function AdminPage() {
     }
 
     return false;
+  }
+
+  function updateInviteForm(key, value) {
+    setInviteForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function createInvitedUser(event) {
+    event.preventDefault();
+
+    if (!isAllowed) {
+      setMessage("You do not have access to add users.");
+      return;
+    }
+
+    const firstName = inviteForm.first_name.trim();
+    const lastName = inviteForm.last_name.trim();
+    const email = inviteForm.email.trim().toLowerCase();
+    const role = inviteForm.role || "user";
+
+    if (!firstName) return setMessage("First name is required.");
+    if (!lastName) return setMessage("Last name is required.");
+    if (!email) return setMessage("Email address is required.");
+    if (!canSetRole({ id: "new-user", role: "user" }, role)) {
+      return setMessage("You cannot assign that role.");
+    }
+
+    setBusyId("create-user");
+    setMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("admin_user_invites")
+        .upsert(
+          {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            role,
+            invited_by: profile.id,
+            status: "pending",
+          },
+          { onConflict: "email" }
+        );
+
+      if (error) throw error;
+
+      setInviteForm({
+        first_name: "",
+        last_name: "",
+        email: "",
+        role: "user",
+      });
+
+      setMessage(`Invite prepared for ${firstName} ${lastName}.`);
+      await loadAdmin();
+    } catch (error) {
+      console.error("Create invited user error", error);
+      setMessage(error?.message || "Could not prepare invited user.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   async function updateRole(targetUser, nextRole) {
@@ -205,214 +297,197 @@ export default function AdminPage() {
     }
   }
 
-  function updateInviteForm(key, value) {
-    setInviteForm((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  }
-
-  async function createInvitedUser(event) {
-    event.preventDefault();
-
-    if (!profile || !allowedRoles.includes(profile.role)) {
-      setMessage("You do not have access to add users.");
-      return;
-    }
-
-    const firstName = inviteForm.first_name.trim();
-    const lastName = inviteForm.last_name.trim();
-    const email = inviteForm.email.trim().toLowerCase();
-    const role = inviteForm.role || "user";
-
-    if (!firstName) return setMessage("First name is required.");
-    if (!lastName) return setMessage("Last name is required.");
-    if (!email) return setMessage("Email address is required.");
-    if (!canSetRole({ id: "new-user", role: "user" }, role)) {
-      return setMessage("You cannot assign that role.");
-    }
-
-    setBusyId("create-user");
-    setMessage("");
-
-    try {
-      const { error } = await supabase
-        .from("admin_user_invites")
-        .upsert(
-          {
-            first_name: firstName,
-            last_name: lastName,
-            email,
-            role,
-            invited_by: profile.id,
-            status: "pending",
-          },
-          { onConflict: "email" }
-        );
-
-      if (error) throw error;
-
-      setInviteForm({
-        first_name: "",
-        last_name: "",
-        email: "",
-        role: "user",
-      });
-
-      setMessage(`Invite prepared for ${firstName} ${lastName}. They can sign up with ${email} and will receive role: ${role}.`);
-    } catch (error) {
-      console.error("Create invited user error", error);
-      setMessage(error?.message || "Could not prepare invited user.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
         <AppHeader profile={profile} compact />
 
-        <header style={styles.header}>
+        <header style={styles.hero}>
           <div style={styles.kicker}>Admin</div>
-          <div style={styles.titleRow}>
-            <h1 style={styles.title}>Manage Endurance.</h1>
-            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
-              Trainings
-            </button>
-          </div>
+          <h1 style={styles.title}>Manage Endurance<span style={styles.dot}>.</span></h1>
           <p style={styles.subtitle}>
             Manage users, roles and access for the verified Endurance community.
           </p>
         </header>
 
-        <section style={styles.systemCheckCard}>
-          <div>
-            <div style={styles.kicker}>MVP stability</div>
-            <h2 style={styles.systemCheckTitle}>Run system check</h2>
-            <p style={styles.muted}>Validate database, RLS and beta flow after every deploy.</p>
-          </div>
-
-          <button type="button" onClick={() => router.push("/admin/system-check")} style={styles.primaryButton}>
-            Open check
-          </button>
-        </section>
-
-        {allowedRoles.includes(profile?.role) ? (
-        <section style={styles.inviteCard}>
-          <div>
-            <div style={styles.kicker}>Add user</div>
-            <h2 style={styles.systemCheckTitle}>Prepare invited user</h2>
-            <p style={styles.muted}>
-              Add first name, last name, email and role. When the user signs up with this email, onboarding applies these rights.
-            </p>
-          </div>
-
-          <form onSubmit={createInvitedUser} style={styles.inviteForm}>
-            <div style={styles.inviteGrid}>
-              <label style={styles.label}>
-                First name
-                <input
-                  value={inviteForm.first_name}
-                  onChange={(event) => updateInviteForm("first_name", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
-              <label style={styles.label}>
-                Last name
-                <input
-                  value={inviteForm.last_name}
-                  onChange={(event) => updateInviteForm("last_name", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
-              <label style={styles.label}>
-                Email
-                <input
-                  type="email"
-                  value={inviteForm.email}
-                  onChange={(event) => updateInviteForm("email", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
-              <label style={styles.label}>
-                Role
-                <select
-                  value={inviteForm.role}
-                  onChange={(event) => updateInviteForm("role", event.target.value)}
-                  style={styles.input}
-                >
-                  {roleOptions
-                    .filter((role) => {
-                      if (profile?.role === "admin") return true;
-                      return ["user", "organizer"].includes(role);
-                    })
-                    .map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            </div>
-
-            <button type="submit" disabled={busyId === "create-user"} style={styles.primaryButton}>
-              {busyId === "create-user" ? "Saving..." : "Add invited user"}
-            </button>
-          </form>
-        </section>
-
-        ) : null}
-
         {message ? <section style={styles.message}>{message}</section> : null}
 
-        {allowedRoles.includes(profile?.role) ? (
+        {!isAllowed && !loading ? (
+          <section style={styles.card}>
+            <h2 style={styles.cardTitle}>No access</h2>
+            <p style={styles.muted}>This page is only available for moderators and admins.</p>
+          </section>
+        ) : null}
+
+        {isAllowed ? (
           <>
-            <section style={styles.statsGrid}>
-              <div style={styles.statCard}>
-                <span style={styles.statLabel}>Users</span>
-                <strong style={styles.statValue}>{loading ? "…" : users.length}</strong>
-                <span style={styles.statHint}>total profiles</span>
+            <section style={styles.systemCard}>
+              <div style={styles.iconBubbleLime}>🛡</div>
+
+              <div style={styles.cardCopy}>
+                <h2 style={styles.cardTitle}>Run system check</h2>
+                <p style={styles.muted}>Validate database, RLS and beta flow after every deploy.</p>
               </div>
 
-              <div style={styles.statCard}>
-                <span style={styles.statLabel}>Blocked</span>
-                <strong style={styles.statValue}>{loading ? "…" : users.filter((user) => user.blocked).length}</strong>
-                <span style={styles.statHint}>restricted accounts</span>
-              </div>
+              <button type="button" onClick={() => router.push("/admin/system-check")} style={styles.primaryButton}>
+                Open check →
+              </button>
             </section>
 
-            <section style={styles.panel}>
-              <div style={styles.panelHeader}>
+            <section style={styles.inviteCard} id="add-user">
+              <div style={styles.sectionIntro}>
+                <div style={styles.iconInline}>👤＋</div>
                 <div>
-                  <div style={styles.panelKicker}>Users</div>
-                  <h2 style={styles.panelTitle}>Role management</h2>
+                  <div style={styles.kicker}>Add user</div>
+                  <h2 style={styles.cardTitle}>Prepare invited user</h2>
+                  <p style={styles.muted}>
+                    Add first name, last name, email and role. When the user signs up with this email, onboarding applies these rights.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={createInvitedUser} style={styles.inviteForm}>
+                <div style={styles.twoColumns}>
+                  <label style={styles.label}>
+                    First name
+                    <input
+                      value={inviteForm.first_name}
+                      onChange={(event) => updateInviteForm("first_name", event.target.value)}
+                      placeholder="First name"
+                      style={styles.input}
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    Last name
+                    <input
+                      value={inviteForm.last_name}
+                      onChange={(event) => updateInviteForm("last_name", event.target.value)}
+                      placeholder="Last name"
+                      style={styles.input}
+                    />
+                  </label>
                 </div>
 
-                <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={styles.secondaryButton}>
-                  Add user
+                <label style={styles.label}>
+                  Email
+                  <input
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(event) => updateInviteForm("email", event.target.value)}
+                    placeholder="email@domain.com"
+                    style={styles.input}
+                  />
+                </label>
+
+                <div style={styles.roleGrid}>
+                  <label style={styles.label}>
+                    Role
+                    <select
+                      value={inviteForm.role}
+                      onChange={(event) => updateInviteForm("role", event.target.value)}
+                      style={styles.input}
+                    >
+                      {roleOptions
+                        .filter((role) => {
+                          if (profile?.role === "admin") return true;
+                          return ["user", "organizer"].includes(role);
+                        })
+                        .map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <div style={styles.roleInfo}>
+                    <span style={styles.infoIcon}>ⓘ</span>
+                    <span>Roles determine the level of access within the platform.</span>
+                  </div>
+                </div>
+
+                <button type="submit" disabled={busyId === "create-user"} style={styles.primaryButtonWide}>
+                  👤＋ {busyId === "create-user" ? "Saving..." : "Add invited user"}
+                </button>
+              </form>
+            </section>
+
+            <section style={styles.statsGrid}>
+              <article style={styles.statCard}>
+                <span style={styles.statIconLime}>👥</span>
+                <strong style={styles.statValue}>{loading ? "…" : users.length}</strong>
+                <span style={styles.statTitle}>Total users</span>
+                <span style={styles.statHint}>All registered profiles</span>
+              </article>
+
+              <article style={styles.statCard}>
+                <span style={styles.statIconBlue}>✉</span>
+                <strong style={styles.statValue}>{pendingInviteCount}</strong>
+                <span style={styles.statTitle}>Pending invites</span>
+                <span style={styles.statHint}>Invites not accepted yet</span>
+              </article>
+
+              <article style={styles.statCard}>
+                <span style={styles.statIconPurple}>🛡</span>
+                <strong style={styles.statValue}>{loading ? "…" : blockedCount}</strong>
+                <span style={styles.statTitle}>Blocked users</span>
+                <span style={styles.statHint}>Restricted accounts</span>
+              </article>
+
+              <article style={styles.statCard}>
+                <span style={styles.statIconOrange}>♛</span>
+                <strong style={styles.statValue}>{loading ? "…" : adminCount}</strong>
+                <span style={styles.statTitle}>Admins</span>
+                <span style={styles.statHint}>Full system access</span>
+              </article>
+            </section>
+
+            <section style={styles.managementCard}>
+              <div style={styles.managementHeader}>
+                <div style={styles.sectionIntroCompact}>
+                  <span style={styles.iconSmall}>👥</span>
+                  <h2 style={styles.cardTitle}>User management</h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("add-user")?.scrollIntoView({ behavior: "smooth" })}
+                  style={styles.secondaryButton}
+                >
+                  👤＋ Add user
                 </button>
               </div>
 
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search name, email, location or role..."
-                style={styles.searchInput}
-              />
+              <div style={styles.searchGrid}>
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search name, email, location or role..."
+                  style={styles.searchInput}
+                />
+
+                <select
+                  value={roleFilter}
+                  onChange={(event) => setRoleFilter(event.target.value)}
+                  style={styles.searchInput}
+                >
+                  <option value="all">All roles</option>
+                  {roleOptions.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
 
               {loading ? (
-                <p style={styles.panelText}>Loading users...</p>
+                <p style={styles.muted}>Loading users...</p>
               ) : filteredUsers.length ? (
                 <div style={styles.userList}>
                   {filteredUsers.map((user) => {
                     const editable = canEditUser(user);
 
                     return (
-                      <article key={user.id} style={user.blocked ? styles.userCardBlocked : styles.userCard}>
+                      <article key={user.id} style={user.blocked ? styles.userRowBlocked : styles.userRow}>
                         <button
                           type="button"
                           onClick={() => router.push(`/profile/${user.id}`)}
@@ -427,11 +502,13 @@ export default function AdminPage() {
                           <span style={styles.userText}>
                             <strong>{displayName(user)}</strong>
                             <span>{user.email || "No email"}</span>
-                            <small>{user.location || "Location not set"}</small>
+                            <small>{user.location || "Location not set"} · {formatJoined(user.created_at)}</small>
                           </span>
                         </button>
 
                         <div style={styles.userControls}>
+                          <span style={styles.statusPill}>{user.blocked ? "Blocked" : "Active"}</span>
+
                           <select
                             value={user.role || "user"}
                             disabled={!editable || busyId === user.id}
@@ -445,22 +522,31 @@ export default function AdminPage() {
                             ))}
                           </select>
 
-                          <button
-                            type="button"
-                            onClick={() => toggleBlocked(user)}
-                            disabled={!editable || busyId === user.id}
-                            style={user.blocked ? styles.unblockButton : styles.blockButton}
-                          >
-                            {busyId === user.id ? "..." : user.blocked ? "Unblock" : "Block"}
-                          </button>
+                          {editable ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleBlocked(user)}
+                              disabled={busyId === user.id}
+                              style={user.blocked ? styles.unblockButton : styles.blockButton}
+                            >
+                              {user.blocked ? "Unblock" : "Block"}
+                            </button>
+                          ) : null}
                         </div>
                       </article>
                     );
                   })}
                 </div>
               ) : (
-                <p style={styles.panelText}>No users found.</p>
+                <p style={styles.muted}>No users found.</p>
               )}
+            </section>
+
+            <section style={styles.infoCard}>
+              <span style={styles.infoIconLarge}>ⓘ</span>
+              <p style={styles.muted}>
+                Invited users receive their role automatically when they sign up with the invited email and complete onboarding.
+              </p>
             </section>
           </>
         ) : null}
@@ -469,26 +555,27 @@ export default function AdminPage() {
   );
 }
 
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
+const glass =
+  "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))";
 
 const styles = {
   page: {
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 34%), linear-gradient(180deg, #07100b 0%, #050505 60%, #020202 100%)",
     color: "white",
-    padding: "18px 16px 42px",
+    padding: "18px 16px 44px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     overflowX: "hidden",
   },
   shell: {
     width: "100%",
-    maxWidth: 980,
+    maxWidth: 1040,
     margin: "0 auto",
     display: "grid",
     gap: 18,
   },
-  header: {
+  hero: {
     display: "grid",
     gap: 10,
   },
@@ -496,45 +583,24 @@ const styles = {
     color: "#e4ef16",
     fontSize: 13,
     fontWeight: 950,
-    letterSpacing: "0.14em",
+    letterSpacing: "0.16em",
     textTransform: "uppercase",
-  },
-  titleRow: {
-    display: "grid",
-    gap: 12,
   },
   title: {
     margin: 0,
-    fontSize: "clamp(38px, 11vw, 64px)",
-    lineHeight: 0.96,
-    letterSpacing: "-0.065em",
+    fontSize: "clamp(46px, 13vw, 76px)",
+    lineHeight: 0.92,
+    letterSpacing: "-0.075em",
+  },
+  dot: {
+    color: "#e4ef16",
   },
   subtitle: {
     margin: 0,
+    maxWidth: 620,
     color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.5,
-    maxWidth: 660,
-  },
-  primaryButton: {
-    minHeight: 46,
-    borderRadius: 999,
-    border: 0,
-    background: "#e4ef16",
-    color: "#101406",
-    padding: "0 16px",
-    fontWeight: 950,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
-  secondaryButton: {
-    minHeight: 42,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.08)",
-    color: "white",
-    padding: "0 15px",
-    fontWeight: 950,
-    cursor: "pointer",
+    lineHeight: 1.55,
+    fontSize: 18,
   },
   message: {
     borderRadius: 20,
@@ -543,79 +609,236 @@ const styles = {
     border: "1px solid rgba(228,239,22,0.18)",
     color: "#e4ef16",
     fontWeight: 850,
-    lineHeight: 1.45,
+  },
+  card: {
+    borderRadius: 28,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 10,
+  },
+  systemCard: {
+    borderRadius: 28,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gridTemplateColumns: "64px minmax(0,1fr) auto",
+    gap: 18,
+    alignItems: "center",
+  },
+  inviteCard: {
+    borderRadius: 30,
+    padding: "22px 22px 24px",
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 18,
+  },
+  sectionIntro: {
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0,1fr)",
+    gap: 14,
+    alignItems: "start",
+  },
+  sectionIntroCompact: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+  },
+  iconInline: {
+    color: "#e4ef16",
+    fontSize: 32,
+    lineHeight: 1,
+  },
+  iconSmall: {
+    color: "#e4ef16",
+    fontSize: 26,
+    lineHeight: 1,
+  },
+  iconBubbleLime: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    display: "grid",
+    placeItems: "center",
+    color: "#e4ef16",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    fontSize: 32,
+  },
+  cardCopy: {
+    display: "grid",
+    gap: 4,
+  },
+  cardTitle: {
+    margin: 0,
+    fontSize: "clamp(25px, 6.5vw, 34px)",
+    lineHeight: 1,
+    letterSpacing: "-0.055em",
+  },
+  muted: {
+    margin: 0,
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.48,
+  },
+  inviteForm: {
+    display: "grid",
+    gap: 14,
+  },
+  twoColumns: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: 14,
+  },
+  roleGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 0.9fr)",
+    gap: 14,
+    alignItems: "end",
+  },
+  label: {
+    display: "grid",
+    gap: 8,
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 14,
+    fontWeight: 850,
+  },
+  input: {
+    width: "100%",
+    minHeight: 54,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.23)",
+    color: "white",
+    padding: "0 14px",
+    boxSizing: "border-box",
+    fontSize: 16,
+    outline: "none",
+  },
+  roleInfo: {
+    minHeight: 54,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.18)",
+    color: "rgba(255,255,255,0.70)",
+    padding: "12px 14px",
+    boxSizing: "border-box",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    lineHeight: 1.35,
+  },
+  infoIcon: {
+    color: "rgba(255,255,255,0.80)",
+    fontSize: 22,
+  },
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 20px",
+    fontWeight: 950,
+    cursor: "pointer",
+    boxShadow: "0 18px 46px rgba(228,239,22,0.16)",
+    whiteSpace: "nowrap",
+  },
+  primaryButtonWide: {
+    width: "fit-content",
+    minHeight: 52,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 22px",
+    fontWeight: 950,
+    cursor: "pointer",
+    boxShadow: "0 18px 46px rgba(228,239,22,0.16)",
+  },
+  secondaryButton: {
+    minHeight: 44,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.13)",
+    background: "rgba(255,255,255,0.06)",
+    color: "white",
+    padding: "0 14px",
+    fontWeight: 900,
+    cursor: "pointer",
   },
   statsGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     gap: 12,
   },
   statCard: {
-    minHeight: 112,
-    borderRadius: 26,
-    padding: 16,
-    boxSizing: "border-box",
+    minHeight: 150,
+    borderRadius: 24,
+    padding: 18,
     background: glass,
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     alignContent: "space-between",
+    gap: 8,
   },
-  statLabel: {
-    color: "rgba(255,255,255,0.54)",
-    fontSize: 12,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.12em",
+  statIconLime: {
+    color: "#e4ef16",
+    fontSize: 30,
+  },
+  statIconBlue: {
+    color: "#3ea2ff",
+    fontSize: 30,
+  },
+  statIconPurple: {
+    color: "#a764ff",
+    fontSize: 30,
+  },
+  statIconOrange: {
+    color: "#ff9d1c",
+    fontSize: 30,
   },
   statValue: {
-    fontSize: 42,
-    letterSpacing: "-0.06em",
-    lineHeight: 0.95,
+    fontSize: 46,
+    lineHeight: 0.9,
+    letterSpacing: "-0.07em",
+  },
+  statTitle: {
+    fontWeight: 950,
   },
   statHint: {
     color: "rgba(255,255,255,0.62)",
     fontSize: 13,
-    fontWeight: 800,
   },
-  panel: {
+  managementCard: {
     borderRadius: 30,
     padding: 18,
     background: glass,
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
-    gap: 14,
+    gap: 16,
   },
-  panelHeader: {
+  managementHeader: {
     display: "flex",
-    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    alignItems: "center",
+    flexWrap: "wrap",
   },
-  panelKicker: {
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: "0.12em",
-    textTransform: "uppercase",
-  },
-  panelTitle: {
-    margin: 0,
-    fontSize: 25,
-    letterSpacing: "-0.05em",
-  },
-  panelText: {
-    margin: 0,
-    color: "rgba(255,255,255,0.66)",
-    lineHeight: 1.45,
+  searchGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.4fr) minmax(150px, 0.7fr)",
+    gap: 12,
   },
   searchInput: {
     width: "100%",
     minHeight: 48,
-    borderRadius: 999,
+    borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.13)",
-    background: "rgba(0,0,0,0.22)",
+    background: "rgba(0,0,0,0.24)",
     color: "white",
-    padding: "0 16px",
+    padding: "0 14px",
     boxSizing: "border-box",
     outline: "none",
     fontSize: 15,
@@ -624,25 +847,25 @@ const styles = {
     display: "grid",
     gap: 10,
   },
-  userCard: {
-    minHeight: 78,
-    borderRadius: 24,
-    padding: 10,
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
+  userRow: {
+    borderRadius: 22,
+    padding: 12,
+    background: "rgba(255,255,255,0.045)",
+    border: "1px solid rgba(255,255,255,0.075)",
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr)",
-    gap: 10,
+    gridTemplateColumns: "minmax(0,1fr) auto",
+    gap: 12,
+    alignItems: "center",
   },
-  userCardBlocked: {
-    minHeight: 78,
-    borderRadius: 24,
-    padding: 10,
+  userRowBlocked: {
+    borderRadius: 22,
+    padding: 12,
     background: "rgba(255,70,70,0.10)",
     border: "1px solid rgba(255,90,90,0.18)",
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr)",
-    gap: 10,
+    gridTemplateColumns: "minmax(0,1fr) auto",
+    gap: 12,
+    alignItems: "center",
   },
   userMain: {
     border: 0,
@@ -655,6 +878,7 @@ const styles = {
     gap: 11,
     textAlign: "left",
     cursor: "pointer",
+    minWidth: 0,
   },
   avatar: {
     width: 48,
@@ -679,39 +903,69 @@ const styles = {
     display: "grid",
     gap: 2,
     color: "rgba(255,255,255,0.66)",
+    overflowWrap: "anywhere",
   },
   userControls: {
     display: "flex",
     gap: 8,
     flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  statusPill: {
+    minHeight: 32,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    padding: "0 10px",
+    color: "#7dff9b",
+    background: "rgba(0,255,90,0.10)",
+    border: "1px solid rgba(0,255,90,0.15)",
+    fontWeight: 900,
+    fontSize: 12,
   },
   roleSelect: {
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.13)",
     background: "rgba(0,0,0,0.28)",
     color: "white",
-    padding: "0 12px",
+    padding: "0 10px",
     fontWeight: 900,
   },
   blockButton: {
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(255,90,90,0.22)",
     background: "rgba(255,70,70,0.10)",
     color: "#ffb4b4",
-    padding: "0 14px",
+    padding: "0 12px",
     fontWeight: 950,
     cursor: "pointer",
   },
   unblockButton: {
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.24)",
     background: "rgba(228,239,22,0.12)",
     color: "#e4ef16",
-    padding: "0 14px",
+    padding: "0 12px",
     fontWeight: 950,
     cursor: "pointer",
   },
+  infoCard: {
+    borderRadius: 24,
+    padding: 18,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gridTemplateColumns: "34px minmax(0,1fr)",
+    gap: 12,
+    alignItems: "center",
+  },
+  infoIconLarge: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 30,
+  },
 };
+
