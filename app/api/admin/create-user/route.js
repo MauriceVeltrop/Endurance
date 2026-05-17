@@ -1,58 +1,40 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const ADMIN_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const allowedRoles = ["user", "organizer", "moderator", "admin"];
+const ROLE_OPTIONS = ["user", "organizer", "moderator", "admin"];
 
 function json(status, body) {
   return NextResponse.json(body, { status });
 }
 
-function decodeJwtPayload(token) {
-  try {
-    const payload = token.split(".")[1];
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = Buffer.from(normalized, "base64").toString("utf8");
-    return JSON.parse(decoded);
-  } catch {
-    return null;
+function isSbSecretKey(key) {
+  return typeof key === "string" && key.startsWith("sb_secret_");
+}
+
+function isLegacyJwtKey(key) {
+  return typeof key === "string" && key.startsWith("eyJ");
+}
+
+function adminHeaders(extra = {}) {
+  const headers = {
+    apikey: ADMIN_KEY,
+    "Content-Type": "application/json",
+    ...extra,
+  };
+
+  if (isLegacyJwtKey(ADMIN_KEY)) {
+    headers.Authorization = `Bearer ${ADMIN_KEY}`;
   }
+
+  return headers;
 }
 
-function isModernSecretKey(token) {
-  return typeof token === "string" && token.startsWith("sb_secret_");
-}
-
-function getProjectRefFromUrl(url) {
-  try {
-    const host = new URL(url).hostname;
-    return host.split(".")[0] || null;
-  } catch {
-    return null;
-  }
-}
-
-function createUserClient(token) {
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  });
-}
-
-function createServiceClient() {
-  const usesModernSecretKey = isModernSecretKey(supabaseServiceRoleKey);
-
-  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+function createUserClient(accessToken) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -60,194 +42,208 @@ function createServiceClient() {
     },
     global: {
       headers: {
-        apikey: supabaseServiceRoleKey,
-        ...(usesModernSecretKey
-          ? {}
-          : { Authorization: `Bearer ${supabaseServiceRoleKey}` }),
-      },
-      fetch: async (input, init = {}) => {
-        if (!usesModernSecretKey) {
-          return fetch(input, init);
-        }
-
-        const headers = new Headers(init.headers || {});
-        headers.set("apikey", supabaseServiceRoleKey);
-        headers.delete("authorization");
-        headers.delete("Authorization");
-
-        return fetch(input, {
-          ...init,
-          headers,
-        });
+        Authorization: `Bearer ${accessToken}`,
       },
     },
   });
 }
 
-async function findAuthUserByEmail(adminClient, email) {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await adminClient.auth.admin.listUsers({
-      page,
-      perPage: 100,
-    });
-
-    if (error) throw error;
-
-    const user = (data?.users || []).find(
-      (item) => String(item.email || "").trim().toLowerCase() === normalizedEmail
-    );
-
-    if (user) return user;
-    if (!data?.users?.length || data.users.length < 100) return null;
-  }
-
-  return null;
+function createLegacyAdminClient() {
+  return createClient(SUPABASE_URL, ADMIN_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
-async function saveInviteRecordNonBlocking(adminClient, payload) {
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    cache: "no-store",
+    ...options,
+  });
+
+  const text = await res.text();
+  let payload = null;
+
   try {
-    const { data: rows, error: lookupError } = await adminClient
-      .from("admin_user_invites")
-      .select("id")
-      .eq("email", payload.email)
-      .limit(20);
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = text;
+  }
 
-    if (lookupError) throw lookupError;
+  if (!res.ok) {
+    throw new Error(`${options.label || "Supabase request"} failed (${res.status}): ${text || res.statusText}`);
+  }
 
-    const ids = (rows || []).map((row) => row.id).filter(Boolean);
+  return payload;
+}
+
+async function getRequesterProfile(requesterId) {
+  const rows = await apiFetch(
+    `/rest/v1/profiles?id=eq.${encodeURIComponent(requesterId)}&select=id,role,blocked,email`,
+    {
+      method: "GET",
+      headers: adminHeaders(),
+      label: "Read requester profile",
+    }
+  );
+
+  return Array.isArray(rows) ? rows[0] : null;
+}
+
+async function listAuthUsers() {
+  return apiFetch("/auth/v1/admin/users?page=1&per_page=1000", {
+    method: "GET",
+    headers: adminHeaders(),
+    label: "List auth users",
+  });
+}
+
+async function findAuthUserByEmail(email) {
+  const payload = await listAuthUsers();
+  const users = payload?.users || [];
+
+  return (
+    users.find(
+      (user) => String(user.email || "").trim().toLowerCase() === email
+    ) || null
+  );
+}
+
+async function createAuthUser({ email, password, firstName, lastName, fullName }) {
+  return apiFetch("/auth/v1/admin/users", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        name: fullName,
+      },
+    }),
+    label: "Create auth user",
+  });
+}
+
+async function updateAuthUser({ id, password, firstName, lastName, fullName }) {
+  return apiFetch(`/auth/v1/admin/users/${id}`, {
+    method: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        name: fullName,
+      },
+    }),
+    label: "Update auth user",
+  });
+}
+
+async function saveProfile(profile) {
+  return apiFetch("/rest/v1/profiles?on_conflict=id", {
+    method: "POST",
+    headers: adminHeaders({
+      Prefer: "resolution=merge-duplicates,return=representation",
+    }),
+    body: JSON.stringify(profile),
+    label: "Save profile",
+  });
+}
+
+async function saveInvite(invite) {
+  try {
+    const rows = await apiFetch(
+      `/rest/v1/admin_user_invites?email=eq.${encodeURIComponent(invite.email)}&select=id`,
+      {
+        method: "GET",
+        headers: adminHeaders(),
+        label: "Find invite",
+      }
+    );
+
+    const ids = Array.isArray(rows) ? rows.map((row) => row.id).filter(Boolean) : [];
 
     if (ids.length) {
-      const { error } = await adminClient
-        .from("admin_user_invites")
-        .update(payload)
-        .in("id", ids);
-
-      if (error) throw error;
-
-      return { ok: true, action: `updated ${ids.length} invite row(s)` };
+      await apiFetch(`/rest/v1/admin_user_invites?id=in.(${ids.join(",")})`, {
+        method: "PATCH",
+        headers: adminHeaders({ Prefer: "return=minimal" }),
+        body: JSON.stringify(invite),
+        label: "Update invite",
+      });
+    } else {
+      await apiFetch("/rest/v1/admin_user_invites", {
+        method: "POST",
+        headers: adminHeaders({ Prefer: "return=minimal" }),
+        body: JSON.stringify(invite),
+        label: "Insert invite",
+      });
     }
 
-    const { error } = await adminClient
-      .from("admin_user_invites")
-      .insert(payload);
-
-    if (error) throw error;
-
-    return { ok: true, action: "inserted invite row" };
+    return { ok: true };
   } catch (error) {
-    console.warn("Invite record skipped", error);
-    return {
-      ok: false,
-      warning: error?.message || "Invite record could not be saved, but auth/profile may still be created.",
-    };
+    return { ok: false, warning: error?.message || "Invite record could not be saved." };
   }
 }
 
 export async function POST(request) {
-  const servicePayload = supabaseServiceRoleKey ? decodeJwtPayload(supabaseServiceRoleKey) : null;
-
   const debug = {
     stage: "start",
-    env: {
-      has_url: Boolean(supabaseUrl),
-      has_anon_key: Boolean(supabaseAnonKey),
-      has_service_role_key: Boolean(supabaseServiceRoleKey),
-      service_role_claim: servicePayload?.role || null,
-      service_key_ref: servicePayload?.ref || null,
-      service_key_type: isModernSecretKey(supabaseServiceRoleKey) ? "sb_secret" : "jwt",
-      expected_project_ref: getProjectRefFromUrl(supabaseUrl),
-    },
+    key_type: isSbSecretKey(ADMIN_KEY)
+      ? "sb_secret"
+      : isLegacyJwtKey(ADMIN_KEY)
+        ? "legacy_jwt"
+        : "unknown",
   };
 
   try {
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !ADMIN_KEY) {
+      return json(500, { error: "Missing Supabase environment variables.", debug });
+    }
+
+    if (!isSbSecretKey(ADMIN_KEY) && !isLegacyJwtKey(ADMIN_KEY)) {
       return json(500, {
-        error: "Missing Supabase environment variables. Add SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.",
+        error: "SUPABASE_SERVICE_ROLE_KEY must start with sb_secret_ or eyJ.",
         debug,
       });
     }
 
-    const usesModernSecretKey = isModernSecretKey(supabaseServiceRoleKey);
-
-    if (!usesModernSecretKey && servicePayload?.role !== "service_role") {
-      return json(500, {
-        error:
-          "SUPABASE_SERVICE_ROLE_KEY is not valid. Use either the new Supabase Secret key starting with sb_secret_ or the legacy JWT service_role key.",
-        debug,
-      });
-    }
-
-    const expectedProjectRef = getProjectRefFromUrl(supabaseUrl);
-    if (
-      !usesModernSecretKey &&
-      servicePayload?.ref &&
-      expectedProjectRef &&
-      servicePayload.ref !== expectedProjectRef
-    ) {
-      return json(500, {
-        error:
-          `SUPABASE_SERVICE_ROLE_KEY does not belong to this Supabase project. Key ref is ${servicePayload.ref}, but URL ref is ${expectedProjectRef}. Copy the key from the same Supabase project as NEXT_PUBLIC_SUPABASE_URL and redeploy.`,
-        debug,
-      });
-    }
-
-    debug.stage = "read_session";
-    const authHeader = request.headers.get("authorization") || "";
-    const token = authHeader.replace("Bearer ", "").trim();
+    debug.stage = "verify_session";
+    const token = (request.headers.get("authorization") || "").replace("Bearer ", "").trim();
 
     if (!token) {
       return json(401, { error: "Not authenticated.", debug });
     }
 
     const userClient = createUserClient(token);
+    const { data: userData, error: userError } = await userClient.auth.getUser();
 
-    const { data: authData, error: authError } = await userClient.auth.getUser();
-
-    if (authError || !authData?.user?.id) {
-      return json(401, {
-        error: authError?.message || "Invalid session.",
-        debug,
-      });
+    if (userError || !userData?.user?.id) {
+      return json(401, { error: userError?.message || "Invalid session.", debug });
     }
 
-    const requesterId = authData.user.id;
+    const requesterId = userData.user.id;
     debug.requester_id = requesterId;
 
-    const adminClient = createServiceClient();
-
-    debug.stage = "service_role_smoke_test";
-    const { error: smokeError } = await adminClient
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
-
-    if (smokeError) {
-      return json(500, {
-        error:
-          `Admin secret smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. For sb_secret_ keys the API must use apikey without Bearer Authorization. This patch applies that fix.`,
-        debug: {
-          ...debug,
-          smoke_error: {
-            code: smokeError.code,
-            message: smokeError.message,
-            details: smokeError.details,
-            hint: smokeError.hint,
-          },
-        },
-      });
-    }
-
-    debug.stage = "check_requester_role";
-    const { data: requesterProfile, error: requesterError } = await adminClient
-      .from("profiles")
-      .select("id,role,blocked,email")
-      .eq("id", requesterId)
-      .maybeSingle();
-
-    if (requesterError) throw requesterError;
-
-    debug.requester_role = requesterProfile?.role || null;
+    debug.stage = "requester_profile";
+    const requesterProfile = isLegacyJwtKey(ADMIN_KEY)
+      ? await createLegacyAdminClient()
+          .from("profiles")
+          .select("id,role,blocked,email")
+          .eq("id", requesterId)
+          .maybeSingle()
+          .then(({ data, error }) => {
+            if (error) throw new Error(`Read requester profile failed: ${error.message}`);
+            return data;
+          })
+      : await getRequesterProfile(requesterId);
 
     if (!requesterProfile || requesterProfile.blocked) {
       return json(403, { error: "No admin access.", debug });
@@ -257,157 +253,107 @@ export async function POST(request) {
       return json(403, { error: "Only admins and moderators can create users.", debug });
     }
 
+    debug.requester_role = requesterProfile.role;
     debug.stage = "validate_payload";
-    const body = await request.json();
 
+    const body = await request.json();
     const firstName = String(body.first_name || "").trim();
     const lastName = String(body.last_name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.temporary_password || "");
-    const requestedRole = String(body.role || "user").trim();
+    const role = String(body.role || "user").trim();
+    const fullName = `${firstName} ${lastName}`.trim();
 
     if (!firstName || !lastName || !email || !password) {
-      return json(400, {
-        error: "First name, last name, email and temporary password are required.",
-        debug,
-      });
+      return json(400, { error: "First name, last name, email and temporary password are required.", debug });
     }
 
     if (password.length < 8) {
       return json(400, { error: "Temporary password must be at least 8 characters.", debug });
     }
 
-    if (!allowedRoles.includes(requestedRole)) {
+    if (!ROLE_OPTIONS.includes(role)) {
       return json(400, { error: "Invalid role.", debug });
     }
 
-    if (requesterProfile.role === "moderator" && !["user", "organizer"].includes(requestedRole)) {
+    if (requesterProfile.role === "moderator" && !["user", "organizer"].includes(role)) {
       return json(403, { error: "Moderators can only create users or organizers.", debug });
     }
 
-    const fullName = `${firstName} ${lastName}`;
-    let authUser = null;
+    debug.stage = "auth_user";
+    const existingAuthUser = await findAuthUserByEmail(email);
+
+    let authUser;
     let createdNewAuthUser = false;
 
-    debug.stage = "find_existing_auth_user";
-    const existingAuthUser = await findAuthUserByEmail(adminClient, email);
-
     if (existingAuthUser?.id) {
-      debug.stage = "update_existing_auth_user";
-      const { data: updatedUser, error: updateAuthError } =
-        await adminClient.auth.admin.updateUserById(existingAuthUser.id, {
-          password,
-          email_confirm: true,
-          user_metadata: {
-            ...(existingAuthUser.user_metadata || {}),
-            first_name: firstName,
-            last_name: lastName,
-            name: fullName,
-          },
-        });
-
-      if (updateAuthError) throw updateAuthError;
-
-      authUser = updatedUser?.user || existingAuthUser;
+      authUser = await updateAuthUser({
+        id: existingAuthUser.id,
+        password,
+        firstName,
+        lastName,
+        fullName,
+      });
     } else {
-      debug.stage = "create_auth_user";
-      const { data: createdUser, error: createError } =
-        await adminClient.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: {
-            first_name: firstName,
-            last_name: lastName,
-            name: fullName,
-          },
-        });
-
-      if (createError) throw createError;
-
-      authUser = createdUser?.user;
+      authUser = await createAuthUser({
+        email,
+        password,
+        firstName,
+        lastName,
+        fullName,
+      });
       createdNewAuthUser = true;
     }
 
-    const createdId = authUser?.id;
-    debug.created_auth_user_id = createdId || null;
-    debug.created_new_auth_user = createdNewAuthUser;
+    const userId = authUser?.id || authUser?.user?.id;
 
-    if (!createdId) {
+    if (!userId) {
       return json(500, { error: "Auth user was not created or found.", debug });
     }
 
-    debug.stage = "upsert_profile";
-    const { data: savedProfile, error: profileError } = await adminClient
-      .from("profiles")
-      .upsert(
-        {
-          id: createdId,
-          first_name: firstName,
-          last_name: lastName,
-          name: fullName,
-          email,
-          role: requestedRole,
-          onboarding_completed: false,
-          blocked: false,
-        },
-        { onConflict: "id" }
-      )
-      .select("id,email,role,name")
-      .maybeSingle();
+    debug.created_user_id = userId;
+    debug.stage = "profile_save";
 
-    if (profileError) {
-      return json(500, {
-        error: `Profile save failed: ${profileError.message}`,
-        debug: {
-          ...debug,
-          profile_error: {
-            code: profileError.code,
-            message: profileError.message,
-            details: profileError.details,
-            hint: profileError.hint,
-          },
-        },
-      });
-    }
+    await saveProfile({
+      id: userId,
+      first_name: firstName,
+      last_name: lastName,
+      name: fullName,
+      email,
+      role,
+      onboarding_completed: false,
+      blocked: false,
+    });
 
-    debug.saved_profile_id = savedProfile?.id || null;
+    debug.stage = "invite_save";
 
-    if (!savedProfile?.id) {
-      return json(500, {
-        error: "Auth user exists, but profile was not saved.",
-        debug,
-      });
-    }
-
-    debug.stage = "save_invite_record";
-    const inviteResult = await saveInviteRecordNonBlocking(adminClient, {
+    const inviteResult = await saveInvite({
       first_name: firstName,
       last_name: lastName,
       email,
-      role: requestedRole,
+      role,
       status: "accepted",
       invited_by: requesterId,
-      accepted_user_id: createdId,
+      accepted_user_id: userId,
       accepted_at: new Date().toISOString(),
     });
 
-    debug.invite_record = inviteResult;
+    debug.invite = inviteResult;
     debug.stage = "done";
 
     return json(200, {
-      id: createdId,
+      id: userId,
       email,
-      role: requestedRole,
+      role,
       created_new_auth_user: createdNewAuthUser,
       warning: inviteResult.ok ? null : inviteResult.warning,
       message: createdNewAuthUser
         ? "User created with temporary password."
-        : "Existing auth user updated and profile saved.",
+        : "Existing user updated and profile saved.",
       debug,
     });
   } catch (error) {
-    console.error("Admin create user error", error);
+    console.error("Admin create user route error", error);
 
     return json(500, {
       error: error?.message || "Could not create user.",
