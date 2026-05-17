@@ -524,26 +524,28 @@ export default function CreateTrainingPage() {
                 </button>
               </div>
 
-              <label style={styles.label}>
-                Date
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(event) => updateForm("date", event.target.value)}
-                  style={styles.input}
-                />
-              </label>
-
               {form.planning_type === "fixed" ? (
-                <label style={styles.label}>
-                  Start time
-                  <input
-                    type="time"
-                    value={form.start_time}
-                    onChange={(event) => updateForm("start_time", event.target.value)}
-                    style={styles.input}
-                  />
-                </label>
+                <>
+                  <label style={styles.label}>
+                    Date
+                    <input
+                      type="date"
+                      value={form.date}
+                      onChange={(event) => updateForm("date", event.target.value)}
+                      style={styles.input}
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    Start time
+                    <input
+                      type="time"
+                      value={form.start_time}
+                      onChange={(event) => updateForm("start_time", event.target.value)}
+                      style={styles.input}
+                    />
+                  </label>
+                </>
               ) : (
                 <div style={styles.timeOptionsBox}>
                   <p style={styles.muted}>
