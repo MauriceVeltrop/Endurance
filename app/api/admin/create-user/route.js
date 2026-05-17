@@ -22,6 +22,15 @@ function decodeJwtPayload(token) {
   }
 }
 
+function getProjectRefFromUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return host.split(".")[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 function createUserClient(token) {
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -123,6 +132,7 @@ export async function POST(request) {
       has_service_role_key: Boolean(supabaseServiceRoleKey),
       service_role_claim: servicePayload?.role || null,
       service_key_ref: servicePayload?.ref || null,
+      expected_project_ref: getProjectRefFromUrl(supabaseUrl),
     },
   };
 
@@ -138,6 +148,15 @@ export async function POST(request) {
       return json(500, {
         error:
           "SUPABASE_SERVICE_ROLE_KEY is not a service_role key. You probably pasted the anon key. Copy the key labeled service_role / secret from Supabase and redeploy.",
+        debug,
+      });
+    }
+
+    const expectedProjectRef = getProjectRefFromUrl(supabaseUrl);
+    if (servicePayload?.ref && expectedProjectRef && servicePayload.ref !== expectedProjectRef) {
+      return json(500, {
+        error:
+          `SUPABASE_SERVICE_ROLE_KEY does not belong to this Supabase project. Key ref is ${servicePayload.ref}, but URL ref is ${expectedProjectRef}. Copy the service_role key from the same Supabase project as NEXT_PUBLIC_SUPABASE_URL and redeploy.`,
         debug,
       });
     }
@@ -174,7 +193,7 @@ export async function POST(request) {
     if (smokeError) {
       return json(500, {
         error:
-          `Service role smoke test failed on profiles: ${smokeError.message}. Check that SUPABASE_SERVICE_ROLE_KEY is the real service_role key and redeploy.`,
+          `Service role smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. Check that SUPABASE_SERVICE_ROLE_KEY belongs to project ${getProjectRefFromUrl(supabaseUrl)} and redeploy.`,
         debug: {
           ...debug,
           smoke_error: {
