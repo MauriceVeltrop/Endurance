@@ -257,7 +257,13 @@ export default function AdminPage() {
           const claim = payload?.debug?.env?.service_role_claim
             ? ` Service key role: ${payload.debug.env.service_role_claim}.`
             : "";
-          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}`);
+          const keyRef = payload?.debug?.env?.service_key_ref
+            ? ` Key ref: ${payload.debug.env.service_key_ref}.`
+            : "";
+          const expectedRef = payload?.debug?.env?.expected_project_ref
+            ? ` URL ref: ${payload.debug.env.expected_project_ref}.`
+            : "";
+          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}${keyRef}${expectedRef}`);
         }
 
         setLastCreated({
