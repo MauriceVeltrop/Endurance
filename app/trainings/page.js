@@ -556,6 +556,16 @@ const baseButton = {
   border: 0,
   cursor: "pointer",
   fontWeight: 950,
+  fontFamily: "inherit",
+};
+
+const glassCard = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.035))",
+  boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
 };
 
 const styles = {
@@ -565,35 +575,34 @@ const styles = {
     maxWidth: "100vw",
     overflowX: "hidden",
     background:
-      "radial-gradient(circle at 100% 2%, rgba(228,239,22,0.13), transparent 31%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+      "radial-gradient(circle at 96% 0%, rgba(228,239,22,0.18), transparent 28%), radial-gradient(circle at 0% 18%, rgba(55,125,255,0.10), transparent 30%), linear-gradient(180deg, #07100b 0%, #050706 58%, #020202 100%)",
     color: "white",
-    padding: "14px 12px 42px",
+    padding: "12px max(12px, env(safe-area-inset-left)) 44px max(12px, env(safe-area-inset-right))",
     boxSizing: "border-box",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
 
   shell: {
     width: "100%",
-    maxWidth: 1040,
+    maxWidth: 1080,
     margin: "0 auto",
     display: "grid",
-    gap: 18,
+    gap: 14,
+    minWidth: 0,
     overflow: "hidden",
     boxSizing: "border-box",
   },
 
-  mobileHero: {
-    width: "100%",
+  hero: {
+    ...glassCard,
+    borderRadius: 32,
+    padding: "clamp(18px, 5vw, 34px)",
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
     alignItems: "end",
-    gap: 10,
-    marginTop: 2,
-    boxSizing: "border-box",
-  },
-
-  heroText: {
-    minWidth: 0,
+    gap: 18,
+    position: "relative",
+    overflow: "hidden",
   },
 
   kicker: {
@@ -605,61 +614,153 @@ const styles = {
   },
 
   title: {
-    margin: "6px 0 0",
-    fontSize: "clamp(46px, 13vw, 76px)",
+    margin: "7px 0 0",
+    fontSize: "clamp(42px, 11vw, 78px)",
     lineHeight: 0.92,
     letterSpacing: "-0.075em",
     maxWidth: "100%",
   },
 
-  createButton: {
+  dot: {
+    color: "#e4ef16",
+  },
+
+  subtitle: {
+    margin: "12px 0 0",
+    maxWidth: 620,
+    color: "rgba(255,255,255,0.70)",
+    fontSize: "clamp(15px, 3.8vw, 18px)",
+    lineHeight: 1.45,
+    fontWeight: 750,
+  },
+
+  heroCreateButton: {
     ...baseButton,
-    minHeight: 44,
-    maxWidth: 108,
-    borderRadius: 999,
+    minHeight: 54,
+    width: "100%",
+    maxWidth: 260,
+    justifySelf: "end",
+    borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
-    padding: "0 14px",
-    boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+    padding: "0 20px",
+    boxShadow: "0 18px 44px rgba(228,239,22,0.20)",
     whiteSpace: "nowrap",
+  },
+
+  focusCard: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 14,
+    display: "grid",
+    gridTemplateColumns: "48px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  iconBubbleLime: {
+    width: 48,
+    height: 48,
+    borderRadius: 17,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.26)",
+    fontSize: 22,
+  },
+
+  cardCopy: {
+    minWidth: 0,
+  },
+
+  cardTitle: {
+    margin: 0,
+    fontSize: "clamp(20px, 5vw, 28px)",
+    lineHeight: 1,
+    letterSpacing: "-0.05em",
+  },
+
+  muted: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.64)",
+    lineHeight: 1.35,
+    fontWeight: 750,
+  },
+
+  filterCard: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 14,
+    display: "grid",
+    gap: 12,
+  },
+
+  sectionIntroCompact: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+
+  iconSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,0.075)",
+    border: "1px solid rgba(255,255,255,0.10)",
     flexShrink: 0,
   },
 
-  trainingControls: {
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
   searchInput: {
-    minHeight: 46,
+    minHeight: 48,
     width: "100%",
-    borderRadius: 999,
+    borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.24)",
+    background: "rgba(0,0,0,0.28)",
     color: "white",
-    padding: "0 18px",
+    padding: "0 16px",
     outline: "none",
     fontSize: 15,
     boxSizing: "border-box",
-    boxShadow: "inset 0 0 0 1px rgba(228,239,22,0.04)",
+  },
+
+  inviteBanner: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 16,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: 14,
+    alignItems: "center",
+  },
+
+  inviteBannerTitle: {
+    display: "block",
+    marginTop: 4,
+    fontSize: 20,
+    letterSpacing: "-0.04em",
+  },
+
+  inviteBannerText: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.62)",
+    fontWeight: 750,
   },
 
   trainingListBlock: {
+    ...glassCard,
     borderRadius: 30,
-    padding: 14,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))",
-    border: "1px solid rgba(255,255,255,0.13)",
+    padding: 12,
     display: "grid",
-    gap: 14,
-    minWidth: 0,
-    width: "100%",
+    gap: 12,
     overflow: "hidden",
-    boxSizing: "border-box",
   },
 
-  listHeader: {
-    display: "flex",
-    justifyContent: "space-between",
+  managementHeader: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     alignItems: "center",
     gap: 10,
     minWidth: 0,
@@ -668,320 +769,108 @@ const styles = {
   listCount: {
     color: "rgba(255,255,255,0.58)",
     fontWeight: 850,
-    fontSize: 13,
-    whiteSpace: "nowrap",
+    fontSize: 12,
+    whiteSpace: "normal",
+    textAlign: "right",
   },
 
   trainingList: {
     display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 14,
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
+    gap: 12,
     width: "100%",
     minWidth: 0,
   },
 
-  card: {
-    width: "100%",
-    minWidth: 0,
-    maxWidth: "100%",
-    borderRadius: 28,
-    boxSizing: "border-box",
-    color: "white",
-    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
+  statsGrid: {
     display: "grid",
-    overflow: "hidden",
-  },
-
-  cardMain: {
-    display: "grid",
-    gridTemplateColumns: "minmax(112px, 34%) minmax(0, 1fr)",
-    alignItems: "stretch",
-    textAlign: "left",
-    border: 0,
-    padding: 0,
-    margin: 0,
-    color: "white",
-    background: "transparent",
-    cursor: "pointer",
-    width: "100%",
-    minWidth: 0,
-  },
-
-  cardImage: {
-    position: "relative",
-    minHeight: 190,
-    height: "100%",
-    overflow: "hidden",
-    borderRight: "1px solid rgba(255,255,255,0.08)",
-    background:
-      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
-    backgroundRepeat: "no-repeat",
-  },
-
-  imageOverlay: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.52)), radial-gradient(circle at 78% 10%, rgba(228,239,22,0.18), transparent 36%)",
-    pointerEvents: "none",
-  },
-
-  cardBody: {
-    padding: 14,
-    display: "grid",
-    gap: 9,
-    minWidth: 0,
-  },
-
-  badgeRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
-  },
-
-  sportBadge: {
-    display: "inline-flex",
-    minWidth: 0,
-    maxWidth: "70%",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    borderRadius: 999,
-    padding: "8px 11px",
-    background: "rgba(228,239,22,0.12)",
-    border: "1px solid rgba(228,239,22,0.28)",
-    color: "#e4ef16",
-    fontWeight: 950,
-    fontSize: 13,
-  },
-
-  visibilityBadge: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    color: "rgba(255,255,255,0.72)",
-    fontWeight: 850,
-    fontSize: 12,
-    textTransform: "capitalize",
-    flexShrink: 0,
-  },
-
-  cardTitle: {
-    margin: 0,
-    fontSize: "clamp(23px, 6.8vw, 32px)",
-    lineHeight: 1,
-    letterSpacing: "-0.055em",
-    overflowWrap: "anywhere",
-  },
-
-  creatorRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 13,
-    fontWeight: 850,
-    lineHeight: 1.2,
-  },
-
-  creatorAvatar: {
-    width: 24,
-    height: 24,
-    minWidth: 24,
-    borderRadius: "50%",
-    objectFit: "cover",
-    display: "block",
-    border: "1px solid rgba(255,255,255,0.24)",
-  },
-
-  creatorFallback: {
-    width: 24,
-    height: 24,
-    minWidth: 24,
-    borderRadius: "50%",
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.16)",
-    border: "1px solid rgba(228,239,22,0.24)",
-    color: "#e4ef16",
-    fontSize: 11,
-    fontWeight: 950,
-  },
-
-  metaGrid: {
-    display: "grid",
-    gap: 6,
-    color: "rgba(255,255,255,0.70)",
-    fontSize: 14,
-    lineHeight: 1.35,
-    minWidth: 0,
-  },
-
-  metricRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  metricPill: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(255,255,255,0.065)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    color: "rgba(255,255,255,0.78)",
-    fontWeight: 850,
-    fontSize: 12,
-  },
-
-  featureRow: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-
-  featureActive: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(228,239,22,0.12)",
-    border: "1px solid rgba(228,239,22,0.22)",
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-  },
-
-  featureMuted: {
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(255,255,255,0.055)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    color: "rgba(255,255,255,0.52)",
-    fontSize: 12,
-    fontWeight: 900,
-  },
-
-  cardFooter: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gridTemplateColumns: "repeat(auto-fit, minmax(138px, 1fr))",
     gap: 10,
-    padding: "0 14px 14px",
-    flexWrap: "wrap",
-  },
-
-  footerText: {
-    display: "grid",
-    gap: 3,
+    width: "100%",
     minWidth: 0,
   },
 
-  joined: {
-    color: "rgba(255,255,255,0.82)",
-    fontWeight: 950,
-    fontSize: 13,
-  },
-
-  footerSub: {
-    color: "rgba(255,255,255,0.50)",
-    fontWeight: 800,
-    fontSize: 12,
-  },
-
-  footerActions: {
-    display: "flex",
-    gap: 8,
-    alignItems: "center",
-    flexShrink: 0,
-  },
-
-  joinSmallButton: {
-    ...baseButton,
-    color: "#101406",
-    background: "#e4ef16",
-    borderRadius: 999,
-    padding: "10px 13px",
-    fontSize: 13,
-  },
-
-  leaveSmallButton: {
-    ...baseButton,
-    color: "white",
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 999,
-    padding: "10px 13px",
-    fontSize: 13,
-  },
-
-  openButton: {
-    ...baseButton,
-    color: "#101406",
-    background: "#e4ef16",
-    borderRadius: 999,
-    padding: "10px 13px",
-    fontSize: 13,
-  },
-
-  dashboardGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginTop: 2,
-    minWidth: 0,
-  },
-
-  dashboardCard: {
-    minHeight: 102,
+  statCard: {
+    ...glassCard,
+    minHeight: 128,
     borderRadius: 24,
     padding: 14,
-    boxSizing: "border-box",
-    background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 18px 46px rgba(0,0,0,0.22)",
     display: "grid",
     alignContent: "space-between",
-    minWidth: 0,
+    gap: 8,
+    overflow: "hidden",
   },
 
-  dashboardLabel: {
-    color: "rgba(255,255,255,0.54)",
-    fontSize: 11,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.12em",
+  statIconLime: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.25)",
   },
 
-  dashboardValue: {
-    fontSize: 34,
-    letterSpacing: "-0.06em",
-    lineHeight: 0.95,
+  statIconBlue: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(80,150,255,0.13)",
+    border: "1px solid rgba(80,150,255,0.22)",
   },
 
-  dashboardHint: {
-    color: "rgba(255,255,255,0.62)",
+  statIconPurple: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(190,120,255,0.13)",
+    border: "1px solid rgba(190,120,255,0.22)",
+  },
+
+  statIconOrange: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,165,80,0.13)",
+    border: "1px solid rgba(255,165,80,0.22)",
+  },
+
+  statValue: {
+    fontSize: "clamp(28px, 8vw, 40px)",
+    lineHeight: 0.9,
+    letterSpacing: "-0.07em",
+  },
+
+  statTitle: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: 950,
+  },
+
+  statHint: {
+    color: "rgba(255,255,255,0.55)",
     fontSize: 12,
     fontWeight: 800,
     lineHeight: 1.25,
+    overflowWrap: "anywhere",
   },
 
   stateCard: {
+    ...glassCard,
     borderRadius: 28,
     padding: 22,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)",
   },
 
   emptyCard: {
+    ...glassCard,
     borderRadius: 28,
     padding: 22,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    boxShadow: "0 24px 70px rgba(0,0,0,0.30)",
   },
 
   emptyIcon: {
@@ -1000,7 +889,7 @@ const styles = {
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 20,
+    marginTop: 18,
   },
 
   errorCard: {
@@ -1013,6 +902,7 @@ const styles = {
   stateTitle: {
     fontSize: 22,
     fontWeight: 950,
+    letterSpacing: "-0.04em",
   },
 
   stateText: {
@@ -1033,18 +923,19 @@ const styles = {
 
   primaryButton: {
     ...baseButton,
-    minHeight: 52,
-    borderRadius: 20,
+    minHeight: 50,
+    borderRadius: 18,
     background: "#e4ef16",
     color: "#101406",
     padding: "0 18px",
     boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+    width: "100%",
   },
 
   secondaryButton: {
     ...baseButton,
-    minHeight: 52,
-    borderRadius: 20,
+    minHeight: 50,
+    borderRadius: 18,
     background: "rgba(255,255,255,0.08)",
     color: "white",
     border: "1px solid rgba(255,255,255,0.12)",
