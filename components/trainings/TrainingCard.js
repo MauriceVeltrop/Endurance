@@ -78,7 +78,7 @@ const styles = {
     color: "white",
     background: "linear-gradient(145deg, rgba(255,255,255,0.092), rgba(255,255,255,0.036))",
     border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 22px 60px rgba(0,0,0,0.24)",
+    boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
     padding: 10,
     display: "grid",
     gap: 8,
