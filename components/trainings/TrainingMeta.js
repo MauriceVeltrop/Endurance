@@ -101,6 +101,7 @@ const styles = {
     fontWeight: 800,
     lineHeight: 1.25,
     minWidth: 0,
+    overflowWrap: "anywhere",
   },
   metricRow: {
     display: "flex",
@@ -108,6 +109,8 @@ const styles = {
     flexWrap: "wrap",
   },
   metricPill: {
+    maxWidth: "100%",
+    overflowWrap: "anywhere",
     borderRadius: 999,
     padding: "6px 9px",
     background: "rgba(255,255,255,0.07)",

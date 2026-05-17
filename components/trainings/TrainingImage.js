@@ -27,9 +27,10 @@ export default function TrainingImage({ image, title }) {
 const styles = {
   image: {
     position: "relative",
-    width: 108,
-    minWidth: 108,
-    height: 132,
+    width: "100%",
+    minWidth: 0,
+    height: "100%",
+    minHeight: 128,
     borderRadius: 22,
     overflow: "hidden",
     background:
