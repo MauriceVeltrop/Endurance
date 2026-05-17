@@ -11,6 +11,46 @@ function json(status, body) {
   return NextResponse.json(body, { status });
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = Buffer.from(normalized, "base64").toString("utf8");
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function createUserClient(token) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}
+
+function createServiceClient() {
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        apikey: supabaseServiceRoleKey,
+        Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      },
+    },
+  });
+}
+
 async function findAuthUserByEmail(adminClient, email) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
 
@@ -73,12 +113,16 @@ async function saveInviteRecordNonBlocking(adminClient, payload) {
 }
 
 export async function POST(request) {
+  const servicePayload = supabaseServiceRoleKey ? decodeJwtPayload(supabaseServiceRoleKey) : null;
+
   const debug = {
     stage: "start",
     env: {
       has_url: Boolean(supabaseUrl),
       has_anon_key: Boolean(supabaseAnonKey),
       has_service_role_key: Boolean(supabaseServiceRoleKey),
+      service_role_claim: servicePayload?.role || null,
+      service_key_ref: servicePayload?.ref || null,
     },
   };
 
@@ -86,6 +130,14 @@ export async function POST(request) {
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       return json(500, {
         error: "Missing Supabase environment variables. Add SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.",
+        debug,
+      });
+    }
+
+    if (servicePayload?.role !== "service_role") {
+      return json(500, {
+        error:
+          "SUPABASE_SERVICE_ROLE_KEY is not a service_role key. You probably pasted the anon key. Copy the key labeled service_role / secret from Supabase and redeploy.",
         debug,
       });
     }
@@ -98,13 +150,7 @@ export async function POST(request) {
       return json(401, { error: "Not authenticated.", debug });
     }
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
+    const userClient = createUserClient(token);
 
     const { data: authData, error: authError } = await userClient.auth.getUser();
 
@@ -118,12 +164,28 @@ export async function POST(request) {
     const requesterId = authData.user.id;
     debug.requester_id = requesterId;
 
-    const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    const adminClient = createServiceClient();
+
+    debug.stage = "service_role_smoke_test";
+    const { error: smokeError } = await adminClient
+      .from("profiles")
+      .select("id", { count: "exact", head: true });
+
+    if (smokeError) {
+      return json(500, {
+        error:
+          `Service role smoke test failed on profiles: ${smokeError.message}. Check that SUPABASE_SERVICE_ROLE_KEY is the real service_role key and redeploy.`,
+        debug: {
+          ...debug,
+          smoke_error: {
+            code: smokeError.code,
+            message: smokeError.message,
+            details: smokeError.details,
+            hint: smokeError.hint,
+          },
+        },
+      });
+    }
 
     debug.stage = "check_requester_role";
     const { data: requesterProfile, error: requesterError } = await adminClient
@@ -225,24 +287,38 @@ export async function POST(request) {
     }
 
     debug.stage = "upsert_profile";
-    const profilePayload = {
-      id: createdId,
-      first_name: firstName,
-      last_name: lastName,
-      name: fullName,
-      email,
-      role: requestedRole,
-      onboarding_completed: false,
-      blocked: false,
-    };
-
     const { data: savedProfile, error: profileError } = await adminClient
       .from("profiles")
-      .upsert(profilePayload, { onConflict: "id" })
+      .upsert(
+        {
+          id: createdId,
+          first_name: firstName,
+          last_name: lastName,
+          name: fullName,
+          email,
+          role: requestedRole,
+          onboarding_completed: false,
+          blocked: false,
+        },
+        { onConflict: "id" }
+      )
       .select("id,email,role,name")
       .maybeSingle();
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      return json(500, {
+        error: `Profile save failed: ${profileError.message}`,
+        debug: {
+          ...debug,
+          profile_error: {
+            code: profileError.code,
+            message: profileError.message,
+            details: profileError.details,
+            hint: profileError.hint,
+          },
+        },
+      });
+    }
 
     debug.saved_profile_id = savedProfile?.id || null;
 
@@ -266,23 +342,6 @@ export async function POST(request) {
     });
 
     debug.invite_record = inviteResult;
-
-    debug.stage = "verify_profile_visible";
-    const { data: verifyProfile, error: verifyError } = await adminClient
-      .from("profiles")
-      .select("id,email,role,name")
-      .eq("id", createdId)
-      .maybeSingle();
-
-    if (verifyError) throw verifyError;
-
-    if (!verifyProfile?.id) {
-      return json(500, {
-        error: "Profile save could not be verified.",
-        debug,
-      });
-    }
-
     debug.stage = "done";
 
     return json(200, {
