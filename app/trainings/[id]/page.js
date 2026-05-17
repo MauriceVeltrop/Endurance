@@ -471,10 +471,13 @@ export default function TrainingDetailPage() {
 
         const { error } = await supabase
           .from("session_participants")
-          .insert({
-            session_id: training.id,
-            user_id: user.id,
-          });
+          .upsert(
+            {
+              session_id: training.id,
+              user_id: user.id,
+            },
+            { onConflict: "session_id,user_id", ignoreDuplicates: true }
+          );
 
         if (error) throw error;
         setMessage("You joined this training.");
@@ -541,33 +544,20 @@ export default function TrainingDetailPage() {
         return;
       }
 
-      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
-
-      if (existing?.id) {
-        const { error } = await supabase
-          .from("session_availability")
-          .update({
-            available_from: sessionAvailabilityForm.available_from,
-            available_until: sessionAvailabilityForm.available_until,
-            note: sessionAvailabilityForm.note.trim() || null,
-          })
-          .eq("id", existing.id)
-          .eq("user_id", user.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("session_availability")
-          .insert({
+      const { error } = await supabase
+        .from("session_availability")
+        .upsert(
+          {
             session_id: training.id,
             user_id: user.id,
             available_from: sessionAvailabilityForm.available_from,
             available_until: sessionAvailabilityForm.available_until,
             note: sessionAvailabilityForm.note.trim() || null,
-          });
+          },
+          { onConflict: "session_id,user_id" }
+        );
 
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       setAvailabilityMessage("Your time frame has been saved.");
       await loadTraining();
