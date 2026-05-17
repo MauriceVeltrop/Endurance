@@ -368,9 +368,6 @@ export default function TrainingsPage() {
               Create a session, invite people, agree a time and train together.
             </p>
           </div>
-          <button type="button" onClick={openCreateTraining} style={styles.primaryButton}>
-            Create →
-          </button>
         </section>
 
         {!loading && !errorText && trainings.length > 0 ? (
@@ -440,10 +437,6 @@ export default function TrainingsPage() {
             </p>
 
             <div style={styles.emptyActions}>
-              <button type="button" onClick={openCreateTraining} style={styles.primaryButton}>
-                Create training
-              </button>
-
               <button type="button" onClick={() => router.push("/profile")} style={styles.secondaryButton}>
                 Edit profile
               </button>
@@ -537,14 +530,14 @@ export default function TrainingsPage() {
             <span style={styles.statIconBlue}>✉</span>
             <strong style={styles.statValue}>{trainingInviteCount || 0}</strong>
             <span style={styles.statTitle}>Invites</span>
-            <span style={styles.statHint}>Open training invites</span>
+            <span style={styles.statHint}>Open invites</span>
           </article>
 
           <article style={styles.statCard}>
             <span style={styles.statIconPurple}>⚡</span>
             <strong style={styles.statValue}>{actionNeededCount || 0}</strong>
             <span style={styles.statTitle}>Action</span>
-            <span style={styles.statHint}>Need availability/time</span>
+            <span style={styles.statHint}>Need time</span>
           </article>
 
           <article style={styles.statCard}>
@@ -566,146 +559,6 @@ const baseButton = {
 };
 
 const styles = {
-
-  hero: {
-    width: "100%",
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "end",
-    gap: 18,
-    marginTop: 2,
-    boxSizing: "border-box",
-  },
-
-  dot: {
-    color: "#e4ef16",
-  },
-
-  subtitle: {
-    margin: "10px 0 0",
-    maxWidth: 680,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.55,
-    fontSize: 18,
-  },
-
-  heroCreateButton: {
-    ...baseButton,
-    minHeight: 52,
-    borderRadius: 999,
-    background: "#e4ef16",
-    color: "#101406",
-    padding: "0 22px",
-    boxShadow: "0 18px 46px rgba(228,239,22,0.16)",
-    whiteSpace: "nowrap",
-    flexShrink: 0,
-  },
-
-  focusCard: {
-    borderRadius: 28,
-    padding: 18,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    gridTemplateColumns: "64px minmax(0,1fr) auto",
-    gap: 18,
-    alignItems: "center",
-  },
-
-  filterCard: {
-    borderRadius: 28,
-    padding: 18,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    gap: 14,
-  },
-
-  iconBubbleLime: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
-    display: "grid",
-    placeItems: "center",
-    color: "#e4ef16",
-    background: "rgba(228,239,22,0.13)",
-    border: "1px solid rgba(228,239,22,0.22)",
-    fontSize: 32,
-  },
-
-  cardCopy: {
-    display: "grid",
-    gap: 4,
-  },
-
-  cardTitle: {
-    margin: 0,
-    fontSize: "clamp(25px, 6.5vw, 34px)",
-    lineHeight: 1,
-    letterSpacing: "-0.055em",
-  },
-
-  muted: {
-    margin: 0,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.48,
-  },
-
-  sectionIntroCompact: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-  },
-
-  iconSmall: {
-    color: "#e4ef16",
-    fontSize: 26,
-    lineHeight: 1,
-  },
-
-  managementHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 12,
-  },
-
-  statCard: {
-    minHeight: 150,
-    borderRadius: 24,
-    padding: 18,
-    background: "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))",
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    alignContent: "space-between",
-    gap: 8,
-    minWidth: 0,
-  },
-
-  statIconLime: { color: "#e4ef16", fontSize: 30 },
-  statIconBlue: { color: "#3ea2ff", fontSize: 30 },
-  statIconPurple: { color: "#a764ff", fontSize: 30 },
-  statIconOrange: { color: "#ff9d1c", fontSize: 30 },
-
-  statValue: {
-    fontSize: 46,
-    lineHeight: 0.9,
-    letterSpacing: "-0.075em",
-  },
-
-  statTitle: { fontWeight: 950 },
-
-  statHint: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 13,
-  },
   page: {
     minHeight: "100vh",
     width: "100%",
@@ -755,7 +608,7 @@ const styles = {
     margin: "6px 0 0",
     fontSize: "clamp(46px, 13vw, 76px)",
     lineHeight: 0.92,
-    letterSpacing: "-0.07em",
+    letterSpacing: "-0.075em",
     maxWidth: "100%",
   },
 
@@ -793,14 +646,15 @@ const styles = {
 
   trainingListBlock: {
     borderRadius: 30,
-    padding: 18,
+    padding: 14,
     background: "linear-gradient(145deg, rgba(255,255,255,0.095), rgba(255,255,255,0.035))",
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
-    gap: 16,
+    gap: 14,
     minWidth: 0,
     width: "100%",
     overflow: "hidden",
+    boxSizing: "border-box",
   },
 
   listHeader: {
