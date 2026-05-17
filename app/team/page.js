@@ -211,11 +211,14 @@ export default function TeamPage() {
     try {
       setBusyId(personId);
 
-      const { error } = await supabase.from("training_partners").insert({
-        requester_id: profile.id,
-        addressee_id: personId,
-        status: "pending",
-      });
+      const { error } = await supabase.from("training_partners").upsert(
+        {
+          requester_id: profile.id,
+          addressee_id: personId,
+          status: "pending",
+        },
+        { onConflict: "requester_id,addressee_id", ignoreDuplicates: true }
+      );
 
       if (error) throw error;
 
@@ -285,33 +288,25 @@ export default function TeamPage() {
     try {
       setBusyId(invite.id);
 
-      const { data: existingParticipant, error: existingParticipantError } = await supabase
+      const { error: participantError } = await supabase
         .from("session_participants")
-        .select("id")
-        .eq("session_id", invite.session_id)
-        .eq("user_id", profile.id)
-        .maybeSingle();
-
-      if (existingParticipantError) throw existingParticipantError;
-
-      if (!existingParticipant?.id) {
-        const { error: participantError } = await supabase
-          .from("session_participants")
-          .insert({
+        .upsert(
+          {
             session_id: invite.session_id,
             user_id: profile.id,
-          });
+          },
+          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+        );
 
-        if (participantError) throw participantError;
-      }
+      if (participantError) throw participantError;
 
-      const { error: inviteDeleteError } = await supabase
+      const { error: inviteUpdateError } = await supabase
         .from("training_invites")
-        .delete()
+        .update({ status: "accepted", response_note: null })
         .eq("id", invite.id)
         .eq("invitee_id", profile.id);
 
-      if (inviteDeleteError) throw inviteDeleteError;
+      if (inviteUpdateError) throw inviteUpdateError;
 
       setMessage("Training invite accepted. You joined the session.");
       await loadTeam();
