@@ -22,6 +22,10 @@ function decodeJwtPayload(token) {
   }
 }
 
+function isModernSecretKey(token) {
+  return typeof token === "string" && token.startsWith("sb_secret_");
+}
+
 function getProjectRefFromUrl(url) {
   try {
     const host = new URL(url).hostname;
@@ -132,6 +136,7 @@ export async function POST(request) {
       has_service_role_key: Boolean(supabaseServiceRoleKey),
       service_role_claim: servicePayload?.role || null,
       service_key_ref: servicePayload?.ref || null,
+      service_key_type: isModernSecretKey(supabaseServiceRoleKey) ? "sb_secret" : "jwt",
       expected_project_ref: getProjectRefFromUrl(supabaseUrl),
     },
   };
@@ -144,19 +149,26 @@ export async function POST(request) {
       });
     }
 
-    if (servicePayload?.role !== "service_role") {
+    const usesModernSecretKey = isModernSecretKey(supabaseServiceRoleKey);
+
+    if (!usesModernSecretKey && servicePayload?.role !== "service_role") {
       return json(500, {
         error:
-          "SUPABASE_SERVICE_ROLE_KEY is not a service_role key. You probably pasted the anon key. Copy the key labeled service_role / secret from Supabase and redeploy.",
+          "SUPABASE_SERVICE_ROLE_KEY is not valid. Use either the new Supabase Secret key starting with sb_secret_ or the legacy JWT service_role key.",
         debug,
       });
     }
 
     const expectedProjectRef = getProjectRefFromUrl(supabaseUrl);
-    if (servicePayload?.ref && expectedProjectRef && servicePayload.ref !== expectedProjectRef) {
+    if (
+      !usesModernSecretKey &&
+      servicePayload?.ref &&
+      expectedProjectRef &&
+      servicePayload.ref !== expectedProjectRef
+    ) {
       return json(500, {
         error:
-          `SUPABASE_SERVICE_ROLE_KEY does not belong to this Supabase project. Key ref is ${servicePayload.ref}, but URL ref is ${expectedProjectRef}. Copy the service_role key from the same Supabase project as NEXT_PUBLIC_SUPABASE_URL and redeploy.`,
+          `SUPABASE_SERVICE_ROLE_KEY does not belong to this Supabase project. Key ref is ${servicePayload.ref}, but URL ref is ${expectedProjectRef}. Copy the key from the same Supabase project as NEXT_PUBLIC_SUPABASE_URL and redeploy.`,
         debug,
       });
     }
@@ -193,7 +205,7 @@ export async function POST(request) {
     if (smokeError) {
       return json(500, {
         error:
-          `Service role smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. Check that SUPABASE_SERVICE_ROLE_KEY belongs to project ${getProjectRefFromUrl(supabaseUrl)} and redeploy.`,
+          `Admin secret smoke test failed on profiles: ${smokeError.message || smokeError.code || "403/unknown"}. Check that SUPABASE_SERVICE_ROLE_KEY is the Secret key starting with sb_secret_ from project ${getProjectRefFromUrl(supabaseUrl)} and redeploy.`,
         debug: {
           ...debug,
           smoke_error: {
