@@ -343,7 +343,10 @@ export default function AdminPage() {
                   style={styles.input}
                 >
                   {roleOptions
-                    .filter((role) => profile?.role === "admin" || ["user", "organizer"].includes(role))
+                    .filter((role) => {
+                      if (profile?.role === "admin") return true;
+                      return ["user", "organizer"].includes(role);
+                    })
                     .map((role) => (
                       <option key={role} value={role}>
                         {role}
