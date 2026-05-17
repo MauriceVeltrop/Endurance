@@ -16,6 +16,33 @@ import { canUserSeeTraining } from "../../lib/trainingVisibility";
 
 const privilegedRoles = ["admin", "moderator"];
 
+function isActionNeededTraining(training) {
+  return training?.planning_type === "flexible" && !training?.final_starts_at;
+}
+
+function getFeedSortValue(training) {
+  const value =
+    training?.final_starts_at ||
+    training?.starts_at ||
+    (training?.flexible_date
+      ? `${training.flexible_date}T${training.flexible_start_time || "00:00"}:00`
+      : null) ||
+    training?.created_at ||
+    "9999-12-31T23:59:59";
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
+function sortTrainingFeed(a, b) {
+  const aAction = isActionNeededTraining(a);
+  const bAction = isActionNeededTraining(b);
+
+  if (aAction !== bAction) return aAction ? -1 : 1;
+
+  return getFeedSortValue(a) - getFeedSortValue(b);
+}
+
 export default function TrainingsPage() {
   const router = useRouter();
 
@@ -128,21 +155,7 @@ export default function TrainingsPage() {
 
           return false;
         })
-        .sort((a, b) => {
-          const aKey =
-            a.final_starts_at ||
-            a.starts_at ||
-            (a.flexible_date ? `${a.flexible_date}T${a.flexible_start_time || "00:00"}:00` : null) ||
-            "9999-12-31T23:59:59";
-
-          const bKey =
-            b.final_starts_at ||
-            b.starts_at ||
-            (b.flexible_date ? `${b.flexible_date}T${b.flexible_start_time || "00:00"}:00` : null) ||
-            "9999-12-31T23:59:59";
-
-          return new Date(aKey).getTime() - new Date(bKey).getTime();
-        });
+.sort(sortTrainingFeed);
 
 
       let acceptedPartnerIds = new Set();
@@ -306,7 +319,7 @@ export default function TrainingsPage() {
   const visibleTrainings = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    if (!query) return trainings;
+    if (!query) return [...trainings].sort(sortTrainingFeed);
 
     return trainings.filter((training) => {
       const haystack = [
@@ -322,8 +335,10 @@ export default function TrainingsPage() {
         .toLowerCase();
 
       return haystack.includes(query);
-    });
+    }).sort(sortTrainingFeed);
   }, [trainings, searchTerm]);
+  const actionNeededCount = visibleTrainings.filter(isActionNeededTraining).length;
+  const upcomingCount = Math.max(visibleTrainings.length - actionNeededCount, 0);
   const empty = !loading && !errorText && trainings.length === 0;
 
   return (
@@ -435,7 +450,9 @@ export default function TrainingsPage() {
           <section style={styles.trainingListBlock} aria-label="Training sessions list">
             <div style={styles.listHeader}>
               <span style={styles.kicker}>Training Sessions</span>
-              <span style={styles.listCount}>{visibleTrainings.length} shown</span>
+              <span style={styles.listCount}>
+                {actionNeededCount ? `${actionNeededCount} action needed · ` : ""}{upcomingCount} upcoming
+              </span>
             </div>
 
             <section style={styles.trainingList}>
@@ -476,6 +493,8 @@ export default function TrainingsPage() {
                     onJoin={() => toggleJoinFromCard(training)}
                     onOpen={() => router.push(`/trainings/${training.id}`)}
                     onCreatorClick={() => router.push(`/profile/${training.creator_id}`)}
+                    actionNeeded={isActionNeededTraining(training)}
+                    actionLabel={training.creator_id === currentUserId ? "Time to decide" : "Availability needed"}
                   />
                 );
               })}
