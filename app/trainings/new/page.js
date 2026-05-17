@@ -62,6 +62,13 @@ export default function CreateTrainingPage() {
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [partners, setPartners] = useState([]);
   const [selectedInviteIds, setSelectedInviteIds] = useState([]);
+  const [timeOptions, setTimeOptions] = useState([
+    {
+      starts_on: todayString(),
+      window_start: nextHourString(),
+      window_end: "11:00",
+    },
+  ]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -221,8 +228,43 @@ export default function CreateTrainingPage() {
     });
   }
 
+  function updateTimeOption(index, key, value) {
+    setTimeOptions((current) =>
+      current.map((option, optionIndex) =>
+        optionIndex === index ? { ...option, [key]: value } : option
+      )
+    );
+  }
+
+  function addTimeOption() {
+    setTimeOptions((current) => [
+      ...current,
+      {
+        starts_on: form.date || todayString(),
+        window_start: form.flexible_start_time || nextHourString(),
+        window_end: form.flexible_end_time || "11:00",
+      },
+    ]);
+  }
+
+  function removeTimeOption(index) {
+    setTimeOptions((current) => current.length > 1 ? current.filter((_, optionIndex) => optionIndex !== index) : current);
+  }
+
+  function normalizedTimeOptions() {
+    if (form.planning_type !== "flexible") return [];
+
+    return timeOptions.map((option) => ({
+      starts_on: option.starts_on || form.date,
+      window_start: option.window_start,
+      window_end: option.window_end,
+    }));
+  }
+
   function buildTrainingPayload() {
     const isFixed = form.planning_type === "fixed";
+    const options = normalizedTimeOptions();
+    const firstOption = options[0] || null;
     const startsAt = isFixed ? new Date(`${form.date}T${form.start_time}:00`).toISOString() : null;
 
     return {
@@ -233,9 +275,9 @@ export default function CreateTrainingPage() {
       visibility: form.visibility,
       planning_type: form.planning_type,
       starts_at: startsAt,
-      flexible_date: isFixed ? null : form.date,
-      flexible_start_time: isFixed ? null : form.flexible_start_time,
-      flexible_end_time: isFixed ? null : form.flexible_end_time,
+      flexible_date: isFixed ? null : firstOption?.starts_on || form.date,
+      flexible_start_time: isFixed ? null : firstOption?.window_start || form.flexible_start_time,
+      flexible_end_time: isFixed ? null : firstOption?.window_end || form.flexible_end_time,
       start_location: form.start_location.trim() || null,
       distance_km: selectedSport?.distance && form.distance_km ? Number(form.distance_km) : null,
       estimated_duration_min: form.estimated_duration_min ? Number(form.estimated_duration_min) : null,
@@ -278,14 +320,22 @@ export default function CreateTrainingPage() {
         return;
       }
 
-      if (form.planning_type === "flexible" && (!form.flexible_start_time || !form.flexible_end_time)) {
-        setMessage("Choose the possible start window.");
-        return;
-      }
+      if (form.planning_type === "flexible") {
+        const options = normalizedTimeOptions();
 
-      if (form.planning_type === "flexible" && form.flexible_start_time >= form.flexible_end_time) {
-        setMessage("The flexible end time must be after the start time.");
-        return;
+        if (!options.length) {
+          setMessage("Add at least one time option.");
+          return;
+        }
+
+        const invalidOption = options.find(
+          (option) => !option.starts_on || !option.window_start || !option.window_end || option.window_start >= option.window_end
+        );
+
+        if (invalidOption) {
+          setMessage("Every time option needs a date and a valid start window.");
+          return;
+        }
       }
 
       const payload = buildTrainingPayload();
@@ -307,6 +357,23 @@ export default function CreateTrainingPage() {
 
       if (creatorJoinError) {
         console.warn("Creator auto-join skipped", creatorJoinError);
+      }
+
+      if (form.planning_type === "flexible") {
+        const optionRows = normalizedTimeOptions().map((option) => ({
+          session_id: trainingRow.id,
+          starts_on: option.starts_on,
+          window_start: option.window_start,
+          window_end: option.window_end,
+        }));
+
+        const { error: optionsError } = await supabase
+          .from("training_time_options")
+          .insert(optionRows);
+
+        if (optionsError) {
+          console.warn("Planning poll options skipped", optionsError);
+        }
       }
 
       const inviteTargets =
@@ -478,26 +545,57 @@ export default function CreateTrainingPage() {
                   />
                 </label>
               ) : (
-                <div style={styles.twoColumns}>
-                  <label style={styles.label}>
-                    Possible from
-                    <input
-                      type="time"
-                      value={form.flexible_start_time}
-                      onChange={(event) => updateForm("flexible_start_time", event.target.value)}
-                      style={styles.input}
-                    />
-                  </label>
+                <div style={styles.timeOptionsBox}>
+                  <p style={styles.muted}>
+                    Add one or more possible start windows. Invitees respond per option; you choose the final start time later.
+                  </p>
 
-                  <label style={styles.label}>
-                    Possible until
-                    <input
-                      type="time"
-                      value={form.flexible_end_time}
-                      onChange={(event) => updateForm("flexible_end_time", event.target.value)}
-                      style={styles.input}
-                    />
-                  </label>
+                  {timeOptions.map((option, index) => (
+                    <div key={index} style={styles.timeOptionCard}>
+                      <div style={styles.timeOptionTop}>
+                        <strong>Option {index + 1}</strong>
+                        <button type="button" onClick={() => removeTimeOption(index)} style={styles.smallGhostButton}>
+                          Remove
+                        </button>
+                      </div>
+
+                      <label style={styles.label}>
+                        Date
+                        <input
+                          type="date"
+                          value={option.starts_on}
+                          onChange={(event) => updateTimeOption(index, "starts_on", event.target.value)}
+                          style={styles.input}
+                        />
+                      </label>
+
+                      <div style={styles.twoColumns}>
+                        <label style={styles.label}>
+                          Window from
+                          <input
+                            type="time"
+                            value={option.window_start}
+                            onChange={(event) => updateTimeOption(index, "window_start", event.target.value)}
+                            style={styles.input}
+                          />
+                        </label>
+
+                        <label style={styles.label}>
+                          Window until
+                          <input
+                            type="time"
+                            value={option.window_end}
+                            onChange={(event) => updateTimeOption(index, "window_end", event.target.value)}
+                            style={styles.input}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button type="button" onClick={addTimeOption} style={styles.secondaryButton}>
+                    + Add another time option
+                  </button>
                 </div>
               )}
             </section>
