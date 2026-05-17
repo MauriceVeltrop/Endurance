@@ -298,7 +298,10 @@ export default function TrainingsPage() {
       } else {
         const { error } = await supabase
           .from("session_participants")
-          .insert({ session_id: training.id, user_id: currentUserId });
+          .upsert(
+            { session_id: training.id, user_id: currentUserId },
+            { onConflict: "session_id,user_id", ignoreDuplicates: true }
+          );
 
         if (error) throw error;
       }
