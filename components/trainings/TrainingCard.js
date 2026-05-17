@@ -78,11 +78,12 @@ const styles = {
     color: "white",
     background: "linear-gradient(145deg, rgba(255,255,255,0.092), rgba(255,255,255,0.036))",
     border: "1px solid rgba(255,255,255,0.13)",
-    boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
+    boxShadow: "0 22px 60px rgba(0,0,0,0.24)",
     padding: 10,
     display: "grid",
     gap: 8,
     overflow: "hidden",
+    minWidth: 0,
   },
   mainButton: {
     width: "100%",
@@ -94,8 +95,8 @@ const styles = {
     margin: 0,
     cursor: "pointer",
     display: "grid",
-    gridTemplateColumns: "108px minmax(0, 1fr)",
-    gap: 12,
+    gridTemplateColumns: "96px minmax(0, 1fr)",
+    gap: 10,
     textAlign: "left",
   },
   body: {
@@ -136,7 +137,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(21px, 6vw, 30px)",
+    fontSize: "clamp(20px, 5.4vw, 28px)",
     lineHeight: 0.98,
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",

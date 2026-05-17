@@ -34,18 +34,21 @@ const baseButton = {
   fontWeight: 950,
   minHeight: 42,
   borderRadius: 999,
-  padding: "0 14px",
+  padding: "0 12px",
   fontSize: 13,
+  width: "100%",
 };
 
 const styles = {
   footer: {
-    display: "flex",
-    justifyContent: "flex-end",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(88px, auto)",
     alignItems: "center",
     gap: 8,
     paddingTop: 4,
-    flexWrap: "wrap",
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
   },
   joinButton: {
     ...baseButton,
