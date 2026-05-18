@@ -107,50 +107,7 @@ export default function TeamPage() {
       setIncoming(withProfiles.filter((row) => row.status === "pending" && row.addressee_id === user.id));
       setOutgoing(withProfiles.filter((row) => row.status === "pending" && row.requester_id === user.id));
 
-      const { data: inviteRows, error: inviteError } = await supabase
-        .from("training_invites")
-        .select("id,session_id,inviter_id,invitee_id,created_at")
-        .eq("invitee_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (inviteError) {
-        console.warn("Training invites skipped", inviteError);
-      } else {
-        const rows = inviteRows || [];
-        const sessionIds = rows.map((row) => row.session_id).filter(Boolean);
-        const inviterIds = rows.map((row) => row.inviter_id).filter(Boolean);
-
-        let sessionMap = {};
-        let inviterMap = {};
-
-        if (sessionIds.length) {
-          const { data: sessions, error: sessionsError } = await supabase
-            .from("training_sessions")
-            .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location")
-            .in("id", sessionIds);
-
-          if (sessionsError) {
-            console.warn("Invited trainings skipped", sessionsError);
-          } else {
-            sessionMap = Object.fromEntries((sessions || []).map((session) => [session.id, session]));
-          }
-        }
-
-        if (inviterIds.length) {
-          const { data: inviters, error: invitersError } = await supabase
-            .from("profiles")
-            .select("id,name,first_name,last_name,avatar_url,role")
-            .in("id", inviterIds);
-
-          if (invitersError) {
-            console.warn("Invite profiles skipped", invitersError);
-          } else {
-            inviterMap = Object.fromEntries((inviters || []).map((person) => [person.id, person]));
-          }
-        }
-      }
-    } catch (err) {
+      } catch (err) {
       console.error("Team load error", err);
       setMessage(err?.message || "Could not load your team.");
     } finally {
@@ -444,70 +401,8 @@ export default function TeamPage() {
           </section>
         ) : null}
 
-        <section style={0 ? styles.panelActive : styles.panel}>
-          <div style={styles.panelHeader}>
-            <div>
-              <div style={styles.panelKicker}>Training invites</div>
-              <h2 style={styles.panelTitle}>Invited sessions</h2>
-            </div>
+        
 
-            <span style={styles.countBadge}>{0}</span>
-          </div>
-
-          {0 ? (
-            <div style={styles.list}>
-              {[].map((invite) => {
-                const inviter = invite.inviter;
-                const training = invite.training;
-
-                return (
-                  <div key={invite.id} style={styles.trainingInviteCard}>
-                    <div style={styles.trainingInviteIcon}>⚡</div>
-
-                    <div style={styles.personText}>
-                      <strong>{training.title}</strong>
-                      <span>{displayTrainingTime(training)}</span>
-                      <span>
-                        Invited by {displayName(inviter)}
-                        {training.start_location ? ` · ${training.start_location}` : ""}
-                      </span>
-                    </div>
-
-                    <div style={styles.buttonGroup}>
-                      <button
-                        type="button"
-                        onClick={() => acceptTrainingInvite(invite)}
-                        disabled={busyId === invite.id}
-                        style={styles.smallPrimaryButton}
-                      >
-                        Join
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => declineTrainingInvite(invite)}
-                        disabled={busyId === invite.id}
-                        style={styles.smallGhostButton}
-                      >
-                        Decline
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/trainings/${training.id}`)}
-                        style={styles.smallGhostButton}
-                      >
-                        Open
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={styles.panelText}>No training invites yet.</p>
-          )}
-        </section>
 
         <section style={styles.panel}>
           <div style={styles.panelHeader}>
