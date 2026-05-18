@@ -14,6 +14,7 @@ export default function AppHeader({ profile, compact = false }) {
     { label: "Inbox", description: "Invites, requests and messages", icon: "✉", href: "/inbox" },
     { label: "Team", description: "Training partners", icon: "◎", href: "/team" },
     { label: "Profile", description: "Your sports and identity", icon: "●", href: "/profile" },
+    { label: "Privacy", description: "Visibility and permissions", icon: "◐", href: "/profile/privacy" },
   ];
 
   if (["admin", "moderator"].includes(profile?.role)) {
