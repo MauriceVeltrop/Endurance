@@ -152,7 +152,6 @@ export default function TrainingsPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
-  const [trainingInviteCount, setTrainingInviteCount] = useState(0);
   const [currentUserId, setCurrentUserId] = useState("");
   const [busySessionId, setBusySessionId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -186,13 +185,6 @@ export default function TrainingsPage() {
 
       setCurrentUserId(user.id);
 
-      const { count: inviteCount } = await supabase
-        .from("training_invites")
-        .select("id", { count: "exact", head: true })
-        .eq("invitee_id", user.id)
-        .eq("status", "pending");
-
-      setTrainingInviteCount(inviteCount || 0);
 
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
@@ -539,14 +531,6 @@ export default function TrainingsPage() {
             </div>
           </article>
 
-          <article style={styles.dashboardCard}>
-            <span style={styles.dashboardIconOrange}>✉</span>
-            <div>
-              <strong style={styles.dashboardValue}>{trainingInviteCount || 0}</strong>
-              <span style={styles.dashboardTitle}>Invites</span>
-              <span style={styles.dashboardHint}>Pending training invites</span>
-            </div>
-          </article>
         </section>
 
         <section style={styles.feedControlCard}>
@@ -570,21 +554,6 @@ export default function TrainingsPage() {
           />
         </section>
 
-        {!loading && trainingInviteCount > 0 ? (
-          <section style={styles.inviteBanner}>
-            <div>
-              <div style={styles.kicker}>Training invites</div>
-              <strong style={styles.inviteBannerTitle}>
-                You have {trainingInviteCount} pending invite{trainingInviteCount === 1 ? "" : "s"}
-              </strong>
-              <p style={styles.inviteBannerText}>Accept, decline or open the training details from Inbox.</p>
-            </div>
-
-            <button type="button" onClick={() => router.push("/team")} style={styles.primaryButton}>
-              Open Inbox
-            </button>
-          </section>
-        ) : null}
 
         {loading ? (
           <section style={styles.skeletonGrid} aria-label="Loading trainings">
@@ -685,9 +654,9 @@ const glassCard = {
   width: "100%",
   minWidth: 0,
   boxSizing: "border-box",
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "linear-gradient(145deg, rgba(20,26,26,0.92), rgba(8,12,13,0.88))",
-  boxShadow: "0 22px 70px rgba(0,0,0,0.34)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.035))",
+  boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
 };
 
 const styles = {
@@ -697,7 +666,7 @@ const styles = {
     maxWidth: "100vw",
     overflowX: "hidden",
     background:
-      "radial-gradient(circle at 88% 4%, rgba(228,239,22,0.10), transparent 24%), radial-gradient(circle at 10% 16%, rgba(30,90,110,0.14), transparent 28%), linear-gradient(180deg, #050909 0%, #050706 52%, #020202 100%)",
+      "radial-gradient(circle at 96% 0%, rgba(228,239,22,0.18), transparent 28%), radial-gradient(circle at 0% 18%, rgba(55,125,255,0.10), transparent 30%), linear-gradient(180deg, #07100b 0%, #050706 58%, #020202 100%)",
     color: "white",
     padding: "12px max(12px, env(safe-area-inset-left)) 44px max(12px, env(safe-area-inset-right))",
     boxSizing: "border-box",
@@ -721,10 +690,9 @@ const styles = {
     padding: "clamp(18px, 5vw, 34px)",
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr)",
-    gap: 20,
+    gap: 18,
     position: "relative",
     overflow: "hidden",
-    background: "linear-gradient(145deg, rgba(21,27,27,0.96), rgba(7,10,11,0.94))",
   },
 
   heroCopy: {
@@ -737,7 +705,7 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
     gap: 10,
     width: "100%",
-    maxWidth: 440,
+    maxWidth: 480,
   },
 
   kicker: {
@@ -771,12 +739,12 @@ const styles = {
 
   heroCreateButton: {
     ...baseButton,
-    minHeight: 56,
-    borderRadius: 22,
+    minHeight: 54,
+    borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
     padding: "0 20px",
-    boxShadow: "0 16px 34px rgba(228,239,22,0.20)",
+    boxShadow: "0 18px 44px rgba(228,239,22,0.20)",
     whiteSpace: "nowrap",
   },
 
@@ -819,8 +787,8 @@ const styles = {
     alignItems: "center",
     gap: 12,
     overflow: "hidden",
-    border: "1px solid rgba(228,239,22,0.18)",
-    background: "linear-gradient(145deg, rgba(35,42,25,0.92), rgba(10,14,15,0.92))",
+    border: "1px solid rgba(228,239,22,0.22)",
+    background: "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.04))",
   },
 
   dashboardIconLime: {
@@ -853,15 +821,6 @@ const styles = {
     border: "1px solid rgba(190,120,255,0.22)",
   },
 
-  dashboardIconOrange: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(255,165,80,0.13)",
-    border: "1px solid rgba(255,165,80,0.22)",
-  },
 
   dashboardValue: {
     display: "block",
@@ -881,7 +840,7 @@ const styles = {
   dashboardHint: {
     display: "block",
     marginTop: 2,
-    color: "rgba(255,255,255,0.62)",
+    color: "rgba(255,255,255,0.55)",
     fontSize: 12,
     fontWeight: 800,
     lineHeight: 1.25,
@@ -943,7 +902,7 @@ const styles = {
     width: "100%",
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(2,5,6,0.70)",
+    background: "rgba(0,0,0,0.28)",
     color: "white",
     padding: "0 16px",
     outline: "none",
@@ -951,28 +910,8 @@ const styles = {
     boxSizing: "border-box",
   },
 
-  inviteBanner: {
-    ...glassCard,
-    borderRadius: 26,
-    padding: 16,
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
-    gap: 14,
-    alignItems: "center",
-  },
 
-  inviteBannerTitle: {
-    display: "block",
-    marginTop: 4,
-    fontSize: 20,
-    letterSpacing: "-0.04em",
-  },
 
-  inviteBannerText: {
-    margin: "5px 0 0",
-    color: "rgba(255,255,255,0.62)",
-    fontWeight: 750,
-  },
 
   feedSections: {
     display: "grid",
@@ -1000,7 +939,7 @@ const styles = {
 
   sectionDescription: {
     margin: "5px 0 0",
-    color: "rgba(255,255,255,0.64)",
+    color: "rgba(255,255,255,0.56)",
     lineHeight: 1.35,
     fontSize: 13,
     fontWeight: 750,
