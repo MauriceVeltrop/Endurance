@@ -9,6 +9,7 @@ import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { fetchPrivacySettings, fetchPrivacySettingsMap, privacyAllowsTrainingInvite } from "../../../lib/privacy";
 import { uploadTrainingPhoto } from "../../../lib/trainingPhotos";
+import { createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
 
 const sportOptions = [
   { id: "running", metric: "pace", distance: true, routes: true, workouts: false },
@@ -526,18 +527,26 @@ export default function CreateTrainingPage() {
 
       if (error) throw error;
 
-      const { error: creatorJoinError } = await supabase
+      const { data: existingCreatorParticipant, error: existingCreatorParticipantError } = await supabase
         .from("session_participants")
-        .upsert(
-          {
+        .select("id")
+        .eq("session_id", trainingRow.id)
+        .eq("user_id", profile.id)
+        .maybeSingle();
+
+      if (existingCreatorParticipantError) {
+        console.warn("Creator auto-join check skipped", existingCreatorParticipantError);
+      } else if (!existingCreatorParticipant?.id) {
+        const { error: creatorJoinError } = await supabase
+          .from("session_participants")
+          .insert({
             session_id: trainingRow.id,
             user_id: profile.id,
-          },
-          { onConflict: "session_id,user_id" }
-        );
+          });
 
-      if (creatorJoinError) {
-        console.warn("Creator auto-join skipped", creatorJoinError);
+        if (creatorJoinError) {
+          console.warn("Creator auto-join skipped", creatorJoinError);
+        }
       }
 
       if (form.planning_type === "flexible") {
@@ -568,35 +577,82 @@ export default function CreateTrainingPage() {
         console.warn(`${blockedInviteCount} invite(s) skipped due to privacy settings.`);
       }
 
+      let createdInviteTargets = [];
+
       if (inviteTargets.length) {
-        const inviteRows = inviteTargets.map((inviteeId) => ({
-          session_id: trainingRow.id,
-          inviter_id: profile.id,
-          invitee_id: inviteeId,
-          status: "pending",
-        }));
-
-        const { error: inviteError } = await supabase
+        const { data: existingInvites, error: existingInviteError } = await supabase
           .from("training_invites")
-          .upsert(inviteRows, { onConflict: "session_id,invitee_id" });
+          .select("invitee_id,status")
+          .eq("session_id", trainingRow.id)
+          .in("invitee_id", inviteTargets);
 
-        if (inviteError) {
-          console.warn("Training invites skipped", inviteError);
+        if (existingInviteError) {
+          console.warn("Existing invite check skipped", existingInviteError);
+        }
+
+        const existingInviteeIds = new Set((existingInvites || []).map((row) => row.invitee_id));
+        const missingInviteTargets = inviteTargets.filter((inviteeId) => !existingInviteeIds.has(inviteeId));
+
+        if (missingInviteTargets.length) {
+          const inviteRows = missingInviteTargets.map((inviteeId) => ({
+            session_id: trainingRow.id,
+            inviter_id: profile.id,
+            invitee_id: inviteeId,
+            status: "pending",
+          }));
+
+          const { error: inviteError } = await supabase
+            .from("training_invites")
+            .insert(inviteRows);
+
+          if (inviteError) {
+            console.warn("Training invites skipped", inviteError);
+          } else {
+            createdInviteTargets = missingInviteTargets;
+          }
+        }
+
+        if (createdInviteTargets.length) {
+          await createNotificationsForUsers(createdInviteTargets, {
+            actorId: profile.id,
+            type: NOTIFICATION_TYPES.TRAINING_INVITE,
+            title: "New training invite",
+            body: `${displayName(profile)} invited you to ${payload.title}.`,
+            sessionId: trainingRow.id,
+            actionUrl: trainingUrl(trainingRow.id),
+            metadata: { source: "training_invites" },
+          });
         }
       }
 
       if (form.visibility === "selected") {
-        const visibilityRows = [...new Set([profile.id, ...inviteTargets])].map((userId) => ({
-          session_id: trainingRow.id,
-          user_id: userId,
-        }));
-
-        const { error: visibilityError } = await supabase
+        const visibilityUserIds = [...new Set([profile.id, ...inviteTargets])];
+        const { data: existingVisibilityRows, error: existingVisibilityError } = await supabase
           .from("training_visibility_members")
-          .upsert(visibilityRows, { onConflict: "session_id,user_id" });
+          .select("user_id")
+          .eq("session_id", trainingRow.id)
+          .in("user_id", visibilityUserIds);
 
-        if (visibilityError) {
-          console.warn("Selected visibility members skipped", visibilityError);
+        if (existingVisibilityError) {
+          console.warn("Selected visibility check skipped", existingVisibilityError);
+        }
+
+        const existingVisibilityIds = new Set((existingVisibilityRows || []).map((row) => row.user_id));
+        const visibilityRows = visibilityUserIds
+          .filter((userId) => !existingVisibilityIds.has(userId))
+          .map((userId) => ({
+            session_id: trainingRow.id,
+            user_id: userId,
+          }));
+
+        if (visibilityRows.length) {
+          const { error: visibilityError } = await supabase
+            .from("training_visibility_members")
+            .insert(visibilityRows);
+
+          if (visibilityError) {
+            console.warn("Selected visibility members skipped", visibilityError);
+          }
         }
       }
 
