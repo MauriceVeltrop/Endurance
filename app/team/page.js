@@ -1,3 +1,4 @@
+// NOTIFICATIONS_V1_PATCH: team request notification helpers available.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -12,6 +13,7 @@ export default function TeamPage() {
   const [partners, setPartners] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [trainingInvites, setTrainingInvites] = useState([]);
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +106,60 @@ export default function TeamPage() {
       setIncoming(withProfiles.filter((row) => row.status === "pending" && row.addressee_id === user.id));
       setOutgoing(withProfiles.filter((row) => row.status === "pending" && row.requester_id === user.id));
 
+      const { data: inviteRows, error: inviteError } = await supabase
+        .from("training_invites")
+        .select("id,session_id,inviter_id,invitee_id,created_at")
+        .eq("invitee_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (inviteError) {
+        console.warn("Training invites skipped", inviteError);
+        setTrainingInvites([]);
+      } else {
+        const rows = inviteRows || [];
+        const sessionIds = rows.map((row) => row.session_id).filter(Boolean);
+        const inviterIds = rows.map((row) => row.inviter_id).filter(Boolean);
+
+        let sessionMap = {};
+        let inviterMap = {};
+
+        if (sessionIds.length) {
+          const { data: sessions, error: sessionsError } = await supabase
+            .from("training_sessions")
+            .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location")
+            .in("id", sessionIds);
+
+          if (sessionsError) {
+            console.warn("Invited trainings skipped", sessionsError);
+          } else {
+            sessionMap = Object.fromEntries((sessions || []).map((session) => [session.id, session]));
+          }
+        }
+
+        if (inviterIds.length) {
+          const { data: inviters, error: invitersError } = await supabase
+            .from("profiles")
+            .select("id,name,first_name,last_name,avatar_url,role")
+            .in("id", inviterIds);
+
+          if (invitersError) {
+            console.warn("Invite profiles skipped", invitersError);
+          } else {
+            inviterMap = Object.fromEntries((inviters || []).map((person) => [person.id, person]));
+          }
+        }
+
+        setTrainingInvites(
+          rows
+            .map((row) => ({
+              ...row,
+              training: sessionMap[row.session_id] || null,
+              inviter: inviterMap[row.inviter_id] || null,
+            }))
+            .filter((row) => row.training)
+        );
+      }
     } catch (err) {
       console.error("Team load error", err);
       setMessage(err?.message || "Could not load your team.");
@@ -225,9 +281,94 @@ export default function TeamPage() {
     }
   };
 
+  const acceptTrainingInvite = async (invite) => {
+    if (!profile?.id || !invite?.session_id) return;
+
+    setMessage("");
+
+    try {
+      setBusyId(invite.id);
+
+      const { error: participantError } = await supabase
+        .from("session_participants")
+        .upsert(
+          {
+            session_id: invite.session_id,
+            user_id: profile.id,
+          },
+          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+        );
+
+      if (participantError) throw participantError;
+
+      const { error: inviteUpdateError } = await supabase
+        .from("training_invites")
+        .update({ status: "accepted", response_note: null })
+        .eq("id", invite.id)
+        .eq("invitee_id", profile.id);
+
+      if (inviteUpdateError) throw inviteUpdateError;
+
+      setMessage("Training invite accepted. You joined the session.");
+      await loadTeam();
+    } catch (err) {
+      console.error("Accept training invite error", err);
+      setMessage(err?.message || "Could not accept training invite.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const declineTrainingInvite = async (invite) => {
+    if (!profile?.id || !invite?.id) return;
+
+    setMessage("");
+
+    try {
+      setBusyId(invite.id);
+
+      const { error } = await supabase
+        .from("training_invites")
+        .delete()
+        .eq("id", invite.id)
+        .eq("invitee_id", profile.id);
+
+      if (error) throw error;
+
+      setMessage("Training invite declined.");
+      await loadTeam();
+    } catch (err) {
+      console.error("Decline training invite error", err);
+      setMessage(err?.message || "Could not decline training invite.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
   const getOtherProfile = (relation) => {
     if (!profile?.id) return null;
     return relation.requester_id === profile.id ? relation.addressee : relation.requester;
+  };
+
+  const displayTrainingTime = (training) => {
+    if (!training) return "Time not set";
+
+    const start = training.final_starts_at || training.starts_at;
+    if (start) {
+      return new Date(start).toLocaleString([], {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    if (training.flexible_date) {
+      return `Flexible · ${training.flexible_date}`;
+    }
+
+    return "Time not set";
   };
 
   const displayName = (person) => {
@@ -263,7 +404,7 @@ export default function TeamPage() {
             <h1 style={styles.title}>Build your team.</h1>
           </div>
           <p style={styles.subtitle}>
-            Training partners are the foundation for team-only sessions, trusted profile visibility and community building.
+            Training partners are the foundation for team-only sessions, invites and trusted profile visibility.
           </p>
         </header>
 
@@ -278,9 +419,92 @@ export default function TeamPage() {
             <strong style={styles.statValue}>{loading ? "…" : totalOpenRequests}</strong>
             <span style={styles.statHint}>open</span>
           </div>
+
+          <div style={trainingInvites.length ? styles.statCardActive : styles.statCard}>
+            <span style={styles.statLabel}>Invites</span>
+            <strong style={styles.statValue}>{loading ? "…" : trainingInvites.length}</strong>
+            <span style={styles.statHint}>training sessions</span>
+          </div>
         </section>
 
         {message ? <section style={styles.message}>{message}</section> : null}
+
+        {trainingInvites.length ? (
+          <section style={styles.inviteAlert}>
+            <div>
+              <div style={styles.panelKicker}>Action needed</div>
+              <h2 style={styles.inviteAlertTitle}>
+                You have {trainingInvites.length} training invite{trainingInvites.length === 1 ? "" : "s"}
+              </h2>
+              <p style={styles.panelText}>Open, join or decline them below.</p>
+            </div>
+          </section>
+        ) : null}
+
+        <section style={trainingInvites.length ? styles.panelActive : styles.panel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <div style={styles.panelKicker}>Training invites</div>
+              <h2 style={styles.panelTitle}>Invited sessions</h2>
+            </div>
+
+            <span style={styles.countBadge}>{trainingInvites.length}</span>
+          </div>
+
+          {trainingInvites.length ? (
+            <div style={styles.list}>
+              {trainingInvites.map((invite) => {
+                const inviter = invite.inviter;
+                const training = invite.training;
+
+                return (
+                  <div key={invite.id} style={styles.trainingInviteCard}>
+                    <div style={styles.trainingInviteIcon}>⚡</div>
+
+                    <div style={styles.personText}>
+                      <strong>{training.title}</strong>
+                      <span>{displayTrainingTime(training)}</span>
+                      <span>
+                        Invited by {displayName(inviter)}
+                        {training.start_location ? ` · ${training.start_location}` : ""}
+                      </span>
+                    </div>
+
+                    <div style={styles.buttonGroup}>
+                      <button
+                        type="button"
+                        onClick={() => acceptTrainingInvite(invite)}
+                        disabled={busyId === invite.id}
+                        style={styles.smallPrimaryButton}
+                      >
+                        Join
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => declineTrainingInvite(invite)}
+                        disabled={busyId === invite.id}
+                        style={styles.smallGhostButton}
+                      >
+                        Decline
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/trainings/${training.id}`)}
+                        style={styles.smallGhostButton}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={styles.panelText}>No training invites yet.</p>
+          )}
+        </section>
 
         <section style={styles.panel}>
           <div style={styles.panelHeader}>
