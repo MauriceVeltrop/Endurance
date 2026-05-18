@@ -4,9 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import ImageCropperModal from "../../../components/ImageCropperModal";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
-import { createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
+import { uploadTrainingPhoto } from "../../../lib/trainingPhotos";
 
 const sportOptions = [
   { id: "running", metric: "pace", distance: true, routes: true, workouts: false },
@@ -109,6 +110,9 @@ export default function CreateTrainingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [trainingPhotoFile, setTrainingPhotoFile] = useState(null);
+  const [trainingPhotoPreview, setTrainingPhotoPreview] = useState("");
+  const [trainingCropFile, setTrainingCropFile] = useState(null);
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -420,6 +424,37 @@ export default function CreateTrainingPage() {
     return "";
   }
 
+
+  function chooseTrainingPhoto(file) {
+    setMessage("");
+
+    if (!file) return;
+
+    if (!file.type?.startsWith("image/")) {
+      setMessage("Choose an image file.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage("Training photo is too large. Use an image under 10 MB.");
+      return;
+    }
+
+    setTrainingCropFile(file);
+  }
+
+  function confirmTrainingPhotoCrop({ file, previewUrl }) {
+    setTrainingPhotoFile(file);
+    setTrainingPhotoPreview(previewUrl);
+    setTrainingCropFile(null);
+  }
+
+  function removeTrainingPhoto() {
+    setTrainingPhotoFile(null);
+    setTrainingPhotoPreview("");
+    setTrainingCropFile(null);
+  }
+
   async function createTraining(event) {
     event.preventDefault();
 
@@ -459,7 +494,20 @@ export default function CreateTrainingPage() {
         }
       }
 
-      const payload = buildTrainingPayload();
+      let uploadedTrainingPhotoUrl = "";
+
+      if (trainingPhotoFile) {
+        uploadedTrainingPhotoUrl = await uploadTrainingPhoto({
+          supabase,
+          userId: profile.id,
+          file: trainingPhotoFile,
+        });
+      }
+
+      const payload = {
+        ...buildTrainingPayload(),
+        ...(uploadedTrainingPhotoUrl ? { teaser_photo_url: uploadedTrainingPhotoUrl } : {}),
+      };
 
       const { data: trainingRow, error } = await supabase
         .from("training_sessions")
@@ -516,16 +564,6 @@ export default function CreateTrainingPage() {
 
         if (inviteError) {
           console.warn("Training invites skipped", inviteError);
-        } else {
-          await createNotificationsForUsers(inviteTargets, {
-            actorId: profile.id,
-            type: NOTIFICATION_TYPES.TRAINING_INVITE,
-            sessionId: trainingRow.id,
-            title: "New training invite",
-            body: `${displayName(profile)} invited you to ${form.title.trim()}.`,
-            actionUrl: trainingUrl(trainingRow.id),
-            metadata: { source: "create_training" },
-          });
         }
       }
 
@@ -655,6 +693,36 @@ export default function CreateTrainingPage() {
                   style={styles.textarea}
                 />
               </label>
+
+              <section style={styles.photoSection}>
+                <div>
+                  <div style={styles.photoTitle}>Training photo</div>
+                  <p style={styles.photoText}>
+                    Optional, but recommended. Crop and zoom a hero image for this training.
+                  </p>
+                </div>
+
+                <label style={styles.photoDrop}>
+                  {trainingPhotoPreview ? (
+                    <img src={trainingPhotoPreview} alt="Training preview" style={styles.photoPreview} />
+                  ) : (
+                    <span style={styles.photoPlaceholder}>Add training photo</span>
+                  )}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
+                    style={styles.hiddenFileInput}
+                  />
+                </label>
+
+                {trainingPhotoPreview ? (
+                  <button type="button" onClick={removeTrainingPhoto} style={styles.tinyButton}>
+                    Remove photo
+                  </button>
+                ) : null}
+              </section>
             </section>
 
             <section style={styles.card}>
@@ -959,6 +1027,16 @@ export default function CreateTrainingPage() {
           </form>
         )}
       </section>
+
+      {trainingCropFile ? (
+        <ImageCropperModal
+          file={trainingCropFile}
+          mode="trainingHero"
+          title="Crop training photo"
+          onCancel={() => setTrainingCropFile(null)}
+          onConfirm={confirmTrainingPhotoCrop}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1364,5 +1442,52 @@ const styles = {
     padding: "0 18px",
     fontWeight: 950,
     cursor: "pointer",
+  },
+
+  photoSection: {
+    display: "grid",
+    gap: 12,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    borderRadius: 24,
+    padding: 14,
+  },
+  photoTitle: {
+    color: "#fff",
+    fontWeight: 950,
+    fontSize: 18,
+    letterSpacing: "-0.03em",
+  },
+  photoText: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 13,
+    lineHeight: 1.4,
+    fontWeight: 650,
+  },
+  photoDrop: {
+    position: "relative",
+    overflow: "hidden",
+    display: "grid",
+    placeItems: "center",
+    minHeight: 160,
+    borderRadius: 22,
+    border: "1px dashed rgba(215,255,63,0.42)",
+    background: "rgba(215,255,63,0.08)",
+    cursor: "pointer",
+  },
+  photoPreview: {
+    width: "100%",
+    height: "100%",
+    minHeight: 160,
+    objectFit: "cover",
+    display: "block",
+  },
+  photoPlaceholder: {
+    color: "#d7ff3f",
+    fontWeight: 950,
+  },
+  hiddenFileInput: {
+    display: "none",
   },
 };
