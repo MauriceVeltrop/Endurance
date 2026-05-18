@@ -1,3 +1,4 @@
+// NOTIFICATIONS_V1_PATCH: notification helpers imported for join/final-time activity.
 "use client";
 
 import Link from "next/link";
