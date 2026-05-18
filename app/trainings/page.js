@@ -1,4 +1,4 @@
-// Duplicate invite buttons removed from feed cards
+// INVITE FLOW CLEANUP PATCH
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -580,11 +580,11 @@ export default function TrainingsPage() {
               <strong style={styles.inviteBannerTitle}>
                 You have {trainingInviteCount} pending invite{trainingInviteCount === 1 ? "" : "s"}
               </strong>
-              <p style={styles.inviteBannerText}>Accept, decline or open the training details from Team.</p>
+              <p style={styles.inviteBannerText}>Accept, decline or open the training details from Inbox.</p>
             </div>
 
             <button type="button" onClick={() => router.push("/team")} style={styles.primaryButton}>
-              Open Team
+              Open Inbox
             </button>
           </section>
         ) : null}
