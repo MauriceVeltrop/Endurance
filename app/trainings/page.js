@@ -12,9 +12,9 @@ import {
   getSportLabel,
 } from "../../lib/trainingHelpers";
 import { getTrainingHeroImage } from "../../lib/sportImages";
-import { canUserSeeTraining } from "../../lib/trainingVisibility";
 
 const privilegedRoles = ["admin", "moderator"];
+const SOON_WINDOW_HOURS = 72;
 
 function isActionNeededTraining(training) {
   return training?.planning_type === "flexible" && !training?.final_starts_at;
@@ -41,6 +41,105 @@ function sortTrainingFeed(a, b) {
   if (aAction !== bAction) return aAction ? -1 : 1;
 
   return getFeedSortValue(a) - getFeedSortValue(b);
+}
+
+function getTrainingStart(training) {
+  const value = training?.final_starts_at || training?.starts_at || null;
+  if (!value) return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isStartingSoon(training) {
+  const start = getTrainingStart(training);
+  if (!start) return false;
+
+  const now = Date.now();
+  const delta = start.getTime() - now;
+  return delta >= 0 && delta <= SOON_WINDOW_HOURS * 60 * 60 * 1000;
+}
+
+function getSectionedTrainings(trainings) {
+  const used = new Set();
+
+  const take = (predicate) => {
+    const rows = trainings.filter((training) => !used.has(training.id) && predicate(training));
+    rows.forEach((training) => used.add(training.id));
+    return rows;
+  };
+
+  const actionNeeded = take(isActionNeededTraining);
+  const startingSoon = take(isStartingSoon);
+  const routeReady = take((training) => Boolean(training.route_id || training.workout_id));
+  const upcoming = take(() => true);
+
+  return [
+    {
+      id: "action",
+      eyebrow: "Planning",
+      title: "Needs a decision",
+      description: "Flexible sessions where availability or a final time still matters.",
+      icon: "⚡",
+      trainings: actionNeeded,
+    },
+    {
+      id: "soon",
+      eyebrow: "Next 72 hours",
+      title: "Starting soon",
+      description: "Sessions with a fixed or final start time coming up soon.",
+      icon: "⏱️",
+      trainings: startingSoon,
+    },
+    {
+      id: "ready",
+      eyebrow: "Prepared",
+      title: "Route or workout attached",
+      description: "Sessions that already have a route or workout connected.",
+      icon: "🧭",
+      trainings: routeReady,
+    },
+    {
+      id: "upcoming",
+      eyebrow: "Your feed",
+      title: "More upcoming trainings",
+      description: "Other sessions that match your sports, team or visibility.",
+      icon: "👥",
+      trainings: upcoming,
+    },
+  ].filter((section) => section.trainings.length > 0);
+}
+
+function getTrainingStatus(training) {
+  if (training?.final_starts_at) return "Final time chosen";
+  if (training?.planning_type === "flexible") return "Finding best overlap";
+  if (training?.starts_at) return "Fixed time";
+  return "Time to confirm";
+}
+
+function getTrainingBadges(training, participantCount, joined) {
+  const badges = [];
+
+  if (joined) badges.push("You joined");
+  if (training?.final_starts_at) badges.push("Final time");
+  else if (training?.planning_type === "flexible") badges.push("Flexible planning");
+  if (isStartingSoon(training)) badges.push("Starting soon");
+  if (training?.route_id) badges.push("Route attached");
+  if (training?.workout_id) badges.push("Workout attached");
+  if (participantCount >= 3) badges.push(`${participantCount} athletes`);
+
+  return badges.slice(0, 4);
+}
+
+function getSocialLabel(training, participantCount, joined) {
+  if (joined) return "You are in";
+  if (training?.planning_type === "flexible" && !training?.final_starts_at) {
+    return participantCount > 0
+      ? `${participantCount} athlete${participantCount === 1 ? "" : "s"} can respond`
+      : "Be the first to share availability";
+  }
+  if (participantCount > 0) return `${participantCount} athlete${participantCount === 1 ? "" : "s"} joined`;
+  return "Open for teammates";
 }
 
 export default function TrainingsPage() {
@@ -89,7 +188,8 @@ export default function TrainingsPage() {
       const { count: inviteCount } = await supabase
         .from("training_invites")
         .select("id", { count: "exact", head: true })
-        .eq("invitee_id", user.id);
+        .eq("invitee_id", user.id)
+        .eq("status", "pending");
 
       setTrainingInviteCount(inviteCount || 0);
 
@@ -155,8 +255,7 @@ export default function TrainingsPage() {
 
           return false;
         })
-.sort(sortTrainingFeed);
-
+        .sort(sortTrainingFeed);
 
       let acceptedPartnerIds = new Set();
       let selectedVisibilitySessionIds = new Set();
@@ -207,7 +306,7 @@ export default function TrainingsPage() {
             return sports.some((sportId) => allowedSports.includes(sportId));
           });
 
-      const visibleRows = filtered.slice(0, 30);
+      const visibleRows = filtered.slice(0, 40);
       setTrainings(visibleRows);
 
       const creatorIds = [...new Set(visibleRows.map((training) => training.creator_id).filter(Boolean))];
@@ -263,6 +362,7 @@ export default function TrainingsPage() {
         }
       } else {
         setParticipantCounts({});
+        setJoinedSessionIds(new Set());
       }
     } catch (err) {
       console.error("Training feed error", err);
@@ -324,25 +424,70 @@ export default function TrainingsPage() {
 
     if (!query) return [...trainings].sort(sortTrainingFeed);
 
-    return trainings.filter((training) => {
-      const haystack = [
-        training.title,
-        training.description,
-        training.start_location,
-        Array.isArray(training.sports) ? training.sports.map(getSportLabel).join(" ") : "",
-        Array.isArray(training.sports) ? training.sports.join(" ") : "",
-        training.visibility,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    return trainings
+      .filter((training) => {
+        const haystack = [
+          training.title,
+          training.description,
+          training.start_location,
+          Array.isArray(training.sports) ? training.sports.map(getSportLabel).join(" ") : "",
+          Array.isArray(training.sports) ? training.sports.join(" ") : "",
+          training.visibility,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      return haystack.includes(query);
-    }).sort(sortTrainingFeed);
+        return haystack.includes(query);
+      })
+      .sort(sortTrainingFeed);
   }, [trainings, searchTerm]);
+
+  const feedSections = useMemo(() => getSectionedTrainings(visibleTrainings), [visibleTrainings]);
   const actionNeededCount = visibleTrainings.filter(isActionNeededTraining).length;
-  const upcomingCount = Math.max(visibleTrainings.length - actionNeededCount, 0);
+  const startingSoonCount = visibleTrainings.filter(isStartingSoon).length;
+  const readyCount = visibleTrainings.filter((training) => training.route_id || training.workout_id).length;
   const empty = !loading && !errorText && trainings.length === 0;
+
+  function renderTrainingCard(training, sectionId) {
+    const primarySport = getPrimarySport(training);
+    const sportLabel = getSportLabel(primarySport);
+    const sportImage = getTrainingHeroImage(training, primarySport);
+    const time = formatTrainingTime(training);
+    const intensity = formatTrainingIntensity(training);
+    const joinedCount = participantCounts[training.id] || 0;
+    const alreadyJoined = joinedSessionIds.has(training.id);
+    const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+    const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
+    const creator = creatorProfiles[training.creator_id];
+    const creatorName = creator?.displayName || (training.creator_id === currentUserId ? "You" : "Organizer");
+
+    return (
+      <TrainingCard
+        key={`${sectionId}-${training.id}`}
+        training={training}
+        sportLabel={sportLabel}
+        sportImage={sportImage}
+        creator={creator}
+        creatorName={creatorName}
+        time={time}
+        intensity={intensity}
+        participantCount={joinedCount}
+        maxParticipants={maxParticipants}
+        joined={alreadyJoined}
+        spotsLeft={spotsLeft}
+        busy={busySessionId === training.id}
+        onJoin={() => toggleJoinFromCard(training)}
+        onOpen={() => router.push(`/trainings/${training.id}`)}
+        onCreatorClick={() => router.push(`/profile/${training.creator_id}`)}
+        actionNeeded={isActionNeededTraining(training)}
+        actionLabel={training.creator_id === currentUserId ? "Choose final time" : "Share availability"}
+        statusLabel={getTrainingStatus(training)}
+        socialLabel={getSocialLabel(training, joinedCount, alreadyJoined)}
+        badges={getTrainingBadges(training, joinedCount, alreadyJoined)}
+      />
+    );
+  }
 
   return (
     <main style={styles.page}>
@@ -350,53 +495,91 @@ export default function TrainingsPage() {
         <AppHeader profile={profile} compact />
 
         <header style={styles.hero}>
-          <div>
-            <div style={styles.kicker}>Training Sessions</div>
-            <h1 style={styles.title}>Who is training<span style={styles.dot}>?</span></h1>
+          <div style={styles.heroCopy}>
+            <div style={styles.kicker}>Training Feed</div>
+            <h1 style={styles.title}>Find your next session<span style={styles.dot}>.</span></h1>
             <p style={styles.subtitle}>
-              Find, create and join verified training sessions with your Endurance community.
+              Join verified sport sessions, respond to flexible planning and see what your team is training next.
             </p>
           </div>
 
-          <button type="button" onClick={openCreateTraining} style={styles.heroCreateButton}>
-            👤＋ Create training
-          </button>
+          <div style={styles.heroActions}>
+            <button type="button" onClick={openCreateTraining} style={styles.heroCreateButton}>
+              ＋ Create training
+            </button>
+            <button type="button" onClick={() => router.push("/team")} style={styles.heroSecondaryButton}>
+              Team & invites
+            </button>
+          </div>
         </header>
 
-        <section style={styles.focusCard}>
-          <div style={styles.iconBubbleLime}>⚡</div>
-          <div style={styles.cardCopy}>
-            <h2 style={styles.cardTitle}>Train together</h2>
-            <p style={styles.muted}>
-              Create a session, invite people, agree a time and train together.
-            </p>
-          </div>
+        <section style={styles.dashboardGrid} aria-label="Training dashboard">
+          <article style={styles.dashboardCardHighlight}>
+            <span style={styles.dashboardIconLime}>⚡</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : actionNeededCount}</strong>
+              <span style={styles.dashboardTitle}>Need planning</span>
+              <span style={styles.dashboardHint}>Flexible sessions waiting for availability or a final time.</span>
+            </div>
+          </article>
+
+          <article style={styles.dashboardCard}>
+            <span style={styles.dashboardIconBlue}>⏱️</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : startingSoonCount}</strong>
+              <span style={styles.dashboardTitle}>Starting soon</span>
+              <span style={styles.dashboardHint}>Next {SOON_WINDOW_HOURS} hours</span>
+            </div>
+          </article>
+
+          <article style={styles.dashboardCard}>
+            <span style={styles.dashboardIconPurple}>🧭</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : readyCount}</strong>
+              <span style={styles.dashboardTitle}>Prepared</span>
+              <span style={styles.dashboardHint}>Route or workout attached</span>
+            </div>
+          </article>
+
+          <article style={styles.dashboardCard}>
+            <span style={styles.dashboardIconOrange}>✉</span>
+            <div>
+              <strong style={styles.dashboardValue}>{trainingInviteCount || 0}</strong>
+              <span style={styles.dashboardTitle}>Invites</span>
+              <span style={styles.dashboardHint}>Pending training invites</span>
+            </div>
+          </article>
         </section>
 
-        {!loading && !errorText && trainings.length > 0 ? (
-          <section style={styles.filterCard}>
+        <section style={styles.feedControlCard}>
+          <div style={styles.feedControlTop}>
             <div style={styles.sectionIntroCompact}>
               <span style={styles.iconSmall}>🔎</span>
-              <h2 style={styles.cardTitle}>Find training</h2>
+              <div>
+                <div style={styles.kicker}>Smart feed</div>
+                <h2 style={styles.cardTitle}>Your training opportunities</h2>
+              </div>
             </div>
 
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search training, location or sport..."
-              style={styles.searchInput}
-            />
-          </section>
-        ) : null}
+            <span style={styles.feedScope}>{preferredSportLabel}</span>
+          </div>
+
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search training, location or sport..."
+            style={styles.searchInput}
+          />
+        </section>
 
         {!loading && trainingInviteCount > 0 ? (
           <section style={styles.inviteBanner}>
             <div>
               <div style={styles.kicker}>Training invites</div>
               <strong style={styles.inviteBannerTitle}>
-                You have {trainingInviteCount} invite{trainingInviteCount === 1 ? "" : "s"}
+                You have {trainingInviteCount} pending invite{trainingInviteCount === 1 ? "" : "s"}
               </strong>
-              <p style={styles.inviteBannerText}>Open Team to join or decline invited sessions.</p>
+              <p style={styles.inviteBannerText}>Accept, decline or open the training details from Team.</p>
             </div>
 
             <button type="button" onClick={() => router.push("/team")} style={styles.primaryButton}>
@@ -406,11 +589,17 @@ export default function TrainingsPage() {
         ) : null}
 
         {loading ? (
-          <section style={styles.stateCard}>
-            <div style={styles.stateTitle}>Loading trainings...</div>
-            <p style={styles.stateText}>
-              Fetching your profile, preferred sports and upcoming sessions.
-            </p>
+          <section style={styles.skeletonGrid} aria-label="Loading trainings">
+            {[0, 1, 2].map((item) => (
+              <div key={item} style={styles.skeletonCard}>
+                <div style={styles.skeletonImage} />
+                <div style={styles.skeletonLines}>
+                  <span style={styles.skeletonLineShort} />
+                  <span style={styles.skeletonLineLong} />
+                  <span style={styles.skeletonLineMedium} />
+                </div>
+              </div>
+            ))}
           </section>
         ) : null}
 
@@ -428,18 +617,18 @@ export default function TrainingsPage() {
         {empty ? (
           <section style={styles.emptyCard}>
             <div style={styles.emptyIcon}>⚡</div>
-
             <div style={styles.stateTitle}>
               {preferredSportIds.length ? "No matching trainings yet" : "Choose your preferred sports"}
             </div>
-
             <p style={styles.stateText}>
               {preferredSportIds.length
                 ? "Create a new session or broaden your preferred sports in your profile."
                 : "Your feed is filtered by preferred sports. Add sports to your profile first."}
             </p>
-
             <div style={styles.emptyActions}>
+              <button type="button" onClick={openCreateTraining} style={styles.primaryButton}>
+                Create training
+              </button>
               <button type="button" onClick={() => router.push("/profile")} style={styles.secondaryButton}>
                 Edit profile
               </button>
@@ -458,98 +647,30 @@ export default function TrainingsPage() {
           </section>
         ) : null}
 
-        {!loading && !errorText && visibleTrainings.length > 0 ? (
-          <section style={styles.trainingListBlock} aria-label="Training sessions list">
-            <div style={styles.managementHeader}>
-              <div style={styles.sectionIntroCompact}>
-                <span style={styles.iconSmall}>👥</span>
-                <div>
-                  <div style={styles.kicker}>Training Sessions</div>
-                  <h2 style={styles.cardTitle}>Upcoming sessions</h2>
+        {!loading && !errorText && feedSections.length > 0 ? (
+          <section style={styles.feedSections} aria-label="Training feed sections">
+            {feedSections.map((section) => (
+              <section key={section.id} style={styles.feedSection}>
+                <div style={styles.sectionHeader}>
+                  <div style={styles.sectionIntroCompact}>
+                    <span style={styles.iconSmall}>{section.icon}</span>
+                    <div>
+                      <div style={styles.kicker}>{section.eyebrow}</div>
+                      <h2 style={styles.cardTitle}>{section.title}</h2>
+                      <p style={styles.sectionDescription}>{section.description}</p>
+                    </div>
+                  </div>
+
+                  <span style={styles.sectionCount}>{section.trainings.length}</span>
                 </div>
-              </div>
 
-              <span style={styles.listCount}>
-                {actionNeededCount ? `${actionNeededCount} action needed · ` : ""}{upcomingCount} upcoming
-              </span>
-            </div>
-
-            <section style={styles.trainingList}>
-              {visibleTrainings.map((training) => {
-                const primarySport = getPrimarySport(training);
-                const sportLabel = getSportLabel(primarySport);
-                const sportImage = getTrainingHeroImage(training, primarySport);
-                const time = formatTrainingTime(training);
-                const intensity = formatTrainingIntensity(training);
-                const joinedCount = participantCounts[training.id] || 0;
-                const alreadyJoined = joinedSessionIds.has(training.id);
-                const hasDistance =
-                  training.distance_km !== null &&
-                  training.distance_km !== undefined &&
-                  training.distance_km !== "";
-                const hasIntensity = intensity && intensity !== "Intensity not set";
-                const hasRouteOrWorkout = Boolean(training.route_id || training.workout_id);
-                const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
-                const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
-                const creator = creatorProfiles[training.creator_id];
-                const creatorName = creator?.displayName || (training.creator_id === currentUserId ? "You" : "Organizer");
-
-                return (
-                  <TrainingCard
-                    key={training.id}
-                    training={training}
-                    sportLabel={sportLabel}
-                    sportImage={sportImage}
-                    creator={creator}
-                    creatorName={creatorName}
-                    time={time}
-                    intensity={intensity}
-                    participantCount={joinedCount}
-                    maxParticipants={maxParticipants}
-                    joined={alreadyJoined}
-                    spotsLeft={spotsLeft}
-                    busy={busySessionId === training.id}
-                    onJoin={() => toggleJoinFromCard(training)}
-                    onOpen={() => router.push(`/trainings/${training.id}`)}
-                    onCreatorClick={() => router.push(`/profile/${training.creator_id}`)}
-                    actionNeeded={isActionNeededTraining(training)}
-                    actionLabel={training.creator_id === currentUserId ? "Time to decide" : "Availability needed"}
-                  />
-                );
-              })}
-            </section>
+                <div style={section.id === "action" ? styles.priorityTrainingList : styles.trainingList}>
+                  {section.trainings.map((training) => renderTrainingCard(training, section.id))}
+                </div>
+              </section>
+            ))}
           </section>
         ) : null}
-
-        <section style={styles.statsGrid} aria-label="Training dashboard">
-          <article style={styles.statCard}>
-            <span style={styles.statIconLime}>👥</span>
-            <strong style={styles.statValue}>{loading ? "…" : visibleTrainings.length}</strong>
-            <span style={styles.statTitle}>Shown</span>
-            <span style={styles.statHint}>{trainings.length} total sessions</span>
-          </article>
-
-          <article style={styles.statCard}>
-            <span style={styles.statIconBlue}>✉</span>
-            <strong style={styles.statValue}>{trainingInviteCount || 0}</strong>
-            <span style={styles.statTitle}>Invites</span>
-            <span style={styles.statHint}>Open invites</span>
-          </article>
-
-          <article style={styles.statCard}>
-            <span style={styles.statIconPurple}>⚡</span>
-            <strong style={styles.statValue}>{actionNeededCount || 0}</strong>
-            <span style={styles.statTitle}>Action</span>
-            <span style={styles.statHint}>Need time</span>
-          </article>
-
-          <article style={styles.statCard}>
-            <span style={styles.statIconOrange}>♛</span>
-            <strong style={styles.statValue}>{canSeeAll ? "All" : preferredSportIds.length || "—"}</strong>
-            <span style={styles.statTitle}>Sports</span>
-            <span style={styles.statHint}>{preferredSportLabel}</span>
-          </article>
-        </section>
       </section>
     </main>
   );
@@ -587,7 +708,7 @@ const styles = {
 
   shell: {
     width: "100%",
-    maxWidth: 1080,
+    maxWidth: 1120,
     margin: "0 auto",
     display: "grid",
     gap: 14,
@@ -601,11 +722,23 @@ const styles = {
     borderRadius: 32,
     padding: "clamp(18px, 5vw, 34px)",
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-    alignItems: "end",
+    gridTemplateColumns: "minmax(0, 1fr)",
     gap: 18,
     position: "relative",
     overflow: "hidden",
+  },
+
+  heroCopy: {
+    minWidth: 0,
+    maxWidth: 760,
+  },
+
+  heroActions: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+    gap: 10,
+    width: "100%",
+    maxWidth: 480,
   },
 
   kicker: {
@@ -618,7 +751,7 @@ const styles = {
 
   title: {
     margin: "7px 0 0",
-    fontSize: "clamp(42px, 11vw, 78px)",
+    fontSize: "clamp(40px, 11vw, 78px)",
     lineHeight: 0.92,
     letterSpacing: "-0.075em",
     maxWidth: "100%",
@@ -630,7 +763,7 @@ const styles = {
 
   subtitle: {
     margin: "12px 0 0",
-    maxWidth: 620,
+    maxWidth: 660,
     color: "rgba(255,255,255,0.70)",
     fontSize: "clamp(15px, 3.8vw, 18px)",
     lineHeight: 1.45,
@@ -640,9 +773,6 @@ const styles = {
   heroCreateButton: {
     ...baseButton,
     minHeight: 54,
-    width: "100%",
-    maxWidth: 260,
-    justifySelf: "end",
     borderRadius: 20,
     background: "#e4ef16",
     color: "#101406",
@@ -651,51 +781,137 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  focusCard: {
-    ...glassCard,
-    borderRadius: 26,
-    padding: 14,
-    display: "grid",
-    gridTemplateColumns: "48px minmax(0, 1fr)",
-    alignItems: "center",
-    gap: 12,
+  heroSecondaryButton: {
+    ...baseButton,
+    minHeight: 54,
+    borderRadius: 20,
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    border: "1px solid rgba(255,255,255,0.12)",
+    padding: "0 20px",
+    whiteSpace: "nowrap",
   },
 
-  iconBubbleLime: {
-    width: 48,
-    height: 48,
-    borderRadius: 17,
+  dashboardGrid: {
     display: "grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.13)",
-    border: "1px solid rgba(228,239,22,0.26)",
-    fontSize: 22,
-  },
-
-  cardCopy: {
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: 10,
+    width: "100%",
     minWidth: 0,
   },
 
-  cardTitle: {
-    margin: 0,
-    fontSize: "clamp(20px, 5vw, 28px)",
-    lineHeight: 1,
-    letterSpacing: "-0.05em",
+  dashboardCard: {
+    ...glassCard,
+    borderRadius: 24,
+    padding: 14,
+    display: "grid",
+    gridTemplateColumns: "42px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+    overflow: "hidden",
   },
 
-  muted: {
-    margin: "5px 0 0",
-    color: "rgba(255,255,255,0.64)",
-    lineHeight: 1.35,
-    fontWeight: 750,
+  dashboardCardHighlight: {
+    ...glassCard,
+    borderRadius: 24,
+    padding: 14,
+    display: "grid",
+    gridTemplateColumns: "42px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+    overflow: "hidden",
+    border: "1px solid rgba(228,239,22,0.22)",
+    background: "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.04))",
   },
 
-  filterCard: {
+  dashboardIconLime: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.25)",
+  },
+
+  dashboardIconBlue: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(80,150,255,0.13)",
+    border: "1px solid rgba(80,150,255,0.22)",
+  },
+
+  dashboardIconPurple: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(190,120,255,0.13)",
+    border: "1px solid rgba(190,120,255,0.22)",
+  },
+
+  dashboardIconOrange: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,165,80,0.13)",
+    border: "1px solid rgba(255,165,80,0.22)",
+  },
+
+  dashboardValue: {
+    display: "block",
+    fontSize: 30,
+    lineHeight: 0.95,
+    letterSpacing: "-0.07em",
+  },
+
+  dashboardTitle: {
+    display: "block",
+    marginTop: 2,
+    color: "white",
+    fontSize: 13,
+    fontWeight: 950,
+  },
+
+  dashboardHint: {
+    display: "block",
+    marginTop: 2,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: 800,
+    lineHeight: 1.25,
+    overflowWrap: "anywhere",
+  },
+
+  feedControlCard: {
     ...glassCard,
     borderRadius: 26,
     padding: 14,
     display: "grid",
     gap: 12,
+  },
+
+  feedControlTop: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+
+  feedScope: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    fontWeight: 900,
+    textAlign: "right",
+    maxWidth: 160,
+    overflowWrap: "anywhere",
   },
 
   sectionIntroCompact: {
@@ -714,6 +930,13 @@ const styles = {
     background: "rgba(255,255,255,0.075)",
     border: "1px solid rgba(255,255,255,0.10)",
     flexShrink: 0,
+  },
+
+  cardTitle: {
+    margin: 0,
+    fontSize: "clamp(20px, 5vw, 28px)",
+    lineHeight: 1,
+    letterSpacing: "-0.05em",
   },
 
   searchInput: {
@@ -752,7 +975,14 @@ const styles = {
     fontWeight: 750,
   },
 
-  trainingListBlock: {
+  feedSections: {
+    display: "grid",
+    gap: 14,
+    width: "100%",
+    minWidth: 0,
+  },
+
+  feedSection: {
     ...glassCard,
     borderRadius: 30,
     padding: 12,
@@ -761,7 +991,7 @@ const styles = {
     overflow: "hidden",
   },
 
-  managementHeader: {
+  sectionHeader: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) auto",
     alignItems: "center",
@@ -769,12 +999,24 @@ const styles = {
     minWidth: 0,
   },
 
-  listCount: {
-    color: "rgba(255,255,255,0.58)",
-    fontWeight: 850,
-    fontSize: 12,
-    whiteSpace: "normal",
-    textAlign: "right",
+  sectionDescription: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.56)",
+    lineHeight: 1.35,
+    fontSize: 13,
+    fontWeight: 750,
+  },
+
+  sectionCount: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 14,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "#e4ef16",
+    fontWeight: 950,
   },
 
   trainingList: {
@@ -785,89 +1027,60 @@ const styles = {
     minWidth: 0,
   },
 
-  statsGrid: {
+  priorityTrainingList: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(138px, 1fr))",
-    gap: 10,
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+    gap: 12,
     width: "100%",
     minWidth: 0,
   },
 
-  statCard: {
-    ...glassCard,
-    minHeight: 128,
-    borderRadius: 24,
-    padding: 14,
+  skeletonGrid: {
     display: "grid",
-    alignContent: "space-between",
-    gap: 8,
-    overflow: "hidden",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+    gap: 12,
   },
 
-  statIconLime: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(228,239,22,0.13)",
-    border: "1px solid rgba(228,239,22,0.25)",
-  },
-
-  statIconBlue: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(80,150,255,0.13)",
-    border: "1px solid rgba(80,150,255,0.22)",
-  },
-
-  statIconPurple: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(190,120,255,0.13)",
-    border: "1px solid rgba(190,120,255,0.22)",
-  },
-
-  statIconOrange: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(255,165,80,0.13)",
-    border: "1px solid rgba(255,165,80,0.22)",
-  },
-
-  statValue: {
-    fontSize: "clamp(28px, 8vw, 40px)",
-    lineHeight: 0.9,
-    letterSpacing: "-0.07em",
-  },
-
-  statTitle: {
-    color: "white",
-    fontSize: 13,
-    fontWeight: 950,
-  },
-
-  statHint: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 12,
-    fontWeight: 800,
-    lineHeight: 1.25,
-    overflowWrap: "anywhere",
-  },
-
-  stateCard: {
+  skeletonCard: {
     ...glassCard,
     borderRadius: 28,
-    padding: 22,
+    padding: 10,
+    minHeight: 170,
+    display: "grid",
+    gridTemplateColumns: "96px minmax(0, 1fr)",
+    gap: 12,
+  },
+
+  skeletonImage: {
+    borderRadius: 22,
+    background: "linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.12), rgba(255,255,255,0.05))",
+  },
+
+  skeletonLines: {
+    display: "grid",
+    alignContent: "center",
+    gap: 10,
+  },
+
+  skeletonLineShort: {
+    width: "40%",
+    height: 14,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.10)",
+  },
+
+  skeletonLineLong: {
+    width: "88%",
+    height: 22,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.12)",
+  },
+
+  skeletonLineMedium: {
+    width: "66%",
+    height: 14,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.09)",
   },
 
   emptyCard: {
@@ -889,9 +1102,9 @@ const styles = {
   },
 
   emptyActions: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
     gap: 10,
-    flexWrap: "wrap",
     marginTop: 18,
   },
 
