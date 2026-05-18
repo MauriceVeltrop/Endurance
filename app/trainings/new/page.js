@@ -7,19 +7,19 @@ import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 
 const sportOptions = [
-  { id: "running", metric: "pace", distance: true },
-  { id: "trail_running", metric: "pace", distance: true },
-  { id: "road_cycling", metric: "speed", distance: true },
-  { id: "gravel_cycling", metric: "speed", distance: true },
-  { id: "mountain_biking", metric: "speed", distance: true },
-  { id: "walking", metric: "speed", distance: true },
-  { id: "kayaking", metric: "speed", distance: true },
-  { id: "strength_training", metric: "intensity", distance: false },
-  { id: "crossfit", metric: "intensity", distance: false },
-  { id: "hyrox", metric: "intensity", distance: false },
-  { id: "bootcamp", metric: "intensity", distance: false },
-  { id: "swimming", metric: "intensity", distance: false },
-  { id: "padel", metric: "intensity", distance: false },
+  { id: "running", metric: "pace", distance: true, routes: true, workouts: false },
+  { id: "trail_running", metric: "pace", distance: true, routes: true, workouts: false },
+  { id: "road_cycling", metric: "speed", distance: true, routes: true, workouts: false },
+  { id: "gravel_cycling", metric: "speed", distance: true, routes: true, workouts: false },
+  { id: "mountain_biking", metric: "speed", distance: true, routes: true, workouts: false },
+  { id: "walking", metric: "speed", distance: true, routes: true, workouts: false },
+  { id: "kayaking", metric: "speed", distance: true, routes: true, workouts: false },
+  { id: "strength_training", metric: "intensity", distance: false, routes: false, workouts: true },
+  { id: "crossfit", metric: "intensity", distance: false, routes: false, workouts: true },
+  { id: "hyrox", metric: "intensity", distance: false, routes: false, workouts: true },
+  { id: "bootcamp", metric: "intensity", distance: false, routes: false, workouts: true },
+  { id: "swimming", metric: "intensity", distance: false, routes: false, workouts: false },
+  { id: "padel", metric: "intensity", distance: false, routes: false, workouts: false },
 ];
 
 function todayString() {
@@ -31,6 +31,20 @@ function nextHourString() {
   date.setHours(date.getHours() + 1);
   date.setMinutes(0, 0, 0);
   return date.toTimeString().slice(0, 5);
+}
+
+function timeAfter(time, minutes) {
+  const [hours, mins] = String(time || "18:00").split(":").map(Number);
+  const date = new Date();
+  date.setHours(Number.isFinite(hours) ? hours : 18, Number.isFinite(mins) ? mins : 0, 0, 0);
+  date.setMinutes(date.getMinutes() + minutes);
+  return date.toTimeString().slice(0, 5);
+}
+
+function addDaysString(dateString, days) {
+  const date = new Date(`${dateString}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function defaultTitle(sportId) {
@@ -50,9 +64,31 @@ function initials(person) {
     .toUpperCase();
 }
 
+function formatDateLabel(value) {
+  if (!value) return "Choose date";
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+    }).format(new Date(`${value}T12:00:00`));
+  } catch {
+    return value;
+  }
+}
+
 function getInviteProfileId() {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("invite") || "";
+}
+
+function makeTimeOption(overrides = {}) {
+  return {
+    uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    starts_on: overrides.starts_on || todayString(),
+    window_start: overrides.window_start || nextHourString(),
+    window_end: overrides.window_end || timeAfter(overrides.window_start || nextHourString(), 90),
+  };
 }
 
 export default function CreateTrainingPage() {
@@ -61,13 +97,12 @@ export default function CreateTrainingPage() {
   const [profile, setProfile] = useState(null);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [partners, setPartners] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [workouts, setWorkouts] = useState([]);
   const [selectedInviteIds, setSelectedInviteIds] = useState([]);
   const [timeOptions, setTimeOptions] = useState([
-    {
-      starts_on: todayString(),
-      window_start: nextHourString(),
-      window_end: "11:00",
-    },
+    makeTimeOption({ starts_on: todayString(), window_start: nextHourString(), window_end: timeAfter(nextHourString(), 90) }),
+    makeTimeOption({ starts_on: todayString(), window_start: "18:30", window_end: "21:00" }),
   ]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -80,8 +115,6 @@ export default function CreateTrainingPage() {
     planning_type: "fixed",
     date: todayString(),
     start_time: nextHourString(),
-    flexible_start_time: nextHourString(),
-    flexible_end_time: "11:00",
     start_location: "",
     distance_km: "",
     estimated_duration_min: "",
@@ -92,6 +125,8 @@ export default function CreateTrainingPage() {
     intensity_label: "Moderate",
     visibility: "team",
     max_participants: "",
+    route_id: "",
+    workout_id: "",
   });
 
   const selectedSport = useMemo(() => {
@@ -101,6 +136,29 @@ export default function CreateTrainingPage() {
   const visibleSports = useMemo(() => {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
+
+  const filteredRoutes = useMemo(() => {
+    return routes.filter((route) => route.sport_id === form.sport_id);
+  }, [routes, form.sport_id]);
+
+  const filteredWorkouts = useMemo(() => {
+    return workouts.filter((workout) => workout.sport_id === form.sport_id);
+  }, [workouts, form.sport_id]);
+
+  const groupedTimeOptions = useMemo(() => {
+    const groups = new Map();
+    normalizedTimeOptions(timeOptions).forEach((option) => {
+      if (!groups.has(option.starts_on)) groups.set(option.starts_on, []);
+      groups.get(option.starts_on).push(option);
+    });
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, options]) => ({
+        date,
+        options: options.sort((a, b) => a.window_start.localeCompare(b.window_start)),
+      }));
+  }, [timeOptions, form.planning_type, form.date]);
 
   useEffect(() => {
     loadCreateData();
@@ -155,6 +213,24 @@ export default function CreateTrainingPage() {
           title: defaultTitle(firstSport.id),
         }));
       }
+
+      const [{ data: routesRows }, { data: workoutRows }] = await Promise.all([
+        supabase
+          .from("routes")
+          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility")
+          .eq("creator_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(30),
+        supabase
+          .from("workouts")
+          .select("id,title,sport_id,workout_type,level,duration_min,visibility")
+          .eq("creator_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(30),
+      ]);
+
+      setRoutes(routesRows || []);
+      setWorkouts(workoutRows || []);
 
       const { data: relationRows } = await supabase
         .from("training_partners")
@@ -211,6 +287,8 @@ export default function CreateTrainingPage() {
         next.speed_max = "";
         next.intensity_label = "Moderate";
         next.distance_km = "";
+        next.route_id = "";
+        next.workout_id = "";
       }
 
       if (key === "visibility" && value !== "selected") {
@@ -228,37 +306,54 @@ export default function CreateTrainingPage() {
     });
   }
 
-  function updateTimeOption(index, key, value) {
+  function updateTimeOption(uid, key, value) {
     setTimeOptions((current) =>
-      current.map((option, optionIndex) =>
-        optionIndex === index ? { ...option, [key]: value } : option
-      )
+      current.map((option) => (option.uid === uid ? { ...option, [key]: value } : option))
     );
   }
 
-  function addTimeOption() {
+  function addTimeOptionForDate(date) {
     setTimeOptions((current) => [
       ...current,
-      {
-        starts_on: form.date || todayString(),
-        window_start: form.flexible_start_time || nextHourString(),
-        window_end: form.flexible_end_time || "11:00",
-      },
+      makeTimeOption({
+        starts_on: date || current[current.length - 1]?.starts_on || form.date || todayString(),
+        window_start: "18:30",
+        window_end: "21:00",
+      }),
     ]);
   }
 
-  function removeTimeOption(index) {
-    setTimeOptions((current) => current.length > 1 ? current.filter((_, optionIndex) => optionIndex !== index) : current);
+  function addNextDayOption() {
+    const latestDate = normalizedTimeOptions(timeOptions).reduce(
+      (latest, option) => (option.starts_on > latest ? option.starts_on : latest),
+      form.date || todayString()
+    );
+
+    setTimeOptions((current) => [
+      ...current,
+      makeTimeOption({
+        starts_on: addDaysString(latestDate, 1),
+        window_start: "18:30",
+        window_end: "21:00",
+      }),
+    ]);
   }
 
-  function normalizedTimeOptions() {
+  function removeTimeOption(uid) {
+    setTimeOptions((current) => (current.length > 1 ? current.filter((option) => option.uid !== uid) : current));
+  }
+
+  function normalizedTimeOptions(options = timeOptions) {
     if (form.planning_type !== "flexible") return [];
 
-    return timeOptions.map((option) => ({
-      starts_on: option.starts_on || form.date,
-      window_start: option.window_start,
-      window_end: option.window_end,
-    }));
+    return options
+      .map((option) => ({
+        uid: option.uid,
+        starts_on: option.starts_on || form.date,
+        window_start: option.window_start,
+        window_end: option.window_end,
+      }))
+      .sort((a, b) => `${a.starts_on} ${a.window_start}`.localeCompare(`${b.starts_on} ${b.window_start}`));
   }
 
   function buildTrainingPayload() {
@@ -276,8 +371,8 @@ export default function CreateTrainingPage() {
       planning_type: form.planning_type,
       starts_at: startsAt,
       flexible_date: isFixed ? null : firstOption?.starts_on || form.date,
-      flexible_start_time: isFixed ? null : firstOption?.window_start || form.flexible_start_time,
-      flexible_end_time: isFixed ? null : firstOption?.window_end || form.flexible_end_time,
+      flexible_start_time: isFixed ? null : firstOption?.window_start || null,
+      flexible_end_time: isFixed ? null : firstOption?.window_end || null,
       start_location: form.start_location.trim() || null,
       distance_km: selectedSport?.distance && form.distance_km ? Number(form.distance_km) : null,
       estimated_duration_min: form.estimated_duration_min ? Number(form.estimated_duration_min) : null,
@@ -287,8 +382,40 @@ export default function CreateTrainingPage() {
       speed_max: selectedSport?.metric === "speed" && form.speed_max ? Number(form.speed_max) : null,
       intensity_label: selectedSport?.metric === "intensity" ? form.intensity_label || null : null,
       max_participants: form.max_participants ? Number(form.max_participants) : null,
+      route_id: selectedSport?.routes && form.route_id ? form.route_id : null,
+      workout_id: selectedSport?.workouts && form.workout_id ? form.workout_id : null,
       updated_at: new Date().toISOString(),
     };
+  }
+
+  function validateFlexibleOptions() {
+    const options = normalizedTimeOptions();
+
+    if (!options.length) {
+      return "Add at least one time option.";
+    }
+
+    const invalidOption = options.find(
+      (option) => !option.starts_on || !option.window_start || !option.window_end || option.window_start >= option.window_end
+    );
+
+    if (invalidOption) {
+      return "Every time option needs a date and a valid time window.";
+    }
+
+    const exactKeys = new Set();
+    const duplicate = options.find((option) => {
+      const key = `${option.starts_on}-${option.window_start}-${option.window_end}`;
+      if (exactKeys.has(key)) return true;
+      exactKeys.add(key);
+      return false;
+    });
+
+    if (duplicate) {
+      return "Remove duplicate time windows before creating the training.";
+    }
+
+    return "";
   }
 
   async function createTraining(event) {
@@ -310,30 +437,22 @@ export default function CreateTrainingPage() {
         return;
       }
 
-      if (!form.date) {
-        setMessage("Choose a date.");
-        return;
-      }
-
-      if (form.planning_type === "fixed" && !form.start_time) {
-        setMessage("Choose a start time.");
-        return;
-      }
-
-      if (form.planning_type === "flexible") {
-        const options = normalizedTimeOptions();
-
-        if (!options.length) {
-          setMessage("Add at least one time option.");
+      if (form.planning_type === "fixed") {
+        if (!form.date) {
+          setMessage("Choose a date.");
           return;
         }
 
-        const invalidOption = options.find(
-          (option) => !option.starts_on || !option.window_start || !option.window_end || option.window_start >= option.window_end
-        );
+        if (!form.start_time) {
+          setMessage("Choose a start time.");
+          return;
+        }
+      }
 
-        if (invalidOption) {
-          setMessage("Every time option needs a date and a valid start window.");
+      if (form.planning_type === "flexible") {
+        const flexibleError = validateFlexibleOptions();
+        if (flexibleError) {
+          setMessage(flexibleError);
           return;
         }
       }
@@ -355,7 +474,7 @@ export default function CreateTrainingPage() {
             session_id: trainingRow.id,
             user_id: profile.id,
           },
-          { onConflict: "session_id,user_id", ignoreDuplicates: true }
+          { onConflict: "session_id,user_id" }
         );
 
       if (creatorJoinError) {
@@ -379,41 +498,37 @@ export default function CreateTrainingPage() {
         }
       }
 
-      const inviteTargets =
-        form.visibility === "selected"
-          ? selectedInviteIds
-          : selectedInviteIds.length
-            ? selectedInviteIds
-            : [];
+      const inviteTargets = [...new Set(selectedInviteIds)].filter((id) => id && id !== profile.id);
 
       if (inviteTargets.length) {
         const inviteRows = inviteTargets.map((inviteeId) => ({
           session_id: trainingRow.id,
           inviter_id: profile.id,
           invitee_id: inviteeId,
+          status: "pending",
         }));
 
         const { error: inviteError } = await supabase
           .from("training_invites")
-          .upsert(inviteRows, { onConflict: "session_id,invitee_id", ignoreDuplicates: true });
+          .upsert(inviteRows, { onConflict: "session_id,invitee_id" });
 
         if (inviteError) {
           console.warn("Training invites skipped", inviteError);
         }
+      }
 
-        if (form.visibility === "selected") {
-          const visibilityRows = inviteTargets.map((userId) => ({
-            session_id: trainingRow.id,
-            user_id: userId,
-          }));
+      if (form.visibility === "selected") {
+        const visibilityRows = [...new Set([profile.id, ...inviteTargets])].map((userId) => ({
+          session_id: trainingRow.id,
+          user_id: userId,
+        }));
 
-          const { error: visibilityError } = await supabase
-            .from("training_visibility_members")
-            .upsert(visibilityRows, { onConflict: "session_id,user_id", ignoreDuplicates: true });
+        const { error: visibilityError } = await supabase
+          .from("training_visibility_members")
+          .upsert(visibilityRows, { onConflict: "session_id,user_id" });
 
-          if (visibilityError) {
-            console.warn("Selected visibility members skipped", visibilityError);
-          }
+        if (visibilityError) {
+          console.warn("Selected visibility members skipped", visibilityError);
         }
       }
 
@@ -426,17 +541,36 @@ export default function CreateTrainingPage() {
     }
   }
 
+  const progressItems = [
+    form.sport_id ? "Sport" : null,
+    form.title.trim() ? "Name" : null,
+    form.planning_type === "fixed" ? "Fixed time" : `${normalizedTimeOptions().length} windows`,
+    form.visibility === "selected" ? `${selectedInviteIds.length} invites` : form.visibility,
+  ].filter(Boolean);
+
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
         <AppHeader profile={profile} compact />
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Create training</div>
-          <h1 style={styles.title}>Who is training?</h1>
-          <p style={styles.subtitle}>
-            Keep it simple: choose a sport, set a time, invite people and train together.
-          </p>
+        <header style={styles.hero}>
+          <div style={styles.heroText}>
+            <div style={styles.kicker}>Create training</div>
+            <h1 style={styles.title}>Plan the session.</h1>
+            <p style={styles.subtitle}>
+              Sport first, then time, route or workout, visibility and invites. Flexible windows now support multiple days and multiple time blocks per day.
+            </p>
+          </div>
+
+          <div style={styles.progressCard}>
+            <span style={styles.progressKicker}>Setup</span>
+            <strong>{progressItems.length}/4 ready</strong>
+            <div style={styles.progressChips}>
+              {progressItems.map((item) => (
+                <span key={item} style={styles.progressChip}>{item}</span>
+              ))}
+            </div>
+          </div>
         </header>
 
         {message ? <section style={styles.message}>{message}</section> : null}
@@ -455,8 +589,7 @@ export default function CreateTrainingPage() {
           <form onSubmit={createTraining} style={styles.form}>
             <section style={styles.cardHot}>
               <div style={styles.cardKicker}>Step 1</div>
-              <h2 style={styles.cardTitle}>Sport</h2>
-
+              <h2 style={styles.cardTitle}>Choose sport</h2>
               <div style={styles.sportGrid}>
                 {visibleSports.map((sport) => (
                   <button
@@ -472,14 +605,31 @@ export default function CreateTrainingPage() {
             </section>
 
             <section style={styles.card}>
-              <div style={styles.cardKicker}>Step 2</div>
-              <h2 style={styles.cardTitle}>Basics</h2>
+              <div style={styles.sectionHeader}>
+                <div>
+                  <div style={styles.cardKicker}>Step 2</div>
+                  <h2 style={styles.cardTitle}>Basics</h2>
+                </div>
+                <button type="button" onClick={() => updateForm("title", defaultTitle(form.sport_id))} style={styles.tinyButton}>
+                  Auto name
+                </button>
+              </div>
 
               <label style={styles.label}>
                 Training name
                 <input
                   value={form.title}
                   onChange={(event) => updateForm("title", event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+
+              <label style={styles.label}>
+                Start location
+                <input
+                  value={form.start_location}
+                  onChange={(event) => updateForm("start_location", event.target.value)}
+                  placeholder="Street, place or meeting point"
                   style={styles.input}
                 />
               </label>
@@ -493,21 +643,15 @@ export default function CreateTrainingPage() {
                   style={styles.textarea}
                 />
               </label>
-
-              <label style={styles.label}>
-                Start location
-                <input
-                  value={form.start_location}
-                  onChange={(event) => updateForm("start_location", event.target.value)}
-                  placeholder="Street, place or meeting point"
-                  style={styles.input}
-                />
-              </label>
             </section>
 
             <section style={styles.card}>
-              <div style={styles.cardKicker}>Step 3</div>
-              <h2 style={styles.cardTitle}>Time</h2>
+              <div style={styles.sectionHeader}>
+                <div>
+                  <div style={styles.cardKicker}>Step 3</div>
+                  <h2 style={styles.cardTitle}>Time</h2>
+                </div>
+              </div>
 
               <div style={styles.segmented}>
                 <button
@@ -528,7 +672,7 @@ export default function CreateTrainingPage() {
               </div>
 
               {form.planning_type === "fixed" ? (
-                <>
+                <div style={styles.compactGrid}>
                   <label style={styles.label}>
                     Date
                     <input
@@ -548,59 +692,77 @@ export default function CreateTrainingPage() {
                       style={styles.input}
                     />
                   </label>
-                </>
+                </div>
               ) : (
                 <div style={styles.timeOptionsBox}>
                   <p style={styles.muted}>
-                    Add one or more possible start windows. Invitees respond per option; you choose the final start time later.
+                    Add several possible windows. You can add multiple windows on the same day, for example Monday 16:00-17:30 and Monday 18:30-21:00.
                   </p>
 
-                  {timeOptions.map((option, index) => (
-                    <div key={index} style={styles.timeOptionCard}>
-                      <div style={styles.timeOptionTop}>
-                        <strong>Option {index + 1}</strong>
-                        <button type="button" onClick={() => removeTimeOption(index)} style={styles.smallGhostButton}>
-                          Remove
+                  <div style={styles.windowSummary}>
+                    <strong>{normalizedTimeOptions().length} windows</strong>
+                    <span>{groupedTimeOptions.length} day{groupedTimeOptions.length === 1 ? "" : "s"}</span>
+                  </div>
+
+                  {groupedTimeOptions.map((group) => (
+                    <div key={group.date} style={styles.dayGroup}>
+                      <div style={styles.dayHeader}>
+                        <strong>{formatDateLabel(group.date)}</strong>
+                        <button type="button" onClick={() => addTimeOptionForDate(group.date)} style={styles.smallGhostButton}>
+                          + Add slot
                         </button>
                       </div>
 
-                      <label style={styles.label}>
-                        Date
-                        <input
-                          type="date"
-                          value={option.starts_on}
-                          onChange={(event) => updateTimeOption(index, "starts_on", event.target.value)}
-                          style={styles.input}
-                        />
-                      </label>
+                      <div style={styles.slotList}>
+                        {group.options.map((option) => (
+                          <div key={option.uid} style={styles.timeOptionCard}>
+                            <label style={styles.miniLabel}>
+                              Date
+                              <input
+                                type="date"
+                                value={option.starts_on}
+                                onChange={(event) => updateTimeOption(option.uid, "starts_on", event.target.value)}
+                                style={styles.compactInput}
+                              />
+                            </label>
 
-                      <div style={styles.twoColumns}>
-                        <label style={styles.label}>
-                          Window from
-                          <input
-                            type="time"
-                            value={option.window_start}
-                            onChange={(event) => updateTimeOption(index, "window_start", event.target.value)}
-                            style={styles.input}
-                          />
-                        </label>
+                            <label style={styles.miniLabel}>
+                              From
+                              <input
+                                type="time"
+                                value={option.window_start}
+                                onChange={(event) => updateTimeOption(option.uid, "window_start", event.target.value)}
+                                style={styles.compactInput}
+                              />
+                            </label>
 
-                        <label style={styles.label}>
-                          Window until
-                          <input
-                            type="time"
-                            value={option.window_end}
-                            onChange={(event) => updateTimeOption(index, "window_end", event.target.value)}
-                            style={styles.input}
-                          />
-                        </label>
+                            <label style={styles.miniLabel}>
+                              Until
+                              <input
+                                type="time"
+                                value={option.window_end}
+                                onChange={(event) => updateTimeOption(option.uid, "window_end", event.target.value)}
+                                style={styles.compactInput}
+                              />
+                            </label>
+
+                            <button type="button" onClick={() => removeTimeOption(option.uid)} style={styles.iconButton} aria-label="Remove time window">
+                              ×
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
 
-                  <button type="button" onClick={addTimeOption} style={styles.secondaryButton}>
-                    + Add another time option
-                  </button>
+                  <div style={styles.buttonRow}>
+                    <button type="button" onClick={() => addTimeOptionForDate(groupedTimeOptions[0]?.date || form.date)} style={styles.secondaryButton}>
+                      + Add slot today
+                    </button>
+                    <button type="button" onClick={addNextDayOption} style={styles.secondaryButton}>
+                      + Add another day
+                    </button>
+                  </div>
                 </div>
               )}
             </section>
@@ -609,82 +771,58 @@ export default function CreateTrainingPage() {
               <div style={styles.cardKicker}>Step 4</div>
               <h2 style={styles.cardTitle}>Training details</h2>
 
-              {selectedSport?.distance ? (
+              <div style={styles.compactGrid}>
+                {selectedSport?.distance ? (
+                  <label style={styles.label}>
+                    Distance in km
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={form.distance_km}
+                      onChange={(event) => updateForm("distance_km", event.target.value)}
+                      placeholder="Optional"
+                      style={styles.input}
+                    />
+                  </label>
+                ) : null}
+
                 <label style={styles.label}>
-                  Distance in km
+                  Duration in minutes
                   <input
                     type="number"
                     min="0"
-                    step="0.1"
-                    value={form.distance_km}
-                    onChange={(event) => updateForm("distance_km", event.target.value)}
+                    step="1"
+                    value={form.estimated_duration_min}
+                    onChange={(event) => updateForm("estimated_duration_min", event.target.value)}
                     placeholder="Optional"
                     style={styles.input}
                   />
                 </label>
-              ) : null}
-
-              <label style={styles.label}>
-                Estimated duration in minutes
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.estimated_duration_min}
-                  onChange={(event) => updateForm("estimated_duration_min", event.target.value)}
-                  placeholder="Optional"
-                  style={styles.input}
-                />
-              </label>
+              </div>
 
               {selectedSport?.metric === "pace" ? (
-                <div style={styles.twoColumns}>
+                <div style={styles.compactGrid}>
                   <label style={styles.label}>
                     Pace min
-                    <input
-                      value={form.pace_min}
-                      onChange={(event) => updateForm("pace_min", event.target.value)}
-                      placeholder="5:00"
-                      style={styles.input}
-                    />
+                    <input value={form.pace_min} onChange={(event) => updateForm("pace_min", event.target.value)} placeholder="5:00" style={styles.input} />
                   </label>
-
                   <label style={styles.label}>
                     Pace max
-                    <input
-                      value={form.pace_max}
-                      onChange={(event) => updateForm("pace_max", event.target.value)}
-                      placeholder="5:30"
-                      style={styles.input}
-                    />
+                    <input value={form.pace_max} onChange={(event) => updateForm("pace_max", event.target.value)} placeholder="5:30" style={styles.input} />
                   </label>
                 </div>
               ) : null}
 
               {selectedSport?.metric === "speed" ? (
-                <div style={styles.twoColumns}>
+                <div style={styles.compactGrid}>
                   <label style={styles.label}>
                     Speed min
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.speed_min}
-                      onChange={(event) => updateForm("speed_min", event.target.value)}
-                      placeholder="25"
-                      style={styles.input}
-                    />
+                    <input type="number" step="0.1" value={form.speed_min} onChange={(event) => updateForm("speed_min", event.target.value)} placeholder="25" style={styles.input} />
                   </label>
-
                   <label style={styles.label}>
                     Speed max
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={form.speed_max}
-                      onChange={(event) => updateForm("speed_max", event.target.value)}
-                      placeholder="30"
-                      style={styles.input}
-                    />
+                    <input type="number" step="0.1" value={form.speed_max} onChange={(event) => updateForm("speed_max", event.target.value)} placeholder="30" style={styles.input} />
                   </label>
                 </div>
               ) : null}
@@ -692,11 +830,7 @@ export default function CreateTrainingPage() {
               {selectedSport?.metric === "intensity" ? (
                 <label style={styles.label}>
                   Intensity
-                  <select
-                    value={form.intensity_label}
-                    onChange={(event) => updateForm("intensity_label", event.target.value)}
-                    style={styles.input}
-                  >
+                  <select value={form.intensity_label} onChange={(event) => updateForm("intensity_label", event.target.value)} style={styles.input}>
                     <option value="Easy">Easy</option>
                     <option value="Moderate">Moderate</option>
                     <option value="Hard">Hard</option>
@@ -706,9 +840,51 @@ export default function CreateTrainingPage() {
               ) : null}
             </section>
 
+            {selectedSport?.routes ? (
+              <section style={styles.card}>
+                <div style={styles.cardKicker}>Route</div>
+                <h2 style={styles.cardTitle}>Attach route</h2>
+                <p style={styles.muted}>Optional for now. Routes make outdoor sessions feel complete in the detail page.</p>
+
+                {filteredRoutes.length ? (
+                  <select value={form.route_id} onChange={(event) => updateForm("route_id", event.target.value)} style={styles.input}>
+                    <option value="">No route yet</option>
+                    {filteredRoutes.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {route.title} {route.distance_km ? `· ${Number(route.distance_km).toFixed(1)} km` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} routes yet. Create the training now and add a route later.</div>
+                )}
+              </section>
+            ) : null}
+
+            {selectedSport?.workouts ? (
+              <section style={styles.card}>
+                <div style={styles.cardKicker}>Workout</div>
+                <h2 style={styles.cardTitle}>Attach workout</h2>
+                <p style={styles.muted}>Optional for strength, HYROX, CrossFit and bootcamp style sessions.</p>
+
+                {filteredWorkouts.length ? (
+                  <select value={form.workout_id} onChange={(event) => updateForm("workout_id", event.target.value)} style={styles.input}>
+                    <option value="">No workout yet</option>
+                    {filteredWorkouts.map((workout) => (
+                      <option key={workout.id} value={workout.id}>
+                        {workout.title} {workout.duration_min ? `· ${workout.duration_min} min` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} workouts yet. Create the training now and add a workout later.</div>
+                )}
+              </section>
+            ) : null}
+
             <section style={styles.card}>
               <div style={styles.cardKicker}>Step 5</div>
-              <h2 style={styles.cardTitle}>Who can see it?</h2>
+              <h2 style={styles.cardTitle}>Visibility</h2>
 
               <div style={styles.visibilityGrid}>
                 {[
@@ -717,12 +893,7 @@ export default function CreateTrainingPage() {
                   ["selected", "Selected", "Only invited people"],
                   ["private", "Private", "Only me"],
                 ].map(([value, label, description]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => updateForm("visibility", value)}
-                    style={form.visibility === value ? styles.visibilityActive : styles.visibilityButton}
-                  >
+                  <button key={value} type="button" onClick={() => updateForm("visibility", value)} style={form.visibility === value ? styles.visibilityActive : styles.visibilityButton}>
                     <strong>{label}</strong>
                     <span>{description}</span>
                   </button>
@@ -731,40 +902,27 @@ export default function CreateTrainingPage() {
 
               <label style={styles.label}>
                 Max participants
-                <input
-                  type="number"
-                  min="0"
-                  value={form.max_participants}
-                  onChange={(event) => updateForm("max_participants", event.target.value)}
-                  placeholder="Optional"
-                  style={styles.input}
-                />
+                <input type="number" min="0" value={form.max_participants} onChange={(event) => updateForm("max_participants", event.target.value)} placeholder="Optional" style={styles.input} />
               </label>
             </section>
 
             <section style={styles.card}>
-              <div style={styles.cardKicker}>Step 6</div>
-              <h2 style={styles.cardTitle}>Invite people</h2>
-              <p style={styles.muted}>Selected people receive an invite in their Inbox.</p>
+              <div style={styles.sectionHeader}>
+                <div>
+                  <div style={styles.cardKicker}>Step 6</div>
+                  <h2 style={styles.cardTitle}>Invite people</h2>
+                </div>
+                {selectedInviteIds.length ? <span style={styles.countBadge}>{selectedInviteIds.length} selected</span> : null}
+              </div>
+              <p style={styles.muted}>Selected people receive an invite in their Inbox. For selected visibility, invitees are also added to the visibility list.</p>
 
               {partners.length ? (
                 <div style={styles.partnerList}>
                   {partners.map((partner) => {
                     const selected = selectedInviteIds.includes(partner.id);
-
                     return (
-                      <button
-                        key={partner.id}
-                        type="button"
-                        onClick={() => toggleInvite(partner.id)}
-                        style={selected ? styles.partnerActive : styles.partnerButton}
-                      >
-                        {partner.avatar_url ? (
-                          <img src={partner.avatar_url} alt="" style={styles.avatar} />
-                        ) : (
-                          <span style={styles.avatarFallback}>{initials(partner)}</span>
-                        )}
-
+                      <button key={partner.id} type="button" onClick={() => toggleInvite(partner.id)} style={selected ? styles.partnerActive : styles.partnerButton}>
+                        {partner.avatar_url ? <img src={partner.avatar_url} alt="" style={styles.avatar} /> : <span style={styles.avatarFallback}>{initials(partner)}</span>}
                         <span style={styles.partnerText}>
                           <strong>{displayName(partner)}</strong>
                           <span>{selected ? "Will receive invite" : "Tap to invite"}</span>
@@ -782,7 +940,6 @@ export default function CreateTrainingPage() {
               <button type="button" onClick={() => router.push("/trainings")} style={styles.secondaryButton}>
                 Cancel
               </button>
-
               <button type="submit" disabled={saving} style={styles.primaryButton}>
                 {saving ? "Creating..." : "Create training"}
               </button>
@@ -799,24 +956,26 @@ const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255
 const styles = {
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 16px 56px",
+    padding: "18px 14px 56px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     overflowX: "hidden",
   },
   shell: {
     width: "100%",
-    maxWidth: 880,
+    maxWidth: 920,
     margin: "0 auto",
     display: "grid",
-    gap: 18,
+    gap: 16,
+    boxSizing: "border-box",
   },
-  header: {
+  hero: {
     display: "grid",
-    gap: 10,
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 12,
   },
+  heroText: { display: "grid", gap: 10, minWidth: 0 },
   kicker: {
     color: "#e4ef16",
     fontSize: 13,
@@ -826,7 +985,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(42px, 12vw, 76px)",
+    fontSize: "clamp(42px, 11vw, 74px)",
     lineHeight: 0.92,
     letterSpacing: "-0.075em",
   },
@@ -834,7 +993,32 @@ const styles = {
     margin: 0,
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.5,
-    maxWidth: 680,
+    maxWidth: 720,
+  },
+  progressCard: {
+    borderRadius: 26,
+    padding: 14,
+    background: "rgba(228,239,22,0.10)",
+    border: "1px solid rgba(228,239,22,0.18)",
+    display: "grid",
+    gap: 8,
+    minWidth: 0,
+  },
+  progressKicker: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+  },
+  progressChips: { display: "flex", flexWrap: "wrap", gap: 6, minWidth: 0 },
+  progressChip: {
+    borderRadius: 999,
+    padding: "6px 9px",
+    background: "rgba(255,255,255,0.09)",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: 850,
   },
   message: {
     borderRadius: 20,
@@ -844,26 +1028,33 @@ const styles = {
     color: "#e4ef16",
     fontWeight: 850,
   },
-  form: {
-    display: "grid",
-    gap: 14,
-  },
+  form: { display: "grid", gap: 14, minWidth: 0 },
   card: {
     borderRadius: 30,
-    padding: 18,
+    padding: 16,
     background: glass,
     border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 14,
+    minWidth: 0,
+    boxSizing: "border-box",
   },
   cardHot: {
     borderRadius: 30,
-    padding: 18,
+    padding: 16,
     background: "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.045))",
     border: "1px solid rgba(228,239,22,0.24)",
     display: "grid",
     gap: 14,
     boxShadow: "0 0 34px rgba(228,239,22,0.10)",
+    minWidth: 0,
+  },
+  sectionHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    minWidth: 0,
   },
   cardKicker: {
     color: "#e4ef16",
@@ -874,20 +1065,12 @@ const styles = {
   },
   cardTitle: {
     margin: 0,
-    fontSize: "clamp(28px, 8vw, 46px)",
+    fontSize: "clamp(28px, 8vw, 44px)",
     lineHeight: 0.96,
     letterSpacing: "-0.065em",
   },
-  muted: {
-    margin: 0,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.5,
-  },
-  sportGrid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  muted: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
+  sportGrid: { display: "flex", flexWrap: "wrap", gap: 8, minWidth: 0 },
   sportButton: {
     minHeight: 44,
     borderRadius: 999,
@@ -914,6 +1097,17 @@ const styles = {
     color: "rgba(255,255,255,0.82)",
     fontSize: 14,
     fontWeight: 850,
+    minWidth: 0,
+  },
+  miniLabel: {
+    display: "grid",
+    gap: 5,
+    color: "rgba(255,255,255,0.70)",
+    fontSize: 11,
+    fontWeight: 900,
+    minWidth: 0,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
   },
   input: {
     width: "100%",
@@ -925,6 +1119,18 @@ const styles = {
     padding: "0 14px",
     boxSizing: "border-box",
     fontSize: 16,
+    outline: "none",
+  },
+  compactInput: {
+    width: "100%",
+    minHeight: 42,
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    padding: "0 9px",
+    boxSizing: "border-box",
+    fontSize: 14,
     outline: "none",
   },
   textarea: {
@@ -941,16 +1147,8 @@ const styles = {
     resize: "vertical",
     fontFamily: "inherit",
   },
-  twoColumns: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 12,
-  },
-  segmented: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 8,
-  },
+  compactGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, minWidth: 0 },
+  segmented: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, minWidth: 0 },
   segment: {
     minHeight: 46,
     borderRadius: 999,
@@ -969,12 +1167,85 @@ const styles = {
     fontWeight: 950,
     cursor: "pointer",
   },
-  visibilityGrid: {
+  timeOptionsBox: { display: "grid", gap: 12, minWidth: 0 },
+  windowSummary: {
+    borderRadius: 18,
+    padding: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.78)",
+    flexWrap: "wrap",
+  },
+  dayGroup: {
+    borderRadius: 22,
+    padding: 10,
+    background: "rgba(0,0,0,0.20)",
+    border: "1px solid rgba(255,255,255,0.10)",
     display: "grid",
     gap: 10,
+    minWidth: 0,
   },
+  dayHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0, flexWrap: "wrap" },
+  slotList: { display: "grid", gap: 8, minWidth: 0 },
+  timeOptionCard: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 8,
+    alignItems: "end",
+    overflow: "hidden",
+    borderRadius: 18,
+    padding: 10,
+    background: "rgba(255,255,255,0.055)",
+    minWidth: 0,
+    boxSizing: "border-box",
+  },
+  buttonRow: { display: "flex", gap: 8, flexWrap: "wrap", minWidth: 0 },
+  smallGhostButton: {
+    minHeight: 32,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "white",
+    padding: "0 10px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  tinyButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "white",
+    padding: "0 10px",
+    fontWeight: 900,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  iconButton: {
+    width: 36,
+    height: 42,
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "white",
+    fontSize: 22,
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  softBox: {
+    borderRadius: 18,
+    padding: 13,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.68)",
+    lineHeight: 1.45,
+  },
+  visibilityGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, minWidth: 0 },
   visibilityButton: {
-    minHeight: 70,
+    minHeight: 76,
     borderRadius: 22,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.055)",
@@ -986,7 +1257,7 @@ const styles = {
     cursor: "pointer",
   },
   visibilityActive: {
-    minHeight: 70,
+    minHeight: 76,
     borderRadius: 22,
     border: "1px solid rgba(228,239,22,0.30)",
     background: "rgba(228,239,22,0.13)",
@@ -997,10 +1268,16 @@ const styles = {
     textAlign: "left",
     cursor: "pointer",
   },
-  partnerList: {
-    display: "grid",
-    gap: 10,
+  countBadge: {
+    borderRadius: 999,
+    padding: "7px 10px",
+    background: "rgba(228,239,22,0.13)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    whiteSpace: "nowrap",
   },
+  partnerList: { display: "grid", gap: 10, minWidth: 0 },
   partnerButton: {
     width: "100%",
     border: 0,
@@ -1029,12 +1306,7 @@ const styles = {
     textAlign: "left",
     cursor: "pointer",
   },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 999,
-    objectFit: "cover",
-  },
+  avatar: { width: 46, height: 46, borderRadius: 999, objectFit: "cover" },
   avatarFallback: {
     width: 46,
     height: 46,
@@ -1045,11 +1317,7 @@ const styles = {
     color: "#e4ef16",
     fontWeight: 950,
   },
-  partnerText: {
-    display: "grid",
-    gap: 3,
-    color: "rgba(255,255,255,0.62)",
-  },
+  partnerText: { display: "grid", gap: 3, color: "rgba(255,255,255,0.62)", minWidth: 0 },
   submitBar: {
     position: "sticky",
     bottom: 14,
@@ -1063,6 +1331,7 @@ const styles = {
     justifyContent: "space-between",
     gap: 10,
     flexWrap: "wrap",
+    minWidth: 0,
   },
   primaryButton: {
     minHeight: 48,
