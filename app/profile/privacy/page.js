@@ -6,17 +6,17 @@ import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 
 const visibilityOptions = [
-  { value: "private", label: "Private", description: "Only you" },
-  { value: "team", label: "Team", description: "Accepted training partners" },
-  { value: "public", label: "Public", description: "Visible to the community" },
+  { value: "private", label: "Private", short: "Private", description: "Only you" },
+  { value: "team", label: "Team", short: "Team", description: "Training partners" },
+  { value: "public", label: "Public", short: "Public", description: "Community" },
 ];
 
 const trainingVisibilityOptions = [
-  { value: "private", label: "Private", description: "Only you" },
-  { value: "team", label: "Team", description: "Your training partners" },
-  { value: "selected", label: "Selected", description: "Specific members" },
-  { value: "group", label: "Group", description: "A group/community" },
-  { value: "public", label: "Public", description: "Everyone" },
+  { value: "private", label: "Private", short: "Private", description: "Only you" },
+  { value: "team", label: "Team", short: "Team", description: "Training partners" },
+  { value: "selected", label: "Selected", short: "Selected", description: "Specific members" },
+  { value: "group", label: "Group", short: "Group", description: "Group/community" },
+  { value: "public", label: "Public", short: "Public", description: "Everyone" },
 ];
 
 const defaultSettings = {
@@ -34,7 +34,7 @@ const defaultSettings = {
 function SettingSelect({ label, description, value, onChange, options = visibilityOptions }) {
   return (
     <label style={styles.settingRow}>
-      <span>
+      <span style={styles.settingText}>
         <strong style={styles.settingTitle}>{label}</strong>
         <small style={styles.settingDescription}>{description}</small>
       </span>
@@ -42,7 +42,7 @@ function SettingSelect({ label, description, value, onChange, options = visibili
       <select value={value} onChange={(event) => onChange(event.target.value)} style={styles.select}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label} · {option.description}
+            {option.short} · {option.description}
           </option>
         ))}
       </select>
@@ -53,12 +53,20 @@ function SettingSelect({ label, description, value, onChange, options = visibili
 function ToggleRow({ label, description, checked, onChange }) {
   return (
     <label style={styles.toggleRow}>
-      <span>
+      <span style={styles.settingText}>
         <strong style={styles.settingTitle}>{label}</strong>
         <small style={styles.settingDescription}>{description}</small>
       </span>
 
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} style={styles.checkbox} />
+      <span style={checked ? styles.switchOn : styles.switchOff}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          style={styles.hiddenCheckbox}
+        />
+        <span style={checked ? styles.switchKnobOn : styles.switchKnobOff} />
+      </span>
     </label>
   );
 }
@@ -196,7 +204,7 @@ export default function PrivacySettingsPage() {
               <p style={styles.groupKicker}>Profile</p>
 
               <SettingSelect
-                label="Profile visibility"
+                label="Profile"
                 description="Who may view your general profile."
                 value={settings.profile_visibility}
                 onChange={(value) => update("profile_visibility", value)}
@@ -218,14 +226,14 @@ export default function PrivacySettingsPage() {
 
               <SettingSelect
                 label="Age"
-                description="Who may see your age or birth-date derived age."
+                description="Who may see your age."
                 value={settings.age_visibility}
                 onChange={(value) => update("age_visibility", value)}
               />
 
               <SettingSelect
                 label="Email"
-                description="Keep this private unless you really want to share it."
+                description="Keep this private unless you choose otherwise."
                 value={settings.email_visibility}
                 onChange={(value) => update("email_visibility", value)}
               />
@@ -242,7 +250,7 @@ export default function PrivacySettingsPage() {
               />
 
               <SettingSelect
-                label="Default training visibility"
+                label="Default visibility"
                 description="Used as a future default when creating a training."
                 value={settings.default_training_visibility}
                 onChange={(value) => update("default_training_visibility", value)}
@@ -315,16 +323,17 @@ const styles = {
   },
   title: {
     margin: "8px 0 0",
-    fontSize: 42,
+    fontSize: "clamp(38px, 12vw, 58px)",
     lineHeight: 0.95,
     fontWeight: 950,
-    letterSpacing: "-0.06em",
+    letterSpacing: "-0.07em",
   },
   subtitle: {
     margin: "12px 0 0",
     color: "rgba(255,255,255,0.62)",
     lineHeight: 1.45,
     fontWeight: 650,
+    fontSize: 17,
   },
   message: {
     border: "1px solid rgba(215,255,63,0.28)",
@@ -356,58 +365,111 @@ const styles = {
   },
   settingRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(160px, 220px)",
+    gridTemplateColumns: "1fr",
     gap: 12,
-    alignItems: "center",
+    alignItems: "stretch",
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(0,0,0,0.22)",
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 22,
+    padding: 16,
   },
   toggleRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 48px",
-    gap: 12,
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: 14,
     alignItems: "center",
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(0,0,0,0.22)",
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 22,
+    padding: 16,
+  },
+  settingText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 4,
   },
   settingTitle: {
     display: "block",
     color: "#fff",
     fontWeight: 950,
+    fontSize: 22,
+    letterSpacing: "-0.04em",
+    lineHeight: 1.05,
   },
   settingDescription: {
     display: "block",
-    marginTop: 4,
     color: "rgba(255,255,255,0.50)",
-    fontWeight: 650,
+    fontWeight: 700,
     lineHeight: 1.35,
+    fontSize: 14,
   },
   select: {
     width: "100%",
-    border: "1px solid rgba(255,255,255,0.12)",
+    maxWidth: "100%",
+    minHeight: 54,
+    border: "1px solid rgba(255,255,255,0.14)",
     background: "#111",
     color: "#fff",
-    borderRadius: 14,
-    padding: "12px 10px",
-    fontWeight: 850,
+    borderRadius: 17,
+    padding: "0 14px",
+    fontWeight: 900,
+    fontSize: 16,
+    outline: "none",
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    accentColor: "#d7ff3f",
-    justifySelf: "end",
+  hiddenCheckbox: {
+    position: "absolute",
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  switchOff: {
+    position: "relative",
+    width: 58,
+    height: 34,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.15)",
+    background: "rgba(255,255,255,0.10)",
+    display: "inline-flex",
+    alignItems: "center",
+    padding: 3,
+    boxSizing: "border-box",
+  },
+  switchOn: {
+    position: "relative",
+    width: 58,
+    height: 34,
+    borderRadius: 999,
+    border: "1px solid rgba(215,255,63,0.45)",
+    background: "rgba(215,255,63,0.82)",
+    display: "inline-flex",
+    alignItems: "center",
+    padding: 3,
+    boxSizing: "border-box",
+    boxShadow: "0 0 24px rgba(215,255,63,0.18)",
+  },
+  switchKnobOff: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.75)",
+    transform: "translateX(0)",
+    transition: "160ms ease",
+  },
+  switchKnobOn: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    background: "#050505",
+    transform: "translateX(24px)",
+    transition: "160ms ease",
   },
   saveButton: {
     border: 0,
     borderRadius: 999,
     background: "#d7ff3f",
     color: "#050505",
-    padding: "15px 18px",
-    fontSize: 16,
+    padding: "16px 18px",
+    fontSize: 17,
     fontWeight: 950,
+    minHeight: 56,
   },
 };
