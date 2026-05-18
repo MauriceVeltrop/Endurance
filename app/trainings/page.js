@@ -397,14 +397,22 @@ export default function TrainingsPage() {
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data: existingParticipant, error: existingParticipantError } = await supabase
           .from("session_participants")
-          .upsert(
-            { session_id: training.id, user_id: currentUserId },
-            { onConflict: "session_id,user_id", ignoreDuplicates: true }
-          );
+          .select("id")
+          .eq("session_id", training.id)
+          .eq("user_id", currentUserId)
+          .maybeSingle();
 
-        if (error) throw error;
+        if (existingParticipantError) throw existingParticipantError;
+
+        if (!existingParticipant?.id) {
+          const { error } = await supabase
+            .from("session_participants")
+            .insert({ session_id: training.id, user_id: currentUserId });
+
+          if (error) throw error;
+        }
       }
 
       await loadTrainings();
