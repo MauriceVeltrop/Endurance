@@ -1,10 +1,11 @@
-// NOTIFICATIONS_V1_PATCH: notification helpers imported for join/final-time activity.
 "use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { subscribeToTrainingRealtime, removeRealtimeChannel } from "../../../lib/realtime";
+import TrainingLiveStatus from "../../../components/realtime/TrainingLiveStatus";
 import PlanningPoll from "../../../components/trainings/PlanningPoll";
 import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
@@ -338,12 +339,20 @@ export default function TrainingDetailPage() {
 
   useEffect(() => {
     loadTraining();
+
+    const channel = subscribeToTrainingRealtime(id, () => {
+      loadTraining({ silent: true });
+    });
+
+    return () => {
+      removeRealtimeChannel(channel);
+    };
   }, [id]);
 
-  async function loadTraining() {
+  async function loadTraining(options = {}) {
     if (!id) return;
 
-    setLoading(true);
+    if (!options.silent) setLoading(true);
     setErrorText("");
     setMessage("");
     setAvailabilityMessage("");
@@ -831,6 +840,10 @@ export default function TrainingDetailPage() {
                 </div>
               ) : null}
             </article>
+
+            <div style={{ marginBottom: 12 }}>
+              <TrainingLiveStatus participants={participants} />
+            </div>
 
             <PlanningPoll
               training={training}
