@@ -7,6 +7,7 @@ import AppHeader from "../../../components/AppHeader";
 import ImageCropperModal from "../../../components/ImageCropperModal";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
+import { fetchPrivacySettings, fetchPrivacySettingsMap, privacyAllowsTrainingInvite } from "../../../lib/privacy";
 import { uploadTrainingPhoto } from "../../../lib/trainingPhotos";
 
 const sportOptions = [
@@ -202,6 +203,14 @@ export default function CreateTrainingPage() {
       }
 
       setProfile(profileRow);
+
+      const ownPrivacy = await fetchPrivacySettings(user.id);
+      if (ownPrivacy?.default_training_visibility) {
+        setForm((current) => ({
+          ...current,
+          visibility: current.visibility || ownPrivacy.default_training_visibility,
+        }));
+      }
 
       const { data: sportsRows } = await supabase
         .from("user_sports")
@@ -548,7 +557,16 @@ export default function CreateTrainingPage() {
         }
       }
 
-      const inviteTargets = [...new Set(selectedInviteIds)].filter((id) => id && id !== profile.id);
+      const rawInviteTargets = [...new Set(selectedInviteIds)].filter((id) => id && id !== profile.id);
+      const invitePrivacyMap = await fetchPrivacySettingsMap(rawInviteTargets);
+      const inviteTargets = rawInviteTargets.filter((inviteeId) =>
+        privacyAllowsTrainingInvite(invitePrivacyMap[inviteeId])
+      );
+
+      const blockedInviteCount = rawInviteTargets.length - inviteTargets.length;
+      if (blockedInviteCount > 0) {
+        console.warn(`${blockedInviteCount} invite(s) skipped due to privacy settings.`);
+      }
 
       if (inviteTargets.length) {
         const inviteRows = inviteTargets.map((inviteeId) => ({
