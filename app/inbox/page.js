@@ -102,8 +102,13 @@ export default function InboxPage() {
       await markNotificationRead(notification.id);
     }
 
-    if (notification.entity_type === "training_session" && notification.entity_id) {
-      router.push(`/trainings/${notification.entity_id}`);
+    if (notification.action_url) {
+      router.push(notification.action_url);
+      return;
+    }
+
+    if (notification.session_id) {
+      router.push(`/trainings/${notification.session_id}`);
       return;
     }
 
