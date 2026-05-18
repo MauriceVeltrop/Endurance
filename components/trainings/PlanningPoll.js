@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { subscribeToTrainingRealtime, removeRealtimeChannel } from "../../lib/realtime";
+import { createNotification, createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../lib/notifications";
 
 function displayName(person) {
   return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.email || "Endurance user";
@@ -402,6 +403,20 @@ export default function PlanningPoll({ training, user, canManage, onChanged, onO
         .eq("creator_id", user.id);
 
       if (error) throw error;
+
+      const notifyUserIds = responses
+        .map((response) => response.user_id)
+        .filter((participantUserId) => participantUserId && participantUserId !== user.id);
+
+      await createNotificationsForUsers(notifyUserIds, {
+        actorId: user.id,
+        type: NOTIFICATION_TYPES.FINAL_TIME_SET,
+        sessionId: training.id,
+        title: "Final start time selected",
+        body: `${training.title} now has a final start time.`,
+        actionUrl: trainingUrl(training.id),
+        metadata: { final_starts_at: finalStartsAt, source: "planning_poll" },
+      });
 
       setMessage("Final start time saved.");
       await loadPoll();
