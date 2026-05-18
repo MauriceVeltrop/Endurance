@@ -242,6 +242,11 @@ export default function EditProfilePage() {
           ← Back
         </button>
 
+        
+        <button type="button" onClick={() => router.push("/profile/privacy")} style={styles.backButton}>
+          Privacy settings
+        </button>
+
         <section style={styles.hero}>
           <p style={styles.kicker}>Profile settings</p>
           <h1 style={styles.title}>Edit your identity.</h1>
