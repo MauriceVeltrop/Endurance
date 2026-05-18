@@ -1,3 +1,4 @@
+// Inbox is now the central place for invites/activity/messages
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
