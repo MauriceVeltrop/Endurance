@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
+import { createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
 
 const sportOptions = [
   { id: "running", metric: "pace", distance: true, routes: true, workouts: false },
@@ -515,6 +516,16 @@ export default function CreateTrainingPage() {
 
         if (inviteError) {
           console.warn("Training invites skipped", inviteError);
+        } else {
+          await createNotificationsForUsers(inviteTargets, {
+            actorId: profile.id,
+            type: NOTIFICATION_TYPES.TRAINING_INVITE,
+            sessionId: trainingRow.id,
+            title: "New training invite",
+            body: `${displayName(profile)} invited you to ${form.title.trim()}.`,
+            actionUrl: trainingUrl(trainingRow.id),
+            metadata: { source: "create_training" },
+          });
         }
       }
 
