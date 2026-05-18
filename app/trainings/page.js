@@ -397,22 +397,14 @@ export default function TrainingsPage() {
 
         if (error) throw error;
       } else {
-        const { data: existingParticipant, error: existingParticipantError } = await supabase
+        const { error } = await supabase
           .from("session_participants")
-          .select("id")
-          .eq("session_id", training.id)
-          .eq("user_id", currentUserId)
-          .maybeSingle();
+          .upsert(
+            { session_id: training.id, user_id: currentUserId },
+            { onConflict: "session_id,user_id", ignoreDuplicates: true }
+          );
 
-        if (existingParticipantError) throw existingParticipantError;
-
-        if (!existingParticipant?.id) {
-          const { error } = await supabase
-            .from("session_participants")
-            .insert({ session_id: training.id, user_id: currentUserId });
-
-          if (error) throw error;
-        }
+        if (error) throw error;
       }
 
       await loadTrainings();
@@ -515,9 +507,6 @@ export default function TrainingsPage() {
           <div style={styles.heroActions}>
             <button type="button" onClick={openCreateTraining} style={styles.heroCreateButton}>
               ＋ Create training
-            </button>
-            <button type="button" onClick={() => router.push("/team")} style={styles.heroSecondaryButton}>
-              Inbox
             </button>
           </div>
         </header>
@@ -696,9 +685,9 @@ const glassCard = {
   width: "100%",
   minWidth: 0,
   boxSizing: "border-box",
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.035))",
-  boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "linear-gradient(145deg, rgba(20,26,26,0.92), rgba(8,12,13,0.88))",
+  boxShadow: "0 22px 70px rgba(0,0,0,0.34)",
 };
 
 const styles = {
@@ -708,7 +697,7 @@ const styles = {
     maxWidth: "100vw",
     overflowX: "hidden",
     background:
-      "radial-gradient(circle at 96% 0%, rgba(228,239,22,0.18), transparent 28%), radial-gradient(circle at 0% 18%, rgba(55,125,255,0.10), transparent 30%), linear-gradient(180deg, #07100b 0%, #050706 58%, #020202 100%)",
+      "radial-gradient(circle at 88% 4%, rgba(228,239,22,0.10), transparent 24%), radial-gradient(circle at 10% 16%, rgba(30,90,110,0.14), transparent 28%), linear-gradient(180deg, #050909 0%, #050706 52%, #020202 100%)",
     color: "white",
     padding: "12px max(12px, env(safe-area-inset-left)) 44px max(12px, env(safe-area-inset-right))",
     boxSizing: "border-box",
@@ -732,9 +721,10 @@ const styles = {
     padding: "clamp(18px, 5vw, 34px)",
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr)",
-    gap: 18,
+    gap: 20,
     position: "relative",
     overflow: "hidden",
+    background: "linear-gradient(145deg, rgba(21,27,27,0.96), rgba(7,10,11,0.94))",
   },
 
   heroCopy: {
@@ -747,7 +737,7 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
     gap: 10,
     width: "100%",
-    maxWidth: 480,
+    maxWidth: 440,
   },
 
   kicker: {
@@ -781,12 +771,12 @@ const styles = {
 
   heroCreateButton: {
     ...baseButton,
-    minHeight: 54,
-    borderRadius: 20,
+    minHeight: 56,
+    borderRadius: 22,
     background: "#e4ef16",
     color: "#101406",
     padding: "0 20px",
-    boxShadow: "0 18px 44px rgba(228,239,22,0.20)",
+    boxShadow: "0 16px 34px rgba(228,239,22,0.20)",
     whiteSpace: "nowrap",
   },
 
@@ -829,8 +819,8 @@ const styles = {
     alignItems: "center",
     gap: 12,
     overflow: "hidden",
-    border: "1px solid rgba(228,239,22,0.22)",
-    background: "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.04))",
+    border: "1px solid rgba(228,239,22,0.18)",
+    background: "linear-gradient(145deg, rgba(35,42,25,0.92), rgba(10,14,15,0.92))",
   },
 
   dashboardIconLime: {
@@ -891,7 +881,7 @@ const styles = {
   dashboardHint: {
     display: "block",
     marginTop: 2,
-    color: "rgba(255,255,255,0.55)",
+    color: "rgba(255,255,255,0.62)",
     fontSize: 12,
     fontWeight: 800,
     lineHeight: 1.25,
@@ -953,7 +943,7 @@ const styles = {
     width: "100%",
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.28)",
+    background: "rgba(2,5,6,0.70)",
     color: "white",
     padding: "0 16px",
     outline: "none",
@@ -1010,7 +1000,7 @@ const styles = {
 
   sectionDescription: {
     margin: "5px 0 0",
-    color: "rgba(255,255,255,0.56)",
+    color: "rgba(255,255,255,0.64)",
     lineHeight: 1.35,
     fontSize: 13,
     fontWeight: 750,
