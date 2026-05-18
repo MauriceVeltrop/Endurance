@@ -24,6 +24,35 @@ function formatDate(value) {
   }
 }
 
+function getPrimarySport(training) {
+  const sports = Array.isArray(training?.sports) ? training.sports : [];
+  return sports[0] || "training";
+}
+
+function sportLabel(value) {
+  return String(value || "training")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getTrainingTimeLabel(training) {
+  const start = training?.final_starts_at || training?.starts_at;
+  if (start) return formatDate(start);
+
+  if (training?.planning_type === "flexible") {
+    if (training?.flexible_date) return `Flexible · ${new Date(training.flexible_date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`;
+    return "Flexible planning";
+  }
+
+  return "Time not set";
+}
+
+function getInvitePriorityLabel(training) {
+  if (training?.final_starts_at || training?.starts_at) return "Ready to join";
+  if (training?.planning_type === "flexible") return "Choose availability";
+  return "Needs response";
+}
+
 export default function InboxPage() {
   const router = useRouter();
 
@@ -221,17 +250,26 @@ export default function InboxPage() {
     setNotice("");
 
     try {
-      const { error: joinError } = await supabase
+      const { data: existing } = await supabase
         .from("session_participants")
-        .upsert(
-          {
-            session_id: invite.session_id,
-            user_id: profile.id,
-          },
-          { onConflict: "session_id,user_id", ignoreDuplicates: true }
-        );
+        .select("id")
+        .eq("session_id", invite.session_id)
+        .eq("user_id", profile.id)
+        .maybeSingle();
 
-      if (joinError) throw joinError;
+      if (!existing?.id) {
+        const { error: joinError } = await supabase
+          .from("session_participants")
+          .upsert(
+            {
+              session_id: invite.session_id,
+              user_id: profile.id,
+            },
+            { onConflict: "session_id,user_id" }
+          );
+
+        if (joinError) throw joinError;
+      }
 
       if (invite.training?.visibility === "selected") {
         const { error: visibilityError } = await supabase
@@ -375,7 +413,7 @@ export default function InboxPage() {
           <div style={styles.kicker}>Inbox</div>
           <h1 style={styles.title}>What needs your attention?</h1>
           <p style={styles.subtitle}>
-            Training invites, Team Up requests and messages in one simple place.
+            Training invites, Team Up requests and messages in one compact action center.
           </p>
         </header>
 
@@ -433,11 +471,19 @@ export default function InboxPage() {
                       <span style={styles.dateText}>{formatDate(invite.created_at)}</span>
                     </div>
 
-                    <h2 style={styles.itemTitle}>{training?.title || "Invited training"}</h2>
-                    <p style={styles.itemText}>
-                      Invited by {displayName(invite.inviter)}
-                      {training?.start_location ? ` · ${training.start_location}` : ""}
-                    </p>
+                    <div style={styles.inviteTitleRow}>
+                      <h2 style={styles.itemTitle}>{training?.title || "Invited training"}</h2>
+                      <span style={styles.priorityPill}>{getInvitePriorityLabel(training)}</span>
+                    </div>
+
+                    <div style={styles.metaGrid}>
+                      <span style={styles.metaChip}>{sportLabel(getPrimarySport(training))}</span>
+                      <span style={styles.metaChip}>{getTrainingTimeLabel(training)}</span>
+                      {training?.start_location ? <span style={styles.metaChip}>{training.start_location}</span> : null}
+                      {training?.distance_km ? <span style={styles.metaChip}>{Number(training.distance_km).toFixed(1)} km</span> : null}
+                    </div>
+
+                    <p style={styles.itemText}>Invited by {displayName(invite.inviter)}.</p>
 
                     <textarea
                       value={declineNotes[invite.id] || ""}
@@ -456,7 +502,7 @@ export default function InboxPage() {
                         Open
                       </button>
                       <button type="button" onClick={() => acceptTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.primaryButton}>
-                        Accept & open
+                        Accept
                       </button>
                       <button type="button" onClick={() => declineTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.dangerButton}>
                         Decline
@@ -484,7 +530,7 @@ export default function InboxPage() {
                         Profile
                       </button>
                       <button type="button" onClick={() => respondTeamRequest(request, "accepted")} disabled={busyId === request.id} style={styles.primaryButton}>
-                        Accept & open
+                        Accept
                       </button>
                       <button type="button" onClick={() => respondTeamRequest(request, "rejected")} disabled={busyId === request.id} style={styles.dangerButton}>
                         Reject
@@ -708,6 +754,43 @@ const styles = {
     margin: 0,
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.45,
+  },
+
+  inviteTitleRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  priorityPill: {
+    borderRadius: 999,
+    padding: "7px 10px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+  },
+  metaGrid: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    minWidth: 0,
+  },
+  metaChip: {
+    maxWidth: "100%",
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(0,0,0,0.22)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: 850,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   noteInput: {
     width: "100%",
