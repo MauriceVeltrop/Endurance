@@ -9,6 +9,7 @@ export default function TrainingMeta({
   participantCount,
   maxParticipants,
   intensity,
+  socialLabel,
   onCreatorClick,
 }) {
   const hasDistance = distanceKm !== null && distanceKm !== undefined && distanceKm !== "";
@@ -35,6 +36,7 @@ export default function TrainingMeta({
       <div style={styles.infoStack}>
         <span>🕒 {time}</span>
         <span>📍 {location || "Location not set"}</span>
+        <span>👥 {socialLabel || `${participantCount} joined`}</span>
       </div>
 
       <div style={styles.metricRow}>

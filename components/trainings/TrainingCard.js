@@ -22,6 +22,9 @@ export default function TrainingCard({
   onCreatorClick,
   actionNeeded = false,
   actionLabel = "Time to decide",
+  statusLabel = "Upcoming",
+  socialLabel = "Open for teammates",
+  badges = [],
 }) {
   return (
     <article style={actionNeeded ? styles.cardActionNeeded : styles.card}>
@@ -36,7 +39,7 @@ export default function TrainingCard({
         <div style={styles.body}>
           <div style={styles.topRow}>
             <span style={styles.sportBadge}>{sportLabel}</span>
-            <span style={styles.visibilityBadge}>{training.visibility}</span>
+            <span style={styles.statusBadge}>{statusLabel}</span>
             {actionNeeded ? <span style={styles.actionBadge}>⚡ {actionLabel}</span> : null}
           </div>
 
@@ -51,8 +54,17 @@ export default function TrainingCard({
             participantCount={participantCount}
             maxParticipants={maxParticipants}
             intensity={intensity}
+            socialLabel={socialLabel}
             onCreatorClick={onCreatorClick}
           />
+
+          {badges.length ? (
+            <div style={styles.badgeRow}>
+              {badges.map((badge) => (
+                <span key={badge} style={styles.microBadge}>{badge}</span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </button>
 
@@ -109,7 +121,7 @@ const styles = {
     margin: 0,
     cursor: "pointer",
     display: "grid",
-    gridTemplateColumns: "minmax(82px, 104px) minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(78px, 104px) minmax(0, 1fr)",
     gap: 10,
     textAlign: "left",
   },
@@ -142,17 +154,17 @@ const styles = {
     fontWeight: 950,
     lineHeight: 1,
   },
-  visibilityBadge: {
+  statusBadge: {
     width: "fit-content",
+    maxWidth: "100%",
     borderRadius: 999,
     padding: "6px 9px",
     background: "rgba(255,255,255,0.065)",
     border: "1px solid rgba(255,255,255,0.10)",
-    color: "rgba(255,255,255,0.66)",
+    color: "rgba(255,255,255,0.70)",
     fontSize: 11,
     fontWeight: 900,
     lineHeight: 1,
-    textTransform: "capitalize",
   },
   actionBadge: {
     width: "fit-content",
@@ -173,5 +185,23 @@ const styles = {
     letterSpacing: "-0.055em",
     overflowWrap: "anywhere",
     wordBreak: "break-word",
+  },
+  badgeRow: {
+    display: "flex",
+    gap: 6,
+    flexWrap: "wrap",
+    minWidth: 0,
+  },
+  microBadge: {
+    maxWidth: "100%",
+    borderRadius: 999,
+    padding: "5px 8px",
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 11,
+    fontWeight: 850,
+    lineHeight: 1,
+    overflowWrap: "anywhere",
   },
 };
