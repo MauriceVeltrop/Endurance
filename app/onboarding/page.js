@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { sportOptions } from "../../lib/sportsConfig";
+import ImageCropperModal from "../../components/ImageCropperModal";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarCropFile, setAvatarCropFile] = useState(null);
   const [message, setMessage] = useState("");
   const [currentRole, setCurrentRole] = useState("user");
   const [adminInvite, setAdminInvite] = useState(null);
@@ -138,6 +140,7 @@ export default function OnboardingPage() {
 
   const uploadAvatar = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     setMessage("");
 
     if (!file || !user?.id) return;
@@ -147,22 +150,28 @@ export default function OnboardingPage() {
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      setMessage("Profile photo is too large. Use an image under 4 MB.");
+    if (file.size > 8 * 1024 * 1024) {
+      setMessage("Profile photo is too large. Use an image under 8 MB.");
       return;
     }
+
+    setAvatarCropFile(file);
+  };
+
+  const confirmAvatarCrop = async ({ file }) => {
+    if (!file || !user?.id) return;
 
     try {
       setUploadingAvatar(true);
 
-      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${user.id}/avatar-${Date.now()}.${extension}`;
+      const path = `${user.id}/avatar-${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(path, file, {
           cacheControl: "3600",
           upsert: true,
+          contentType: file.type || "image/jpeg",
         });
 
       if (uploadError) throw uploadError;
@@ -176,6 +185,7 @@ export default function OnboardingPage() {
       }
 
       update("avatar_url", data.publicUrl);
+      setAvatarCropFile(null);
     } catch (err) {
       console.error("Avatar upload error", err);
       setMessage(err?.message || "Could not upload profile photo.");
@@ -398,6 +408,16 @@ export default function OnboardingPage() {
           </button>
         </form>
       </section>
+
+      {avatarCropFile ? (
+        <ImageCropperModal
+          file={avatarCropFile}
+          mode="avatar"
+          title="Crop profile photo"
+          onCancel={() => setAvatarCropFile(null)}
+          onConfirm={confirmAvatarCrop}
+        />
+      ) : null}
     </main>
   );
 }
