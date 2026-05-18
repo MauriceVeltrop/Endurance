@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import PlanningPoll from "../../../components/trainings/PlanningPoll";
+import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
 
 const sportLabels = {
@@ -139,6 +140,28 @@ function getNearestHourlyIndex(times, targetDate) {
   });
 
   return bestIndex;
+}
+
+
+const routeSportIds = new Set(["running", "trail_running", "road_cycling", "gravel_cycling", "mountain_biking", "walking", "kayaking"]);
+const workoutSportIds = new Set(["strength_training", "crossfit", "hyrox", "bootcamp"]);
+
+function supportsRoutePreview(training) {
+  const sports = Array.isArray(training?.sports) ? training.sports : [];
+  return sports.some((sport) => routeSportIds.has(sport));
+}
+
+function supportsWorkoutPreview(training) {
+  const sports = Array.isArray(training?.sports) ? training.sports : [];
+  return sports.some((sport) => workoutSportIds.has(sport));
+}
+
+function getWorkoutBlockCount(workout) {
+  const exercises = workout?.structure?.exercises;
+  if (Array.isArray(exercises)) return exercises.length;
+  const blocks = workout?.structure?.blocks;
+  if (Array.isArray(blocks)) return blocks.length;
+  return 0;
 }
 
 function WeatherForecastCard({ training }) {
@@ -369,7 +392,7 @@ export default function TrainingDetailPage() {
       if (trainingRow.route_id) {
         const { data: routeRow } = await supabase
           .from("routes")
-          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility")
+          .select("id,title,description,sport_id,distance_km,elevation_gain_m,route_points,gpx_file_url,visibility")
           .eq("id", trainingRow.route_id)
           .maybeSingle();
 
@@ -381,7 +404,7 @@ export default function TrainingDetailPage() {
       if (trainingRow.workout_id) {
         const { data: workoutRow } = await supabase
           .from("workouts")
-          .select("id,title,sport_id,workout_type,level,duration_min,visibility")
+          .select("id,title,description,sport_id,workout_type,level,duration_min,structure,visibility")
           .eq("id", trainingRow.workout_id)
           .maybeSingle();
 
@@ -471,13 +494,10 @@ export default function TrainingDetailPage() {
 
         const { error } = await supabase
           .from("session_participants")
-          .upsert(
-            {
-              session_id: training.id,
-              user_id: user.id,
-            },
-            { onConflict: "session_id,user_id", ignoreDuplicates: true }
-          );
+          .insert({
+            session_id: training.id,
+            user_id: user.id,
+          });
 
         if (error) throw error;
         setMessage("You joined this training.");
@@ -544,20 +564,33 @@ export default function TrainingDetailPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("session_availability")
-        .upsert(
-          {
+      const existing = sessionAvailabilityRows.find((row) => row.user_id === user.id);
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("session_availability")
+          .update({
+            available_from: sessionAvailabilityForm.available_from,
+            available_until: sessionAvailabilityForm.available_until,
+            note: sessionAvailabilityForm.note.trim() || null,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_availability")
+          .insert({
             session_id: training.id,
             user_id: user.id,
             available_from: sessionAvailabilityForm.available_from,
             available_until: sessionAvailabilityForm.available_until,
             note: sessionAvailabilityForm.note.trim() || null,
-          },
-          { onConflict: "session_id,user_id" }
-        );
+          });
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setAvailabilityMessage("Your time frame has been saved.");
       await loadTraining();
@@ -963,6 +996,88 @@ export default function TrainingDetailPage() {
               </section>
             ) : null}
 
+            <section style={styles.previewGrid}>
+              <article style={styles.previewCard}>
+                <div style={styles.previewHeader}>
+                  <div>
+                    <div style={styles.cardKicker}>Route</div>
+                    <h2 style={styles.previewTitle}>{route ? route.title : supportsRoutePreview(training) ? "No route added yet" : "Route not needed"}</h2>
+                  </div>
+                  {route ? <span style={styles.readyPill}>Ready</span> : null}
+                </div>
+
+                {route ? (
+                  <>
+                    <RouteMiniPreview routePoints={route.route_points} height={170} />
+                    <div style={styles.previewFacts}>
+                      <span style={styles.factChip}>{getSportLabel(route.sport_id)}</span>
+                      <span style={styles.factChip}>{route.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km planned` : "Distance not set"}</span>
+                      <span style={styles.factChip}>{route.elevation_gain_m ? `${route.elevation_gain_m} m+` : "Elevation not set"}</span>
+                    </div>
+                    {route.description ? <p style={styles.muted}>{route.description}</p> : null}
+                    <div style={styles.actionsCompact}>
+                      <Link href={`/routes/${route.id}`} style={styles.secondaryLink}>Open route</Link>
+                      {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>Change route</Link> : null}
+                    </div>
+                  </>
+                ) : supportsRoutePreview(training) ? (
+                  <div style={styles.previewEmpty}>
+                    <strong>Add a route preview for this training.</strong>
+                    <span>Participants can quickly see distance, elevation and the planned course before they join.</span>
+                    {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.primaryLink}>Add route</Link> : null}
+                  </div>
+                ) : (
+                  <div style={styles.previewEmpty}>
+                    <strong>This sport does not need a route.</strong>
+                    <span>For indoor or court based sports, use a workout plan instead.</span>
+                  </div>
+                )}
+              </article>
+
+              <article style={styles.previewCard}>
+                <div style={styles.previewHeader}>
+                  <div>
+                    <div style={styles.cardKicker}>Workout</div>
+                    <h2 style={styles.previewTitle}>{workout ? workout.title : supportsWorkoutPreview(training) ? "No workout added yet" : "Workout optional"}</h2>
+                  </div>
+                  {workout ? <span style={styles.readyPill}>Ready</span> : null}
+                </div>
+
+                {workout ? (
+                  <>
+                    <div style={styles.workoutVisual}>
+                      <span style={styles.workoutIcon}>▦</span>
+                      <strong>{workout.workout_type || "Workout"}</strong>
+                      <span>{workout.level || "Level not set"}</span>
+                    </div>
+                    <div style={styles.previewFacts}>
+                      <span style={styles.factChip}>{getSportLabel(workout.sport_id)}</span>
+                      <span style={styles.factChip}>{workout.duration_min ? `${workout.duration_min} min` : "Duration not set"}</span>
+                      <span style={styles.factChip}>{getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
+                    </div>
+                    {workout.description ? <p style={styles.muted}>{workout.description}</p> : null}
+                    {canManage ? (
+                      <div style={styles.actionsCompact}>
+                        <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>Change workout</Link>
+                        <Link href="/workouts/new" style={styles.secondaryLink}>New workout</Link>
+                      </div>
+                    ) : null}
+                  </>
+                ) : supportsWorkoutPreview(training) ? (
+                  <div style={styles.previewEmpty}>
+                    <strong>Add the workout structure.</strong>
+                    <span>Show blocks, duration and level so participants know what to expect.</span>
+                    {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.primaryLink}>Add workout</Link> : null}
+                  </div>
+                ) : (
+                  <div style={styles.previewEmpty}>
+                    <strong>Workout plan is optional here.</strong>
+                    <span>Use this only when the session has a specific workout structure.</span>
+                  </div>
+                )}
+              </article>
+            </section>
+
             <section style={styles.card}>
               <div style={styles.cardKicker}>Participants</div>
               <h2 style={styles.sectionTitle}>{participantCount} joined</h2>
@@ -997,33 +1112,6 @@ export default function TrainingDetailPage() {
                 <p style={styles.muted}>No participants yet.</p>
               )}
             </section>
-
-            {(route || workout) ? (
-              <section style={styles.toolsGrid}>
-                {route ? (
-                  <article style={styles.card}>
-                    <div style={styles.cardKicker}>Route</div>
-                    <h2 style={styles.sectionTitle}>{route.title}</h2>
-                    <p style={styles.muted}>
-                      {getSportLabel(route.sport_id)}
-                      {route.distance_km ? ` · ${route.distance_km} km` : ""}
-                      {route.elevation_gain_m ? ` · ${route.elevation_gain_m} m+` : ""}
-                    </p>
-                  </article>
-                ) : null}
-
-                {workout ? (
-                  <article style={styles.card}>
-                    <div style={styles.cardKicker}>Workout</div>
-                    <h2 style={styles.sectionTitle}>{workout.title}</h2>
-                    <p style={styles.muted}>
-                      {getSportLabel(workout.sport_id)}
-                      {workout.duration_min ? ` · ${workout.duration_min} min` : ""}
-                    </p>
-                  </article>
-                ) : null}
-              </section>
-            ) : null}
           </>
         ) : null}
       </section>
@@ -1385,6 +1473,113 @@ const styles = {
     color: "rgba(255,255,255,0.72)",
     fontSize: 13,
     fontWeight: 850,
+  },
+
+  previewGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 14,
+    alignItems: "stretch",
+  },
+  previewCard: {
+    minWidth: 0,
+    borderRadius: 30,
+    padding: 16,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
+    overflow: "hidden",
+  },
+  previewHeader: {
+    minWidth: 0,
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  previewTitle: {
+    margin: "5px 0 0",
+    fontSize: "clamp(24px, 6vw, 34px)",
+    lineHeight: 0.98,
+    letterSpacing: "-0.055em",
+  },
+  readyPill: {
+    flex: "0 0 auto",
+    borderRadius: 999,
+    padding: "7px 10px",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+  },
+  previewFacts: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  factChip: {
+    borderRadius: 999,
+    padding: "7px 10px",
+    background: "rgba(255,255,255,0.07)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.74)",
+    fontSize: 13,
+    fontWeight: 850,
+  },
+  previewEmpty: {
+    minHeight: 170,
+    borderRadius: 24,
+    padding: 16,
+    background: "rgba(255,255,255,0.045)",
+    border: "1px dashed rgba(255,255,255,0.14)",
+    display: "grid",
+    alignContent: "center",
+    gap: 10,
+    color: "rgba(255,255,255,0.66)",
+    lineHeight: 1.45,
+  },
+  primaryLink: {
+    width: "fit-content",
+    minHeight: 44,
+    borderRadius: 999,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 16px",
+    fontWeight: 950,
+    textDecoration: "none",
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  actionsCompact: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  workoutVisual: {
+    minHeight: 170,
+    borderRadius: 24,
+    background: "radial-gradient(circle at 70% 22%, rgba(228,239,22,0.16), transparent 36%), linear-gradient(145deg,#111611,#060706)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: 7,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.72)",
+  },
+  workoutIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontSize: 28,
+    fontWeight: 950,
   },
   toolsGrid: {
     display: "grid",
