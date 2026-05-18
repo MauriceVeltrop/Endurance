@@ -508,7 +508,7 @@ export default function TrainingsPage() {
             <button type="button" onClick={openCreateTraining} style={styles.heroCreateButton}>
               ＋ Create training
             </button>
-            <button type="button" onClick={() => router.push("/team")} style={styles.heroSecondaryButton}>
+            <button type="button" onClick={() => router.push("/inbox")} style={styles.heroSecondaryButton}>
               Team & invites
             </button>
           </div>
@@ -583,7 +583,7 @@ export default function TrainingsPage() {
               <p style={styles.inviteBannerText}>Accept, decline or open the training details from Inbox.</p>
             </div>
 
-            <button type="button" onClick={() => router.push("/team")} style={styles.primaryButton}>
+            <button type="button" onClick={() => router.push("/inbox")} style={styles.primaryButton}>
               Open Inbox
             </button>
           </section>
