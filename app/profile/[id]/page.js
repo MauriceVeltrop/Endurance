@@ -167,7 +167,7 @@ export default function PublicProfilePage() {
               sports={sports}
               stats={stats}
               isOwnProfile={isOwnProfile}
-              onEditProfile={() => router.push("/onboarding?edit=1")}
+              onEditProfile={() => router.push("/profile/edit")}
             />
 
             <section style={styles.actionCard}>
