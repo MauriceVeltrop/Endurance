@@ -517,17 +517,25 @@ export default function TrainingDetailPage() {
           return;
         }
 
-        const { error } = await supabase
+        const { data: existingParticipant, error: existingParticipantError } = await supabase
           .from("session_participants")
-          .upsert(
-            {
+          .select("id")
+          .eq("session_id", training.id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (existingParticipantError) throw existingParticipantError;
+
+        if (!existingParticipant?.id) {
+          const { error } = await supabase
+            .from("session_participants")
+            .insert({
               session_id: training.id,
               user_id: user.id,
-            },
-            { onConflict: "session_id,user_id" }
-          );
+            });
 
-        if (error) throw error;
+          if (error) throw error;
+        }
 
         if (training.creator_id && training.creator_id !== user.id) {
           await createNotification({
