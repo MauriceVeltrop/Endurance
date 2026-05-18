@@ -249,17 +249,25 @@ export default function TeamPage() {
     try {
       setBusyId(invite.id);
 
-      const { error: participantError } = await supabase
+      const { data: existingParticipant, error: existingParticipantError } = await supabase
         .from("session_participants")
-        .upsert(
-          {
+        .select("id")
+        .eq("session_id", invite.session_id)
+        .eq("user_id", profile.id)
+        .maybeSingle();
+
+      if (existingParticipantError) throw existingParticipantError;
+
+      if (!existingParticipant?.id) {
+        const { error: participantError } = await supabase
+          .from("session_participants")
+          .insert({
             session_id: invite.session_id,
             user_id: profile.id,
-          },
-          { onConflict: "session_id,user_id", ignoreDuplicates: true }
-        );
+          });
 
-      if (participantError) throw participantError;
+        if (participantError) throw participantError;
+      }
 
       const { error: inviteUpdateError } = await supabase
         .from("training_invites")
