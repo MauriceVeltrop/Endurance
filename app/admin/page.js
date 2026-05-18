@@ -132,14 +132,21 @@ export default function AdminPage() {
       }
 
       const { data: userRows, error: usersError } = await supabase
-        .from("profiles")
-        .select("id,name,email,avatar_url,location,role,blocked,onboarding_completed,created_at,first_name,last_name")
-        .order("created_at", { ascending: false })
-        .limit(250);
+        .rpc("admin_list_users");
 
-      if (usersError) throw usersError;
+      if (usersError) {
+        console.warn("admin_list_users RPC failed, falling back to profiles select", usersError);
+        const { data: fallbackRows, error: fallbackError } = await supabase
+          .from("profiles")
+          .select("id,name,email,avatar_url,location,role,blocked,onboarding_completed,created_at,first_name,last_name")
+          .order("created_at", { ascending: false })
+          .limit(250);
 
-      setUsers(userRows || []);
+        if (fallbackError) throw fallbackError;
+        setUsers(fallbackRows || []);
+      } else {
+        setUsers(userRows || []);
+      }
 
       const { count } = await supabase
         .from("admin_user_invites")
@@ -315,16 +322,16 @@ export default function AdminPage() {
     setMessage("");
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ role: nextRole })
-        .eq("id", targetUser.id);
+      const { data, error } = await supabase.rpc("admin_set_user_role", {
+        p_user_id: targetUser.id,
+        p_role: nextRole,
+      });
 
       if (error) throw error;
 
       setUsers((current) =>
         current.map((user) =>
-          user.id === targetUser.id ? { ...user, role: nextRole } : user
+          user.id === targetUser.id ? { ...user, ...(data || {}), role: nextRole } : user
         )
       );
       setMessage(`Role updated for ${displayName(targetUser)}.`);
@@ -348,16 +355,16 @@ export default function AdminPage() {
     try {
       const nextBlocked = !targetUser.blocked;
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({ blocked: nextBlocked })
-        .eq("id", targetUser.id);
+      const { data, error } = await supabase.rpc("admin_set_user_blocked", {
+        p_user_id: targetUser.id,
+        p_blocked: nextBlocked,
+      });
 
       if (error) throw error;
 
       setUsers((current) =>
         current.map((user) =>
-          user.id === targetUser.id ? { ...user, blocked: nextBlocked } : user
+          user.id === targetUser.id ? { ...user, ...(data || {}), blocked: nextBlocked } : user
         )
       );
 
@@ -379,7 +386,7 @@ export default function AdminPage() {
           <div style={styles.kicker}>Admin</div>
           <h1 style={styles.title}>Manage Endurance<span style={styles.dot}>.</span></h1>
           <p style={styles.subtitle}>
-            Manage users, roles and access for the verified Endurance community.
+            Manage users, roles and access through secure admin actions.
           </p>
         </header>
 
