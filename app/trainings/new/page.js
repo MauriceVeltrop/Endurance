@@ -1,3 +1,4 @@
+// NOTIFICATIONS_V1_PATCH: invite notification helpers available for create-training flow.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
