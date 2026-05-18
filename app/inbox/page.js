@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../../lib/supabase";
 import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
-} from "@/lib/notifications";
+} from "../../lib/notifications";
 
 function fmtDate(value) {
   if (!value) return "";
