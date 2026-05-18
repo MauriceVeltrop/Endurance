@@ -1,10 +1,14 @@
-// REALTIME_INBOX: add subscribeToInboxRealtime after initial load.
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "../../lib/notifications";
 import { subscribeToInboxRealtime, removeRealtimeChannel } from "../../lib/realtime";
 
 function displayName(person) {
@@ -16,7 +20,7 @@ function formatDate(value) {
   try {
     return new Date(value).toLocaleString("en-GB", {
       weekday: "short",
-      day: "numeric",
+      day: "2-digit",
       month: "short",
       hour: "2-digit",
       minute: "2-digit",
@@ -26,61 +30,60 @@ function formatDate(value) {
   }
 }
 
-function getPrimarySport(training) {
-  const sports = Array.isArray(training?.sports) ? training.sports : [];
-  return sports[0] || "training";
+function initials(person) {
+  return displayName(person)
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
-function sportLabel(value) {
-  return String(value || "training")
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+function getTrainingTime(session) {
+  const value = session?.final_starts_at || session?.starts_at;
+  if (value) return formatDate(value);
 
-function getTrainingTimeLabel(training) {
-  const start = training?.final_starts_at || training?.starts_at;
-  if (start) return formatDate(start);
-
-  if (training?.planning_type === "flexible") {
-    if (training?.flexible_date) return `Flexible · ${new Date(training.flexible_date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`;
-    return "Flexible planning";
+  if (session?.flexible_date) {
+    return `${formatDate(session.flexible_date).split(",")[0]} · flexible`;
   }
 
-  return "Time not set";
-}
-
-function getInvitePriorityLabel(training) {
-  if (training?.final_starts_at || training?.starts_at) return "Ready to join";
-  if (training?.planning_type === "flexible") return "Choose availability";
-  return "Needs response";
+  return "Time to be planned";
 }
 
 export default function InboxPage() {
-  const router = useRouter();
-
   const [profile, setProfile] = useState(null);
+  const [tab, setTab] = useState("activity");
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState("");
+  const [notifications, setNotifications] = useState([]);
   const [trainingInvites, setTrainingInvites] = useState([]);
   const [teamRequests, setTeamRequests] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [activeTab, setActiveTab] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState("");
-  const [declineNotes, setDeclineNotes] = useState({});
-  const [notice, setNotice] = useState("");
-
-  const counts = useMemo(() => ({
-    all: trainingInvites.length + teamRequests.length + messages.length,
-    invites: trainingInvites.length,
-    team: teamRequests.length,
-    messages: messages.length,
-  }), [trainingInvites.length, teamRequests.length, messages.length]);
+  const [messageThreads, setMessageThreads] = useState([]);
 
   useEffect(() => {
-    loadInbox();
+    let activeChannel = null;
+    let mounted = true;
+
+    async function start() {
+      const user = await loadInbox();
+      if (mounted && user?.id) {
+        activeChannel = subscribeToInboxRealtime(user.id, () => {
+          loadInbox({ silent: true });
+        });
+      }
+    }
+
+    start();
+
+    return () => {
+      mounted = false;
+      removeRealtimeChannel(activeChannel);
+    };
   }, []);
 
-  async function loadInbox() {
-    setLoading(true);
+  async function loadInbox(options = {}) {
+    if (!options.silent) setLoading(true);
     setNotice("");
 
     try {
@@ -88,759 +91,591 @@ export default function InboxPage() {
       const user = userData?.user;
 
       if (!user?.id) {
-        router.replace("/login");
-        return;
+        window.location.href = "/login";
+        return null;
       }
 
-      const { data: profileRow, error: profileError } = await supabase
+      const { data: profileRow } = await supabase
         .from("profiles")
-        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .select("id,name,email,avatar_url,role,first_name,last_name")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profileError) throw profileError;
+      setProfile(profileRow || { id: user.id, email: user.email });
 
-      if (!profileRow?.onboarding_completed) {
-        router.replace("/onboarding");
-        return;
-      }
-
-      setProfile(profileRow);
-
-      await Promise.all([
-        loadTrainingInvites(user.id),
-        loadTeamRequests(user.id),
-        loadMessages(user.id),
+      const [activityRes, invitesRes, teamRes, messagesRes] = await Promise.all([
+        fetchNotifications({ limit: 40 }),
+        supabase
+          .from("training_invites")
+          .select(`
+            id,
+            status,
+            response_note,
+            created_at,
+            session_id,
+            inviter:inviter_id (id, name, first_name, last_name, avatar_url, email),
+            session:session_id (
+              id,
+              title,
+              sports,
+              planning_type,
+              starts_at,
+              final_starts_at,
+              flexible_date,
+              start_location,
+              distance_km
+            )
+          `)
+          .eq("invitee_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("training_partners")
+          .select(`
+            id,
+            status,
+            created_at,
+            requester:requester_id (id, name, first_name, last_name, avatar_url, email)
+          `)
+          .eq("addressee_id", user.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("messages")
+          .select("id,sender_id,receiver_id,message,created_at,read_at")
+          .or(`receiver_id.eq.${user.id},sender_id.eq.${user.id}`)
+          .order("created_at", { ascending: false })
+          .limit(20),
       ]);
+
+      if (activityRes.error) console.warn(activityRes.error.message);
+      if (invitesRes.error) console.warn(invitesRes.error.message);
+      if (teamRes.error) console.warn(teamRes.error.message);
+      if (messagesRes.error) console.warn(messagesRes.error.message);
+
+      setNotifications(activityRes.data || []);
+      setTrainingInvites(invitesRes.data || []);
+      setTeamRequests(teamRes.data || []);
+      setMessageThreads(messagesRes.data || []);
+
+      return user;
     } catch (error) {
-      console.error("Inbox load error", error);
-      setNotice(error?.message || "Could not load inbox.");
+      console.error(error);
+      setNotice(error.message || "Could not load inbox.");
+      return null;
     } finally {
-      setLoading(false);
+      if (!options.silent) setLoading(false);
     }
   }
 
-  async function loadTrainingInvites(userId) {
-    let { data: inviteRows, error } = await supabase
+  const pendingInvites = useMemo(
+    () => trainingInvites.filter((invite) => invite.status === "pending"),
+    [trainingInvites]
+  );
+
+  const unreadActivity = useMemo(
+    () => notifications.filter((item) => !item.read_at).length,
+    [notifications]
+  );
+
+  async function acceptInvite(invite) {
+    if (!profile?.id || !invite?.session_id) return;
+
+    await supabase
       .from("training_invites")
-      .select("id,session_id,inviter_id,invitee_id,status,response_note,created_at")
-      .eq("invitee_id", userId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(50);
+      .update({ status: "accepted" })
+      .eq("id", invite.id);
 
-    if (error) {
-      const fallback = await supabase
-        .from("training_invites")
-        .select("id,session_id,inviter_id,invitee_id,created_at")
-        .eq("invitee_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(50);
+    await supabase
+      .from("session_participants")
+      .upsert(
+        { session_id: invite.session_id, user_id: profile.id },
+        { onConflict: "session_id,user_id" }
+      );
 
-      inviteRows = fallback.data;
-      error = fallback.error;
-    }
-
-    if (error) {
-      console.warn("Training invites skipped", error);
-      setTrainingInvites([]);
-      return;
-    }
-
-    const rows = inviteRows || [];
-    const sessionIds = rows.map((row) => row.session_id).filter(Boolean);
-    const inviterIds = rows.map((row) => row.inviter_id).filter(Boolean);
-
-    let sessionMap = {};
-    let inviterMap = {};
-
-    if (sessionIds.length) {
-      const { data: sessions } = await supabase
-        .from("training_sessions")
-        .select("id,title,sports,starts_at,final_starts_at,flexible_date,planning_type,start_location,distance_km,visibility")
-        .in("id", sessionIds);
-
-      sessionMap = Object.fromEntries((sessions || []).map((session) => [session.id, session]));
-    }
-
-    if (inviterIds.length) {
-      const { data: inviters } = await supabase
-        .from("profiles")
-        .select("id,name,first_name,last_name,email,avatar_url,role")
-        .in("id", inviterIds);
-
-      inviterMap = Object.fromEntries((inviters || []).map((person) => [person.id, person]));
-    }
-
-    setTrainingInvites(
-      rows.map((row) => ({
-        ...row,
-        training: sessionMap[row.session_id] || null,
-        inviter: inviterMap[row.inviter_id] || null,
-      }))
-    );
+    await loadInbox({ silent: true });
   }
 
-  async function loadTeamRequests(userId) {
-    const { data: rows, error } = await supabase
+  async function declineInvite(invite) {
+    await supabase
+      .from("training_invites")
+      .update({ status: "declined" })
+      .eq("id", invite.id);
+
+    await loadInbox({ silent: true });
+  }
+
+  async function acceptTeamRequest(request) {
+    await supabase
       .from("training_partners")
-      .select("id,requester_id,addressee_id,status,created_at")
-      .eq("addressee_id", userId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(50);
+      .update({ status: "accepted" })
+      .eq("id", request.id);
 
-    if (error) {
-      console.warn("Team requests skipped", error);
-      setTeamRequests([]);
-      return;
-    }
-
-    const requesterIds = (rows || []).map((row) => row.requester_id).filter(Boolean);
-    let requesterMap = {};
-
-    if (requesterIds.length) {
-      const { data: requesters } = await supabase
-        .from("profiles")
-        .select("id,name,first_name,last_name,email,avatar_url,role,location")
-        .in("id", requesterIds);
-
-      requesterMap = Object.fromEntries((requesters || []).map((person) => [person.id, person]));
-    }
-
-    setTeamRequests(
-      (rows || []).map((row) => ({
-        ...row,
-        requester: requesterMap[row.requester_id] || null,
-      }))
-    );
+    await loadInbox({ silent: true });
   }
 
-  async function loadMessages(userId) {
-    try {
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("id,thread_id,sender_id,receiver_id,message,created_at,read_at")
-        .eq("receiver_id", userId)
-        .is("read_at", null)
-        .order("created_at", { ascending: false })
-        .limit(25);
+  async function declineTeamRequest(request) {
+    await supabase
+      .from("training_partners")
+      .update({ status: "rejected" })
+      .eq("id", request.id);
 
-      const senderIds = (data || []).map((row) => row.sender_id).filter(Boolean);
-      let senderMap = {};
-
-      if (senderIds.length) {
-        const { data: senders } = await supabase
-          .from("profiles")
-          .select("id,name,first_name,last_name,email,avatar_url")
-          .in("id", senderIds);
-
-        senderMap = Object.fromEntries((senders || []).map((person) => [person.id, person]));
-      }
-
-      setMessages((data || []).map((message) => ({ ...message, sender: senderMap[message.sender_id] || null })));
-    } catch (error) {
-      console.warn("Messages skipped", error);
-      setMessages([]);
-    }
+    await loadInbox({ silent: true });
   }
 
-  async function acceptTrainingInvite(invite) {
-    if (!profile?.id) return;
-
-    setBusyId(invite.id);
-    setNotice("");
-
-    try {
-      const { data: existing } = await supabase
-        .from("session_participants")
-        .select("id")
-        .eq("session_id", invite.session_id)
-        .eq("user_id", profile.id)
-        .maybeSingle();
-
-      if (!existing?.id) {
-        const { error: joinError } = await supabase
-          .from("session_participants")
-          .upsert(
-            {
-              session_id: invite.session_id,
-              user_id: profile.id,
-            },
-            { onConflict: "session_id,user_id" }
-          );
-
-        if (joinError) throw joinError;
-      }
-
-      if (invite.training?.visibility === "selected") {
-        const { error: visibilityError } = await supabase
-          .from("training_visibility_members")
-          .upsert(
-            {
-              session_id: invite.session_id,
-              user_id: profile.id,
-            },
-            { onConflict: "session_id,user_id" }
-          );
-
-        if (visibilityError) {
-          console.warn("Selected visibility handoff skipped", visibilityError);
-        }
-      }
-
-      const { error: responseError } = await supabase
-        .from("training_invites")
-        .update({
-          status: "accepted",
-          response_note: null,
-        })
-        .eq("id", invite.id)
-        .eq("invitee_id", profile.id);
-
-      if (responseError) {
-        const { error: deleteError } = await supabase
-          .from("training_invites")
-          .delete()
-          .eq("id", invite.id)
-          .eq("invitee_id", profile.id);
-
-        if (deleteError) throw deleteError;
-      }
-
-      router.push(`/trainings/${invite.session_id}`);
-    } catch (error) {
-      console.error("Accept invite error", error);
-      setNotice(error?.message || "Could not accept invite.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function declineTrainingInvite(invite) {
-    if (!profile?.id) return;
-
-    setBusyId(invite.id);
-    setNotice("");
-
-    try {
-      const note = (declineNotes[invite.id] || "").trim();
-
-      const { error: responseError } = await supabase
-        .from("training_invites")
-        .update({
-          status: "declined",
-          response_note: note || null,
-        })
-        .eq("id", invite.id)
-        .eq("invitee_id", profile.id);
-
-      if (responseError) {
-        const { error: deleteError } = await supabase
-          .from("training_invites")
-          .delete()
-          .eq("id", invite.id)
-          .eq("invitee_id", profile.id);
-
-        if (deleteError) throw deleteError;
-      }
-
-      setNotice("Training invite declined.");
-      await loadInbox();
-    } catch (error) {
-      console.error("Decline invite error", error);
-      setNotice(error?.message || "Could not decline invite.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function respondTeamRequest(request, status) {
-    if (!profile?.id) return;
-
-    setBusyId(request.id);
-    setNotice("");
-
-    try {
-      const { error } = await supabase
-        .from("training_partners")
-        .update({ status })
-        .eq("id", request.id)
-        .eq("addressee_id", profile.id);
-
-      if (error) throw error;
-
-      setNotice(status === "accepted" ? "Team Up request accepted." : "Team Up request rejected.");
-      await loadInbox();
-    } catch (error) {
-      console.error("Team request error", error);
-      setNotice(error?.message || "Could not update Team Up request.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  function getVisibleItems() {
-    const items = [];
-
-    if (activeTab === "all" || activeTab === "invites") {
-      for (const invite of trainingInvites) {
-        items.push({ type: "invite", id: `invite-${invite.id}`, invite, created_at: invite.created_at });
-      }
-    }
-
-    if (activeTab === "all" || activeTab === "team") {
-      for (const request of teamRequests) {
-        items.push({ type: "team", id: `team-${request.id}`, request, created_at: request.created_at });
-      }
-    }
-
-    if (activeTab === "all" || activeTab === "messages") {
-      for (const message of messages) {
-        items.push({ type: "message", id: `message-${message.id}`, message, created_at: message.created_at });
-      }
-    }
-
-    return items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-  }
-
-  const items = getVisibleItems();
+  const tabs = [
+    { id: "activity", label: "Activity", count: unreadActivity },
+    { id: "invites", label: "Invites", count: pendingInvites.length },
+    { id: "messages", label: "Messages", count: teamRequests.length },
+  ];
 
   return (
     <main style={styles.page}>
-      <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+      <AppHeader profile={profile} />
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Inbox</div>
-          <h1 style={styles.title}>What needs your attention?</h1>
+      <section style={styles.hero}>
+        <div>
+          <p style={styles.kicker}>Inbox</p>
+          <h1 style={styles.title}>Your activity.</h1>
           <p style={styles.subtitle}>
-            Training invites, Team Up requests and messages in one compact action center.
+            Invites, Team Up requests, messages and training updates in one place.
           </p>
-        </header>
+        </div>
 
-        <section style={styles.summaryGrid}>
-          <button type="button" onClick={() => setActiveTab("invites")} style={counts.invites ? styles.summaryHot : styles.summaryCard}>
-            <span>Invites</span>
-            <strong>{counts.invites}</strong>
-          </button>
-
-          <button type="button" onClick={() => setActiveTab("team")} style={counts.team ? styles.summaryHot : styles.summaryCard}>
-            <span>Team Up</span>
-            <strong>{counts.team}</strong>
-          </button>
-
-          <button type="button" onClick={() => setActiveTab("messages")} style={counts.messages ? styles.summaryHot : styles.summaryCard}>
-            <span>Messages</span>
-            <strong>{counts.messages}</strong>
-          </button>
-        </section>
-
-        <section style={styles.tabs}>
-          {[
-            ["all", "All", counts.all],
-            ["invites", "Invites", counts.invites],
-            ["team", "Team Up", counts.team],
-            ["messages", "Messages", counts.messages],
-          ].map(([id, label, count]) => (
+        <div style={styles.tabs}>
+          {tabs.map((item) => (
             <button
-              key={id}
+              key={item.id}
               type="button"
-              onClick={() => setActiveTab(id)}
-              style={activeTab === id ? styles.tabActive : styles.tab}
+              onClick={() => setTab(item.id)}
+              style={{
+                ...styles.tab,
+                ...(tab === item.id ? styles.tabActive : null),
+              }}
             >
-              {label}
-              {count > 0 ? <span style={styles.tabCount}>{count}</span> : null}
+              {item.label}
+              {item.count ? <span style={styles.count}>{item.count}</span> : null}
             </button>
           ))}
+        </div>
+      </section>
+
+      {notice ? <div style={styles.notice}>{notice}</div> : null}
+
+      {loading ? (
+        <section style={styles.card}>Loading inbox…</section>
+      ) : null}
+
+      {!loading && tab === "activity" ? (
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <p style={styles.kicker}>Activity</p>
+              <h2 style={styles.sectionTitle}>Latest updates</h2>
+            </div>
+            {unreadActivity ? (
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={async () => {
+                  await markAllNotificationsRead();
+                  await loadInbox({ silent: true });
+                }}
+              >
+                Mark read
+              </button>
+            ) : null}
+          </div>
+
+          <div style={styles.list}>
+            {notifications.length ? (
+              notifications.map((item) => {
+                const href = item.action_url || (item.session_id ? `/trainings/${item.session_id}` : "/inbox");
+                return (
+                  <Link
+                    href={href}
+                    key={item.id}
+                    onClick={() => markNotificationRead(item.id)}
+                    style={{
+                      ...styles.row,
+                      ...(item.read_at ? null : styles.unreadRow),
+                    }}
+                  >
+                    <div style={styles.avatar}>
+                      {item.actor?.avatar_url ? (
+                        <img src={item.actor.avatar_url} alt="" style={styles.avatarImg} />
+                      ) : (
+                        initials(item.actor)
+                      )}
+                    </div>
+                    <div style={styles.rowBody}>
+                      <div style={styles.rowTop}>
+                        <strong style={styles.rowTitle}>{item.title}</strong>
+                        <span style={styles.date}>{formatDate(item.created_at)}</span>
+                      </div>
+                      {item.body ? <p style={styles.rowText}>{item.body}</p> : null}
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <p style={styles.empty}>No activity yet.</p>
+            )}
+          </div>
         </section>
+      ) : null}
 
-        {notice ? <section style={styles.notice}>{notice}</section> : null}
+      {!loading && tab === "invites" ? (
+        <section style={styles.card}>
+          <p style={styles.kicker}>Training invites</p>
+          <h2 style={styles.sectionTitle}>Pending sessions</h2>
 
-        {loading ? (
-          <section style={styles.card}>Loading inbox...</section>
-        ) : items.length ? (
-          <section style={styles.list}>
-            {items.map((item) => {
-              if (item.type === "invite") {
-                const invite = item.invite;
-                const training = invite.training;
-
-                return (
-                  <article key={item.id} style={styles.cardHot}>
-                    <div style={styles.itemTop}>
-                      <span style={styles.typeBadge}>Training invite</span>
-                      <span style={styles.dateText}>{formatDate(invite.created_at)}</span>
+          <div style={styles.list}>
+            {trainingInvites.length ? (
+              trainingInvites.map((invite) => (
+                <article key={invite.id} style={styles.inviteCard}>
+                  <div style={styles.rowTop}>
+                    <div>
+                      <span style={styles.status}>{invite.status}</span>
+                      <h3 style={styles.inviteTitle}>{invite.session?.title || "Training session"}</h3>
+                      <p style={styles.rowText}>Invited by {displayName(invite.inviter)}</p>
                     </div>
-
-                    <div style={styles.inviteTitleRow}>
-                      <h2 style={styles.itemTitle}>{training?.title || "Invited training"}</h2>
-                      <span style={styles.priorityPill}>{getInvitePriorityLabel(training)}</span>
+                    <div style={styles.avatar}>
+                      {invite.inviter?.avatar_url ? (
+                        <img src={invite.inviter.avatar_url} alt="" style={styles.avatarImg} />
+                      ) : (
+                        initials(invite.inviter)
+                      )}
                     </div>
-
-                    <div style={styles.metaGrid}>
-                      <span style={styles.metaChip}>{sportLabel(getPrimarySport(training))}</span>
-                      <span style={styles.metaChip}>{getTrainingTimeLabel(training)}</span>
-                      {training?.start_location ? <span style={styles.metaChip}>{training.start_location}</span> : null}
-                      {training?.distance_km ? <span style={styles.metaChip}>{Number(training.distance_km).toFixed(1)} km</span> : null}
-                    </div>
-
-                    <p style={styles.itemText}>Invited by {displayName(invite.inviter)}.</p>
-
-                    <textarea
-                      value={declineNotes[invite.id] || ""}
-                      onChange={(event) =>
-                        setDeclineNotes((current) => ({
-                          ...current,
-                          [invite.id]: event.target.value,
-                        }))
-                      }
-                      placeholder="Optional note if you decline..."
-                      style={styles.noteInput}
-                    />
-
-                    <div style={styles.actions}>
-                      <button type="button" onClick={() => router.push(`/trainings/${invite.session_id}`)} style={styles.secondaryButton}>
-                        Open
-                      </button>
-                      <button type="button" onClick={() => acceptTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.primaryButton}>
-                        Accept
-                      </button>
-                      <button type="button" onClick={() => declineTrainingInvite(invite)} disabled={busyId === invite.id} style={styles.dangerButton}>
-                        Decline
-                      </button>
-                    </div>
-                  </article>
-                );
-              }
-
-              if (item.type === "team") {
-                const request = item.request;
-
-                return (
-                  <article key={item.id} style={styles.card}>
-                    <div style={styles.itemTop}>
-                      <span style={styles.typeBadge}>Team Up</span>
-                      <span style={styles.dateText}>{formatDate(request.created_at)}</span>
-                    </div>
-
-                    <h2 style={styles.itemTitle}>{displayName(request.requester)}</h2>
-                    <p style={styles.itemText}>wants to become your training partner.</p>
-
-                    <div style={styles.actions}>
-                      <button type="button" onClick={() => router.push(`/profile/${request.requester_id}`)} style={styles.secondaryButton}>
-                        Profile
-                      </button>
-                      <button type="button" onClick={() => respondTeamRequest(request, "accepted")} disabled={busyId === request.id} style={styles.primaryButton}>
-                        Accept
-                      </button>
-                      <button type="button" onClick={() => respondTeamRequest(request, "rejected")} disabled={busyId === request.id} style={styles.dangerButton}>
-                        Reject
-                      </button>
-                    </div>
-                  </article>
-                );
-              }
-
-              const message = item.message;
-
-              return (
-                <article key={item.id} style={styles.card}>
-                  <div style={styles.itemTop}>
-                    <span style={styles.typeBadge}>Message</span>
-                    <span style={styles.dateText}>{formatDate(message.created_at)}</span>
                   </div>
 
-                  <h2 style={styles.itemTitle}>{displayName(message.sender)}</h2>
-                  <p style={styles.itemText}>{message.message}</p>
+                  <div style={styles.chips}>
+                    {(invite.session?.sports || []).slice(0, 3).map((sport) => (
+                      <span key={sport} style={styles.chip}>{sport}</span>
+                    ))}
+                    <span style={styles.chip}>{getTrainingTime(invite.session)}</span>
+                    {invite.session?.start_location ? (
+                      <span style={styles.chip}>{invite.session.start_location}</span>
+                    ) : null}
+                  </div>
 
                   <div style={styles.actions}>
-                    <button
-                      type="button"
-                      onClick={() => router.push(message.thread_id ? `/messages/${message.thread_id}` : "/messages")}
-                      style={styles.primaryButton}
-                    >
-                      Open message
-                    </button>
+                    <Link href={`/trainings/${invite.session_id}`} style={styles.secondaryButton}>
+                      Open
+                    </Link>
+                    {invite.status === "pending" ? (
+                      <>
+                        <button type="button" style={styles.secondaryButton} onClick={() => declineInvite(invite)}>
+                          Decline
+                        </button>
+                        <button type="button" style={styles.primaryButton} onClick={() => acceptInvite(invite)}>
+                          Accept
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </article>
-              );
-            })}
-          </section>
-        ) : (
-          <section style={styles.emptyCard}>
-            <h2 style={styles.itemTitle}>Inbox is empty</h2>
-            <p style={styles.itemText}>You are all caught up. New invites, Team Up requests and messages will appear here.</p>
-            <button type="button" onClick={() => router.push("/trainings")} style={styles.primaryButton}>
-              Go to trainings
-            </button>
-          </section>
-        )}
-      </section>
+              ))
+            ) : (
+              <p style={styles.empty}>No training invites.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && tab === "messages" ? (
+        <section style={styles.card}>
+          <p style={styles.kicker}>Messages</p>
+          <h2 style={styles.sectionTitle}>Team requests & messages</h2>
+
+          <div style={styles.list}>
+            {teamRequests.map((request) => (
+              <article key={request.id} style={styles.inviteCard}>
+                <div style={styles.rowTop}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <div style={styles.avatar}>
+                      {request.requester?.avatar_url ? (
+                        <img src={request.requester.avatar_url} alt="" style={styles.avatarImg} />
+                      ) : (
+                        initials(request.requester)
+                      )}
+                    </div>
+                    <div>
+                      <h3 style={styles.inviteTitle}>{displayName(request.requester)}</h3>
+                      <p style={styles.rowText}>wants to team up</p>
+                    </div>
+                  </div>
+                </div>
+                <div style={styles.actions}>
+                  <button type="button" style={styles.secondaryButton} onClick={() => declineTeamRequest(request)}>
+                    Decline
+                  </button>
+                  <button type="button" style={styles.primaryButton} onClick={() => acceptTeamRequest(request)}>
+                    Accept
+                  </button>
+                </div>
+              </article>
+            ))}
+
+            {messageThreads.length ? (
+              messageThreads.map((message) => (
+                <div key={message.id} style={styles.row}>
+                  <div style={styles.rowBody}>
+                    <div style={styles.rowTop}>
+                      <strong style={styles.rowTitle}>Message</strong>
+                      <span style={styles.date}>{formatDate(message.created_at)}</span>
+                    </div>
+                    <p style={styles.rowText}>{message.message}</p>
+                  </div>
+                </div>
+              ))
+            ) : null}
+
+            {!teamRequests.length && !messageThreads.length ? (
+              <p style={styles.empty}>No messages yet.</p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
 
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-
 const styles = {
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-    color: "white",
-    padding: "18px 16px 42px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    overflowX: "hidden",
-  },
-  shell: {
     width: "100%",
-    maxWidth: 960,
-    margin: "0 auto",
-    display: "grid",
-    gap: 18,
+    overflowX: "hidden",
+    background: "radial-gradient(circle at top, rgba(190,255,0,0.10), transparent 34%), #050505",
+    color: "#fff",
+    padding: "18px",
+    paddingBottom: "80px",
+    boxSizing: "border-box",
   },
-  header: {
-    display: "grid",
-    gap: 10,
+  hero: {
+    maxWidth: 820,
+    margin: "18px auto",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.10), rgba(190,255,0,0.08))",
+    borderRadius: 32,
+    padding: 22,
+    boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
   },
   kicker: {
-    color: "#e4ef16",
-    fontSize: 13,
-    fontWeight: 950,
-    letterSpacing: "0.14em",
+    margin: 0,
+    color: "#d7ff3f",
     textTransform: "uppercase",
+    fontSize: 11,
+    letterSpacing: "0.22em",
+    fontWeight: 900,
   },
   title: {
-    margin: 0,
-    fontSize: "clamp(42px, 12vw, 72px)",
-    lineHeight: 0.92,
-    letterSpacing: "-0.075em",
+    margin: "8px 0 0",
+    fontSize: 44,
+    lineHeight: 0.95,
+    fontWeight: 950,
+    letterSpacing: "-0.06em",
   },
   subtitle: {
-    margin: 0,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.5,
-    maxWidth: 660,
-  },
-  summaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 10,
-  },
-  summaryCard: {
-    minHeight: 86,
-    borderRadius: 24,
-    padding: 14,
-    background: glass,
-    border: "1px solid rgba(255,255,255,0.12)",
-    color: "white",
-    display: "grid",
-    alignContent: "space-between",
-    textAlign: "left",
-    cursor: "pointer",
-  },
-  summaryHot: {
-    minHeight: 86,
-    borderRadius: 24,
-    padding: 14,
-    background: "rgba(228,239,22,0.13)",
-    border: "1px solid rgba(228,239,22,0.28)",
-    color: "white",
-    display: "grid",
-    alignContent: "space-between",
-    textAlign: "left",
-    cursor: "pointer",
-    boxShadow: "0 0 34px rgba(228,239,22,0.10)",
+    margin: "14px 0 0",
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 16,
+    lineHeight: 1.45,
+    fontWeight: 650,
   },
   tabs: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 6,
+    marginTop: 20,
+    padding: 4,
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 999,
+    background: "rgba(0,0,0,0.28)",
   },
   tab: {
-    minHeight: 42,
+    border: 0,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.06)",
-    color: "white",
-    padding: "0 13px",
+    padding: "11px 8px",
+    background: "transparent",
+    color: "rgba(255,255,255,0.62)",
     fontWeight: 900,
-    cursor: "pointer",
+    fontSize: 13,
   },
   tabActive: {
-    minHeight: 42,
+    background: "#d7ff3f",
+    color: "#050505",
+  },
+  count: {
+    marginLeft: 6,
+    padding: "2px 6px",
     borderRadius: 999,
-    border: "1px solid rgba(228,239,22,0.28)",
-    background: "rgba(228,239,22,0.13)",
-    color: "#e4ef16",
-    padding: "0 13px",
-    fontWeight: 950,
-    cursor: "pointer",
-  },
-  tabCount: {
-    marginLeft: 7,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 999,
-    display: "inline-grid",
-    placeItems: "center",
-    background: "#e4ef16",
-    color: "#101406",
-    fontSize: 11,
-    fontWeight: 950,
-  },
-  notice: {
-    borderRadius: 20,
-    padding: 14,
-    background: "rgba(228,239,22,0.10)",
-    border: "1px solid rgba(228,239,22,0.18)",
-    color: "#e4ef16",
-    fontWeight: 850,
-  },
-  list: {
-    display: "grid",
-    gap: 12,
+    background: "rgba(0,0,0,0.18)",
   },
   card: {
-    borderRadius: 28,
-    padding: 18,
-    background: glass,
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    gap: 12,
-  },
-  cardHot: {
-    borderRadius: 28,
-    padding: 18,
-    background: "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(228,239,22,0.25)",
-    display: "grid",
-    gap: 12,
-    boxShadow: "0 0 36px rgba(228,239,22,0.10)",
-  },
-  emptyCard: {
+    maxWidth: 820,
+    margin: "14px auto",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.055)",
     borderRadius: 30,
-    padding: 22,
-    background: glass,
-    border: "1px solid rgba(255,255,255,0.13)",
-    display: "grid",
-    gap: 14,
+    padding: 18,
   },
-  itemTop: {
+  notice: {
+    maxWidth: 820,
+    margin: "14px auto",
+    border: "1px solid rgba(215,255,63,0.30)",
+    background: "rgba(215,255,63,0.10)",
+    color: "#eaff8f",
+    borderRadius: 22,
+    padding: 14,
+    fontWeight: 800,
+  },
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  sectionTitle: {
+    margin: "5px 0 0",
+    fontSize: 25,
+    fontWeight: 950,
+    letterSpacing: "-0.04em",
+  },
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginTop: 14,
+  },
+  row: {
+    display: "flex",
+    gap: 12,
+    padding: 14,
+    border: "1px solid rgba(255,255,255,0.09)",
+    borderRadius: 24,
+    background: "rgba(0,0,0,0.24)",
+    color: "#fff",
+    textDecoration: "none",
+    minWidth: 0,
+  },
+  unreadRow: {
+    border: "1px solid rgba(215,255,63,0.30)",
+    background: "rgba(215,255,63,0.10)",
+  },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    overflow: "hidden",
+    background: "rgba(255,255,255,0.10)",
+    color: "#d7ff3f",
+    fontWeight: 950,
+  },
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  },
+  rowBody: {
+    minWidth: 0,
+    flex: 1,
+  },
+  rowTop: {
     display: "flex",
     justifyContent: "space-between",
     gap: 10,
-    alignItems: "center",
-  },
-  typeBadge: {
-    borderRadius: 999,
-    padding: "7px 10px",
-    background: "rgba(228,239,22,0.12)",
-    border: "1px solid rgba(228,239,22,0.24)",
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-  },
-  dateText: {
-    color: "rgba(255,255,255,0.48)",
-    fontSize: 12,
-    fontWeight: 800,
-  },
-  itemTitle: {
-    margin: 0,
-    fontSize: 24,
-    letterSpacing: "-0.05em",
-  },
-  itemText: {
-    margin: 0,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.45,
-  },
-
-  inviteTitleRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
     alignItems: "flex-start",
-    flexWrap: "wrap",
   },
-  priorityPill: {
-    borderRadius: 999,
-    padding: "7px 10px",
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 12,
-    fontWeight: 950,
-    whiteSpace: "nowrap",
-  },
-  metaGrid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
+  rowTitle: {
     minWidth: 0,
-  },
-  metaChip: {
-    maxWidth: "100%",
-    borderRadius: 999,
-    padding: "8px 10px",
-    background: "rgba(0,0,0,0.22)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 12,
-    fontWeight: 850,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+    fontSize: 16,
   },
-  noteInput: {
-    width: "100%",
-    minHeight: 74,
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
+  rowText: {
+    margin: "4px 0 0",
+    color: "rgba(255,255,255,0.60)",
+    fontSize: 13,
+    lineHeight: 1.4,
+    fontWeight: 650,
+  },
+  date: {
+    color: "rgba(255,255,255,0.36)",
+    fontSize: 11,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
+  empty: {
+    margin: 0,
+    padding: 16,
+    borderRadius: 22,
     background: "rgba(0,0,0,0.22)",
-    color: "white",
-    padding: 12,
-    boxSizing: "border-box",
-    fontFamily: "inherit",
-    fontSize: 14,
-    resize: "vertical",
-    outline: "none",
+    color: "rgba(255,255,255,0.50)",
+    fontWeight: 750,
+  },
+  inviteCard: {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.26)",
+    borderRadius: 26,
+    padding: 15,
+  },
+  status: {
+    color: "#d7ff3f",
+    textTransform: "uppercase",
+    letterSpacing: "0.18em",
+    fontSize: 10,
+    fontWeight: 950,
+  },
+  inviteTitle: {
+    margin: "4px 0 0",
+    fontSize: 22,
+    lineHeight: 1,
+    fontWeight: 950,
+    letterSpacing: "-0.04em",
+  },
+  chips: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 13,
+  },
+  chip: {
+    borderRadius: 999,
+    padding: "8px 10px",
+    background: "rgba(255,255,255,0.08)",
+    color: "rgba(255,255,255,0.74)",
+    fontSize: 12,
+    fontWeight: 850,
   },
   actions: {
     display: "flex",
     gap: 8,
     flexWrap: "wrap",
+    marginTop: 14,
   },
   primaryButton: {
-    minHeight: 42,
-    borderRadius: 999,
     border: 0,
-    background: "#e4ef16",
-    color: "#101406",
-    padding: "0 14px",
+    borderRadius: 999,
+    background: "#d7ff3f",
+    color: "#050505",
+    padding: "11px 15px",
     fontWeight: 950,
+    textDecoration: "none",
     cursor: "pointer",
   },
   secondaryButton: {
-    minHeight: 42,
-    borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.08)",
-    color: "white",
-    padding: "0 14px",
-    fontWeight: 950,
-    cursor: "pointer",
-  },
-  dangerButton: {
-    minHeight: 42,
     borderRadius: 999,
-    border: "1px solid rgba(255,90,90,0.18)",
-    background: "rgba(255,70,70,0.10)",
-    color: "#ffb4b4",
-    padding: "0 14px",
-    fontWeight: 950,
+    background: "rgba(255,255,255,0.05)",
+    color: "#fff",
+    padding: "11px 15px",
+    fontWeight: 900,
+    textDecoration: "none",
     cursor: "pointer",
   },
 };
