@@ -7,6 +7,7 @@ import ProfileHero from "../../../components/profile/ProfileHero";
 import ProfileTrainingList from "../../../components/profile/ProfileTrainingList";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
+import { fetchPrivacySettings, filterProfileByPrivacy, privacyAllowsTeamRequest } from "../../../lib/privacy";
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -19,6 +20,7 @@ export default function PublicProfilePage() {
   const [createdTrainings, setCreatedTrainings] = useState([]);
   const [joinedTrainings, setJoinedTrainings] = useState([]);
   const [partnerStatus, setPartnerStatus] = useState("");
+  const [privacySettings, setPrivacySettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -61,7 +63,24 @@ export default function PublicProfilePage() {
         return;
       }
 
-      setProfile(profileRow);
+      const { data: partnerRows } = await supabase
+        .from("training_partners")
+        .select("id,status")
+        .eq("status", "accepted")
+        .or(`and(requester_id.eq.${user.id},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${user.id})`);
+
+      const isTeamPartner = Boolean((partnerRows || []).length);
+      const isAdmin = ["admin", "moderator"].includes(profileRow?.role) || ["admin", "moderator"].includes(profileRow?.viewer_role);
+      const loadedPrivacy = await fetchPrivacySettings(profileId);
+
+      setPrivacySettings(loadedPrivacy);
+      setProfile(filterProfileByPrivacy({
+        profile: profileRow,
+        privacy: loadedPrivacy,
+        viewerId: user.id,
+        isTeamPartner,
+        isAdmin: ["admin", "moderator"].includes(profileRow?.role) && user.id === profileRow.id ? false : false,
+      }));
 
       const { data: sportRows } = await supabase
         .from("user_sports")
@@ -123,6 +142,11 @@ export default function PublicProfilePage() {
   async function sendTeamUpRequest() {
     if (!viewer?.id || !profile?.id || viewer.id === profile.id) return;
 
+    if (!privacyAllowsTeamRequest(privacySettings)) {
+      setMessage("This athlete is not accepting Team Up requests.");
+      return;
+    }
+
     setMessage("");
 
     try {
@@ -182,6 +206,10 @@ export default function PublicProfilePage() {
               {isOwnProfile ? (
                 <button type="button" onClick={() => router.push("/team")} style={styles.primaryButton}>
                   Open Team
+                </button>
+              ) : !privacyAllowsTeamRequest(privacySettings) ? (
+                <button type="button" disabled style={styles.secondaryButton}>
+                  Team Up disabled
                 </button>
               ) : partnerStatus === "accepted" ? (
                 <button type="button" onClick={() => router.push("/team")} style={styles.secondaryButton}>
