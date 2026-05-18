@@ -9,6 +9,7 @@ import TrainingLiveStatus from "../../../components/realtime/TrainingLiveStatus"
 import PlanningPoll from "../../../components/trainings/PlanningPoll";
 import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
+import { createNotification, createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
 
 const sportLabels = {
   running: "Running",
@@ -495,6 +496,20 @@ export default function TrainingDetailPage() {
           .eq("user_id", user.id);
 
         if (error) throw error;
+
+        if (training.creator_id && training.creator_id !== user.id) {
+          await createNotification({
+            userId: training.creator_id,
+            actorId: user.id,
+            type: NOTIFICATION_TYPES.TRAINING_LEFT,
+            sessionId: training.id,
+            title: "Someone left your training",
+            body: `${displayName(participantProfiles[user.id] || user)} left ${training.title}.`,
+            actionUrl: trainingUrl(training.id),
+            metadata: { source: "leave_training" },
+          });
+        }
+
         setMessage("You left this training.");
       } else {
         if (isFull) {
@@ -504,12 +519,29 @@ export default function TrainingDetailPage() {
 
         const { error } = await supabase
           .from("session_participants")
-          .insert({
-            session_id: training.id,
-            user_id: user.id,
-          });
+          .upsert(
+            {
+              session_id: training.id,
+              user_id: user.id,
+            },
+            { onConflict: "session_id,user_id" }
+          );
 
         if (error) throw error;
+
+        if (training.creator_id && training.creator_id !== user.id) {
+          await createNotification({
+            userId: training.creator_id,
+            actorId: user.id,
+            type: NOTIFICATION_TYPES.TRAINING_JOINED,
+            sessionId: training.id,
+            title: "Someone joined your training",
+            body: `${displayName(participantProfiles[user.id] || user)} joined ${training.title}.`,
+            actionUrl: trainingUrl(training.id),
+            metadata: { source: "join_training" },
+          });
+        }
+
         setMessage("You joined this training.");
       }
 
@@ -602,6 +634,19 @@ export default function TrainingDetailPage() {
         if (error) throw error;
       }
 
+      if (training.creator_id && training.creator_id !== user.id) {
+        await createNotification({
+          userId: training.creator_id,
+          actorId: user.id,
+          type: NOTIFICATION_TYPES.AVAILABILITY_RESPONSE,
+          sessionId: training.id,
+          title: "Availability updated",
+          body: `${displayName(participantProfiles[user.id] || user)} shared availability for ${training.title}.`,
+          actionUrl: trainingUrl(training.id),
+          metadata: { source: "session_availability" },
+        });
+      }
+
       setAvailabilityMessage("Your time frame has been saved.");
       await loadTraining();
     } catch (error) {
@@ -677,6 +722,20 @@ export default function TrainingDetailPage() {
         .eq("creator_id", user.id);
 
       if (error) throw error;
+
+      const notifyUserIds = participants
+        .map((participant) => participant.user_id)
+        .filter((participantUserId) => participantUserId && participantUserId !== user.id);
+
+      await createNotificationsForUsers(notifyUserIds, {
+        actorId: user.id,
+        type: NOTIFICATION_TYPES.FINAL_TIME_SET,
+        sessionId: training.id,
+        title: "Final start time selected",
+        body: `${training.title} now has a final start time.`,
+        actionUrl: trainingUrl(training.id),
+        metadata: { final_starts_at: finalStartsAt, source: "final_time" },
+      });
 
       setMessage("Final start time saved.");
       await loadTraining();
