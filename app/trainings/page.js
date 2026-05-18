@@ -152,6 +152,7 @@ export default function TrainingsPage() {
   const [participantCounts, setParticipantCounts] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
+  const [trainingInviteCount, setTrainingInviteCount] = useState(0);
   const [currentUserId, setCurrentUserId] = useState("");
   const [busySessionId, setBusySessionId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -185,6 +186,13 @@ export default function TrainingsPage() {
 
       setCurrentUserId(user.id);
 
+      const { count: inviteCount } = await supabase
+        .from("training_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("invitee_id", user.id)
+        .eq("status", "pending");
+
+      setTrainingInviteCount(inviteCount || 0);
 
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
@@ -485,7 +493,7 @@ export default function TrainingsPage() {
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+        <AppHeader profile={profile} compact notificationCount={trainingInviteCount} />
 
         <header style={styles.hero}>
           <div style={styles.heroCopy}>
@@ -530,7 +538,6 @@ export default function TrainingsPage() {
               <span style={styles.dashboardHint}>Route or workout attached</span>
             </div>
           </article>
-
         </section>
 
         <section style={styles.feedControlCard}>
@@ -553,7 +560,6 @@ export default function TrainingsPage() {
             style={styles.searchInput}
           />
         </section>
-
 
         {loading ? (
           <section style={styles.skeletonGrid} aria-label="Loading trainings">
@@ -654,9 +660,9 @@ const glassCard = {
   width: "100%",
   minWidth: 0,
   boxSizing: "border-box",
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.035))",
-  boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
+  border: "1px solid rgba(255,255,255,0.085)",
+  background: "linear-gradient(145deg, rgba(18,22,28,0.88), rgba(8,12,16,0.86))",
+  boxShadow: "0 22px 70px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.035)",
 };
 
 const styles = {
@@ -666,7 +672,7 @@ const styles = {
     maxWidth: "100vw",
     overflowX: "hidden",
     background:
-      "radial-gradient(circle at 96% 0%, rgba(228,239,22,0.18), transparent 28%), radial-gradient(circle at 0% 18%, rgba(55,125,255,0.10), transparent 30%), linear-gradient(180deg, #07100b 0%, #050706 58%, #020202 100%)",
+      "radial-gradient(circle at 94% 0%, rgba(228,239,22,0.075), transparent 30%), radial-gradient(circle at 0% 22%, rgba(55,125,255,0.055), transparent 32%), linear-gradient(180deg, #05070A 0%, #080D10 52%, #020303 100%)",
     color: "white",
     padding: "12px max(12px, env(safe-area-inset-left)) 44px max(12px, env(safe-area-inset-right))",
     boxSizing: "border-box",
@@ -744,20 +750,10 @@ const styles = {
     background: "#e4ef16",
     color: "#101406",
     padding: "0 20px",
-    boxShadow: "0 18px 44px rgba(228,239,22,0.20)",
+    boxShadow: "0 14px 30px rgba(228,239,22,0.16)",
     whiteSpace: "nowrap",
   },
 
-  heroSecondaryButton: {
-    ...baseButton,
-    minHeight: 54,
-    borderRadius: 20,
-    background: "rgba(255,255,255,0.08)",
-    color: "white",
-    border: "1px solid rgba(255,255,255,0.12)",
-    padding: "0 20px",
-    whiteSpace: "nowrap",
-  },
 
   dashboardGrid: {
     display: "grid",
@@ -787,8 +783,8 @@ const styles = {
     alignItems: "center",
     gap: 12,
     overflow: "hidden",
-    border: "1px solid rgba(228,239,22,0.22)",
-    background: "linear-gradient(145deg, rgba(228,239,22,0.12), rgba(255,255,255,0.04))",
+    border: "1px solid rgba(228,239,22,0.16)",
+    background: "linear-gradient(145deg, rgba(228,239,22,0.075), rgba(18,22,28,0.86))",
   },
 
   dashboardIconLime: {
@@ -821,6 +817,15 @@ const styles = {
     border: "1px solid rgba(190,120,255,0.22)",
   },
 
+  dashboardIconOrange: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,165,80,0.13)",
+    border: "1px solid rgba(255,165,80,0.22)",
+  },
 
   dashboardValue: {
     display: "block",
@@ -910,8 +915,28 @@ const styles = {
     boxSizing: "border-box",
   },
 
+  inviteBanner: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 16,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: 14,
+    alignItems: "center",
+  },
 
+  inviteBannerTitle: {
+    display: "block",
+    marginTop: 4,
+    fontSize: 20,
+    letterSpacing: "-0.04em",
+  },
 
+  inviteBannerText: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.62)",
+    fontWeight: 750,
+  },
 
   feedSections: {
     display: "grid",
