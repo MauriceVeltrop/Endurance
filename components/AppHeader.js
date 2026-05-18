@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import NotificationBadge from "./notifications/NotificationBadge";
 
 export default function AppHeader({ profile, compact = false }) {
   const router = useRouter();
@@ -119,7 +120,7 @@ export default function AppHeader({ profile, compact = false }) {
               >
                 <span style={styles.menuIcon}>{item.icon}</span>
                 <span style={styles.menuText}>
-                  <strong>{item.label}</strong>
+                  <strong>{item.label}{item.label === "Inbox" ? <NotificationBadge className="ml-2" /> : null}</strong>
                   <small>{item.description}</small>
                 </span>
                 <span style={styles.menuArrow}>›</span>
