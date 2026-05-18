@@ -1,13 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function AppHeader({ profile, compact = false }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
   const initials = getInitials(profile?.name || profile?.email || "E");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMessageCount() {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        if (!userId) {
+          if (!cancelled) setMessageCount(0);
+          return;
+        }
+
+        const [notificationsResult, invitesResult] = await Promise.all([
+          supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .is("read_at", null),
+          supabase
+            .from("training_invites")
+            .select("id", { count: "exact", head: true })
+            .eq("invitee_id", userId)
+            .eq("status", "pending"),
+        ]);
+
+        if (cancelled) return;
+
+        const notificationCount = notificationsResult?.error ? 0 : notificationsResult?.count || 0;
+        const inviteCount = invitesResult?.error ? 0 : invitesResult?.count || 0;
+
+        setMessageCount(notificationCount + inviteCount);
+      } catch (error) {
+        if (!cancelled) setMessageCount(0);
+      }
+    }
+
+    loadMessageCount();
+  }, [profile?.id]);
 
   const menuItems = [
     { label: "Trainings", description: "Find, create and join sessions", icon: "▣", href: "/trainings" },
@@ -69,6 +110,11 @@ export default function AppHeader({ profile, compact = false }) {
           <span style={styles.hamburger}>☰</span>
           <span>Menu</span>
           <span style={styles.chevron}>{menuOpen ? "⌃" : "⌄"}</span>
+          {messageCount > 0 ? (
+            <span style={styles.menuBadge} aria-label={`${messageCount} unread messages`}>
+              {messageCount > 99 ? "99+" : messageCount}
+            </span>
+          ) : null}
         </button>
 
         {menuOpen ? (
@@ -110,10 +156,11 @@ const styles = {
   logoButton: { ...baseButton, background: "transparent", padding: 0, lineHeight: 0, justifySelf: "center", minWidth: 0 },
   logo: { width: "min(250px, 62vw)", maxWidth: "100%", height: "auto", display: "block", filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))" },
   menuShell: { position: "relative", display: "grid", justifyItems: "center", width: "100%", maxWidth: "100%" },
-  menuButton: { ...baseButton, minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.25)", background: "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.045))", color: "white", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 18px 44px rgba(0,0,0,0.22)", backdropFilter: "blur(12px)" },
-  menuButtonOpen: { ...baseButton, minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.42)", background: "rgba(228,239,22,0.12)", color: "#e4ef16", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 0 0 1px rgba(228,239,22,0.07), 0 18px 44px rgba(0,0,0,0.26)", backdropFilter: "blur(12px)" },
+  menuButton: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.25)", background: "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.045))", color: "white", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 18px 44px rgba(0,0,0,0.22)", backdropFilter: "blur(12px)" },
+  menuButtonOpen: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.42)", background: "rgba(228,239,22,0.12)", color: "#e4ef16", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 0 0 1px rgba(228,239,22,0.07), 0 18px 44px rgba(0,0,0,0.26)", backdropFilter: "blur(12px)" },
   hamburger: { fontSize: 19, lineHeight: 1 },
   chevron: { fontSize: 18, lineHeight: 1, opacity: 0.9 },
+  menuBadge: { position: "absolute", top: -8, right: -8, minWidth: 24, height: 24, padding: "0 7px", borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#101406", border: "2px solid #07100b", fontSize: 12, fontWeight: 950, lineHeight: 1, boxShadow: "0 0 0 1px rgba(228,239,22,0.32), 0 10px 24px rgba(228,239,22,0.22)", boxSizing: "border-box" },
   menuPanel: { position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: "min(390px, calc(100vw - 32px))", borderRadius: 24, overflow: "hidden", background: "linear-gradient(145deg, rgba(25,30,25,0.98), rgba(9,12,9,0.98))", border: "1px solid rgba(228,239,22,0.22)", boxShadow: "0 28px 90px rgba(0,0,0,0.45)", backdropFilter: "blur(18px)", zIndex: 50 },
   menuItem: { ...baseButton, width: "100%", minHeight: 68, display: "grid", gridTemplateColumns: "44px minmax(0, 1fr) 22px", alignItems: "center", gap: 12, padding: "10px 14px", background: "transparent", color: "white", borderBottom: "1px solid rgba(255,255,255,0.08)", textAlign: "left" },
   menuIcon: { width: 42, height: 42, borderRadius: 15, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.20)", color: "#e4ef16", fontSize: 20 },
