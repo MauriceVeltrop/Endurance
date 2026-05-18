@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { subscribeToTrainingRealtime, removeRealtimeChannel } from "../../lib/realtime";
 
 function displayName(person) {
   return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.email || "Endurance user";
@@ -133,6 +134,23 @@ function getAvatar(person, size = 30) {
 }
 
 export default function PlanningPoll({ training, user, canManage, onChanged, onOptionsLoaded }) {
+
+  // REALTIME_PLANNING_POLL: keep overlap and responses fresh without manual refresh.
+  useEffect(() => {
+    const sessionId = training?.id;
+    if (!sessionId) return undefined;
+
+    const channel = subscribeToTrainingRealtime(sessionId, () => {
+      if (typeof onChanged === "function") {
+        onChanged();
+      }
+    });
+
+    return () => {
+      removeRealtimeChannel(channel);
+    };
+  }, [training?.id, onChanged]);
+
   const [options, setOptions] = useState([]);
   const [responses, setResponses] = useState([]);
   const [profiles, setProfiles] = useState({});
