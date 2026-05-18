@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
+import { createNotification, NOTIFICATION_TYPES } from "../../lib/notifications";
 
 export default function TeamPage() {
   const router = useRouter();
