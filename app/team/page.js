@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import { supabase } from "../../lib/supabase";
+import { fetchPrivacySettings, fetchPrivacySettingsMap, privacyAllowsTeamRequest } from "../../lib/privacy";
 import { createNotification, NOTIFICATION_TYPES } from "../../lib/notifications";
 
 export default function TeamPage() {
@@ -184,7 +185,14 @@ export default function TeamPage() {
 
       if (error) throw error;
 
-      setResults((data || []).filter((person) => !allKnownUserIds.has(person.id)));
+      const candidates = (data || []).filter((person) => !allKnownUserIds.has(person.id));
+      const privacyMap = await fetchPrivacySettingsMap(candidates.map((person) => person.id));
+
+      setResults(
+        candidates.filter((person) =>
+          privacyAllowsTeamRequest(privacyMap[person.id])
+        )
+      );
     } catch (err) {
       console.error("Team search error", err);
       setMessage(err?.message || "Could not search people.");
@@ -200,6 +208,12 @@ export default function TeamPage() {
 
     try {
       setBusyId(personId);
+
+      const receiverPrivacy = await fetchPrivacySettings(personId);
+      if (!privacyAllowsTeamRequest(receiverPrivacy)) {
+        setMessage("This athlete is not accepting Team Up requests.");
+        return;
+      }
 
       const { error } = await supabase.from("training_partners").upsert(
         {
