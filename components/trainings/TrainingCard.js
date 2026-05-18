@@ -1,4 +1,4 @@
-// Invite actions centralized in Inbox
+// INVITE FLOW CLEANUP PATCH
 "use client";
 
 import TrainingImage from "./TrainingImage";
@@ -22,7 +22,7 @@ export default function TrainingCard({
   onOpen,
   onCreatorClick,
   actionNeeded = false,
-  actionLabel = "Open training",
+  actionLabel = "Time to decide",
   statusLabel = "Upcoming",
   socialLabel = "Open for teammates",
   badges = [],
