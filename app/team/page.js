@@ -13,7 +13,6 @@ export default function TeamPage() {
   const [partners, setPartners] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
-  const [trainingInvites, setTrainingInvites] = useState([]);
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +114,6 @@ export default function TeamPage() {
 
       if (inviteError) {
         console.warn("Training invites skipped", inviteError);
-        setTrainingInvites([]);
       } else {
         const rows = inviteRows || [];
         const sessionIds = rows.map((row) => row.session_id).filter(Boolean);
@@ -149,16 +147,6 @@ export default function TeamPage() {
             inviterMap = Object.fromEntries((inviters || []).map((person) => [person.id, person]));
           }
         }
-
-        setTrainingInvites(
-          rows
-            .map((row) => ({
-              ...row,
-              training: sessionMap[row.session_id] || null,
-              inviter: inviterMap[row.inviter_id] || null,
-            }))
-            .filter((row) => row.training)
-        );
       }
     } catch (err) {
       console.error("Team load error", err);
@@ -420,40 +408,40 @@ export default function TeamPage() {
             <span style={styles.statHint}>open</span>
           </div>
 
-          <div style={trainingInvites.length ? styles.statCardActive : styles.statCard}>
+          <div style={0 ? styles.statCardActive : styles.statCard}>
             <span style={styles.statLabel}>Invites</span>
-            <strong style={styles.statValue}>{loading ? "…" : trainingInvites.length}</strong>
+            <strong style={styles.statValue}>{loading ? "…" : 0}</strong>
             <span style={styles.statHint}>training sessions</span>
           </div>
         </section>
 
         {message ? <section style={styles.message}>{message}</section> : null}
 
-        {trainingInvites.length ? (
+        {0 ? (
           <section style={styles.inviteAlert}>
             <div>
               <div style={styles.panelKicker}>Action needed</div>
               <h2 style={styles.inviteAlertTitle}>
-                You have {trainingInvites.length} training invite{trainingInvites.length === 1 ? "" : "s"}
+                You have {0} training invite{0 === 1 ? "" : "s"}
               </h2>
               <p style={styles.panelText}>Open, join or decline them below.</p>
             </div>
           </section>
         ) : null}
 
-        <section style={trainingInvites.length ? styles.panelActive : styles.panel}>
+        <section style={0 ? styles.panelActive : styles.panel}>
           <div style={styles.panelHeader}>
             <div>
               <div style={styles.panelKicker}>Training invites</div>
               <h2 style={styles.panelTitle}>Invited sessions</h2>
             </div>
 
-            <span style={styles.countBadge}>{trainingInvites.length}</span>
+            <span style={styles.countBadge}>{0}</span>
           </div>
 
-          {trainingInvites.length ? (
+          {0 ? (
             <div style={styles.list}>
-              {trainingInvites.map((invite) => {
+              {[].map((invite) => {
                 const inviter = invite.inviter;
                 const training = invite.training;
 
