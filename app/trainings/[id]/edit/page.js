@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { uploadTrainingPhoto } from "../../../../lib/trainingPhotos";
+import ImageCropperModal from "../../../../components/ImageCropperModal";
 
 function toDateInput(value) {
   if (!value) return "";
@@ -53,6 +54,7 @@ export default function EditTrainingPage() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [removePhoto, setRemovePhoto] = useState(false);
+  const [trainingCropFile, setTrainingCropFile] = useState(null);
 
   const canSave = useMemo(() => {
     return Boolean(user?.id && training?.creator_id === user.id && form.title.trim());
@@ -124,20 +126,26 @@ export default function EditTrainingPage() {
   }
 
   function chooseTrainingPhoto(file) {
-    if (!file) {
-      setPhotoFile(null);
-      setPhotoPreview(form.teaser_photo_url || "");
-      return;
-    }
+    if (!file) return;
 
     if (!file.type?.startsWith("image/")) {
-      setMessage("Choose an image file for the training photo.");
+      setMessage("Choose an image file.");
       return;
     }
 
-    setRemovePhoto(false);
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage("Training photo is too large. Use an image under 10 MB.");
+      return;
+    }
+
+    setTrainingCropFile(file);
+  }
+
+  function confirmTrainingPhotoCrop({ file, previewUrl }) {
     setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoPreview(previewUrl);
+    setRemovePhoto(false);
+    setTrainingCropFile(null);
   }
 
   async function saveTraining(event) {
@@ -309,6 +317,16 @@ export default function EditTrainingPage() {
           ) : null}
         </section>
       </section>
+
+      {trainingCropFile ? (
+        <ImageCropperModal
+          file={trainingCropFile}
+          mode="trainingHero"
+          title="Crop training photo"
+          onCancel={() => setTrainingCropFile(null)}
+          onConfirm={confirmTrainingPhotoCrop}
+        />
+      ) : null}
     </main>
   );
 }
