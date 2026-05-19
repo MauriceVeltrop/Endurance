@@ -462,7 +462,9 @@ const styles = {
   },
   photoDrop: {
     position: "relative",
-    minHeight: 170,
+    aspectRatio: "9 / 16",
+    minHeight: 300,
+    maxHeight: 520,
     borderRadius: 24,
     overflow: "hidden",
     border: "1px dashed rgba(228,239,22,0.34)",
@@ -474,7 +476,8 @@ const styles = {
   },
   photoPreview: {
     width: "100%",
-    height: 220,
+    height: "100%",
+    minHeight: 300,
     objectFit: "cover",
     display: "block",
   },
