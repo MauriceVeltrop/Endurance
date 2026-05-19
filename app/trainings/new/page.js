@@ -126,6 +126,8 @@ export default function CreateTrainingPage() {
     date: todayString(),
     start_time: nextHourString(),
     start_location: "",
+    latitude: null,
+    longitude: null,
     distance_km: "",
     estimated_duration_min: "",
     pace_min: "",
@@ -185,26 +187,42 @@ export default function CreateTrainingPage() {
       address.county ||
       "";
     const parts = [street, place].filter(Boolean);
-
     return parts.length ? parts.join(", ") : "";
   }
 
   async function reverseGeocodeLocation(latitude, longitude) {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          Accept: "application/json",
-        },
-      }
+      { headers: { Accept: "application/json" } }
     );
 
-    if (!response.ok) {
-      throw new Error("Could not find your nearest address.");
-    }
+    if (!response.ok) throw new Error("Could not find your nearest address.");
 
     const data = await response.json();
     return formatNearestAddress(data?.address) || data?.display_name || "";
+  }
+
+  async function geocodeAddress(address) {
+    const query = String(address || "").trim();
+    if (!query) return null;
+
+    const searchQuery = /netherlands|nederland/i.test(query) ? query : `${query}, Nederland`;
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(searchQuery)}&limit=1&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const place = data?.[0];
+    if (!place?.lat || !place?.lon) return null;
+
+    return {
+      latitude: Number(place.lat),
+      longitude: Number(place.lon),
+      label: formatNearestAddress(place.address) || place.display_name || query,
+    };
   }
 
   async function useCurrentLocation({ silent = false } = {}) {
@@ -219,18 +237,27 @@ export default function CreateTrainingPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          const { latitude, longitude } = position.coords || {};
+          const latitude = position.coords?.latitude;
+          const longitude = position.coords?.longitude;
+
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            throw new Error("No coordinates found.");
+          }
+
           const address = await reverseGeocodeLocation(latitude, longitude);
 
-          if (address) {
-            setForm((current) => ({
-              ...current,
-              start_location: current.start_location?.trim() ? current.start_location : address,
-            }));
-            setLocationMessage("Nearest address filled in. You can still overwrite it.");
-          } else {
-            setLocationMessage("Could not determine a nearby address. Please enter a start location.");
-          }
+          setForm((current) => ({
+            ...current,
+            start_location: current.start_location?.trim() ? current.start_location : address,
+            latitude,
+            longitude,
+          }));
+
+          setLocationMessage(
+            address
+              ? "Nearest address filled in. You can still overwrite it."
+              : "Coordinates saved. Please enter a recognizable meeting point."
+          );
         } catch (error) {
           console.warn("Reverse geocode failed", error);
           setLocationMessage("Could not determine a nearby address. Please enter a start location.");
@@ -243,11 +270,7 @@ export default function CreateTrainingPage() {
         setLocationLoading(false);
         setLocationMessage(silent ? "" : "Location permission was denied. Please enter a start location.");
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 9000,
-        maximumAge: 60000,
-      }
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
     );
   }
 
@@ -470,6 +493,8 @@ export default function CreateTrainingPage() {
       flexible_start_time: isFixed ? null : firstOption?.window_start || null,
       flexible_end_time: isFixed ? null : firstOption?.window_end || null,
       start_location: form.start_location.trim(),
+      latitude: form.latitude ?? null,
+      longitude: form.longitude ?? null,
       distance_km: selectedSport?.distance && form.distance_km ? Number(form.distance_km) : null,
       estimated_duration_min: form.estimated_duration_min ? Number(form.estimated_duration_min) : null,
       pace_min: selectedSport?.metric === "pace" ? form.pace_min || null : null,
@@ -567,6 +592,19 @@ export default function CreateTrainingPage() {
       if (!form.start_location.trim()) {
         setMessage("Start location is required. Use current location or enter a meeting point.");
         return;
+      }
+
+      if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
+        const geocoded = await geocodeAddress(form.start_location);
+        if (geocoded?.latitude && geocoded?.longitude) {
+          setForm((current) => ({
+            ...current,
+            latitude: geocoded.latitude,
+            longitude: geocoded.longitude,
+          }));
+          form.latitude = geocoded.latitude;
+          form.longitude = geocoded.longitude;
+        }
       }
 
       if (form.planning_type === "fixed") {
@@ -750,6 +788,12 @@ export default function CreateTrainingPage() {
     }
   }
 
+  const progressItems = [
+    form.sport_id ? "Sport" : null,
+    form.title.trim() ? "Name" : null,
+    form.planning_type === "fixed" ? "Fixed time" : `${normalizedTimeOptions().length} windows`,
+    form.visibility === "selected" ? `${selectedInviteIds.length} invites` : form.visibility,
+  ].filter(Boolean);
 
   return (
     <main style={styles.page}>
@@ -761,8 +805,18 @@ export default function CreateTrainingPage() {
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
             <p style={styles.subtitle}>
-              Create a verified training session with sport, time, start location, route or workout, visibility and invites.
+              Sport first, then time, route or workout, visibility and invites. Flexible windows now support multiple days and multiple time blocks per day.
             </p>
+          </div>
+
+          <div style={styles.progressCard}>
+            <span style={styles.progressKicker}>Setup</span>
+            <strong>{progressItems.length}/4 ready</strong>
+            <div style={styles.progressChips}>
+              {progressItems.map((item) => (
+                <span key={item} style={styles.progressChip}>{item}</span>
+              ))}
+            </div>
           </div>
         </header>
 
@@ -831,7 +885,7 @@ export default function CreateTrainingPage() {
                 </span>
                 <input
                   value={form.start_location}
-                  onChange={(event) => updateForm("start_location", event.target.value)}
+                  onChange={(event) => setForm((current) => ({ ...current, start_location: event.target.value, latitude: null, longitude: null }))}
                   placeholder="Nearest address or meeting point"
                   required
                   style={styles.input}
@@ -1201,9 +1255,9 @@ const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at 82% 4%, rgba(228,239,22,0.055), transparent 28%), radial-gradient(circle at 0% 28%, rgba(64,92,44,0.10), transparent 26%), linear-gradient(180deg, #05070a 0%, #0a0f14 62%, #020304 100%)",
+    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 14px 120px",
+    padding: "18px 14px 56px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     overflowX: "hidden",
   },
@@ -1219,12 +1273,6 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr)",
     gap: 12,
-    borderRadius: 34,
-    padding: 24,
-    background: "linear-gradient(180deg, rgba(22,27,33,0.88), rgba(12,17,22,0.84))",
-    border: "1px solid rgba(255,255,255,0.08)",
-    boxShadow: "0 22px 70px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
-    overflow: "hidden",
   },
   heroText: { display: "grid", gap: 10, minWidth: 0 },
   kicker: {
@@ -1236,8 +1284,8 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(40px, 10vw, 66px)",
-    lineHeight: 0.94,
+    fontSize: "clamp(42px, 11vw, 74px)",
+    lineHeight: 0.92,
     letterSpacing: "-0.075em",
   },
   subtitle: {
@@ -1283,22 +1331,21 @@ const styles = {
   card: {
     borderRadius: 30,
     padding: 16,
-    background: "linear-gradient(180deg, rgba(22,27,33,0.86), rgba(12,17,22,0.82))",
-    border: "1px solid rgba(255,255,255,0.08)",
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
     display: "grid",
     gap: 14,
     minWidth: 0,
     boxSizing: "border-box",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.24)",
   },
   cardHot: {
     borderRadius: 30,
     padding: 16,
-    background: "linear-gradient(180deg, rgba(22,27,33,0.90), rgba(12,17,22,0.84))",
-    border: "1px solid rgba(228,239,22,0.18)",
+    background: "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(228,239,22,0.24)",
     display: "grid",
     gap: 14,
-    boxShadow: "0 18px 55px rgba(0,0,0,0.24)",
+    boxShadow: "0 0 34px rgba(228,239,22,0.10)",
     minWidth: 0,
   },
   sectionHeader: {
