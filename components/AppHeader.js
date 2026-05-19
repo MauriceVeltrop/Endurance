@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
-export default function AppHeader({ profile, compact = false, notificationCount = 0 }) {
+export default function AppHeader({ profile, compact = false }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuBadgeCount, setMenuBadgeCount] = useState(0);
   const initials = getInitials(profile?.name || profile?.email || "E");
 
   const menuItems = [
     { label: "Trainings", description: "Find, create and join sessions", icon: "▣", href: "/trainings" },
-    { label: "Inbox", description: "Invites, requests and messages", icon: "✉", href: "/inbox" },
+    { label: "Routes", description: "Create and save sport routes", icon: "⌁", href: "/routes" },
+    { label: "Workouts", description: "Strength, HYROX and session prep", icon: "◫", href: "/workouts" },
     { label: "Team", description: "Training partners", icon: "◎", href: "/team" },
+    { label: "Inbox", description: "Invites, requests and messages", icon: "✉", href: "/inbox", badge: menuBadgeCount },
     { label: "Profile", description: "Your sports and identity", icon: "●", href: "/profile" },
     { label: "Privacy", description: "Visibility and permissions", icon: "◐", href: "/profile/privacy" },
   ];
@@ -20,6 +23,48 @@ export default function AppHeader({ profile, compact = false, notificationCount 
   if (["admin", "moderator"].includes(profile?.role)) {
     menuItems.push({ label: "Admin", description: "Manage users and roles", icon: "⚡", href: "/admin" });
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBadgeCount() {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        if (!userId) {
+          if (!cancelled) setMenuBadgeCount(0);
+          return;
+        }
+
+        const [{ count: inviteCount }, { count: notificationCount }] = await Promise.all([
+          supabase
+            .from("training_invites")
+            .select("id", { count: "exact", head: true })
+            .eq("invitee_id", userId)
+            .eq("status", "pending"),
+          supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .is("read_at", null),
+        ]);
+
+        if (!cancelled) {
+          setMenuBadgeCount((inviteCount || 0) + (notificationCount || 0));
+        }
+      } catch (error) {
+        console.warn("Menu badge count skipped", error);
+        if (!cancelled) setMenuBadgeCount(0);
+      }
+    }
+
+    loadBadgeCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function openPath(href) {
     setMenuOpen(false);
@@ -69,11 +114,8 @@ export default function AppHeader({ profile, compact = false, notificationCount 
           <span style={styles.hamburger}>☰</span>
           <span>Menu</span>
           <span style={styles.chevron}>{menuOpen ? "⌃" : "⌄"}</span>
+          {menuBadgeCount > 0 ? <span style={styles.menuBadge}>{menuBadgeCount > 99 ? "99+" : menuBadgeCount}</span> : null}
         </button>
-
-        {notificationCount > 0 ? (
-          <span style={styles.menuNotificationBadge}>{notificationCount > 99 ? "99+" : notificationCount}</span>
-        ) : null}
 
         {menuOpen ? (
           <div style={styles.menuPanel}>
@@ -84,7 +126,7 @@ export default function AppHeader({ profile, compact = false, notificationCount 
                   <strong>{item.label}</strong>
                   <small>{item.description}</small>
                 </span>
-                <span style={styles.menuArrow}>›</span>
+                {item.badge > 0 ? <span style={styles.itemBadge}>{item.badge > 99 ? "99+" : item.badge}</span> : <span style={styles.menuArrow}>›</span>}
               </button>
             ))}
           </div>
@@ -112,21 +154,22 @@ const styles = {
   headerCompact: { width: "100%", maxWidth: "100%", display: "grid", justifyItems: "center", gap: 12, position: "relative", zIndex: 20, overflow: "visible" },
   topRow: { width: "100%", maxWidth: "100%", display: "grid", gridTemplateColumns: "48px minmax(0, 1fr) 48px", alignItems: "center", gap: 8, boxSizing: "border-box" },
   logoButton: { ...baseButton, background: "transparent", padding: 0, lineHeight: 0, justifySelf: "center", minWidth: 0 },
-  logo: { width: "min(250px, 62vw)", maxWidth: "100%", height: "auto", display: "block", filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.16))" },
+  logo: { width: "min(250px, 62vw)", maxWidth: "100%", height: "auto", display: "block", filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.13))" },
   menuShell: { position: "relative", display: "grid", justifyItems: "center", width: "100%", maxWidth: "100%" },
-  menuButton: { ...baseButton, minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "linear-gradient(145deg, rgba(18,22,28,0.90), rgba(8,12,16,0.88))", color: "white", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 18px 44px rgba(0,0,0,0.32)", backdropFilter: "blur(12px)" },
-  menuButtonOpen: { ...baseButton, minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.36)", background: "linear-gradient(145deg, rgba(228,239,22,0.10), rgba(18,22,28,0.90))", color: "#e4ef16", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 0 0 1px rgba(228,239,22,0.05), 0 18px 44px rgba(0,0,0,0.34)", backdropFilter: "blur(12px)" },
+  menuButton: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.20)", background: "linear-gradient(145deg, rgba(20,24,31,0.88), rgba(7,10,14,0.82))", color: "white", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 18px 44px rgba(0,0,0,0.26)", backdropFilter: "blur(14px)" },
+  menuButtonOpen: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.38)", background: "rgba(228,239,22,0.10)", color: "#e4ef16", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 0 0 1px rgba(228,239,22,0.06), 0 18px 44px rgba(0,0,0,0.28)", backdropFilter: "blur(14px)" },
+  menuBadge: { position: "absolute", top: -8, right: -8, minWidth: 23, height: 23, padding: "0 6px", borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#070a0f", border: "2px solid #05070a", fontSize: 11, fontWeight: 950, boxShadow: "0 0 18px rgba(228,239,22,0.22)" },
   hamburger: { fontSize: 19, lineHeight: 1 },
   chevron: { fontSize: 18, lineHeight: 1, opacity: 0.9 },
-  menuPanel: { position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: "min(390px, calc(100vw - 32px))", borderRadius: 24, overflow: "hidden", background: "linear-gradient(145deg, rgba(14,18,24,0.98), rgba(5,8,10,0.98))", border: "1px solid rgba(255,255,255,0.10)", boxShadow: "0 28px 90px rgba(0,0,0,0.55)", backdropFilter: "blur(18px)", zIndex: 50 },
-  menuNotificationBadge: { position: "absolute", top: -5, right: "calc(50% - 76px)", minWidth: 22, height: 22, padding: "0 6px", borderRadius: 999, background: "#e4ef16", color: "#05070A", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 950, lineHeight: 1, border: "2px solid #05070A", boxShadow: "0 0 18px rgba(228,239,22,0.28)", zIndex: 3 },
-  menuItem: { ...baseButton, width: "100%", minHeight: 68, display: "grid", gridTemplateColumns: "44px minmax(0, 1fr) 22px", alignItems: "center", gap: 12, padding: "10px 14px", background: "transparent", color: "white", borderBottom: "1px solid rgba(255,255,255,0.08)", textAlign: "left" },
-  menuIcon: { width: 42, height: 42, borderRadius: 15, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.20)", color: "#e4ef16", fontSize: 20 },
+  menuPanel: { position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: "min(390px, calc(100vw - 32px))", borderRadius: 24, overflow: "hidden", background: "linear-gradient(145deg, rgba(17,21,28,0.98), rgba(5,7,10,0.98))", border: "1px solid rgba(255,255,255,0.10)", boxShadow: "0 28px 90px rgba(0,0,0,0.48)", backdropFilter: "blur(18px)", zIndex: 50 },
+  menuItem: { ...baseButton, width: "100%", minHeight: 68, display: "grid", gridTemplateColumns: "44px minmax(0, 1fr) 34px", alignItems: "center", gap: 12, padding: "10px 14px", background: "transparent", color: "white", borderBottom: "1px solid rgba(255,255,255,0.075)", textAlign: "left" },
+  menuIcon: { width: 42, height: 42, borderRadius: 15, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.09)", border: "1px solid rgba(228,239,22,0.17)", color: "#e4ef16", fontSize: 20 },
   menuText: { display: "grid", gap: 3, minWidth: 0 },
-  menuArrow: { color: "rgba(255,255,255,0.76)", fontSize: 28, lineHeight: 1 },
-  avatarButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.78)", background: "rgba(228,239,22,0.08)", display: "grid", placeItems: "center", overflow: "hidden", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.13), 0 0 26px rgba(228,239,22,0.20), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "start" },
+  menuArrow: { color: "rgba(255,255,255,0.58)", fontSize: 28, lineHeight: 1, justifySelf: "end" },
+  itemBadge: { minWidth: 26, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#070a0f", fontSize: 11, fontWeight: 950, justifySelf: "end" },
+  avatarButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.70)", background: "rgba(228,239,22,0.07)", display: "grid", placeItems: "center", overflow: "hidden", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.10), 0 0 22px rgba(228,239,22,0.14), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "start" },
   avatarImage: { width: "100%", height: "100%", objectFit: "cover" },
   avatarFallback: { color: "#e4ef16", fontWeight: 950, fontSize: 13 },
-  signOutButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.70)", background: "radial-gradient(circle at 32% 22%, rgba(228,239,22,0.20), transparent 38%), rgba(228,239,22,0.07)", color: "#e4ef16", display: "grid", placeItems: "center", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.10), 0 0 28px rgba(228,239,22,0.18), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "end" },
-  signOutIcon: { width: 27, height: 27, fill: "none", stroke: "#e4ef16", strokeWidth: 2.35, strokeLinecap: "round", strokeLinejoin: "round", filter: "drop-shadow(0 0 8px rgba(228,239,22,0.40))" },
+  signOutButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.58)", background: "rgba(228,239,22,0.055)", color: "#e4ef16", display: "grid", placeItems: "center", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.08), 0 0 22px rgba(228,239,22,0.13), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "end" },
+  signOutIcon: { width: 27, height: 27, fill: "none", stroke: "#e4ef16", strokeWidth: 2.35, strokeLinecap: "round", strokeLinejoin: "round", filter: "drop-shadow(0 0 8px rgba(228,239,22,0.30))" },
 };
