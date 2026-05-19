@@ -261,6 +261,29 @@ export default function ImageCropperModal({
 
         <p style={styles.help}>Drag the image itself to position it. Use zoom to frame the subject.</p>
 
+        {mode === "trainingHero" ? (
+          <div style={styles.cardPreview}>
+            <div style={styles.cardPreviewImage}>
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt=""
+                  style={{
+                    ...styles.cardPreviewImg,
+                    transform: `translate(${pan.x * 0.06}px, ${pan.y * 0.06}px) scale(${zoom})`,
+                  }}
+                  draggable={false}
+                />
+              ) : null}
+            </div>
+            <div style={styles.cardPreviewText}>
+              <span style={styles.cardPreviewKicker}>Feed preview</span>
+              <strong>Training photo</strong>
+              <small>9:16 portrait card</small>
+            </div>
+          </div>
+        ) : null}
+
         <div style={styles.actions}>
           <button type="button" onClick={onCancel} style={styles.secondaryButton}>
             Cancel
@@ -281,18 +304,23 @@ const styles = {
     zIndex: 999,
     display: "grid",
     placeItems: "center",
-    padding: 16,
-    background: "rgba(0,0,0,0.78)",
-    backdropFilter: "blur(16px)",
+    padding: "max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom))",
+    background: "rgba(0,0,0,0.82)",
+    backdropFilter: "blur(18px)",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
   },
   modal: {
-    width: "min(560px, 100%)",
+    width: "min(560px, calc(100vw - 20px))",
+    maxHeight: "calc(100dvh - 20px)",
+    overflowY: "auto",
     borderRadius: 30,
     border: "1px solid rgba(255,255,255,0.14)",
-    background: "linear-gradient(145deg, rgba(28,31,28,0.98), rgba(5,7,5,0.98))",
+    background: "linear-gradient(145deg, rgba(22,27,33,0.98), rgba(5,7,10,0.98))",
     color: "#fff",
-    padding: 18,
+    padding: 16,
     boxShadow: "0 32px 110px rgba(0,0,0,0.65)",
+    boxSizing: "border-box",
   },
   header: {
     display: "flex",
@@ -327,9 +355,10 @@ const styles = {
   },
   stage: {
     position: "relative",
-    marginTop: 18,
+    marginTop: 16,
     width: "100%",
-    height: "min(72vh, 680px)",
+    height: "min(58dvh, 560px)",
+    minHeight: 360,
     overflow: "hidden",
     borderRadius: 24,
     background: "#050505",
