@@ -268,10 +268,7 @@ export default function ImageCropperModal({
                 <img
                   src={imageUrl}
                   alt=""
-                  style={{
-                    ...styles.cardPreviewImg,
-                    transform: `translate(${pan.x * 0.06}px, ${pan.y * 0.06}px) scale(${zoom})`,
-                  }}
+                  style={styles.cardPreviewImg}
                   draggable={false}
                 />
               ) : null}
@@ -426,5 +423,50 @@ const styles = {
     color: "#050505",
     padding: "13px 14px",
     fontWeight: 950,
+  },  cardPreview: {
+    marginTop: 12,
+    display: "grid",
+    gridTemplateColumns: "58px minmax(0, 1fr)",
+    gap: 12,
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 20,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.045)",
+    overflow: "hidden",
+    width: "100%",
+    maxWidth: 260,
+    boxSizing: "border-box",
+  },
+  cardPreviewImage: {
+    position: "relative",
+    width: 58,
+    height: 103,
+    borderRadius: 14,
+    overflow: "hidden",
+    background: "#101317",
+    flexShrink: 0,
+  },
+  cardPreviewImg: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "center center",
+    display: "block",
+  },
+  cardPreviewText: {
+    minWidth: 0,
+    display: "grid",
+    gap: 2,
+  },
+  cardPreviewKicker: {
+    color: "#d7ff3f",
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    fontSize: 10,
+    fontWeight: 950,
   },
 };
+
