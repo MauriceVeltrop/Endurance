@@ -889,3 +889,173 @@
     max-height: 292px;
   }
 }
+
+/* ===== ENDURANCE MOBILE CONTAINMENT FIX ===== */
+
+/* Hard stop for horizontal overflow */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Keep every shell safely inside the viewport */
+.endurance-shell {
+  width: min(100%, calc(100vw - 28px));
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Header must never push outside screen */
+.endurance-header {
+  width: min(100%, calc(100vw - 28px));
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: visible;
+}
+
+.endurance-topbar {
+  width: 100%;
+  min-width: 0;
+}
+
+.endurance-avatar,
+.endurance-signout {
+  flex: 0 0 54px;
+}
+
+.endurance-logo {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100vw - 150px);
+  overflow: hidden;
+}
+
+.endurance-logo-image {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  max-height: 70px;
+  object-fit: contain;
+}
+
+/* Main hero/card sections must not exceed viewport */
+.training-hero,
+.endurance-card,
+.feed-filter-card,
+.flexible-session-wrap,
+.training-card,
+.metric-card,
+.page-hero,
+.team-search-card,
+.notification-card {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Hero text can wrap without forcing card wider than viewport */
+.training-hero {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding: clamp(22px, 6vw, 30px);
+}
+
+.training-hero h1 {
+  max-width: 100%;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: clamp(42px, 13vw, 68px);
+}
+
+/* Prevent long text from expanding grid columns */
+.training-hero p,
+.metric-card p,
+.training-card-title,
+.training-card-meta,
+.training-card-body,
+.feed-filter-card,
+.section-title-row,
+.notification-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Buttons stay within their card */
+.hero-create-button,
+.primary-action,
+.secondary-action {
+  max-width: 100%;
+}
+
+/* Metric cards more compact on mobile */
+.metric-card {
+  width: 100%;
+}
+
+/* Mobile-specific containment */
+@media (max-width: 560px) {
+  .endurance-shell,
+  .endurance-header {
+    width: calc(100vw - 24px);
+  }
+
+  .endurance-topbar {
+    gap: 10px;
+  }
+
+  .endurance-avatar,
+  .endurance-signout {
+    width: 50px;
+    height: 50px;
+    flex-basis: 50px;
+  }
+
+  .endurance-logo {
+    max-width: calc(100vw - 132px);
+  }
+
+  .endurance-logo-image {
+    max-width: min(250px, calc(100vw - 150px));
+    max-height: 58px;
+  }
+
+  .training-hero {
+    border-radius: 30px;
+    padding: 24px;
+  }
+
+  .training-hero h1 {
+    font-size: clamp(40px, 12.5vw, 58px);
+    line-height: 0.96;
+    letter-spacing: -0.075em;
+  }
+
+  .training-hero p {
+    font-size: 16px;
+    line-height: 1.48;
+  }
+
+  .hero-create-button {
+    width: 100%;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 390px) {
+  .training-hero h1 {
+    font-size: clamp(36px, 12vw, 50px);
+  }
+
+  .endurance-logo-image {
+    max-width: min(220px, calc(100vw - 140px));
+  }
+}
