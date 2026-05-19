@@ -194,14 +194,24 @@ function WeatherForecastCard({ training }) {
       try {
         setStatus("loading");
 
-        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
-        const geoResponse = await fetch(geoUrl);
-        const geoData = await geoResponse.json();
-        const place = geoData?.results?.[0];
+        let place = {
+          latitude: Number(training?.latitude),
+          longitude: Number(training?.longitude),
+          name: location,
+        };
 
-        if (!place?.latitude || !place?.longitude) {
-          if (!cancelled) setStatus("unavailable");
-          return;
+        if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
+          const geoResponse = await fetch(geoUrl);
+          const geoData = await geoResponse.json();
+          const foundPlace = geoData?.results?.[0];
+
+          if (!foundPlace?.latitude || !foundPlace?.longitude) {
+            if (!cancelled) setStatus("unavailable");
+            return;
+          }
+
+          place = foundPlace;
         }
 
         const targetDate = startDate.toISOString().slice(0, 10);
@@ -247,7 +257,7 @@ function WeatherForecastCard({ training }) {
     return () => {
       cancelled = true;
     };
-  }, [training?.id, training?.start_location, training?.starts_at, training?.final_starts_at]);
+  }, [training?.id, training?.start_location, training?.latitude, training?.longitude, training?.starts_at, training?.final_starts_at]);
 
   let body = null;
 
@@ -870,7 +880,7 @@ export default function TrainingDetailPage() {
                 </button>
 
                 {training.start_location ? (
-                  <a href={mapsUrl(training.start_location)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
+                  <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
                     Maps
                   </a>
                 ) : null}
