@@ -1,2 +1,1126 @@
-// app/trainings/page.js
-// premium dark UI patch
+// INVITE FLOW CLEANUP PATCH
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
+import TrainingCard from "../../components/trainings/TrainingCard";
+import { supabase } from "../../lib/supabase";
+import {
+  formatTrainingIntensity,
+  formatTrainingTime,
+  getPrimarySport,
+  getSportLabel,
+} from "../../lib/trainingHelpers";
+import { getTrainingHeroImage } from "../../lib/sportImages";
+
+const privilegedRoles = ["admin", "moderator"];
+const SOON_WINDOW_HOURS = 72;
+
+function isActionNeededTraining(training) {
+  return training?.planning_type === "flexible" && !training?.final_starts_at;
+}
+
+function getFeedSortValue(training) {
+  const value =
+    training?.final_starts_at ||
+    training?.starts_at ||
+    (training?.flexible_date
+      ? `${training.flexible_date}T${training.flexible_start_time || "00:00"}:00`
+      : null) ||
+    training?.created_at ||
+    "9999-12-31T23:59:59";
+
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
+function sortTrainingFeed(a, b) {
+  const aAction = isActionNeededTraining(a);
+  const bAction = isActionNeededTraining(b);
+
+  if (aAction !== bAction) return aAction ? -1 : 1;
+
+  return getFeedSortValue(a) - getFeedSortValue(b);
+}
+
+function getTrainingStart(training) {
+  const value = training?.final_starts_at || training?.starts_at || null;
+  if (!value) return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isStartingSoon(training) {
+  const start = getTrainingStart(training);
+  if (!start) return false;
+
+  const now = Date.now();
+  const delta = start.getTime() - now;
+  return delta >= 0 && delta <= SOON_WINDOW_HOURS * 60 * 60 * 1000;
+}
+
+function getSectionedTrainings(trainings) {
+  const used = new Set();
+
+  const take = (predicate) => {
+    const rows = trainings.filter((training) => !used.has(training.id) && predicate(training));
+    rows.forEach((training) => used.add(training.id));
+    return rows;
+  };
+
+  const actionNeeded = take(isActionNeededTraining);
+  const startingSoon = take(isStartingSoon);
+  const routeReady = take((training) => Boolean(training.route_id || training.workout_id));
+  const upcoming = take(() => true);
+
+  return [
+    {
+      id: "action",
+      eyebrow: "Planning",
+      title: "Needs a decision",
+      description: "Flexible sessions where availability or a final time still matters.",
+      icon: "⚡",
+      trainings: actionNeeded,
+    },
+    {
+      id: "soon",
+      eyebrow: "Next 72 hours",
+      title: "Starting soon",
+      description: "Sessions with a fixed or final start time coming up soon.",
+      icon: "⏱️",
+      trainings: startingSoon,
+    },
+    {
+      id: "ready",
+      eyebrow: "Prepared",
+      title: "Route or workout attached",
+      description: "Sessions that already have a route or workout connected.",
+      icon: "🧭",
+      trainings: routeReady,
+    },
+    {
+      id: "upcoming",
+      eyebrow: "Your feed",
+      title: "More upcoming trainings",
+      description: "Other sessions that match your sports, team or visibility.",
+      icon: "👥",
+      trainings: upcoming,
+    },
+  ].filter((section) => section.trainings.length > 0);
+}
+
+function getTrainingStatus(training) {
+  if (training?.final_starts_at) return "Final time chosen";
+  if (training?.planning_type === "flexible") return "Finding best overlap";
+  if (training?.starts_at) return "Fixed time";
+  return "Time to confirm";
+}
+
+function getTrainingBadges(training, participantCount, joined) {
+  const badges = [];
+
+  if (joined) badges.push("You joined");
+  if (training?.final_starts_at) badges.push("Final time");
+  else if (training?.planning_type === "flexible") badges.push("Flexible planning");
+  if (isStartingSoon(training)) badges.push("Starting soon");
+  if (training?.route_id) badges.push("Route attached");
+  if (training?.workout_id) badges.push("Workout attached");
+  if (participantCount >= 3) badges.push(`${participantCount} athletes`);
+
+  return badges.slice(0, 4);
+}
+
+function getSocialLabel(training, participantCount, joined) {
+  if (joined) return "You are in";
+  if (training?.planning_type === "flexible" && !training?.final_starts_at) {
+    return participantCount > 0
+      ? `${participantCount} athlete${participantCount === 1 ? "" : "s"} can respond`
+      : "Be the first to share availability";
+  }
+  if (participantCount > 0) return `${participantCount} athlete${participantCount === 1 ? "" : "s"} joined`;
+  return "Open for teammates";
+}
+
+export default function TrainingsPage() {
+  const router = useRouter();
+
+  const [profile, setProfile] = useState(null);
+  const [preferredSportIds, setPreferredSportIds] = useState([]);
+  const [trainings, setTrainings] = useState([]);
+  const [participantCounts, setParticipantCounts] = useState({});
+  const [creatorProfiles, setCreatorProfiles] = useState({});
+  const [joinedSessionIds, setJoinedSessionIds] = useState(new Set());
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [busySessionId, setBusySessionId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const canSeeAll = privilegedRoles.includes(profile?.role);
+
+  const preferredSportLabel = useMemo(() => {
+    if (canSeeAll) return "Admin/moderator view";
+    if (!preferredSportIds.length) return "No preferred sports selected";
+    return `${preferredSportIds.length} preferred sport${preferredSportIds.length === 1 ? "" : "s"}`;
+  }, [canSeeAll, preferredSportIds.length]);
+
+  useEffect(() => {
+    loadTrainings();
+  }, []);
+
+  async function loadTrainings() {
+    setLoading(true);
+    setErrorText("");
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData?.user;
+
+      if (!user?.id) {
+        router.replace("/login");
+        return;
+      }
+
+      setCurrentUserId(user.id);
+
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (!profileRow?.onboarding_completed) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      if (profileRow?.blocked) {
+        setProfile(profileRow);
+        setTrainings([]);
+        setErrorText("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
+      setProfile(profileRow);
+
+      const { data: sportRows, error: sportError } = await supabase
+        .from("user_sports")
+        .select("sport_id")
+        .eq("user_id", user.id);
+
+      if (sportError) throw sportError;
+
+      const allowedSports = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
+      setPreferredSportIds(allowedSports);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayDate = today.toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("training_sessions")
+        .select("id,creator_id,title,description,sports,visibility,planning_type,starts_at,flexible_date,flexible_start_time,flexible_end_time,final_starts_at,start_location,distance_km,estimated_duration_min,intensity_label,pace_min,pace_max,speed_min,speed_max,max_participants,teaser_photo_url,route_id,workout_id,created_at")
+        .or(`starts_at.gte.${today.toISOString()},flexible_date.gte.${todayDate},final_starts_at.gte.${today.toISOString()}`)
+        .limit(120);
+
+      if (error) throw error;
+
+      const shouldSeeAll = privilegedRoles.includes(profileRow?.role);
+
+      const rows = (data || [])
+        .filter((training) => {
+          const startValue = training.final_starts_at || training.starts_at || null;
+
+          if (startValue) {
+            const startDate = new Date(startValue);
+            if (Number.isNaN(startDate.getTime())) return true;
+            return startDate >= today;
+          }
+
+          if (training.planning_type === "flexible" && training.flexible_date) {
+            return training.flexible_date >= todayDate;
+          }
+
+          return false;
+        })
+        .sort(sortTrainingFeed);
+
+      let acceptedPartnerIds = new Set();
+      let selectedVisibilitySessionIds = new Set();
+
+      if (!shouldSeeAll) {
+        const { data: partnerRows, error: partnerError } = await supabase
+          .from("training_partners")
+          .select("requester_id,addressee_id,status")
+          .eq("status", "accepted")
+          .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+        if (!partnerError) {
+          acceptedPartnerIds = new Set(
+            (partnerRows || []).map((relation) =>
+              relation.requester_id === user.id ? relation.addressee_id : relation.requester_id
+            )
+          );
+        } else {
+          console.warn("Team visibility partners skipped", partnerError);
+        }
+
+        const selectedRows = rows.filter((training) => training.visibility === "selected");
+
+        if (selectedRows.length) {
+          const { data: visibilityRows, error: visibilityError } = await supabase
+            .from("training_visibility_members")
+            .select("session_id,user_id")
+            .eq("user_id", user.id)
+            .in("session_id", selectedRows.map((training) => training.id));
+
+          if (!visibilityError) {
+            selectedVisibilitySessionIds = new Set((visibilityRows || []).map((row) => row.session_id));
+          } else {
+            console.warn("Selected visibility filter skipped", visibilityError);
+          }
+        }
+      }
+
+      const filtered = shouldSeeAll
+        ? rows
+        : rows.filter((training) => {
+            if (training.creator_id === user.id) return true;
+            if (training.visibility === "private") return false;
+            if (training.visibility === "team" && !acceptedPartnerIds.has(training.creator_id)) return false;
+            if (training.visibility === "selected" && !selectedVisibilitySessionIds.has(training.id)) return false;
+
+            const sports = Array.isArray(training.sports) ? training.sports : [];
+            return sports.some((sportId) => allowedSports.includes(sportId));
+          });
+
+      const visibleRows = filtered.slice(0, 40);
+      setTrainings(visibleRows);
+
+      const creatorIds = [...new Set(visibleRows.map((training) => training.creator_id).filter(Boolean))];
+
+      if (creatorIds.length) {
+        const { data: creatorRows, error: creatorError } = await supabase
+          .from("profiles")
+          .select("id,name,first_name,last_name,avatar_url")
+          .in("id", creatorIds);
+
+        if (!creatorError) {
+          const mappedCreators = {};
+
+          (creatorRows || []).forEach((creator) => {
+            const fullName = [creator.first_name, creator.last_name].filter(Boolean).join(" ").trim();
+            mappedCreators[creator.id] = {
+              ...creator,
+              displayName: fullName || creator.name || "Unknown organizer",
+            };
+          });
+
+          setCreatorProfiles(mappedCreators);
+        } else {
+          console.warn("Creator profiles skipped", creatorError);
+          setCreatorProfiles({});
+        }
+      } else {
+        setCreatorProfiles({});
+      }
+
+      const trainingIds = visibleRows.map((training) => training.id);
+
+      if (trainingIds.length) {
+        const { data: participantRows, error: participantError } = await supabase
+          .from("session_participants")
+          .select("session_id,user_id")
+          .in("session_id", trainingIds);
+
+        if (!participantError) {
+          const counts = {};
+          const joined = new Set();
+
+          (participantRows || []).forEach((row) => {
+            counts[row.session_id] = (counts[row.session_id] || 0) + 1;
+            if (row.user_id === user.id) joined.add(row.session_id);
+          });
+
+          setParticipantCounts(counts);
+          setJoinedSessionIds(joined);
+        } else {
+          console.warn("Participant counts skipped", participantError);
+          setParticipantCounts({});
+        }
+      } else {
+        setParticipantCounts({});
+        setJoinedSessionIds(new Set());
+      }
+    } catch (err) {
+      console.error("Training feed error", err);
+      setErrorText(err?.message || "Could not load training sessions.");
+      setTrainings([]);
+      setParticipantCounts({});
+      setCreatorProfiles({});
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleJoinFromCard(training) {
+    if (!currentUserId || !training?.id) return;
+
+    const alreadyJoined = joinedSessionIds.has(training.id);
+    const joinedCount = participantCounts[training.id] || 0;
+    const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+
+    if (!alreadyJoined && maxParticipants && joinedCount >= maxParticipants) return;
+
+    try {
+      setBusySessionId(training.id);
+
+      if (alreadyJoined) {
+        const { error } = await supabase
+          .from("session_participants")
+          .delete()
+          .eq("session_id", training.id)
+          .eq("user_id", currentUserId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("session_participants")
+          .upsert(
+            { session_id: training.id, user_id: currentUserId },
+            { onConflict: "session_id,user_id", ignoreDuplicates: true }
+          );
+
+        if (error) throw error;
+      }
+
+      await loadTrainings();
+    } catch (error) {
+      console.error("Quick join error", error);
+      setErrorText(error?.message || "Could not update participation.");
+    } finally {
+      setBusySessionId("");
+    }
+  }
+
+  const openCreateTraining = () => {
+    router.push("/trainings/new");
+  };
+
+  const visibleTrainings = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) return [...trainings].sort(sortTrainingFeed);
+
+    return trainings
+      .filter((training) => {
+        const haystack = [
+          training.title,
+          training.description,
+          training.start_location,
+          Array.isArray(training.sports) ? training.sports.map(getSportLabel).join(" ") : "",
+          Array.isArray(training.sports) ? training.sports.join(" ") : "",
+          training.visibility,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(query);
+      })
+      .sort(sortTrainingFeed);
+  }, [trainings, searchTerm]);
+
+  const feedSections = useMemo(() => getSectionedTrainings(visibleTrainings), [visibleTrainings]);
+  const actionNeededCount = visibleTrainings.filter(isActionNeededTraining).length;
+  const startingSoonCount = visibleTrainings.filter(isStartingSoon).length;
+  const readyCount = visibleTrainings.filter((training) => training.route_id || training.workout_id).length;
+  const empty = !loading && !errorText && trainings.length === 0;
+
+  function renderTrainingCard(training, sectionId) {
+    const primarySport = getPrimarySport(training);
+    const sportLabel = getSportLabel(primarySport);
+    const sportImage = getTrainingHeroImage(training, primarySport);
+    const time = formatTrainingTime(training);
+    const intensity = formatTrainingIntensity(training);
+    const joinedCount = participantCounts[training.id] || 0;
+    const alreadyJoined = joinedSessionIds.has(training.id);
+    const maxParticipants = training.max_participants ? Number(training.max_participants) : null;
+    const spotsLeft = maxParticipants ? Math.max(maxParticipants - joinedCount, 0) : null;
+    const creator = creatorProfiles[training.creator_id];
+    const creatorName = creator?.displayName || (training.creator_id === currentUserId ? "You" : "Organizer");
+
+    return (
+      <TrainingCard
+        key={`${sectionId}-${training.id}`}
+        training={training}
+        sportLabel={sportLabel}
+        sportImage={sportImage}
+        creator={creator}
+        creatorName={creatorName}
+        time={time}
+        intensity={intensity}
+        participantCount={joinedCount}
+        maxParticipants={maxParticipants}
+        joined={alreadyJoined}
+        spotsLeft={spotsLeft}
+        busy={busySessionId === training.id}
+        onJoin={() => toggleJoinFromCard(training)}
+        onOpen={() => router.push(`/trainings/${training.id}`)}
+        onCreatorClick={() => router.push(`/profile/${training.creator_id}`)}
+        actionNeeded={isActionNeededTraining(training)}
+        actionLabel={training.creator_id === currentUserId ? "Choose final time" : "Share availability"}
+        statusLabel={getTrainingStatus(training)}
+        socialLabel={getSocialLabel(training, joinedCount, alreadyJoined)}
+        badges={getTrainingBadges(training, joinedCount, alreadyJoined)}
+      />
+    );
+  }
+
+  return (
+    <main style={styles.page}>
+      <section style={styles.shell}>
+        <AppHeader profile={profile} compact />
+
+        <header style={styles.hero}>
+          <div style={styles.heroCopy}>
+            <div style={styles.kicker}>Training Feed</div>
+            <h1 style={styles.title}>Find your next session<span style={styles.dot}>.</span></h1>
+            <p style={styles.subtitle}>
+              Join verified sport sessions, respond to flexible planning and see what your team is training next.
+            </p>
+          </div>
+
+          <div style={styles.heroActions}>
+            <button type="button" onClick={openCreateTraining} style={styles.heroCreateButton}>
+              ＋ Create training
+            </button>
+          </div>
+        </header>
+
+        <section style={styles.dashboardGrid} aria-label="Training dashboard">
+          <article style={styles.dashboardCardHighlight}>
+            <span style={styles.dashboardIconLime}>⚡</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : actionNeededCount}</strong>
+              <span style={styles.dashboardTitle}>Need planning</span>
+              <span style={styles.dashboardHint}>Flexible sessions waiting for availability or a final time.</span>
+            </div>
+          </article>
+
+          <article style={styles.dashboardCard}>
+            <span style={styles.dashboardIconBlue}>⏱️</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : startingSoonCount}</strong>
+              <span style={styles.dashboardTitle}>Starting soon</span>
+              <span style={styles.dashboardHint}>Next {SOON_WINDOW_HOURS} hours</span>
+            </div>
+          </article>
+
+          <article style={styles.dashboardCard}>
+            <span style={styles.dashboardIconPurple}>🧭</span>
+            <div>
+              <strong style={styles.dashboardValue}>{loading ? "…" : readyCount}</strong>
+              <span style={styles.dashboardTitle}>Prepared</span>
+              <span style={styles.dashboardHint}>Route or workout attached</span>
+            </div>
+          </article>
+        </section>
+
+        <section style={styles.feedControlCard}>
+          <div style={styles.feedControlTop}>
+            <div style={styles.sectionIntroCompact}>
+              <span style={styles.iconSmall}>🔎</span>
+              <div>
+                <div style={styles.kicker}>Smart feed</div>
+                <h2 style={styles.cardTitle}>Your training opportunities</h2>
+              </div>
+            </div>
+
+            <span style={styles.feedScope}>{preferredSportLabel}</span>
+          </div>
+
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search training, location or sport..."
+            style={styles.searchInput}
+          />
+        </section>
+
+        {loading ? (
+          <section style={styles.skeletonGrid} aria-label="Loading trainings">
+            {[0, 1, 2].map((item) => (
+              <div key={item} style={styles.skeletonCard}>
+                <div style={styles.skeletonImage} />
+                <div style={styles.skeletonLines}>
+                  <span style={styles.skeletonLineShort} />
+                  <span style={styles.skeletonLineLong} />
+                  <span style={styles.skeletonLineMedium} />
+                </div>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {errorText ? (
+          <section style={styles.errorCard}>
+            <div style={styles.stateTitle}>Could not load trainings</div>
+            <p style={styles.stateText}>{errorText}</p>
+
+            <button type="button" onClick={loadTrainings} style={styles.retryButton}>
+              Try again
+            </button>
+          </section>
+        ) : null}
+
+        {empty ? (
+          <section style={styles.emptyCard}>
+            <div style={styles.emptyIcon}>⚡</div>
+            <div style={styles.stateTitle}>
+              {preferredSportIds.length ? "No matching trainings yet" : "Choose your preferred sports"}
+            </div>
+            <p style={styles.stateText}>
+              {preferredSportIds.length
+                ? "Create a new session or broaden your preferred sports in your profile."
+                : "Your feed is filtered by preferred sports. Add sports to your profile first."}
+            </p>
+            <div style={styles.emptyActions}>
+              <button type="button" onClick={openCreateTraining} style={styles.primaryButton}>
+                Create training
+              </button>
+              <button type="button" onClick={() => router.push("/profile")} style={styles.secondaryButton}>
+                Edit profile
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {!loading && !errorText && trainings.length > 0 && visibleTrainings.length === 0 ? (
+          <section style={styles.emptyCard}>
+            <div style={styles.emptyIcon}>🔎</div>
+            <div style={styles.stateTitle}>No trainings found</div>
+            <p style={styles.stateText}>Try another search term.</p>
+            <button type="button" onClick={() => setSearchTerm("")} style={styles.primaryButton}>
+              Clear search
+            </button>
+          </section>
+        ) : null}
+
+        {!loading && !errorText && feedSections.length > 0 ? (
+          <section style={styles.feedSections} aria-label="Training feed sections">
+            {feedSections.map((section) => (
+              <section key={section.id} style={styles.feedSection}>
+                <div style={styles.sectionHeader}>
+                  <div style={styles.sectionIntroCompact}>
+                    <span style={styles.iconSmall}>{section.icon}</span>
+                    <div>
+                      <div style={styles.kicker}>{section.eyebrow}</div>
+                      <h2 style={styles.cardTitle}>{section.title}</h2>
+                      <p style={styles.sectionDescription}>{section.description}</p>
+                    </div>
+                  </div>
+
+                  <span style={styles.sectionCount}>{section.trainings.length}</span>
+                </div>
+
+                <div style={section.id === "action" ? styles.priorityTrainingList : styles.trainingList}>
+                  {section.trainings.map((training) => renderTrainingCard(training, section.id))}
+                </div>
+              </section>
+            ))}
+          </section>
+        ) : null}
+      </section>
+      <BottomNav />
+    </main>
+  );
+}
+
+const baseButton = {
+  border: 0,
+  cursor: "pointer",
+  fontWeight: 950,
+  fontFamily: "inherit",
+};
+
+const glassCard = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  border: "1px solid rgba(255,255,255,0.085)",
+  background: "linear-gradient(145deg, rgba(20,24,31,0.86), rgba(8,11,16,0.78))",
+  boxShadow: "0 22px 70px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.035)",
+};
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    width: "100%",
+    maxWidth: "100vw",
+    overflowX: "hidden",
+    background:
+      "radial-gradient(circle at 96% 0%, rgba(228,239,22,0.07), transparent 30%), radial-gradient(circle at 0% 18%, rgba(55,125,255,0.045), transparent 34%), linear-gradient(180deg, #05070a 0%, #070b10 46%, #020304 100%)",
+    color: "white",
+    padding: "12px max(12px, env(safe-area-inset-left)) 96px max(12px, env(safe-area-inset-right))",
+    boxSizing: "border-box",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+
+  shell: {
+    width: "100%",
+    maxWidth: 1120,
+    margin: "0 auto",
+    display: "grid",
+    gap: 14,
+    minWidth: 0,
+    overflow: "hidden",
+    boxSizing: "border-box",
+  },
+
+  hero: {
+    ...glassCard,
+    borderRadius: 32,
+    padding: "clamp(18px, 5vw, 34px)",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: 18,
+    position: "relative",
+    overflow: "hidden",
+  },
+
+  heroCopy: {
+    minWidth: 0,
+    maxWidth: 760,
+  },
+
+  heroActions: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+    gap: 10,
+    width: "100%",
+    maxWidth: 280,
+  },
+
+  kicker: {
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+  },
+
+  title: {
+    margin: "7px 0 0",
+    fontSize: "clamp(40px, 11vw, 78px)",
+    lineHeight: 0.92,
+    letterSpacing: "-0.075em",
+    maxWidth: "100%",
+  },
+
+  dot: {
+    color: "#e4ef16",
+  },
+
+  subtitle: {
+    margin: "12px 0 0",
+    maxWidth: 660,
+    color: "rgba(255,255,255,0.70)",
+    fontSize: "clamp(15px, 3.8vw, 18px)",
+    lineHeight: 1.45,
+    fontWeight: 750,
+  },
+
+  heroCreateButton: {
+    ...baseButton,
+    minHeight: 54,
+    borderRadius: 20,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 20px",
+    boxShadow: "0 18px 44px rgba(228,239,22,0.20)",
+    whiteSpace: "nowrap",
+  },
+
+  heroSecondaryButton: {
+    ...baseButton,
+    minHeight: 54,
+    borderRadius: 20,
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    border: "1px solid rgba(255,255,255,0.12)",
+    padding: "0 20px",
+    whiteSpace: "nowrap",
+  },
+
+  dashboardGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: 10,
+    width: "100%",
+    minWidth: 0,
+  },
+
+  dashboardCard: {
+    ...glassCard,
+    borderRadius: 24,
+    padding: 14,
+    display: "grid",
+    gridTemplateColumns: "42px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+    overflow: "hidden",
+  },
+
+  dashboardCardHighlight: {
+    ...glassCard,
+    borderRadius: 24,
+    padding: 14,
+    display: "grid",
+    gridTemplateColumns: "42px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+    overflow: "hidden",
+    border: "1px solid rgba(228,239,22,0.22)",
+    background: "linear-gradient(145deg, rgba(228,239,22,0.07), rgba(17,22,29,0.72))",
+  },
+
+  dashboardIconLime: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.13)",
+    border: "1px solid rgba(228,239,22,0.25)",
+  },
+
+  dashboardIconBlue: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(80,150,255,0.13)",
+    border: "1px solid rgba(80,150,255,0.22)",
+  },
+
+  dashboardIconPurple: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(190,120,255,0.13)",
+    border: "1px solid rgba(190,120,255,0.22)",
+  },
+
+  dashboardIconOrange: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,165,80,0.13)",
+    border: "1px solid rgba(255,165,80,0.22)",
+  },
+
+  dashboardValue: {
+    display: "block",
+    fontSize: 30,
+    lineHeight: 0.95,
+    letterSpacing: "-0.07em",
+  },
+
+  dashboardTitle: {
+    display: "block",
+    marginTop: 2,
+    color: "white",
+    fontSize: 13,
+    fontWeight: 950,
+  },
+
+  dashboardHint: {
+    display: "block",
+    marginTop: 2,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: 800,
+    lineHeight: 1.25,
+    overflowWrap: "anywhere",
+  },
+
+  feedControlCard: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 14,
+    display: "grid",
+    gap: 12,
+  },
+
+  feedControlTop: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+
+  feedScope: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    fontWeight: 900,
+    textAlign: "right",
+    maxWidth: 160,
+    overflowWrap: "anywhere",
+  },
+
+  sectionIntroCompact: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+
+  iconSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,0.075)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    flexShrink: 0,
+  },
+
+  cardTitle: {
+    margin: 0,
+    fontSize: "clamp(20px, 5vw, 28px)",
+    lineHeight: 1,
+    letterSpacing: "-0.05em",
+  },
+
+  searchInput: {
+    minHeight: 48,
+    width: "100%",
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.28)",
+    color: "white",
+    padding: "0 16px",
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+  },
+
+  inviteBanner: {
+    ...glassCard,
+    borderRadius: 26,
+    padding: 16,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: 14,
+    alignItems: "center",
+  },
+
+  inviteBannerTitle: {
+    display: "block",
+    marginTop: 4,
+    fontSize: 20,
+    letterSpacing: "-0.04em",
+  },
+
+  inviteBannerText: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.62)",
+    fontWeight: 750,
+  },
+
+  feedSections: {
+    display: "grid",
+    gap: 14,
+    width: "100%",
+    minWidth: 0,
+  },
+
+  feedSection: {
+    ...glassCard,
+    borderRadius: 30,
+    padding: 12,
+    display: "grid",
+    gap: 12,
+    overflow: "hidden",
+  },
+
+  sectionHeader: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+
+  sectionDescription: {
+    margin: "5px 0 0",
+    color: "rgba(255,255,255,0.56)",
+    lineHeight: 1.35,
+    fontSize: 13,
+    fontWeight: 750,
+  },
+
+  sectionCount: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 14,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.22)",
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+
+  trainingList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
+    gap: 12,
+    width: "100%",
+    minWidth: 0,
+  },
+
+  priorityTrainingList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+    gap: 12,
+    width: "100%",
+    minWidth: 0,
+  },
+
+  skeletonGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+    gap: 12,
+  },
+
+  skeletonCard: {
+    ...glassCard,
+    borderRadius: 28,
+    padding: 10,
+    minHeight: 170,
+    display: "grid",
+    gridTemplateColumns: "96px minmax(0, 1fr)",
+    gap: 12,
+  },
+
+  skeletonImage: {
+    borderRadius: 22,
+    background: "linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.12), rgba(255,255,255,0.05))",
+  },
+
+  skeletonLines: {
+    display: "grid",
+    alignContent: "center",
+    gap: 10,
+  },
+
+  skeletonLineShort: {
+    width: "40%",
+    height: 14,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.10)",
+  },
+
+  skeletonLineLong: {
+    width: "88%",
+    height: 22,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.12)",
+  },
+
+  skeletonLineMedium: {
+    width: "66%",
+    height: 14,
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.09)",
+  },
+
+  emptyCard: {
+    ...glassCard,
+    borderRadius: 28,
+    padding: 22,
+  },
+
+  emptyIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    border: "1px solid rgba(228,239,22,0.25)",
+    marginBottom: 16,
+    fontSize: 24,
+  },
+
+  emptyActions: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+    gap: 10,
+    marginTop: 18,
+  },
+
+  errorCard: {
+    borderRadius: 28,
+    padding: 22,
+    background: "rgba(140,20,20,0.18)",
+    border: "1px solid rgba(255,90,90,0.22)",
+  },
+
+  stateTitle: {
+    fontSize: 22,
+    fontWeight: 950,
+    letterSpacing: "-0.04em",
+  },
+
+  stateText: {
+    color: "rgba(255,255,255,0.70)",
+    lineHeight: 1.5,
+    marginBottom: 0,
+  },
+
+  retryButton: {
+    ...baseButton,
+    minHeight: 42,
+    borderRadius: 999,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 16px",
+    marginTop: 12,
+  },
+
+  primaryButton: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 18,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 18px",
+    boxShadow: "0 18px 38px rgba(228,239,22,0.16)",
+    width: "100%",
+  },
+
+  secondaryButton: {
+    ...baseButton,
+    minHeight: 50,
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    border: "1px solid rgba(255,255,255,0.12)",
+    padding: "0 18px",
+  },
+};
