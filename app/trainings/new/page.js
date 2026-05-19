@@ -115,6 +115,8 @@ export default function CreateTrainingPage() {
   const [trainingPhotoFile, setTrainingPhotoFile] = useState(null);
   const [trainingPhotoPreview, setTrainingPhotoPreview] = useState("");
   const [trainingCropFile, setTrainingCropFile] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -172,6 +174,83 @@ export default function CreateTrainingPage() {
     loadCreateData();
   }, []);
 
+  function formatNearestAddress(address = {}) {
+    const street = [address.road, address.house_number].filter(Boolean).join(" ");
+    const place =
+      address.city ||
+      address.town ||
+      address.village ||
+      address.hamlet ||
+      address.municipality ||
+      address.county ||
+      "";
+    const parts = [street, place].filter(Boolean);
+
+    return parts.length ? parts.join(", ") : "";
+  }
+
+  async function reverseGeocodeLocation(latitude, longitude) {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Could not find your nearest address.");
+    }
+
+    const data = await response.json();
+    return formatNearestAddress(data?.address) || data?.display_name || "";
+  }
+
+  async function useCurrentLocation({ silent = false } = {}) {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      if (!silent) setLocationMessage("Current location is not available on this device.");
+      return;
+    }
+
+    setLocationLoading(true);
+    if (!silent) setLocationMessage("Finding nearest address...");
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords || {};
+          const address = await reverseGeocodeLocation(latitude, longitude);
+
+          if (address) {
+            setForm((current) => ({
+              ...current,
+              start_location: current.start_location?.trim() ? current.start_location : address,
+            }));
+            setLocationMessage("Nearest address filled in. You can still overwrite it.");
+          } else {
+            setLocationMessage("Could not determine a nearby address. Please enter a start location.");
+          }
+        } catch (error) {
+          console.warn("Reverse geocode failed", error);
+          setLocationMessage("Could not determine a nearby address. Please enter a start location.");
+        } finally {
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        console.warn("Geolocation failed", error);
+        setLocationLoading(false);
+        setLocationMessage(silent ? "" : "Location permission was denied. Please enter a start location.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 9000,
+        maximumAge: 60000,
+      }
+    );
+  }
+
   async function loadCreateData() {
     setLoading(true);
     setMessage("");
@@ -204,6 +283,7 @@ export default function CreateTrainingPage() {
       }
 
       setProfile(profileRow);
+      useCurrentLocation({ silent: true });
 
       const ownPrivacy = await fetchPrivacySettings(user.id);
       if (ownPrivacy?.default_training_visibility) {
@@ -389,7 +469,7 @@ export default function CreateTrainingPage() {
       flexible_date: isFixed ? null : firstOption?.starts_on || form.date,
       flexible_start_time: isFixed ? null : firstOption?.window_start || null,
       flexible_end_time: isFixed ? null : firstOption?.window_end || null,
-      start_location: form.start_location.trim() || null,
+      start_location: form.start_location.trim(),
       distance_km: selectedSport?.distance && form.distance_km ? Number(form.distance_km) : null,
       estimated_duration_min: form.estimated_duration_min ? Number(form.estimated_duration_min) : null,
       pace_min: selectedSport?.metric === "pace" ? form.pace_min || null : null,
@@ -481,6 +561,11 @@ export default function CreateTrainingPage() {
 
       if (!form.title.trim()) {
         setMessage("Give the training a name.");
+        return;
+      }
+
+      if (!form.start_location.trim()) {
+        setMessage("Start location is required. Use current location or enter a meeting point.");
         return;
       }
 
@@ -665,12 +750,6 @@ export default function CreateTrainingPage() {
     }
   }
 
-  const progressItems = [
-    form.sport_id ? "Sport" : null,
-    form.title.trim() ? "Name" : null,
-    form.planning_type === "fixed" ? "Fixed time" : `${normalizedTimeOptions().length} windows`,
-    form.visibility === "selected" ? `${selectedInviteIds.length} invites` : form.visibility,
-  ].filter(Boolean);
 
   return (
     <main style={styles.page}>
@@ -682,18 +761,8 @@ export default function CreateTrainingPage() {
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
             <p style={styles.subtitle}>
-              Sport first, then time, route or workout, visibility and invites. Flexible windows now support multiple days and multiple time blocks per day.
+              Create a verified training session with sport, time, start location, route or workout, visibility and invites.
             </p>
-          </div>
-
-          <div style={styles.progressCard}>
-            <span style={styles.progressKicker}>Setup</span>
-            <strong>{progressItems.length}/4 ready</strong>
-            <div style={styles.progressChips}>
-              {progressItems.map((item) => (
-                <span key={item} style={styles.progressChip}>{item}</span>
-              ))}
-            </div>
           </div>
         </header>
 
@@ -749,13 +818,25 @@ export default function CreateTrainingPage() {
               </label>
 
               <label style={styles.label}>
-                Start location
+                <span style={styles.labelRow}>
+                  <span>Start location <strong style={styles.requiredMark}>*</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => useCurrentLocation()}
+                    disabled={locationLoading}
+                    style={styles.locationButton}
+                  >
+                    {locationLoading ? "Finding..." : "Use current location"}
+                  </button>
+                </span>
                 <input
                   value={form.start_location}
                   onChange={(event) => updateForm("start_location", event.target.value)}
-                  placeholder="Street, place or meeting point"
+                  placeholder="Nearest address or meeting point"
+                  required
                   style={styles.input}
                 />
+                {locationMessage ? <span style={styles.locationHint}>{locationMessage}</span> : null}
               </label>
 
               <label style={styles.label}>
@@ -772,7 +853,7 @@ export default function CreateTrainingPage() {
                 <div>
                   <div style={styles.photoTitle}>Training photo</div>
                   <p style={styles.photoText}>
-                    Optional, but recommended. Crop and zoom a 9:16 portrait image for this training.
+                    Optional, but recommended. Crop and zoom a hero image for this training.
                   </p>
                 </div>
 
@@ -1120,9 +1201,9 @@ const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
+    background: "radial-gradient(circle at 82% 4%, rgba(228,239,22,0.055), transparent 28%), radial-gradient(circle at 0% 28%, rgba(64,92,44,0.10), transparent 26%), linear-gradient(180deg, #05070a 0%, #0a0f14 62%, #020304 100%)",
     color: "white",
-    padding: "18px 14px 56px",
+    padding: "18px 14px 120px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     overflowX: "hidden",
   },
@@ -1138,6 +1219,12 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr)",
     gap: 12,
+    borderRadius: 34,
+    padding: 24,
+    background: "linear-gradient(180deg, rgba(22,27,33,0.88), rgba(12,17,22,0.84))",
+    border: "1px solid rgba(255,255,255,0.08)",
+    boxShadow: "0 22px 70px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.04)",
+    overflow: "hidden",
   },
   heroText: { display: "grid", gap: 10, minWidth: 0 },
   kicker: {
@@ -1149,8 +1236,8 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(42px, 11vw, 74px)",
-    lineHeight: 0.92,
+    fontSize: "clamp(40px, 10vw, 66px)",
+    lineHeight: 0.94,
     letterSpacing: "-0.075em",
   },
   subtitle: {
@@ -1196,21 +1283,22 @@ const styles = {
   card: {
     borderRadius: 30,
     padding: 16,
-    background: glass,
-    border: "1px solid rgba(255,255,255,0.13)",
+    background: "linear-gradient(180deg, rgba(22,27,33,0.86), rgba(12,17,22,0.82))",
+    border: "1px solid rgba(255,255,255,0.08)",
     display: "grid",
     gap: 14,
     minWidth: 0,
     boxSizing: "border-box",
+    boxShadow: "0 18px 55px rgba(0,0,0,0.24)",
   },
   cardHot: {
     borderRadius: 30,
     padding: 16,
-    background: "linear-gradient(145deg, rgba(228,239,22,0.13), rgba(255,255,255,0.045))",
-    border: "1px solid rgba(228,239,22,0.24)",
+    background: "linear-gradient(180deg, rgba(22,27,33,0.90), rgba(12,17,22,0.84))",
+    border: "1px solid rgba(228,239,22,0.18)",
     display: "grid",
     gap: 14,
-    boxShadow: "0 0 34px rgba(228,239,22,0.10)",
+    boxShadow: "0 18px 55px rgba(0,0,0,0.24)",
     minWidth: 0,
   },
   sectionHeader: {
@@ -1262,6 +1350,33 @@ const styles = {
     fontSize: 14,
     fontWeight: 850,
     minWidth: 0,
+  },
+  labelRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  requiredMark: {
+    color: "#e4ef16",
+  },
+  locationButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.22)",
+    background: "rgba(228,239,22,0.08)",
+    color: "#e4ef16",
+    padding: "0 11px",
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  locationHint: {
+    color: "rgba(255,255,255,0.56)",
+    fontSize: 12,
+    lineHeight: 1.35,
+    fontWeight: 700,
   },
   miniLabel: {
     display: "grid",
@@ -1544,9 +1659,7 @@ const styles = {
     overflow: "hidden",
     display: "grid",
     placeItems: "center",
-    aspectRatio: "9 / 16",
-    minHeight: 300,
-    maxHeight: 520,
+    minHeight: 160,
     borderRadius: 22,
     border: "1px dashed rgba(215,255,63,0.42)",
     background: "rgba(215,255,63,0.08)",
@@ -1555,9 +1668,7 @@ const styles = {
   photoPreview: {
     width: "100%",
     height: "100%",
-    aspectRatio: "9 / 16",
-    minHeight: 300,
-    maxHeight: 520,
+    minHeight: 160,
     objectFit: "cover",
     display: "block",
   },
