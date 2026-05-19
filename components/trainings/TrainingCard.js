@@ -4,6 +4,7 @@
 import Link from "next/link";
 import TrainingParticipants from "./TrainingParticipants";
 import TrainingStats from "./TrainingStats";
+import { getTrainingHeroImage } from "../../lib/sportImages";
 
 function formatDate(training) {
   const value = training?.final_starts_at || training?.starts_at;
@@ -34,17 +35,31 @@ function sportLabel(training) {
   return String(sport).replaceAll("_", " ");
 }
 
+function sportId(training) {
+  const sport = Array.isArray(training?.sports) ? training.sports[0] : training?.sports;
+  return String(sport || "running").trim();
+}
+
 export default function TrainingCard({ training, participants = [] }) {
   if (!training) return null;
 
   const href = `/trainings/${training.id}`;
-  const image = training.teaser_photo_url;
+  const heroImage = getTrainingHeroImage(training, sportId(training));
+  const image = heroImage.src;
   const flexible = training.planning_type === "flexible";
 
   return (
     <article className="training-card">
       <Link href={href} className="training-card-media" aria-label={training.title}>
-        {image ? <img src={image} alt="" /> : <div className="training-card-fallback">ENDURANCE</div>}
+        {image ? (
+          <img
+            src={image}
+            alt=""
+            style={{ objectPosition: heroImage.position || "center center" }}
+          />
+        ) : (
+          <div className="training-card-fallback">ENDURANCE</div>
+        )}
       </Link>
 
       <div className="training-card-body">
