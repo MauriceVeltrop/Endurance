@@ -2,8 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 function timeAgo(value) {
   if (!value) return "";
@@ -16,7 +16,6 @@ function timeAgo(value) {
 }
 
 export default function NotificationCenter() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
   const [notifications, setNotifications] = useState([]);
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
