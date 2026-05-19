@@ -730,29 +730,24 @@
 }
 
 
-/* LOGO + TRAINING IMAGE FIX */
-.endurance-logo {
-  flex: 1;
-  justify-content: center;
-  min-width: 0;
-}
+/* ===== ENDURANCE 9:16 PORTRAIT TRAINING MEDIA ===== */
 
-.endurance-logo-image {
-  display: block;
-  width: min(300px, 58vw);
-  max-height: 76px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 14px rgba(230,255,0,0.10));
-}
-
-.endurance-logo-pulse {
-  display: none;
+.training-card {
+  grid-template-columns: 150px 1fr;
+  align-items: stretch;
 }
 
 .training-card-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  min-height: 260px;
+  max-height: 360px;
+  border-radius: 28px;
+  overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(230,255,0,0.07), rgba(5,7,10,0.42)),
-    rgba(255,255,255,0.04);
+    radial-gradient(circle at 65% 22%, rgba(230,255,0,0.10), transparent 36%),
+    linear-gradient(180deg, rgba(18,25,18,0.95), rgba(5,7,10,0.96));
 }
 
 .training-card-media img {
@@ -764,15 +759,35 @@
 }
 
 .training-card-fallback {
+  height: 100%;
+  display: grid;
+  place-items: center;
   background:
     radial-gradient(circle at 60% 25%, rgba(230,255,0,0.12), transparent 38%),
     linear-gradient(180deg, rgba(36,48,27,0.92), rgba(14,19,16,0.94));
+  color: var(--endurance-lime);
+  font-weight: 1000;
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
+}
+
+.training-image-cropper-frame,
+.photo-portrait-frame {
+  aspect-ratio: 9 / 16;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #0b0f14;
 }
 
 @media (max-width: 560px) {
-  .endurance-logo-image {
-    width: min(260px, 56vw);
-    max-height: 64px;
+  .training-card {
+    grid-template-columns: 132px 1fr;
+    gap: 12px;
+  }
+
+  .training-card-media {
+    min-height: 240px;
+    max-height: 330px;
   }
 }
 
