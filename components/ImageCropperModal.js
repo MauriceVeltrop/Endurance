@@ -240,7 +240,16 @@ export default function ImageCropperModal({
               ref={frameRef}
               style={{
                 ...styles.cropFrame,
-                aspectRatio: `${preset.aspectRatio}`,
+                ...(preset.aspectRatio < 1
+                  ? {
+                      width: "min(72%, calc((min(58dvh, 560px) - 48px) * 0.5625))",
+                      height: "min(calc(100% - 48px), 560px)",
+                      aspectRatio: "9 / 16",
+                    }
+                  : {
+                      width: "min(86%, 520px)",
+                      aspectRatio: `${preset.aspectRatio}`,
+                    }),
               }}
             />
           ) : null}
@@ -378,12 +387,14 @@ const styles = {
   },
   cropFrame: {
     position: "absolute",
-    width: "78%",
-    maxHeight: "78%",
+    left: "50%",
+    top: "50%",
+    transform: "translate(-50%, -50%)",
     border: "2px solid #d7ff3f",
-    boxShadow: "0 0 0 9999px rgba(0,0,0,0.42), 0 0 30px rgba(215,255,63,0.28)",
     borderRadius: 24,
+    boxShadow: "0 0 0 999px rgba(0,0,0,0.60), 0 0 18px rgba(215,255,63,0.20)",
     pointerEvents: "none",
+    zIndex: 2,
   },
   zoomLabel: {
     display: "grid",
