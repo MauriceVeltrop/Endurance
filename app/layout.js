@@ -1,5 +1,4 @@
 import "../styles/globals.css";
-
 export const metadata = {
   title: "Endurance",
   description: "Verified Social Training Platform",
