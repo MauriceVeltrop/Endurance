@@ -329,7 +329,7 @@ const styles = {
     position: "relative",
     marginTop: 18,
     width: "100%",
-    height: preset.aspectRatio < 1 ? "min(72vh, 680px)" : "min(56vh, 420px)",
+    height: "min(72vh, 680px)",
     overflow: "hidden",
     borderRadius: 24,
     background: "#050505",
