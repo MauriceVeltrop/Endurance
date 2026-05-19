@@ -3,13 +3,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import AppHeader from "@/components/AppHeader";
-import BottomNav from "@/components/BottomNav";
-import TrainingCard from "@/components/trainings/TrainingCard";
-import TrainingFeedTabs from "@/components/trainings/TrainingFeedTabs";
-import TrainingFilters from "@/components/trainings/TrainingFilters";
-import FlexibleSessionCard from "@/components/trainings/FlexibleSessionCard";
+import { supabase } from "../../lib/supabase";
+import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
+import TrainingCard from "../../components/trainings/TrainingCard";
+import TrainingFeedTabs from "../../components/trainings/TrainingFeedTabs";
+import TrainingFilters from "../../components/trainings/TrainingFilters";
+import FlexibleSessionCard from "../../components/trainings/FlexibleSessionCard";
 
 function matchesSearch(training, search) {
   if (!search) return true;
@@ -26,7 +26,7 @@ function matchesSearch(training, search) {
 }
 
 export default function TrainingsPage() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
+  
   const [trainings, setTrainings] = useState([]);
   const [participantsBySession, setParticipantsBySession] = useState({});
   const [activeTab, setActiveTab] = useState("upcoming");
