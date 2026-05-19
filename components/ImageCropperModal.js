@@ -50,7 +50,7 @@ export default function ImageCropperModal({
   const [busy, setBusy] = useState(false);
 
   const aspectLabel = useMemo(
-    () => (mode === "avatar" ? "Square avatar" : "Wide training hero"),
+    () => (mode === "avatar" ? "Square avatar" : "Portrait training photo"),
     [mode]
   );
 
@@ -329,7 +329,7 @@ const styles = {
     position: "relative",
     marginTop: 18,
     width: "100%",
-    height: "min(56vh, 420px)",
+    height: preset.aspectRatio < 1 ? "min(72vh, 680px)" : "min(56vh, 420px)",
     overflow: "hidden",
     borderRadius: 24,
     background: "#050505",
