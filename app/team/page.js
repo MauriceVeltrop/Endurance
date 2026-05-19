@@ -3,12 +3,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "../../lib/supabase";
-import AppHeader from "../../components/AppHeader";
-import BottomNav from "../../components/BottomNav";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import AppHeader from "@/components/AppHeader";
+import BottomNav from "@/components/BottomNav";
 
 export default function TeamPage() {
-  
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const [partners, setPartners] = useState([]);
   const [requests, setRequests] = useState([]);
   const [query, setQuery] = useState("");
