@@ -772,7 +772,7 @@ export default function CreateTrainingPage() {
                 <div>
                   <div style={styles.photoTitle}>Training photo</div>
                   <p style={styles.photoText}>
-                    Optional, but recommended. Crop and zoom a hero image for this training.
+                    Optional, but recommended. Crop and zoom a 9:16 portrait image for this training.
                   </p>
                 </div>
 
@@ -1544,7 +1544,9 @@ const styles = {
     overflow: "hidden",
     display: "grid",
     placeItems: "center",
-    minHeight: 160,
+    aspectRatio: "9 / 16",
+    minHeight: 300,
+    maxHeight: 520,
     borderRadius: 22,
     border: "1px dashed rgba(215,255,63,0.42)",
     background: "rgba(215,255,63,0.08)",
@@ -1553,7 +1555,9 @@ const styles = {
   photoPreview: {
     width: "100%",
     height: "100%",
-    minHeight: 160,
+    aspectRatio: "9 / 16",
+    minHeight: 300,
+    maxHeight: 520,
     objectFit: "cover",
     display: "block",
   },
