@@ -728,3 +728,51 @@
     grid-column: span 1;
   }
 }
+
+
+/* LOGO + TRAINING IMAGE FIX */
+.endurance-logo {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.endurance-logo-image {
+  display: block;
+  width: min(300px, 58vw);
+  max-height: 76px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 14px rgba(230,255,0,0.10));
+}
+
+.endurance-logo-pulse {
+  display: none;
+}
+
+.training-card-media {
+  background:
+    linear-gradient(180deg, rgba(230,255,0,0.07), rgba(5,7,10,0.42)),
+    rgba(255,255,255,0.04);
+}
+
+.training-card-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.98;
+}
+
+.training-card-fallback {
+  background:
+    radial-gradient(circle at 60% 25%, rgba(230,255,0,0.12), transparent 38%),
+    linear-gradient(180deg, rgba(36,48,27,0.92), rgba(14,19,16,0.94));
+}
+
+@media (max-width: 560px) {
+  .endurance-logo-image {
+    width: min(260px, 56vw);
+    max-height: 64px;
+  }
+}
+
