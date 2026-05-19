@@ -80,8 +80,11 @@ export default function AppHeader({ active = "trainings" }) {
         </Link>
 
         <Link href="/trainings" className="endurance-logo" aria-label="Endurance home">
-          <span className="endurance-logo-pulse">⌁</span>
-          <span>ENDURANCE</span>
+          <img
+            src="/logo-endurance.png"
+            alt="Endurance"
+            className="endurance-logo-image"
+          />
         </Link>
 
         <button type="button" onClick={signOut} className="endurance-signout" aria-label="Sign out">
