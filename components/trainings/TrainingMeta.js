@@ -5,16 +5,11 @@ export default function TrainingMeta({
   creatorName,
   time,
   location,
-  distanceKm,
   participantCount,
   maxParticipants,
-  intensity,
   socialLabel,
   onCreatorClick,
 }) {
-  const hasDistance = distanceKm !== null && distanceKm !== undefined && distanceKm !== "";
-  const hasIntensity = Boolean(intensity && intensity !== "Intensity not set");
-
   return (
     <div style={styles.wrap}>
       <button
@@ -33,18 +28,11 @@ export default function TrainingMeta({
         <span style={styles.creatorText}>Hosted by {creatorName}</span>
       </button>
 
-      <div style={styles.infoStack}>
-        <span>🕒 {time}</span>
-        <span>📍 {location || "Location not set"}</span>
-        <span>👥 {socialLabel || `${participantCount} joined`}</span>
-      </div>
-
-      <div style={styles.metricRow}>
-        {hasDistance ? <span style={styles.metricPill}>{distanceKm} km</span> : null}
-        <span style={styles.metricPill}>
-          {participantCount}{maxParticipants ? `/${maxParticipants}` : ""} joined
-        </span>
-        {hasIntensity ? <span style={styles.metricPill}>{intensity}</span> : null}
+      <div style={styles.infoGrid}>
+        <span style={styles.infoItem}>🕒 {time}</span>
+        <span style={styles.infoItem}>📍 {location || "Location not set"}</span>
+        <span style={styles.infoItem}>👥 {socialLabel || `${participantCount} joined`}</span>
+        <span style={styles.infoItem}>🎟 {participantCount}{maxParticipants ? `/${maxParticipants}` : ""} joined</span>
       </div>
     </div>
   );
@@ -53,7 +41,7 @@ export default function TrainingMeta({
 const styles = {
   wrap: {
     display: "grid",
-    gap: 8,
+    gap: 9,
     minWidth: 0,
   },
   creatorRow: {
@@ -71,22 +59,22 @@ const styles = {
     lineHeight: 1.2,
   },
   creatorAvatar: {
-    width: 24,
-    height: 24,
+    width: 27,
+    height: 27,
     borderRadius: 999,
     objectFit: "cover",
-    border: "1px solid rgba(228,239,22,0.24)",
+    border: "1px solid rgba(228,239,22,0.22)",
     flexShrink: 0,
   },
   creatorFallback: {
-    width: 24,
-    height: 24,
+    width: 27,
+    height: 27,
     borderRadius: 999,
     display: "grid",
     placeItems: "center",
-    background: "rgba(228,239,22,0.12)",
+    background: "rgba(228,239,22,0.10)",
     color: "#e4ef16",
-    border: "1px solid rgba(228,239,22,0.22)",
+    border: "1px solid rgba(228,239,22,0.18)",
     fontWeight: 950,
     flexShrink: 0,
   },
@@ -95,30 +83,23 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  infoStack: {
+  infoGrid: {
     display: "grid",
-    gap: 4,
-    color: "rgba(255,255,255,0.70)",
-    fontSize: 13,
-    fontWeight: 800,
-    lineHeight: 1.25,
-    minWidth: 0,
-    overflowWrap: "anywhere",
-  },
-  metricRow: {
-    display: "flex",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: 7,
-    flexWrap: "wrap",
+    minWidth: 0,
   },
-  metricPill: {
-    maxWidth: "100%",
-    overflowWrap: "anywhere",
-    borderRadius: 999,
-    padding: "6px 9px",
-    background: "rgba(255,255,255,0.07)",
-    border: "1px solid rgba(255,255,255,0.09)",
-    color: "rgba(255,255,255,0.76)",
+  infoItem: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color: "rgba(255,255,255,0.70)",
+    background: "rgba(255,255,255,0.045)",
+    border: "1px solid rgba(255,255,255,0.065)",
+    borderRadius: 15,
+    padding: "9px 9px",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 850,
   },
 };

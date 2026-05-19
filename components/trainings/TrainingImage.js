@@ -29,20 +29,20 @@ const styles = {
     position: "relative",
     width: "100%",
     minWidth: 0,
-    height: "100%",
-    minHeight: 128,
-    borderRadius: 22,
+    height: "clamp(190px, 47vw, 285px)",
+    borderRadius: 24,
     overflow: "hidden",
     background:
-      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
-    border: "1px solid rgba(255,255,255,0.10)",
+      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.11), transparent 34%), linear-gradient(145deg, #171c23, #06080c)",
+    border: "1px solid rgba(255,255,255,0.085)",
     alignSelf: "start",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   },
   overlay: {
     position: "absolute",
     inset: 0,
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.42)), radial-gradient(circle at 80% 12%, rgba(228,239,22,0.12), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.12) 40%, rgba(0,0,0,0.58)), radial-gradient(circle at 82% 12%, rgba(228,239,22,0.08), transparent 36%)",
     pointerEvents: "none",
   },
 };
