@@ -3,14 +3,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 function initialsFromName(name = "") {
   return String(name || "E").trim().slice(0, 1).toUpperCase() || "E";
 }
 
 export default function AppHeader({ active = "trainings" }) {
-  
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const [profile, setProfile] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
