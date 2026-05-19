@@ -1,9 +1,9 @@
 // app/notifications/page.js
 "use client";
 
-import AppHeader from "../../components/AppHeader";
-import BottomNav from "../../components/BottomNav";
-import NotificationCenter from "../../components/NotificationCenter";
+import AppHeader from "@/components/AppHeader";
+import BottomNav from "@/components/BottomNav";
+import NotificationCenter from "@/components/NotificationCenter";
 
 export default function NotificationsPage() {
   return (
