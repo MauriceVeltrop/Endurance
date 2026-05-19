@@ -1,175 +1,126 @@
+// components/AppHeader.js
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabase";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-export default function AppHeader({ profile, compact = false }) {
-  const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuBadgeCount, setMenuBadgeCount] = useState(0);
-  const initials = getInitials(profile?.name || profile?.email || "E");
+function initialsFromName(name = "") {
+  return String(name || "E").trim().slice(0, 1).toUpperCase() || "E";
+}
 
-  const menuItems = [
-    { label: "Trainings", description: "Find, create and join sessions", icon: "▣", href: "/trainings" },
-    { label: "Routes", description: "Create and save sport routes", icon: "⌁", href: "/routes" },
-    { label: "Workouts", description: "Strength, HYROX and session prep", icon: "◫", href: "/workouts" },
-    { label: "Team", description: "Training partners", icon: "◎", href: "/team" },
-    { label: "Inbox", description: "Invites, requests and messages", icon: "✉", href: "/inbox", badge: menuBadgeCount },
-    { label: "Profile", description: "Your sports and identity", icon: "●", href: "/profile" },
-    { label: "Privacy", description: "Visibility and permissions", icon: "◐", href: "/profile/privacy" },
-  ];
-
-  if (["admin", "moderator"].includes(profile?.role)) {
-    menuItems.push({ label: "Admin", description: "Manage users and roles", icon: "⚡", href: "/admin" });
-  }
+export default function AppHeader({ active = "trainings" }) {
+  const supabase = useMemo(() => createClientComponentClient(), []);
+  const [profile, setProfile] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    let alive = true;
 
-    async function loadBadgeCount() {
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
+    async function loadHeader() {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!alive || !user) return;
 
-        if (!userId) {
-          if (!cancelled) setMenuBadgeCount(0);
-          return;
-        }
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id,name,first_name,last_name,avatar_url")
+        .eq("id", user.id)
+        .maybeSingle();
 
-        const [{ count: inviteCount }, { count: notificationCount }] = await Promise.all([
-          supabase
-            .from("training_invites")
-            .select("id", { count: "exact", head: true })
-            .eq("invitee_id", userId)
-            .eq("status", "pending"),
-          supabase
-            .from("notifications")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", userId)
-            .is("read_at", null),
-        ]);
+      if (alive) setProfile(profileData || null);
 
-        if (!cancelled) {
-          setMenuBadgeCount((inviteCount || 0) + (notificationCount || 0));
-        }
-      } catch (error) {
-        console.warn("Menu badge count skipped", error);
-        if (!cancelled) setMenuBadgeCount(0);
-      }
+      const [{ count: notificationCount }, { count: inviteCount }] = await Promise.all([
+        supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .is("read_at", null),
+        supabase
+          .from("training_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("invitee_id", user.id)
+          .eq("status", "pending"),
+      ]);
+
+      if (alive) setUnreadCount((notificationCount || 0) + (inviteCount || 0));
     }
 
-    loadBadgeCount();
-
+    loadHeader();
     return () => {
-      cancelled = true;
+      alive = false;
     };
-  }, []);
-
-  function openPath(href) {
-    setMenuOpen(false);
-    router.push(href);
-  }
+  }, [supabase]);
 
   async function signOut() {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      router.replace("/login");
-    }
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   }
 
+  const items = [
+    ["trainings", "/trainings", "Trainings"],
+    ["routes", "/routes", "Routes"],
+    ["workouts", "/workouts", "Workouts"],
+    ["team", "/team", "Team"],
+    ["notifications", "/notifications", "Inbox"],
+    ["profile", "/profile", "Profile"],
+  ];
+
+  const name = profile?.first_name || profile?.name || "Endurance";
+
   return (
-    <header style={compact ? styles.headerCompact : styles.header}>
-      <div style={styles.topRow}>
-        <button type="button" onClick={() => openPath("/profile")} style={styles.avatarButton} aria-label="Open profile">
+    <header className="endurance-shell endurance-header">
+      <div className="endurance-topbar">
+        <Link href="/profile" className="endurance-avatar" aria-label="Profile">
           {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="" style={styles.avatarImage} />
+            <img src={profile.avatar_url} alt="" />
           ) : (
-            <span style={styles.avatarFallback}>{initials}</span>
+            <span>{initialsFromName(name)}</span>
           )}
-        </button>
+        </Link>
 
-        <button type="button" onClick={() => openPath("/trainings")} style={styles.logoButton} aria-label="Go to trainings">
-          <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
-        </button>
+        <Link href="/trainings" className="endurance-logo" aria-label="Endurance home">
+          <span className="endurance-logo-pulse">⌁</span>
+          <span>ENDURANCE</span>
+        </Link>
 
-        <button type="button" onClick={signOut} style={styles.signOutButton} aria-label="Sign out" title="Sign out">
-          <svg viewBox="0 0 24 24" aria-hidden="true" style={styles.signOutIcon}>
-            <path d="M10 7.5V6.25A2.25 2.25 0 0 1 12.25 4h5.5A2.25 2.25 0 0 1 20 6.25v11.5A2.25 2.25 0 0 1 17.75 20h-5.5A2.25 2.25 0 0 1 10 17.75V16.5" />
-            <path d="M4 12h10.75" />
-            <path d="M11.5 8.75 14.75 12l-3.25 3.25" />
-          </svg>
+        <button type="button" onClick={signOut} className="endurance-signout" aria-label="Sign out">
+          ↪
         </button>
       </div>
 
-      <div style={styles.menuShell}>
+      <div className="endurance-menu-row">
         <button
           type="button"
-          onClick={() => setMenuOpen((value) => !value)}
-          style={menuOpen ? styles.menuButtonOpen : styles.menuButton}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
+          onClick={() => setOpen((value) => !value)}
+          className="endurance-menu-button"
+          aria-expanded={open}
         >
-          <span style={styles.hamburger}>☰</span>
+          <span className="endurance-menu-icon">☰</span>
           <span>Menu</span>
-          <span style={styles.chevron}>{menuOpen ? "⌃" : "⌄"}</span>
-          {menuBadgeCount > 0 ? <span style={styles.menuBadge}>{menuBadgeCount > 99 ? "99+" : menuBadgeCount}</span> : null}
+          <span className="endurance-menu-chevron">⌄</span>
+          {unreadCount > 0 && <span className="endurance-menu-badge">{unreadCount}</span>}
         </button>
-
-        {menuOpen ? (
-          <div style={styles.menuPanel}>
-            {menuItems.map((item) => (
-              <button key={item.href} type="button" onClick={() => openPath(item.href)} style={styles.menuItem}>
-                <span style={styles.menuIcon}>{item.icon}</span>
-                <span style={styles.menuText}>
-                  <strong>{item.label}</strong>
-                  <small>{item.description}</small>
-                </span>
-                {item.badge > 0 ? <span style={styles.itemBadge}>{item.badge > 99 ? "99+" : item.badge}</span> : <span style={styles.menuArrow}>›</span>}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
+
+      {open && (
+        <nav className="endurance-menu-panel">
+          {items.map(([key, href, label]) => (
+            <Link
+              key={key}
+              href={href}
+              className={active === key ? "is-active" : ""}
+              onClick={() => setOpen(false)}
+            >
+              <span>{label}</span>
+              {key === "notifications" && unreadCount > 0 && (
+                <strong className="endurance-small-badge">{unreadCount}</strong>
+              )}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }
-
-function getInitials(value) {
-  return (
-    String(value)
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "E"
-  );
-}
-
-const baseButton = { border: 0, cursor: "pointer", fontWeight: 950 };
-
-const styles = {
-  header: { width: "100%", maxWidth: "100%", display: "grid", justifyItems: "center", gap: 12, position: "relative", zIndex: 20, overflow: "visible" },
-  headerCompact: { width: "100%", maxWidth: "100%", display: "grid", justifyItems: "center", gap: 12, position: "relative", zIndex: 20, overflow: "visible" },
-  topRow: { width: "100%", maxWidth: "100%", display: "grid", gridTemplateColumns: "48px minmax(0, 1fr) 48px", alignItems: "center", gap: 8, boxSizing: "border-box" },
-  logoButton: { ...baseButton, background: "transparent", padding: 0, lineHeight: 0, justifySelf: "center", minWidth: 0 },
-  logo: { width: "min(250px, 62vw)", maxWidth: "100%", height: "auto", display: "block", filter: "drop-shadow(0 12px 34px rgba(228,239,22,0.13))" },
-  menuShell: { position: "relative", display: "grid", justifyItems: "center", width: "100%", maxWidth: "100%" },
-  menuButton: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.20)", background: "linear-gradient(145deg, rgba(20,24,31,0.88), rgba(7,10,14,0.82))", color: "white", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 18px 44px rgba(0,0,0,0.26)", backdropFilter: "blur(14px)" },
-  menuButtonOpen: { ...baseButton, position: "relative", minWidth: 140, height: 46, borderRadius: 999, border: "1px solid rgba(228,239,22,0.38)", background: "rgba(228,239,22,0.10)", color: "#e4ef16", fontSize: 16, padding: "0 16px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 0 0 1px rgba(228,239,22,0.06), 0 18px 44px rgba(0,0,0,0.28)", backdropFilter: "blur(14px)" },
-  menuBadge: { position: "absolute", top: -8, right: -8, minWidth: 23, height: 23, padding: "0 6px", borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#070a0f", border: "2px solid #05070a", fontSize: 11, fontWeight: 950, boxShadow: "0 0 18px rgba(228,239,22,0.22)" },
-  hamburger: { fontSize: 19, lineHeight: 1 },
-  chevron: { fontSize: 18, lineHeight: 1, opacity: 0.9 },
-  menuPanel: { position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: "min(390px, calc(100vw - 32px))", borderRadius: 24, overflow: "hidden", background: "linear-gradient(145deg, rgba(17,21,28,0.98), rgba(5,7,10,0.98))", border: "1px solid rgba(255,255,255,0.10)", boxShadow: "0 28px 90px rgba(0,0,0,0.48)", backdropFilter: "blur(18px)", zIndex: 50 },
-  menuItem: { ...baseButton, width: "100%", minHeight: 68, display: "grid", gridTemplateColumns: "44px minmax(0, 1fr) 34px", alignItems: "center", gap: 12, padding: "10px 14px", background: "transparent", color: "white", borderBottom: "1px solid rgba(255,255,255,0.075)", textAlign: "left" },
-  menuIcon: { width: 42, height: 42, borderRadius: 15, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.09)", border: "1px solid rgba(228,239,22,0.17)", color: "#e4ef16", fontSize: 20 },
-  menuText: { display: "grid", gap: 3, minWidth: 0 },
-  menuArrow: { color: "rgba(255,255,255,0.58)", fontSize: 28, lineHeight: 1, justifySelf: "end" },
-  itemBadge: { minWidth: 26, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: "#e4ef16", color: "#070a0f", fontSize: 11, fontWeight: 950, justifySelf: "end" },
-  avatarButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.70)", background: "rgba(228,239,22,0.07)", display: "grid", placeItems: "center", overflow: "hidden", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.10), 0 0 22px rgba(228,239,22,0.14), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "start" },
-  avatarImage: { width: "100%", height: "100%", objectFit: "cover" },
-  avatarFallback: { color: "#e4ef16", fontWeight: 950, fontSize: 13 },
-  signOutButton: { ...baseButton, width: 46, height: 46, borderRadius: 999, border: "2px solid rgba(228,239,22,0.58)", background: "rgba(228,239,22,0.055)", color: "#e4ef16", display: "grid", placeItems: "center", padding: 0, boxShadow: "0 0 0 1px rgba(228,239,22,0.08), 0 0 22px rgba(228,239,22,0.13), 0 12px 34px rgba(0,0,0,0.26)", justifySelf: "end" },
-  signOutIcon: { width: 27, height: 27, fill: "none", stroke: "#e4ef16", strokeWidth: 2.35, strokeLinecap: "round", strokeLinejoin: "round", filter: "drop-shadow(0 0 8px rgba(228,239,22,0.30))" },
-};
