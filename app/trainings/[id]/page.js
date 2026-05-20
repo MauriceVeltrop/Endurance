@@ -10,6 +10,7 @@ import PlanningPoll from "../../../components/trainings/PlanningPoll";
 import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
 import { createNotification, createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
+import BottomNav from "../../../components/BottomNav";
 
 const sportLabels = {
   running: "Running",
@@ -1201,7 +1202,9 @@ export default function TrainingDetailPage() {
           </>
         ) : null}
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
