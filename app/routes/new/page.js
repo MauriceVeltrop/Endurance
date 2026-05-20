@@ -10,7 +10,8 @@ import OSMRouteMap from "../../../components/OSMRouteMap";
 import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
-import { parseGpxText, formatRoutePointSummary, haversineMeters } from "../../../lib/gpxUtils";
+import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
+import { calculateRouteMetrics, estimateTimeText } from "../../../lib/routeMetrics";
 
 const FALLBACK_ROUTE_SPORTS = [
   "running",
@@ -103,6 +104,15 @@ function initialForm() {
 }
 
 function routeProfileFor(sportId) {
+
+  useEffect(() => {
+    if (!autoReroute || form.method !== "draw") return;
+    const pts = normalizeRoutePoints(form.route_points);
+    if (pts.length < 2) return;
+    const timeout = window.setTimeout(() => rerouteDrawnRoute(), 900);
+    return () => window.clearTimeout(timeout);
+  }, [autoReroute, form.method, form.route_points?.point_count]);
+
   return (
     SPORT_ROUTE_PROFILES[sportId] || {
       title: `${getSportLabel(sportId)} route profile`,
@@ -122,47 +132,13 @@ function normalizeRoutePoints(routePoints) {
 
 
 function routeMetricsFromPoints(points) {
-  const normalized = normalizeRoutePoints(points);
-
-  if (normalized.length < 2) {
-    return {
-      distance_km: "",
-      elevation_gain_m: "",
-    };
-  }
-
-  let distanceMeters = 0;
-  let elevationGain = 0;
-
-  for (let index = 1; index < normalized.length; index += 1) {
-    distanceMeters += haversineMeters(normalized[index - 1], normalized[index]);
-
-    const prevEle = Number(normalized[index - 1].ele);
-    const nextEle = Number(normalized[index].ele);
-
-    if (Number.isFinite(prevEle) && Number.isFinite(nextEle)) {
-      const diff = nextEle - prevEle;
-      if (diff > 1) elevationGain += diff;
-    }
-  }
-
-  return {
-    distance_km: Number((distanceMeters / 1000).toFixed(2)),
-    elevation_gain_m: Math.round(elevationGain),
-  };
+  return calculateRouteMetrics(points);
 }
 
-function makeRoutePointPayload(points) {
+function makeRoutePointPayload(points, source = "draw") {
   const normalized = normalizeRoutePoints(points);
-
-  return {
-    points: normalized,
-    point_count: normalized.length,
-    distance_km: routeMetricsFromPoints(normalized).distance_km || null,
-    elevation_gain_m: routeMetricsFromPoints(normalized).elevation_gain_m || 0,
-    drawn_at: new Date().toISOString(),
-    source: "draw",
-  };
+  const metrics = calculateRouteMetrics(normalized);
+  return { points: normalized, point_count: normalized.length, distance_km: metrics.distance_km || null, elevation_gain_m: metrics.elevation_gain_m || 0, elevation_loss_m: metrics.elevation_loss_m || 0, max_elevation_m: metrics.max_elevation_m || null, drawn_at: new Date().toISOString(), source };
 }
 
 export default function NewRoutePage() {
@@ -175,6 +151,11 @@ export default function NewRoutePage() {
   const [message, setMessage] = useState("");
   const [form, setForm] = useState(initialForm());
   const [drawInsertMode, setDrawInsertMode] = useState(false);
+  const [drawLayer, setDrawLayer] = useState("light");
+  const [autoReroute, setAutoReroute] = useState(false);
+  const [routingStatus, setRoutingStatus] = useState("idle");
+  const [routingError, setRoutingError] = useState("");
+  const [routedPayload, setRoutedPayload] = useState(null);
 
   const selectedSport = useMemo(
     () => availableSports.find((sport) => sport.id === form.sport_id) || null,
@@ -316,15 +297,10 @@ export default function NewRoutePage() {
 
   function handleDrawPointsChange(points) {
     const metrics = routeMetricsFromPoints(points);
-    const payload = makeRoutePointPayload(points);
-
-    setForm((current) => ({
-      ...current,
-      method: "draw",
-      route_points: payload,
-      distance_km: metrics.distance_km ? String(metrics.distance_km) : current.distance_km,
-      elevation_gain_m: metrics.elevation_gain_m ? String(metrics.elevation_gain_m) : current.elevation_gain_m,
-    }));
+    const payload = makeRoutePointPayload(points, "draw");
+    setRoutedPayload(null);
+    setRoutingError("");
+    setForm((current) => ({ ...current, method: "draw", route_points: payload, distance_km: metrics.distance_km ? String(metrics.distance_km) : current.distance_km, elevation_gain_m: metrics.elevation_gain_m ? String(metrics.elevation_gain_m) : current.elevation_gain_m }));
   }
 
   function undoDrawPoint() {
@@ -390,6 +366,23 @@ export default function NewRoutePage() {
   function removeDrawPoint(indexToRemove) {
     const currentPoints = normalizeRoutePoints(form.route_points);
     handleDrawPointsChange(currentPoints.filter((_, index) => index !== indexToRemove));
+  }
+
+
+  async function rerouteDrawnRoute() {
+    const waypoints = normalizeRoutePoints(form.route_points);
+    if (waypoints.length < 2) { setMessage("Add at least two points before rerouting."); return null; }
+    setRoutingStatus("routing"); setRoutingError("");
+    try {
+      const response = await fetch("/api/routes/reroute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport_id: form.sport_id, points: waypoints }) });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "Could not reroute.");
+      setRoutedPayload(data.route_points);
+      setForm((current) => ({ ...current, route_points: { ...data.route_points, waypoints }, distance_km: data.distance_km ? String(data.distance_km) : current.distance_km, elevation_gain_m: data.elevation_gain_m ? String(data.elevation_gain_m) : current.elevation_gain_m }));
+      setRoutingStatus("done"); setMessage(`Route snapped to roads/paths using ${data.profile}.`); return data;
+    } catch (error) {
+      console.error("Reroute failed", error); setRoutingStatus("error"); setRoutingError(error?.message || "Reroute failed. Straight line route remains available."); setMessage(error?.message || "Reroute failed. Straight line route remains available."); return null;
+    }
   }
 
   async function saveRoute() {
@@ -602,10 +595,20 @@ export default function NewRoutePage() {
                         <button type="button" onClick={undoDrawPoint} disabled={!normalizeRoutePoints(form.route_points).length}>
                           Undo
                         </button>
+                        <button type="button" onClick={rerouteDrawnRoute} disabled={normalizeRoutePoints(form.route_points).length < 2 || routingStatus === "routing"}>
+                          {routingStatus === "routing" ? "Routing..." : "Reroute"}
+                        </button>
                         <button type="button" onClick={clearDrawPoints} disabled={!normalizeRoutePoints(form.route_points).length}>
                           Clear
                         </button>
                       </div>
+                    </div>
+                  ) : null}
+
+                  {form.method === "draw" ? (
+                    <div className="route-routing-panel">
+                      <div><span>Routing mode</span><strong>{autoReroute ? "Auto reroute on" : "Manual reroute"}</strong><small>{routingError || "Uses OpenRouteService when configured. Falls back to drawn lines if routing fails."}</small></div>
+                      <label><input type="checkbox" checked={autoReroute} onChange={(event) => setAutoReroute(event.target.checked)} /> Auto reroute</label>
                     </div>
                   ) : null}
 
@@ -632,11 +635,15 @@ export default function NewRoutePage() {
 
                   {form.method === "draw" ? (
                     <RouteDrawMap
-                      points={normalizeRoutePoints(form.route_points)}
+                      points={normalizeRoutePoints(form.route_points?.waypoints || form.route_points)}
+                      routedPoints={normalizeRoutePoints(routedPayload || form.route_points)}
                       onChange={handleDrawPointsChange}
-                      height={390}
+                      height={430}
                       title={form.title || "Draw route"}
                       insertMode={drawInsertMode}
+                      layer={drawLayer}
+                      onLayerChange={setDrawLayer}
+                      routeMode={routedPayload || form.route_points?.source === "openrouteservice" ? "routed" : "drawn"}
                     />
                   ) : (
                     <OSMRouteMap
@@ -652,8 +659,8 @@ export default function NewRoutePage() {
 
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
-                    <span><b>{form.elevation_gain_m || "—"}</b>m</span>
-                    <span><b>{getSportLabel(form.sport_id)}</b>sport</span>
+                    <span><b>{form.elevation_gain_m || "—"}</b>m gain</span>
+                    <span><b>{estimateTimeText(form.distance_km, form.sport_id)}</b>est. time</span>
                   </div>
 
                   {form.method === "draw" && normalizeRoutePoints(form.route_points).length ? (
