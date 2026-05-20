@@ -1086,3 +1086,51 @@ main {
   min-width: 0;
 }
 
+
+/* ===== ROUTE FEED MATCHES TRAINING FEED ===== */
+.route-feed-card .training-card-media {
+  position: relative;
+  background: rgba(230,255,0,0.06);
+  border: 1px solid rgba(230,255,0,0.10);
+}
+
+.route-card-map {
+  display: block;
+  min-height: 190px;
+}
+
+.route-card-map .leaflet-container {
+  background: #071008;
+}
+
+.route-card-map-label {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(5,8,5,0.76);
+  border: 1px solid rgba(230,255,0,0.24);
+  color: var(--endurance-lime);
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(10px);
+}
+
+.route-card-description {
+  margin: 0;
+  color: rgba(255,255,255,0.62);
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
+.primary-action.small,
+.secondary-action.small {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
