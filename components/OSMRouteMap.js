@@ -99,7 +99,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
           }).addTo(mapRef.current);
 
           if (compact && mapRef.current.getPane("tilePane")) {
-            mapRef.current.getPane("tilePane").style.filter = "brightness(0.55) saturate(0.85) contrast(1.1)";
+            mapRef.current.getPane("tilePane").style.filter = "brightness(0.52) saturate(0.8) contrast(1.12)";
           }
         }
 
@@ -152,7 +152,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
           mapRef.current.invalidateSize(true);
           mapRef.current.fitBounds(bounds, {
-            padding: compact ? [18, 18] : [28, 28],
+            padding: compact ? [14, 14] : [28, 28],
             maxZoom: compact ? 14 : 15,
             animate: false,
           });
@@ -198,7 +198,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
   if (points.length < 2) {
     return (
-      <div style={compact ? { ...styles.empty, minHeight: height } : styles.empty}>
+      <div style={compact ? { ...styles.empty, minHeight: height, borderRadius: 0 } : styles.empty}>
         <strong>No map data yet</strong>
         <span>Import a GPX file to show this route on OpenStreetMap.</span>
       </div>
@@ -207,7 +207,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
   return (
     <div style={compact ? styles.compactWrapper : styles.wrapper}>
-      <div ref={containerRef} style={{ ...styles.map, height, minHeight: height, borderRadius: compact ? 0 : styles.map.borderRadius }} />
+      <div ref={containerRef} style={{ ...styles.map, height, minHeight: height, borderRadius: compact ? 0 : styles.map.borderRadius, border: compact ? 0 : styles.map.border }} />
 
       {showLegend ? (
       <div style={styles.legend}>
@@ -306,16 +306,16 @@ const styles = {
     inset: 0,
     pointerEvents: "none",
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.26)), radial-gradient(circle at 74% 12%, rgba(228,239,22,0.13), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.32)), radial-gradient(circle at 72% 18%, rgba(228,239,22,0.12), transparent 36%)",
   },
   compactError: {
     position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    borderRadius: 16,
-    padding: 10,
-    background: "rgba(10,12,10,0.78)",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    borderRadius: 14,
+    padding: 9,
+    background: "rgba(10,12,10,0.80)",
     border: "1px solid rgba(255,255,255,0.12)",
     color: "rgba(255,255,255,0.82)",
     fontWeight: 850,
