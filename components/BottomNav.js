@@ -14,19 +14,29 @@ function itemMatchesPath(item, pathname) {
 export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [role, setRole] = useState(null);
 
   useEffect(() => {
-    if (externalUnreadCount !== null && externalUnreadCount !== undefined) {
-      setUnreadCount(Number(externalUnreadCount) || 0);
-      return;
-    }
-
     let alive = true;
 
-    async function loadUnreadCount() {
+    async function loadNavState() {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
+
       if (!user?.id || !alive) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (alive) setRole(profile?.role || "user");
+
+      if (externalUnreadCount !== null && externalUnreadCount !== undefined) {
+        if (alive) setUnreadCount(Number(externalUnreadCount) || 0);
+        return;
+      }
 
       const [{ count: notificationCount }, { count: inviteCount }] = await Promise.all([
         supabase
@@ -44,23 +54,28 @@ export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
       if (alive) setUnreadCount((notificationCount || 0) + (inviteCount || 0));
     }
 
-    loadUnreadCount();
+    loadNavState();
 
     return () => {
       alive = false;
     };
   }, [externalUnreadCount]);
 
-  const allItems = useMemo(
-    () => [
+  const allItems = useMemo(() => {
+    const items = [
       { href: "/trainings", label: "Trainings", icon: "⌁", match: ["/trainings"] },
       { href: "/routes", label: "Routes", icon: "◇", match: ["/routes"] },
       { href: "/workouts", label: "Workouts", icon: "✦", match: ["/workouts"] },
       { href: "/team", label: "Team", icon: "👥", match: ["/team"] },
       { href: "/notifications", label: "Inbox", icon: "✉", match: ["/notifications", "/inbox"] },
-    ],
-    []
-  );
+    ];
+
+    if (role === "admin" || role === "moderator") {
+      items.push({ href: "/admin", label: "Admin", icon: "⚙", match: ["/admin"] });
+    }
+
+    return items;
+  }, [role]);
 
   const visibleItems = allItems.filter((item) => !itemMatchesPath(item, pathname));
 
