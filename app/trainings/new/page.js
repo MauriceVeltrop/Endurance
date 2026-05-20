@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import BottomNav from "../../../components/BottomNav";
 import ImageCropperModal from "../../../components/ImageCropperModal";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
@@ -1253,7 +1254,9 @@ export default function CreateTrainingPage() {
           onConfirm={confirmTrainingPhotoCrop}
         />
       ) : null}
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
