@@ -1059,3 +1059,30 @@ body {
     max-width: min(220px, calc(100vw - 140px));
   }
 }
+
+
+/* ===== NO TOP MENU + UNIVERSAL BOTTOM NAV ===== */
+.endurance-menu-row,
+.endurance-menu-panel,
+.endurance-menu-button {
+  display: none !important;
+}
+
+.endurance-header {
+  padding-bottom: 14px;
+}
+
+.endurance-page,
+.endurance-shell-page,
+main {
+  padding-bottom: max(112px, calc(92px + env(safe-area-inset-bottom)));
+}
+
+.endurance-bottom-nav {
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+}
+
+.endurance-bottom-nav a {
+  min-width: 0;
+}
+
