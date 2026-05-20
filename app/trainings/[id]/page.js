@@ -173,7 +173,128 @@ function getWorkoutBlockCount(workout) {
   return 0;
 }
 
-function WeatherForecastCard({ training }
+function WeatherForecastCard({ training }) {
+  const [status, setStatus] = useState("idle");
+  const [forecast, setForecast] = useState(null);
+
+  const startDate = getWeatherStartDate(training);
+  const location = training?.start_location || "";
+  const latitude = Number(training?.latitude);
+  const longitude = Number(training?.longitude);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+  const canTryForecast = Boolean(startDate && location && isWithinWeatherWindow(startDate));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForecast() {
+      setForecast(null);
+
+      if (!startDate || !location) {
+        setStatus("missing");
+        return;
+      }
+
+      if (!isWithinWeatherWindow(startDate)) {
+        setStatus("too_early");
+        return;
+      }
+
+      try {
+        setStatus("loading");
+
+        const params = new URLSearchParams({
+          time: startDate.toISOString(),
+          location,
+        });
+
+        if (hasCoordinates) {
+          params.set("latitude", String(latitude));
+          params.set("longitude", String(longitude));
+        }
+
+        const response = await fetch(`/api/weather?${params.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok || !data?.ok || !data?.forecast) {
+          if (!cancelled) setStatus("unavailable");
+          return;
+        }
+
+        if (!cancelled) {
+          setForecast(data.forecast);
+          setStatus("ready");
+        }
+      } catch (error) {
+        console.error("Weather forecast error", error);
+        if (!cancelled) setStatus("unavailable");
+      }
+    }
+
+    loadForecast();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    training?.id,
+    training?.start_location,
+    training?.latitude,
+    training?.longitude,
+    training?.starts_at,
+    training?.final_starts_at,
+  ]);
+
+  let body = null;
+
+  if (!startDate) {
+    body = <span style={styles.weatherMuted}>Available after the final start time is set.</span>;
+  } else if (!location) {
+    body = <span style={styles.weatherMuted}>Set a start location to show weather.</span>;
+  } else if (!canTryForecast) {
+    const availableFrom = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    body = (
+      <>
+        <strong style={styles.weatherSoon}>Available soon</strong>
+        <span style={styles.weatherMuted}>
+          From {availableFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} · {startDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </>
+    );
+  } else if (status === "loading") {
+    body = <span style={styles.weatherMuted}>Loading forecast...</span>;
+  } else if (status === "ready" && forecast) {
+    const forecastDate = forecast.forecastTime ? new Date(forecast.forecastTime) : startDate;
+    const night = Boolean(forecast.isNight) || isNightHour(forecastDate);
+
+    body = (
+      <>
+        <div style={styles.weatherMainRow}>
+          <span style={styles.weatherIcon}>{forecast.icon || weatherIcon(forecast.code, forecastDate)}</span>
+          <span style={styles.weatherTemperature}>{forecast.temperature}°C</span>
+        </div>
+        <span style={styles.weatherCondition}>{forecast.condition || weatherCodeText(forecast.code)}</span>
+        <div style={styles.weatherDetails}>
+          <span>☔ {forecast.precipitation ?? "—"}%</span>
+          <span>💨 {forecast.wind} km/h</span>
+          <span>{night ? "🌙 Night" : `☀️ UV ${forecast.uv ?? "—"}`}</span>
+        </div>
+        <span style={styles.weatherSource}>
+          {forecast.source || "Weather forecast"} · indicative hourly forecast
+        </span>
+      </>
+    );
+  } else {
+    body = <span style={styles.weatherMuted}>Forecast unavailable for this location.</span>;
+  }
+
+  return (
+    <div style={{ ...styles.quickCard, ...styles.weatherCard }}>
+      <span>Forecast indication</span>
+      {body}
+    </div>
+  );
+}
 
 function initials(person) {
   return displayName(person)
