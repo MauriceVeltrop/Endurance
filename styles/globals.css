@@ -2276,3 +2276,97 @@ main {
   }
 }
 
+
+/* ===== PRIORITY 4 DRAW ROUTE UX ===== */
+.route-draw-tools-expanded {
+  align-items: flex-start;
+}
+
+.route-draw-tools-expanded > div:last-child {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.route-draw-tools-expanded button.active {
+  background: rgba(230,255,0,0.16);
+  color: var(--endurance-lime);
+  border-color: rgba(230,255,0,0.32);
+}
+
+.route-point-list {
+  margin-top: 12px;
+  border-radius: 24px;
+  padding: 12px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.route-point-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  color: white;
+}
+
+.route-point-list-head small {
+  color: rgba(255,255,255,0.50);
+  font-weight: 800;
+}
+
+.route-point-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+}
+
+.route-point-row span {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(230,255,0,0.12);
+  color: var(--endurance-lime);
+  font-weight: 1000;
+}
+
+.route-point-row small {
+  color: rgba(255,255,255,0.62);
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-point-row button {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  color: white;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-weight: 900;
+}
+
+@media (max-width: 520px) {
+  .route-point-list-head {
+    display: grid;
+  }
+
+  .route-point-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .route-point-row button {
+    grid-column: 1 / -1;
+  }
+}
+
