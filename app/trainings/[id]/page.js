@@ -78,7 +78,10 @@ function formatEffort(training) {
   return training.intensity_label || "Not set";
 }
 
-function mapsUrl(location) {
+function mapsUrl(location, latitude, longitude) {
+  if (Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
+    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  }
   if (!location) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
@@ -123,7 +126,7 @@ function isNightHour(date) {
 
 function weatherIcon(code, date) {
   if (code === 0) return isNightHour(date) ? "🌙" : "☀️";
-  if ([1, 2].includes(code)) return "⛅";
+  if ([1, 2].includes(code)) return isNightHour(date) ? "🌙" : "⛅";
   if (code === 3) return "☁️";
   if ([45, 48].includes(code)) return "🌫️";
   if ([51, 53, 55, 56, 57].includes(code)) return "🌦️";
@@ -285,12 +288,12 @@ function WeatherForecastCard({ training }) {
       </>
     );
   } else {
-    body = <span style={styles.weatherMuted}>Forecast unavailable for this location.</span>;
+    body = <span style={styles.weatherMuted}>Forecast unavailable. Save this training with current-location coordinates.</span>;
   }
 
   return (
     <div style={{ ...styles.quickCard, ...styles.weatherCard }}>
-      <span>Forecast indication</span>
+      <span>{forecast?.providerLabel ? `${forecast.providerLabel} indication` : "Forecast indication"}</span>
       {body}
     </div>
   );
