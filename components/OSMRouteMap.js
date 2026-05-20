@@ -99,7 +99,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
           }).addTo(mapRef.current);
 
           if (compact && mapRef.current.getPane("tilePane")) {
-            mapRef.current.getPane("tilePane").style.filter = "brightness(0.52) saturate(0.8) contrast(1.12)";
+            mapRef.current.getPane("tilePane").style.filter = "brightness(0.48) saturate(0.85) contrast(1.16)";
           }
         }
 
