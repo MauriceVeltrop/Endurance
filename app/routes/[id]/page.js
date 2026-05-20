@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
@@ -367,7 +368,9 @@ export default function RouteDetailPage() {
           </>
         ) : null}
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
