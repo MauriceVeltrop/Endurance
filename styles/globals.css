@@ -1134,3 +1134,66 @@ main {
   font-size: 14px;
 }
 
+
+/* ===== COMPACT ROUTE CARDS ===== */
+.route-feed-card-compact {
+  grid-template-columns: 112px 1fr;
+  gap: 13px;
+  padding: 12px;
+}
+
+.route-feed-card-compact .training-card-media,
+.route-card-map-compact {
+  min-height: 150px;
+  max-height: 150px;
+  border-radius: 22px;
+}
+
+.route-feed-card-compact .training-card-body {
+  gap: 8px;
+}
+
+.route-feed-card-compact .training-card-badges {
+  gap: 7px;
+}
+
+.route-feed-card-compact .sport-badge,
+.route-feed-card-compact .status-badge {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.route-feed-card-compact .training-card-title {
+  font-size: 25px;
+}
+
+.route-feed-card-compact .training-card-meta {
+  gap: 4px;
+  font-size: 14px;
+}
+
+.route-feed-card-compact .route-card-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.route-feed-card-compact .training-card-actions {
+  margin-top: 2px;
+}
+
+.route-feed-card-compact .primary-action.small,
+.route-feed-card-compact .secondary-action.small {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.route-feed-card-compact .route-card-map-label {
+  left: 10px;
+  bottom: 10px;
+  padding: 6px 9px;
+  font-size: 10px;
+}
+
