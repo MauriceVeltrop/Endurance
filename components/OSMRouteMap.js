@@ -57,7 +57,7 @@ function loadLeaflet() {
   });
 }
 
-export default function OSMRouteMap({ routePoints, title = "Route" }) {
+export default function OSMRouteMap({ routePoints, title = "Route", compact = false, interactive = true, showLegend = true, height = 390 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const routeLayerRef = useRef(null);
@@ -81,12 +81,15 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
 
         if (!mapRef.current) {
           mapRef.current = L.map(containerRef.current, {
-            zoomControl: true,
-            attributionControl: true,
+            zoomControl: interactive,
+            attributionControl: !compact,
             scrollWheelZoom: false,
-            doubleClickZoom: true,
-            dragging: true,
-            tap: true,
+            doubleClickZoom: interactive,
+            dragging: interactive,
+            tap: interactive,
+            touchZoom: interactive,
+            boxZoom: interactive,
+            keyboard: interactive,
           });
 
           L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -94,6 +97,10 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
             maxZoom: 19,
             crossOrigin: true,
           }).addTo(mapRef.current);
+
+          if (compact && mapRef.current.getPane("tilePane")) {
+            mapRef.current.getPane("tilePane").style.filter = "brightness(0.55) saturate(0.85) contrast(1.1)";
+          }
         }
 
         if (routeLayerRef.current) {
@@ -145,8 +152,8 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
 
           mapRef.current.invalidateSize(true);
           mapRef.current.fitBounds(bounds, {
-            padding: [28, 28],
-            maxZoom: 15,
+            padding: compact ? [18, 18] : [28, 28],
+            maxZoom: compact ? 14 : 15,
             animate: false,
           });
         };
@@ -178,7 +185,7 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
         resizeObserverRef.current = null;
       }
     };
-  }, [points, title]);
+  }, [points, title, compact, interactive]);
 
   useEffect(() => {
     return () => {
@@ -191,7 +198,7 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
 
   if (points.length < 2) {
     return (
-      <div style={styles.empty}>
+      <div style={compact ? { ...styles.empty, minHeight: height } : styles.empty}>
         <strong>No map data yet</strong>
         <span>Import a GPX file to show this route on OpenStreetMap.</span>
       </div>
@@ -199,9 +206,10 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
   }
 
   return (
-    <div style={styles.wrapper}>
-      <div ref={containerRef} style={styles.map} />
+    <div style={compact ? styles.compactWrapper : styles.wrapper}>
+      <div ref={containerRef} style={{ ...styles.map, height, minHeight: height, borderRadius: compact ? 0 : styles.map.borderRadius }} />
 
+      {showLegend ? (
       <div style={styles.legend}>
         <span style={styles.legendItem}>
           <span style={styles.startDot} />
@@ -215,8 +223,11 @@ export default function OSMRouteMap({ routePoints, title = "Route" }) {
 
         <span style={styles.osmLabel}>OpenStreetMap</span>
       </div>
+      ) : null}
 
-      {error ? <div style={styles.error}>{error}</div> : null}
+      {compact ? <div style={styles.compactShade} /> : null}
+
+      {error ? <div style={compact ? styles.compactError : styles.error}>{error}</div> : null}
     </div>
   );
 }
@@ -225,6 +236,13 @@ const styles = {
   wrapper: {
     display: "grid",
     gap: 12,
+  },
+  compactWrapper: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    overflow: "hidden",
+    background: "linear-gradient(145deg, #101811, #050705)",
   },
   map: {
     width: "100%",
@@ -282,6 +300,26 @@ const styles = {
     display: "grid",
     alignContent: "center",
     gap: 8,
+  },
+  compactShade: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    background:
+      "linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.26)), radial-gradient(circle at 74% 12%, rgba(228,239,22,0.13), transparent 36%)",
+  },
+  compactError: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderRadius: 16,
+    padding: 10,
+    background: "rgba(10,12,10,0.78)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: 850,
+    fontSize: 12,
   },
   error: {
     borderRadius: 18,
