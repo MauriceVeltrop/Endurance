@@ -2132,3 +2132,147 @@ main {
   }
 }
 
+
+/* ===== PRIORITY 3 DRAW ROUTE FOUNDATION ===== */
+.route-draw-map-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(230,255,0,0.12);
+  background: #05070a;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.30);
+}
+
+.route-draw-map {
+  width: 100%;
+  background: #05070a;
+}
+
+.route-draw-map-toolbar {
+  position: absolute;
+  z-index: 600;
+  left: 12px;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 20px;
+  background: rgba(5,8,5,0.76);
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.route-draw-map-toolbar span,
+.route-draw-map-toolbar small {
+  display: block;
+  font-weight: 950;
+}
+
+.route-draw-map-toolbar span {
+  color: white;
+}
+
+.route-draw-map-toolbar small {
+  color: rgba(255,255,255,0.58);
+  text-align: right;
+}
+
+.route-draw-marker {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.94);
+  border: 4px solid rgba(5,8,5,0.90);
+  color: #05070a;
+  font-weight: 1000;
+  box-shadow: 0 0 0 2px rgba(230,255,0,0.26), 0 0 22px rgba(230,255,0,0.20);
+}
+
+.route-draw-marker-start {
+  background: var(--endurance-lime);
+}
+
+.route-draw-marker-finish {
+  background: white;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.35), 0 0 22px rgba(255,255,255,0.18);
+}
+
+.route-draw-error {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 700;
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(120,20,20,0.45);
+  border: 1px solid rgba(255,80,80,0.22);
+  color: white;
+  font-weight: 850;
+}
+
+.create-route-draw-tools {
+  border-radius: 24px;
+  padding: 16px;
+  border: 1px solid rgba(230,255,0,0.18);
+  background: rgba(230,255,0,0.06);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.create-route-draw-tools strong,
+.create-route-draw-tools span {
+  display: block;
+}
+
+.create-route-draw-tools strong {
+  color: white;
+}
+
+.create-route-draw-tools span {
+  color: rgba(255,255,255,0.58);
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.create-route-draw-tools > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.create-route-draw-tools button {
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: white;
+  padding: 0 12px;
+  font-weight: 1000;
+}
+
+.create-route-draw-tools button:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 460px) {
+  .route-draw-map-toolbar {
+    display: grid;
+  }
+
+  .route-draw-map-toolbar small {
+    text-align: left;
+  }
+
+  .create-route-draw-tools {
+    display: grid;
+  }
+}
+
