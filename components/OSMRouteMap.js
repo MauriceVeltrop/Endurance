@@ -57,13 +57,14 @@ function loadLeaflet() {
   });
 }
 
-export default function OSMRouteMap({ routePoints, title = "Route", compact = false, interactive = true, showLegend = true, height = 390 }) {
+export default function OSMRouteMap({ routePoints, title = "Route", compact = false, interactive = true, showLegend = true, height = 390, className = "", showFullscreen = false }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const routeLayerRef = useRef(null);
   const resizeObserverRef = useRef(null);
 
   const [error, setError] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
 
   const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
 
@@ -185,7 +186,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
         resizeObserverRef.current = null;
       }
     };
-  }, [points, title, compact, interactive]);
+  }, [points, title, compact, interactive, fullscreen]);
 
   useEffect(() => {
     return () => {
@@ -206,8 +207,8 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
   }
 
   return (
-    <div style={compact ? styles.compactWrapper : styles.wrapper}>
-      <div ref={containerRef} style={{ ...styles.map, height, minHeight: height, borderRadius: compact ? 0 : styles.map.borderRadius, border: compact ? 0 : styles.map.border }} />
+    <div className={className} style={fullscreen ? styles.fullscreenWrapper : compact ? styles.compactWrapper : styles.wrapper}>
+      <div ref={containerRef} style={{ ...styles.map, height: fullscreen ? "100%" : height, minHeight: fullscreen ? "100%" : height, borderRadius: fullscreen || compact ? 0 : styles.map.borderRadius, border: compact ? 0 : styles.map.border }} />
 
       {showLegend ? (
       <div style={styles.legend}>
@@ -223,6 +224,16 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
         <span style={styles.osmLabel}>OpenStreetMap</span>
       </div>
+      ) : null}
+
+      {showFullscreen ? (
+        <button
+          type="button"
+          onClick={() => setFullscreen((value) => !value)}
+          style={styles.fullscreenButton}
+        >
+          {fullscreen ? "Close map" : "Fullscreen"}
+        </button>
       ) : null}
 
       {compact ? <div style={styles.compactShade} /> : null}
@@ -243,6 +254,12 @@ const styles = {
     height: "100%",
     overflow: "hidden",
     background: "linear-gradient(145deg, #101811, #050705)",
+  },
+  fullscreenWrapper: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9999,
+    background: "#05070a",
   },
   map: {
     width: "100%",
@@ -300,6 +317,20 @@ const styles = {
     display: "grid",
     alignContent: "center",
     gap: 8,
+  },
+  fullscreenButton: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    zIndex: 99999,
+    border: "1px solid rgba(230,255,0,0.30)",
+    background: "rgba(5,8,5,0.82)",
+    color: "#e6ff00",
+    borderRadius: 999,
+    padding: "10px 14px",
+    fontWeight: 1000,
+    cursor: "pointer",
+    backdropFilter: "blur(10px)",
   },
   compactShade: {
     position: "absolute",
