@@ -2,35 +2,81 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import { supabase } from "../lib/supabase";
 
-export default function BottomNav({ unreadCount = 0 }) {
+function itemMatchesPath(item, pathname) {
+  if (!pathname) return false;
+  return item.match.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
   const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const items = [
-    { href: "/trainings", label: "Trainings", icon: "⌁" },
-    { href: "/routes", label: "Routes", icon: "◇" },
-    { href: "/workouts", label: "Workouts", icon: "✦" },
-    { href: "/team", label: "Team", icon: "👥" },
-    { href: "/notifications", label: "Inbox", icon: "✉" },
-  ];
+  useEffect(() => {
+    if (externalUnreadCount !== null && externalUnreadCount !== undefined) {
+      setUnreadCount(Number(externalUnreadCount) || 0);
+      return;
+    }
+
+    let alive = true;
+
+    async function loadUnreadCount() {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user?.id || !alive) return;
+
+      const [{ count: notificationCount }, { count: inviteCount }] = await Promise.all([
+        supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .is("read_at", null),
+        supabase
+          .from("training_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("invitee_id", user.id)
+          .eq("status", "pending"),
+      ]);
+
+      if (alive) setUnreadCount((notificationCount || 0) + (inviteCount || 0));
+    }
+
+    loadUnreadCount();
+
+    return () => {
+      alive = false;
+    };
+  }, [externalUnreadCount]);
+
+  const allItems = useMemo(
+    () => [
+      { href: "/trainings", label: "Trainings", icon: "⌁", match: ["/trainings"] },
+      { href: "/routes", label: "Routes", icon: "◇", match: ["/routes"] },
+      { href: "/workouts", label: "Workouts", icon: "✦", match: ["/workouts"] },
+      { href: "/team", label: "Team", icon: "👥", match: ["/team"] },
+      { href: "/notifications", label: "Inbox", icon: "✉", match: ["/notifications", "/inbox"] },
+    ],
+    []
+  );
+
+  const visibleItems = allItems.filter((item) => !itemMatchesPath(item, pathname));
 
   return (
     <nav className="endurance-bottom-nav" aria-label="Primary navigation">
-      {items.map((item) => {
-        const active = pathname?.startsWith(item.href);
-        return (
-          <Link key={item.href} href={item.href} className={active ? "active" : ""}>
-            <span className="nav-icon">
-              {item.icon}
-              {item.href === "/notifications" && unreadCount > 0 && (
-                <strong className="nav-badge">{unreadCount}</strong>
-              )}
-            </span>
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+      {visibleItems.map((item) => (
+        <Link key={item.href} href={item.href}>
+          <span className="nav-icon">
+            {item.icon}
+            {item.href === "/notifications" && unreadCount > 0 && (
+              <strong className="nav-badge">{unreadCount}</strong>
+            )}
+          </span>
+          <span>{item.label}</span>
+        </Link>
+      ))}
     </nav>
   );
 }

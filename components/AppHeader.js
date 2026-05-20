@@ -12,7 +12,6 @@ function initialsFromName(name = "") {
 export default function AppHeader({ active = "trainings" }) {
   const [profile, setProfile] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -57,14 +56,6 @@ export default function AppHeader({ active = "trainings" }) {
     window.location.href = "/login";
   }
 
-  const items = [
-    ["trainings", "/trainings", "Trainings"],
-    ["routes", "/routes", "Routes"],
-    ["workouts", "/workouts", "Workouts"],
-    ["team", "/team", "Team"],
-    ["notifications", "/notifications", "Inbox"],
-    ["profile", "/profile", "Profile"],
-  ];
 
   const name = profile?.first_name || profile?.name || "Endurance";
 
@@ -91,38 +82,6 @@ export default function AppHeader({ active = "trainings" }) {
           ↪
         </button>
       </div>
-
-      <div className="endurance-menu-row">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="endurance-menu-button"
-          aria-expanded={open}
-        >
-          <span className="endurance-menu-icon">☰</span>
-          <span>Menu</span>
-          <span className="endurance-menu-chevron">⌄</span>
-          {unreadCount > 0 && <span className="endurance-menu-badge">{unreadCount}</span>}
-        </button>
-      </div>
-
-      {open && (
-        <nav className="endurance-menu-panel">
-          {items.map(([key, href, label]) => (
-            <Link
-              key={key}
-              href={href}
-              className={active === key ? "is-active" : ""}
-              onClick={() => setOpen(false)}
-            >
-              <span>{label}</span>
-              {key === "notifications" && unreadCount > 0 && (
-                <strong className="endurance-small-badge">{unreadCount}</strong>
-              )}
-            </Link>
-          ))}
-        </nav>
-      )}
     </header>
   );
 }
