@@ -1,7 +1,7 @@
 // NOTIFICATIONS_V1_PATCH: invite notification helpers available for create-training flow.
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
@@ -135,7 +135,7 @@ function makeTimeOption(overrides = {}) {
   };
 }
 
-export default function CreateTrainingPage() {
+function CreateTrainingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1831,3 +1831,12 @@ const styles = {
     display: "none",
   },
 };
+
+
+export default function CreateTrainingPage() {
+  return (
+    <Suspense fallback={<main className="endurance-page"><section className="endurance-shell endurance-card notification-empty">Loading create training...</section></main>}>
+      <CreateTrainingPageContent />
+    </Suspense>
+  );
+}
