@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
 import { sportOptions } from "../../../lib/sportsConfig";
 import { getSportLabel } from "../../../lib/trainingHelpers";
@@ -335,7 +336,9 @@ export default function NewRoutePage() {
           </form>
         )}
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
