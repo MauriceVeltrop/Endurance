@@ -5,6 +5,33 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const LEAFLET_CSS_ID = "endurance-leaflet-css";
 const LEAFLET_SCRIPT_ID = "endurance-leaflet-script";
 
+const TILE_LAYERS = {
+  dark: {
+    label: "Dark",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution: "&copy; OpenStreetMap &copy; CARTO",
+    maxZoom: 20,
+  },
+  osm: {
+    label: "OSM",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19,
+  },
+  cyclosm: {
+    label: "Cycling",
+    url: "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors, CyclOSM",
+    maxZoom: 20,
+  },
+  topo: {
+    label: "Outdoor",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors, SRTM, OpenTopoMap",
+    maxZoom: 17,
+  },
+};
+
 function getRoutePoints(routePoints) {
   if (!routePoints) return [];
   if (Array.isArray(routePoints)) return routePoints;
@@ -57,14 +84,27 @@ function loadLeaflet() {
   });
 }
 
-export default function OSMRouteMap({ routePoints, title = "Route", compact = false, interactive = true, showLegend = true, height = 390, className = "", showFullscreen = false }) {
+export default function OSMRouteMap({
+  routePoints,
+  title = "Route",
+  compact = false,
+  interactive = true,
+  showLegend = true,
+  height = 390,
+  className = "",
+  showFullscreen = false,
+  showLayerControl = false,
+  defaultLayer = "dark",
+}) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const routeLayerRef = useRef(null);
   const resizeObserverRef = useRef(null);
 
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [layerKey, setLayerKey] = useState(defaultLayer);
 
   const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
 
@@ -80,9 +120,11 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
         const L = await loadLeaflet();
         if (cancelled || !containerRef.current) return;
 
+        const selectedLayer = TILE_LAYERS[layerKey] || TILE_LAYERS.dark;
+
         if (!mapRef.current) {
           mapRef.current = L.map(containerRef.current, {
-            zoomControl: interactive,
+            zoomControl: interactive && !compact,
             attributionControl: !compact,
             scrollWheelZoom: false,
             doubleClickZoom: interactive,
@@ -92,16 +134,26 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
             boxZoom: interactive,
             keyboard: interactive,
           });
+        }
 
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "&copy; OpenStreetMap contributors",
-            maxZoom: 19,
-            crossOrigin: true,
-          }).addTo(mapRef.current);
+        if (tileLayerRef.current) {
+          tileLayerRef.current.remove();
+        }
 
-          if (compact && mapRef.current.getPane("tilePane")) {
-            mapRef.current.getPane("tilePane").style.filter = "brightness(0.48) saturate(0.85) contrast(1.16)";
-          }
+        tileLayerRef.current = L.tileLayer(selectedLayer.url, {
+          attribution: selectedLayer.attribution,
+          maxZoom: selectedLayer.maxZoom,
+          crossOrigin: true,
+        }).addTo(mapRef.current);
+
+        if (selectedLayer === TILE_LAYERS.dark && mapRef.current.getPane("tilePane")) {
+          mapRef.current.getPane("tilePane").style.filter = compact
+            ? "brightness(0.78) saturate(1.05) contrast(1.08)"
+            : "brightness(0.86) saturate(1.05) contrast(1.06)";
+        } else if (mapRef.current.getPane("tilePane")) {
+          mapRef.current.getPane("tilePane").style.filter = compact
+            ? "brightness(0.62) saturate(0.88) contrast(1.12)"
+            : "brightness(0.82) saturate(0.95) contrast(1.08)";
         }
 
         if (routeLayerRef.current) {
@@ -110,40 +162,48 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
         const latLngs = points.map((point) => [point.lat, point.lon]);
         const bounds = L.latLngBounds(latLngs);
-
         const group = L.layerGroup();
 
         L.polyline(latLngs, {
-          color: "#050505",
-          weight: 10,
-          opacity: 0.70,
+          color: "#000000",
+          weight: compact ? 12 : 17,
+          opacity: 0.62,
           lineJoin: "round",
           lineCap: "round",
         }).addTo(group);
 
         L.polyline(latLngs, {
-          color: "#e4ef16",
-          weight: 5,
+          color: "#e6ff00",
+          weight: compact ? 8 : 11,
+          opacity: 0.20,
+          lineJoin: "round",
+          lineCap: "round",
+        }).addTo(group);
+
+        L.polyline(latLngs, {
+          color: "#e6ff00",
+          weight: compact ? 4.5 : 6,
           opacity: 1,
           lineJoin: "round",
           lineCap: "round",
         }).addTo(group);
 
-        L.circleMarker(latLngs[0], {
-          radius: 8,
-          color: "#101406",
-          weight: 3,
-          fillColor: "#e4ef16",
-          fillOpacity: 1,
-        }).bindPopup(`${title}<br/>Start`).addTo(group);
+        const startIcon = L.divIcon({
+          className: "endurance-map-marker-start",
+          html: `<span>${compact ? "" : "START"}</span>`,
+          iconSize: compact ? [18, 18] : [62, 28],
+          iconAnchor: compact ? [9, 9] : [31, 14],
+        });
 
-        L.circleMarker(latLngs[latLngs.length - 1], {
-          radius: 8,
-          color: "#101406",
-          weight: 3,
-          fillColor: "#ffffff",
-          fillOpacity: 1,
-        }).bindPopup(`${title}<br/>Finish`).addTo(group);
+        const finishIcon = L.divIcon({
+          className: "endurance-map-marker-finish",
+          html: `<span>${compact ? "" : "FINISH"}</span>`,
+          iconSize: compact ? [18, 18] : [66, 28],
+          iconAnchor: compact ? [9, 9] : [33, 14],
+        });
+
+        L.marker(latLngs[0], { icon: startIcon }).bindPopup(`${title}<br/>Start`).addTo(group);
+        L.marker(latLngs[latLngs.length - 1], { icon: finishIcon }).bindPopup(`${title}<br/>Finish`).addTo(group);
 
         group.addTo(mapRef.current);
         routeLayerRef.current = group;
@@ -153,13 +213,13 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
           mapRef.current.invalidateSize(true);
           mapRef.current.fitBounds(bounds, {
-            padding: compact ? [14, 14] : [28, 28],
+            padding: fullscreen ? [70, 42] : compact ? [14, 14] : [34, 34],
             maxZoom: compact ? 14 : 15,
             animate: false,
           });
         };
 
-        timeoutIds = [80, 250, 650].map((delay) => window.setTimeout(fit, delay));
+        timeoutIds = [80, 250, 650, 1100].map((delay) => window.setTimeout(fit, delay));
 
         if (resizeObserverRef.current) {
           resizeObserverRef.current.disconnect();
@@ -186,7 +246,7 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
         resizeObserverRef.current = null;
       }
     };
-  }, [points, title, compact, interactive, fullscreen]);
+  }, [points, title, compact, interactive, fullscreen, layerKey]);
 
   useEffect(() => {
     return () => {
@@ -208,22 +268,30 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
   return (
     <div className={className} style={fullscreen ? styles.fullscreenWrapper : compact ? styles.compactWrapper : styles.wrapper}>
-      <div ref={containerRef} style={{ ...styles.map, height: fullscreen ? "100%" : height, minHeight: fullscreen ? "100%" : height, borderRadius: fullscreen || compact ? 0 : styles.map.borderRadius, border: compact ? 0 : styles.map.border }} />
+      <div
+        ref={containerRef}
+        style={{
+          ...styles.map,
+          height: fullscreen ? "100%" : height,
+          minHeight: fullscreen ? "100%" : height,
+          borderRadius: fullscreen || compact ? 0 : styles.map.borderRadius,
+          border: compact ? 0 : styles.map.border,
+        }}
+      />
 
-      {showLegend ? (
-      <div style={styles.legend}>
-        <span style={styles.legendItem}>
-          <span style={styles.startDot} />
-          Start
-        </span>
-
-        <span style={styles.legendItem}>
-          <span style={styles.finishDot} />
-          Finish
-        </span>
-
-        <span style={styles.osmLabel}>OpenStreetMap</span>
-      </div>
+      {showLayerControl && !compact ? (
+        <div style={styles.layerControl}>
+          {Object.entries(TILE_LAYERS).map(([key, layer]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setLayerKey(key)}
+              style={layerKey === key ? styles.layerButtonActive : styles.layerButton}
+            >
+              {layer.label}
+            </button>
+          ))}
+        </div>
       ) : null}
 
       {showFullscreen ? (
@@ -238,6 +306,22 @@ export default function OSMRouteMap({ routePoints, title = "Route", compact = fa
 
       {compact ? <div style={styles.compactShade} /> : null}
 
+      {showLegend ? (
+        <div style={fullscreen ? styles.legendFullscreen : styles.legend}>
+          <span style={styles.legendItem}>
+            <span style={styles.startDot} />
+            Start
+          </span>
+
+          <span style={styles.legendItem}>
+            <span style={styles.finishDot} />
+            Finish
+          </span>
+
+          <span style={styles.osmLabel}>{TILE_LAYERS[layerKey]?.label || "OpenStreetMap"}</span>
+        </div>
+      ) : null}
+
       {error ? <div style={compact ? styles.compactError : styles.error}>{error}</div> : null}
     </div>
   );
@@ -247,6 +331,7 @@ const styles = {
   wrapper: {
     display: "grid",
     gap: 12,
+    position: "relative",
   },
   compactWrapper: {
     position: "relative",
@@ -271,52 +356,37 @@ const styles = {
     background: "linear-gradient(145deg, #101811, #050705)",
     boxShadow: "0 24px 70px rgba(0,0,0,0.34)",
   },
-  legend: {
+  layerControl: {
+    position: "absolute",
+    left: 14,
+    top: 14,
+    zIndex: 999,
     display: "flex",
-    alignItems: "center",
-    gap: 14,
-    flexWrap: "wrap",
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 13,
-    fontWeight: 850,
-  },
-  legendItem: {
-    display: "inline-flex",
-    alignItems: "center",
     gap: 7,
+    flexWrap: "wrap",
+    maxWidth: "calc(100% - 128px)",
   },
-  startDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    background: "#e4ef16",
-    display: "inline-block",
-    boxShadow: "0 0 18px rgba(228,239,22,0.38)",
-  },
-  finishDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    background: "#ffffff",
-    display: "inline-block",
-  },
-  osmLabel: {
-    marginLeft: "auto",
-    color: "#e4ef16",
-    fontWeight: 950,
-  },
-  empty: {
-    minHeight: 240,
-    borderRadius: 28,
-    padding: 22,
-    boxSizing: "border-box",
-    background:
-      "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
+  layerButton: {
     border: "1px solid rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.72)",
-    display: "grid",
-    alignContent: "center",
-    gap: 8,
+    background: "rgba(5,8,5,0.72)",
+    color: "rgba(255,255,255,0.78)",
+    borderRadius: 999,
+    padding: "8px 10px",
+    fontWeight: 950,
+    fontSize: 12,
+    backdropFilter: "blur(10px)",
+    cursor: "pointer",
+  },
+  layerButtonActive: {
+    border: "1px solid rgba(230,255,0,0.36)",
+    background: "rgba(230,255,0,0.14)",
+    color: "#e6ff00",
+    borderRadius: 999,
+    padding: "8px 10px",
+    fontWeight: 1000,
+    fontSize: 12,
+    backdropFilter: "blur(10px)",
+    cursor: "pointer",
   },
   fullscreenButton: {
     position: "absolute",
@@ -337,7 +407,7 @@ const styles = {
     inset: 0,
     pointerEvents: "none",
     background:
-      "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.32)), radial-gradient(circle at 72% 18%, rgba(228,239,22,0.12), transparent 36%)",
+      "linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.36)), radial-gradient(circle at 72% 18%, rgba(230,255,0,0.12), transparent 36%)",
   },
   compactError: {
     position: "absolute",
@@ -351,6 +421,71 @@ const styles = {
     color: "rgba(255,255,255,0.82)",
     fontWeight: 850,
     fontSize: 12,
+  },
+  legend: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    fontWeight: 850,
+  },
+  legendFullscreen: {
+    position: "absolute",
+    left: 16,
+    bottom: 16,
+    zIndex: 99999,
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 13,
+    fontWeight: 900,
+    padding: "11px 13px",
+    borderRadius: 999,
+    background: "rgba(5,8,5,0.72)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    backdropFilter: "blur(10px)",
+  },
+  legendItem: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+  },
+  startDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: "#e6ff00",
+    display: "inline-block",
+    boxShadow: "0 0 18px rgba(230,255,0,0.38)",
+  },
+  finishDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: "#ffffff",
+    display: "inline-block",
+  },
+  osmLabel: {
+    marginLeft: "auto",
+    color: "#e6ff00",
+    fontWeight: 950,
+  },
+  empty: {
+    minHeight: 240,
+    borderRadius: 28,
+    padding: 22,
+    boxSizing: "border-box",
+    background:
+      "radial-gradient(circle at 78% 18%, rgba(230,255,0,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.72)",
+    display: "grid",
+    alignContent: "center",
+    gap: 8,
   },
   error: {
     borderRadius: 18,
