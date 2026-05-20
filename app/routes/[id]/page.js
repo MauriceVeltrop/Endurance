@@ -201,55 +201,9 @@ export default function RouteDetailPage() {
   const sportLabel = getSportLabel(route?.sport_id);
   const editable = canEditRoute(route, profile);
 
-  async function createTrainingFromRoute() {
-    if (!route || busy) return;
-    setBusy(true);
-
-    try {
-      const point = points?.[0];
-      const lat = point?.lat ? Number(point.lat) : null;
-      const lon = point?.lon ? Number(point.lon) : null;
-
-      const payload = {
-        creator_id: profile.id,
-        title: route.title,
-        description: route.description || "",
-        sports: [route.sport_id],
-        visibility: "team",
-        planning_type: "fixed",
-        start_location: makeRouteStartLocation(route),
-        latitude: Number.isFinite(lat) ? lat : null,
-        longitude: Number.isFinite(lon) ? lon : null,
-        is_outdoor: true,
-        distance_km: route.distance_km || null,
-        estimated_duration_min: null,
-        route_id: route.id,
-        intensity_label: "Social pace",
-      };
-
-      const { data, error } = await supabase
-        .from("training_sessions")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      await supabase.from("session_participants").upsert(
-        {
-          session_id: data.id,
-          user_id: profile.id,
-        },
-        { onConflict: "session_id,user_id" }
-      );
-
-      router.push(`/trainings/${data.id}/edit`);
-    } catch (err) {
-      console.error("Create training from route failed", err);
-      setMessage(err?.message || "Could not create training from route.");
-    } finally {
-      setBusy(false);
-    }
+  function createTrainingFromRoute() {
+    if (!route) return;
+    router.push(`/trainings/new?route_id=${route.id}`);
   }
 
   async function shareRoute() {
@@ -349,8 +303,8 @@ export default function RouteDetailPage() {
       {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
 
       <section className="endurance-shell route-detail-action-bar">
-        <button type="button" className="route-detail-primary" onClick={createTrainingFromRoute} disabled={busy}>
-          {busy ? "Creating..." : "Start training from route"}
+        <button type="button" className="route-detail-primary" onClick={createTrainingFromRoute}>
+          Plan training with this route
         </button>
         <button type="button" className="route-detail-secondary" onClick={shareRoute}>Share</button>
         {route.gpx_file_url ? (
