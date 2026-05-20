@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
 import { supabase } from "../../lib/supabase";
 import {
   acceptTrainingInvite,
@@ -265,7 +266,9 @@ export default function InboxPage() {
           </section>
         )}
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
