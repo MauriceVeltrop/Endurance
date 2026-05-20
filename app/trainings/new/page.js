@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import ImageCropperModal from "../../../components/ImageCropperModal";
@@ -61,6 +61,44 @@ function displayName(person) {
   return person?.name || [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.email || "Endurance user";
 }
 
+
+function normalizeRoutePoints(routePoints) {
+  if (!routePoints) return [];
+  if (Array.isArray(routePoints)) return routePoints;
+  if (Array.isArray(routePoints.points)) return routePoints.points;
+  return [];
+}
+
+function routeStartLocation(route) {
+  const points = normalizeRoutePoints(route?.route_points);
+  const first = points[0];
+
+  if (first?.lat && first?.lon) {
+    return `${Number(first.lat).toFixed(5)}, ${Number(first.lon).toFixed(5)}`;
+  }
+
+  return route?.title || "";
+}
+
+function routeEstimatedDuration(route) {
+  const distance = Number(route?.distance_km || 0);
+  const sport = String(route?.sport_id || "");
+
+  if (!distance) return "";
+
+  if (sport.includes("cycling") || sport.includes("gravel") || sport.includes("mountain")) {
+    const minutes = Math.round((distance / (sport.includes("road") ? 26 : sport.includes("mountain") ? 13 : 20)) * 60);
+    return String(Math.max(10, minutes));
+  }
+
+  if (sport.includes("walking")) {
+    return String(Math.max(10, Math.round(distance * 12)));
+  }
+
+  return String(Math.max(10, Math.round(distance * 6.5)));
+}
+
+
 function initials(person) {
   return displayName(person)
     .split(" ")
@@ -99,6 +137,7 @@ function makeTimeOption(overrides = {}) {
 
 export default function CreateTrainingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [profile, setProfile] = useState(null);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
@@ -118,6 +157,7 @@ export default function CreateTrainingPage() {
   const [trainingCropFile, setTrainingCropFile] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
+  const [prefilledRoute, setPrefilledRoute] = useState(null);
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -284,6 +324,7 @@ export default function CreateTrainingPage() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData?.user;
+      const preselectRouteId = searchParams.get("route_id") || searchParams.get("from_route") || searchParams.get("route");
 
       if (!user?.id) {
         router.replace("/login");
@@ -328,7 +369,7 @@ export default function CreateTrainingPage() {
       setAllowedSportIds(ids);
 
       const firstSport = sportOptions.find((sport) => ids.includes(sport.id));
-      if (firstSport) {
+      if (firstSport && !preselectRouteId) {
         setForm((current) => ({
           ...current,
           sport_id: firstSport.id,
@@ -339,7 +380,7 @@ export default function CreateTrainingPage() {
       const [{ data: routesRows }, { data: workoutRows }] = await Promise.all([
         supabase
           .from("routes")
-          .select("id,title,sport_id,distance_km,elevation_gain_m,visibility")
+          .select("id,title,description,sport_id,distance_km,elevation_gain_m,visibility,route_points")
           .eq("creator_id", user.id)
           .order("created_at", { ascending: false })
           .limit(30),
@@ -353,6 +394,30 @@ export default function CreateTrainingPage() {
 
       setRoutes(routesRows || []);
       setWorkouts(workoutRows || []);
+
+      const routeToPrefill = preselectRouteId
+        ? (routesRows || []).find((route) => route.id === preselectRouteId)
+        : null;
+
+      if (routeToPrefill) {
+        const startPoint = normalizeRoutePoints(routeToPrefill.route_points)[0];
+
+        setPrefilledRoute(routeToPrefill);
+        setForm((current) => ({
+          ...current,
+          sport_id: routeToPrefill.sport_id,
+          title: routeToPrefill.title || defaultTitle(routeToPrefill.sport_id),
+          description: routeToPrefill.description || current.description,
+          route_id: routeToPrefill.id,
+          distance_km: routeToPrefill.distance_km ? String(routeToPrefill.distance_km) : current.distance_km,
+          estimated_duration_min: routeEstimatedDuration(routeToPrefill) || current.estimated_duration_min,
+          start_location: current.start_location?.trim() || routeStartLocation(routeToPrefill),
+          latitude: startPoint?.lat ? Number(startPoint.lat) : current.latitude,
+          longitude: startPoint?.lon ? Number(startPoint.lon) : current.longitude,
+        }));
+        setMessage(`Route attached: ${routeToPrefill.title}`);
+      }
+
 
       const { data: relationRows } = await supabase
         .from("training_partners")
@@ -1140,18 +1205,47 @@ export default function CreateTrainingPage() {
             {selectedSport?.routes ? (
               <section style={styles.card}>
                 <div style={styles.cardKicker}>Route</div>
-                <h2 style={styles.cardTitle}>Attach route</h2>
-                <p style={styles.muted}>Optional for now. Routes make outdoor sessions feel complete in the detail page.</p>
+                <h2 style={styles.cardTitle}>Attached route</h2>
+                <p style={styles.muted}>
+                  Pick one of your saved routes or use the route that opened this training form.
+                </p>
 
                 {filteredRoutes.length ? (
-                  <select value={form.route_id} onChange={(event) => updateForm("route_id", event.target.value)} style={styles.input}>
-                    <option value="">No route yet</option>
-                    {filteredRoutes.map((route) => (
-                      <option key={route.id} value={route.id}>
-                        {route.title} {route.distance_km ? `· ${Number(route.distance_km).toFixed(1)} km` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select value={form.route_id} onChange={(event) => {
+                      const routeId = event.target.value;
+                      const selectedRoute = filteredRoutes.find((route) => route.id === routeId);
+                      updateForm("route_id", routeId);
+
+                      if (selectedRoute) {
+                        setPrefilledRoute(selectedRoute);
+                        setForm((current) => ({
+                          ...current,
+                          route_id: selectedRoute.id,
+                          distance_km: selectedRoute.distance_km ? String(selectedRoute.distance_km) : current.distance_km,
+                          estimated_duration_min: routeEstimatedDuration(selectedRoute) || current.estimated_duration_min,
+                          start_location: current.start_location?.trim() || routeStartLocation(selectedRoute),
+                        }));
+                      }
+                    }} style={styles.input}>
+                      <option value="">No route yet</option>
+                      {filteredRoutes.map((route) => (
+                        <option key={route.id} value={route.id}>
+                          {route.title} {route.distance_km ? `· ${Number(route.distance_km).toFixed(1)} km` : ""}
+                        </option>
+                      ))}
+                    </select>
+
+                    {prefilledRoute ? (
+                      <div className="create-route-mini-summary">
+                        <b>{prefilledRoute.title}</b>
+                        <span>
+                          {prefilledRoute.distance_km ? `${Number(prefilledRoute.distance_km).toFixed(1)} km` : "Distance unknown"}
+                          {prefilledRoute.elevation_gain_m ? ` · ${prefilledRoute.elevation_gain_m} m elevation` : ""}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} routes yet. Create the training now and add a route later.</div>
                 )}
