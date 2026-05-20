@@ -1,3 +1,4 @@
+// app/routes/new/page.js
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -5,44 +6,148 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
+import OSMRouteMap from "../../../components/OSMRouteMap";
 import { supabase } from "../../../lib/supabase";
-import { sportOptions } from "../../../lib/sportsConfig";
 import { getSportLabel } from "../../../lib/trainingHelpers";
-import { getTrainingHeroImage } from "../../../lib/sportImages";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
-import { makeSvgPolyline } from "../../../lib/routePreview";
 
-const routeSports = sportOptions.filter((sport) => sport.route);
+const FALLBACK_ROUTE_SPORTS = [
+  "running",
+  "trail_running",
+  "road_cycling",
+  "gravel_cycling",
+  "mountain_biking",
+  "walking",
+  "kayaking",
+];
 
-export default function NewRoutePage() {
-  const router = useRouter();
-  const [templateId, setTemplateId] = useState(null);
+const METHOD_DETAILS = {
+  upload: {
+    title: "Upload GPX",
+    eyebrow: "Fastest",
+    icon: "↥",
+    body: "Import a GPX route from Garmin, Komoot, Strava, RouteYou or another route planner.",
+  },
+  draw: {
+    title: "Draw route",
+    eyebrow: "Manual",
+    icon: "✎",
+    body: "Create a route by drawing on the map. Snapping and rerouting will be expanded next.",
+  },
+  wizard: {
+    title: "Route wizard",
+    eyebrow: "Smart",
+    icon: "✦",
+    body: "Let Endurance generate sport-specific route ideas using routing profiles and surface rules.",
+  },
+};
 
-  const [profile, setProfile] = useState(null);
-  const [allowedSportIds, setAllowedSportIds] = useState([]);
-  const [checking, setChecking] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [form, setForm] = useState({
+const SPORT_ROUTE_PROFILES = {
+  running: {
+    title: "Road running profile",
+    focus: "Paved, safe and fluent.",
+    best: "Best with GPX upload or draw mode. Wizard will prefer quiet streets, parks and paved footpaths.",
+    avoid: "Avoids traffic-heavy roads and awkward stop-start routes.",
+  },
+  trail_running: {
+    title: "Trail running profile",
+    focus: "Unpaved, forest paths and elevation.",
+    best: "Best with GPX upload now. Wizard will later prioritize OSM path/track/surface/sac_scale tags.",
+    avoid: "Avoids too much asphalt and overly technical hiking-only terrain.",
+  },
+  road_cycling: {
+    title: "Road cycling profile",
+    focus: "Fast asphalt and safe cycling roads.",
+    best: "Best with GPX upload or draw mode. Wizard will later prefer cycling infrastructure and quiet roads.",
+    avoid: "Avoids unpaved tracks and footpaths.",
+  },
+  gravel_cycling: {
+    title: "Gravel profile",
+    focus: "Gravel, compacted surfaces and forest roads.",
+    best: "Best with GPX upload now. Wizard will later use surface=gravel/compacted/fine_gravel.",
+    avoid: "Avoids technical MTB-only trails and busy roads.",
+  },
+  mountain_biking: {
+    title: "MTB profile",
+    focus: "Technical trails and MTB networks.",
+    best: "Best with GPX upload now. Wizard will later use mtb:scale, singletrack and official networks.",
+    avoid: "Avoids boring road-only routes.",
+  },
+  walking: {
+    title: "Walking / hiking profile",
+    focus: "Comfortable paths, nature and safety.",
+    best: "Best with GPX upload or draw mode. Wizard will later prefer hiking paths and natural areas.",
+    avoid: "Avoids fast roads and unpleasant walking environments.",
+  },
+  kayaking: {
+    title: "Kayaking profile",
+    focus: "Water-based routes.",
+    best: "Use GPX upload for now. Wizard will later require waterway-specific routing data.",
+    avoid: "Avoids standard road routing.",
+  },
+};
+
+function initialForm() {
+  return {
     sport_id: "",
+    method: "",
     title: "",
     description: "",
-    visibility: "public",
+    visibility: "team",
     distance_km: "",
     elevation_gain_m: "",
     gpx_file_url: "",
     route_points: null,
-  });
+  };
+}
 
-  const availableSports = useMemo(() => {
-    return routeSports.filter((sport) => allowedSportIds.includes(sport.id));
-  }, [allowedSportIds]);
+function routeProfileFor(sportId) {
+  return (
+    SPORT_ROUTE_PROFILES[sportId] || {
+      title: `${getSportLabel(sportId)} route profile`,
+      focus: "Sport-specific route creation.",
+      best: "Choose the best route method for this sport.",
+      avoid: "Generic routing without sport logic.",
+    }
+  );
+}
 
-  const selectedSport = availableSports.find((sport) => sport.id === form.sport_id);
-  const hero = getTrainingHeroImage(null, form.sport_id);
-  const previewPolyline = useMemo(() => makeSvgPolyline(form.route_points, 320, 220, 18), [form.route_points]);
+function normalizeRoutePoints(routePoints) {
+  if (!routePoints) return [];
+  if (Array.isArray(routePoints)) return routePoints;
+  if (Array.isArray(routePoints.points)) return routePoints.points;
+  return [];
+}
 
-  const loadAccess = async () => {
+export default function NewRoutePage() {
+  const router = useRouter();
+
+  const [profile, setProfile] = useState(null);
+  const [availableSports, setAvailableSports] = useState([]);
+  const [checking, setChecking] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState(initialForm());
+
+  const selectedSport = useMemo(
+    () => availableSports.find((sport) => sport.id === form.sport_id) || null,
+    [availableSports, form.sport_id]
+  );
+
+  const selectedProfile = routeProfileFor(form.sport_id);
+  const routePoints = normalizeRoutePoints(form.route_points);
+  const canSave =
+    Boolean(profile?.id) &&
+    Boolean(form.sport_id) &&
+    Boolean(form.method) &&
+    Boolean(form.title.trim()) &&
+    routePoints.length >= 2;
+
+  useEffect(() => {
+    loadAccess();
+  }, []);
+
+  async function loadAccess() {
     setChecking(true);
     setMessage("");
 
@@ -68,68 +173,75 @@ export default function NewRoutePage() {
         return;
       }
 
+      if (profileRow?.blocked) {
+        setMessage("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
       setProfile(profileRow);
 
-      const { data: sportRows, error: sportError } = await supabase
-        .from("user_sports")
-        .select("sport_id")
-        .eq("user_id", user.id);
+      const [{ data: preferredRows, error: preferredError }, { data: sportRows, error: sportError }] =
+        await Promise.all([
+          supabase.from("user_sports").select("sport_id").eq("user_id", user.id),
+          supabase
+            .from("sports")
+            .select("id,name,category,supports_routes,supports_weather,supports_pace,supports_speed,sort_order")
+            .eq("supports_routes", true)
+            .order("sort_order", { ascending: true }),
+        ]);
 
+      if (preferredError) throw preferredError;
       if (sportError) throw sportError;
 
-      const allowed = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
-      setAllowedSportIds(allowed);
+      const preferredIds = (preferredRows || []).map((row) => row.sport_id).filter(Boolean);
+      const routeSports = (sportRows || []).filter(
+        (sport) => preferredIds.includes(sport.id) || FALLBACK_ROUTE_SPORTS.includes(sport.id)
+      );
 
-      if (templateId) {
-        const { data: template, error: templateError } = await supabase
-          .from("routes")
-          .select("sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points")
-          .eq("id", templateId)
-          .maybeSingle();
+      const allowed = routeSports.filter((sport) => preferredIds.includes(sport.id));
 
-        if (!templateError && template) {
-          setForm({
-            sport_id: template.sport_id || "",
-            title: `${template.title || "Route"} copy`,
-            description: template.description || "",
-            visibility: template.visibility || "public",
-            distance_km: template.distance_km || "",
-            elevation_gain_m: template.elevation_gain_m || "",
-            gpx_file_url: template.gpx_file_url || "",
-            route_points: template.route_points || null,
-          });
-        }
-      } else if (allowed.length) {
-        const firstRouteSport = routeSports.find((sport) => allowed.includes(sport.id));
-        if (firstRouteSport) {
-          setForm((current) => ({
-            ...current,
-            sport_id: firstRouteSport.id,
-            title: `${firstRouteSport.label} Route`,
-          }));
-        }
+      setAvailableSports(allowed);
+
+      if (allowed.length) {
+        const first = allowed[0];
+        setForm((current) => ({
+          ...current,
+          sport_id: current.sport_id || first.id,
+          title: current.title || `${getSportLabel(first.id)} Route`,
+        }));
       }
-    } catch (err) {
-      console.error("Route access error", err);
-      setMessage(err?.message || "Could not prepare route form.");
+    } catch (error) {
+      console.error("Create route access error", error);
+      setMessage(error?.message || "Could not load route creator.");
     } finally {
       setChecking(false);
     }
-  };
+  }
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setTemplateId(params.get("from"));
-    }
-  }, []);
+  function updateForm(key, value) {
+    setForm((current) => {
+      const next = { ...current, [key]: value };
 
-  useEffect(() => {
-    loadAccess();
-  }, [templateId]);
+      if (key === "sport_id") {
+        next.title = `${getSportLabel(value)} Route`;
+        next.method = "";
+        next.description = "";
+        next.distance_km = "";
+        next.elevation_gain_m = "";
+        next.gpx_file_url = "";
+        next.route_points = null;
+      }
 
+      if (key === "method") {
+        next.route_points = current.route_points;
+      }
 
-  const importGpxFile = async (file) => {
+      return next;
+    });
+  }
+
+  async function handleGpxUpload(event) {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     setMessage("");
@@ -140,239 +252,261 @@ export default function NewRoutePage() {
 
       setForm((current) => ({
         ...current,
+        method: "upload",
+        title: current.title?.trim() ? current.title : file.name.replace(/\.gpx$/i, ""),
+        distance_km: parsed.distance_km ? String(parsed.distance_km) : current.distance_km,
+        elevation_gain_m: parsed.elevation_gain_m ? String(parsed.elevation_gain_m) : current.elevation_gain_m,
         route_points: parsed,
-        distance_km: parsed.distance_km || current.distance_km,
-        elevation_gain_m: parsed.elevation_gain_m || current.elevation_gain_m,
       }));
 
-      setMessage(
-        `GPX imported: ${parsed.point_count} points · ${parsed.distance_km} km · ${parsed.elevation_gain_m} m elevation`
-      );
-    } catch (err) {
-      console.error("GPX import error", err);
-      setMessage(err?.message || "Could not import GPX.");
+      setMessage(`GPX imported: ${formatRoutePointSummary(parsed)}.`);
+    } catch (error) {
+      console.error("GPX upload error", error);
+      setMessage(error?.message || "Could not import GPX.");
     }
-  };
+  }
 
-  const updateForm = (key, value) => {
-    setForm((current) => {
-      const next = { ...current, [key]: value };
+  async function saveRoute() {
+    if (!canSave || saving) {
+      setMessage("Choose a sport, choose a method, add a title and import route points first.");
+      return;
+    }
 
-      if (key === "sport_id" && !current.title.trim()) {
-        next.title = `${getSportLabel(value)} Route`;
-      }
-
-      return next;
-    });
-  };
-
-  const saveRoute = async (event) => {
-    event.preventDefault();
+    setSaving(true);
     setMessage("");
 
-    if (!profile?.id) return router.replace("/login");
-    if (!form.sport_id) return setMessage("Choose a route sport.");
-    if (!form.title.trim()) return setMessage("Route title is required.");
-
     try {
-      setSaving(true);
+      const payload = {
+        creator_id: profile.id,
+        sport_id: form.sport_id,
+        title: form.title.trim(),
+        description: form.description.trim() || "",
+        visibility: form.visibility,
+        distance_km: form.distance_km ? Number(form.distance_km) : null,
+        elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : null,
+        gpx_file_url: form.gpx_file_url.trim() || null,
+        route_points: form.route_points || null,
+        updated_at: new Date().toISOString(),
+      };
 
       const { data, error } = await supabase
         .from("routes")
-        .insert({
-          creator_id: profile.id,
-          sport_id: form.sport_id,
-          title: form.title.trim(),
-          description: form.description.trim(),
-          visibility: form.visibility,
-          distance_km: form.distance_km ? Number(form.distance_km) : null,
-          elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : null,
-          gpx_file_url: form.gpx_file_url.trim() || null,
-          route_points: form.route_points || null,
-        })
+        .insert(payload)
         .select("id")
         .single();
 
       if (error) throw error;
 
-      setMessage("Route saved.");
-      router.push("/routes");
-    } catch (err) {
-      console.error("Route save error", err);
-      setMessage(err?.message || "Could not save route.");
+      router.push(`/routes/${data.id}`);
+    } catch (error) {
+      console.error("Save route error", error);
+      setMessage(error?.message || "Could not save route.");
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+    <main className="endurance-page create-route-v2-page">
+      <AppHeader active="routes" />
 
-        <Link href="/routes" style={styles.backLink}>← Back to routes</Link>
-
-        <header style={styles.header}>
-          <div style={styles.kicker}>Route Builder</div>
-          <h1 style={styles.title}>Save a route.</h1>
-          <p style={styles.subtitle}>
-            This is the stable route foundation. GPX upload, route wizard and OSM trail scoring will be added on top of this.
+      <section className="endurance-shell training-hero endurance-card create-route-v2-hero">
+        <div>
+          <p className="eyebrow">Create route</p>
+          <h1>
+            Build a route
+            <br />
+            for your sport<span>.</span>
+          </h1>
+          <p>
+            Choose a preferred sport first. Endurance then shows the route methods and logic that fit that sport.
           </p>
-        </header>
+        </div>
+        <Link href="/routes" className="hero-create-button">
+          Routes
+        </Link>
+      </section>
 
-        <section style={styles.previewCard}>
-          <div
-            style={{
-              ...styles.previewImage,
-              ...(hero?.src
-                ? {
-                    backgroundImage: `url("${hero.src}")`,
-                    backgroundSize: "cover",
-                    backgroundPosition: hero.position || "center center",
-                  }
-                : {}),
-            }}
-          >
-            <div style={styles.previewOverlay} />
-            {previewPolyline ? (
-              <svg viewBox="0 0 320 220" preserveAspectRatio="xMidYMid meet" style={styles.routeSvg}>
-                <polyline points={previewPolyline} fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points={previewPolyline} fill="none" stroke="#e4ef16" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : null}
-          </div>
-          <div style={styles.previewBody}>
-            <span style={styles.sportBadge}>{selectedSport?.label || "Route sport"}</span>
-            <h2 style={styles.previewTitle}>{form.title || "New route"}</h2>
-            <p style={styles.previewText}>
-              {form.distance_km ? `${form.distance_km} km` : "Distance not set"} ·{" "}
-              {form.elevation_gain_m ? `${form.elevation_gain_m} m elevation` : "Elevation not set"}
-            </p>
-          </div>
+      {message ? <section className="endurance-shell create-route-v2-message">{message}</section> : null}
+
+      {checking ? (
+        <section className="endurance-shell endurance-card notification-empty">Loading route creator...</section>
+      ) : null}
+
+      {!checking && !availableSports.length ? (
+        <section className="endurance-shell endurance-card notification-empty">
+          <h2>No route sports available</h2>
+          <p>Add a route-relevant sport to your preferred sports first.</p>
+          <Link href="/onboarding" className="primary-action">Update preferred sports</Link>
         </section>
+      ) : null}
 
-        {message ? <section style={styles.message}>{message}</section> : null}
-
-        {checking ? (
-          <section style={styles.formCard}>
-            <h2>Checking profile...</h2>
-          </section>
-        ) : (
-          <form onSubmit={saveRoute} style={styles.formCard}>
-            <label style={styles.field}>
-              <span>Sport</span>
-              <select value={form.sport_id} onChange={(event) => updateForm("sport_id", event.target.value)} style={styles.input}>
-                <option value="">Choose sport</option>
-                {availableSports.map((sport) => (
-                  <option key={sport.id} value={sport.id}>{sport.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.field}>
-              <span>Route title</span>
-              <input value={form.title} onChange={(event) => updateForm("title", event.target.value)} style={styles.input} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-              <span>Description</span>
-              <textarea
-                value={form.description}
-                onChange={(event) => updateForm("description", event.target.value)}
-                placeholder="Short route notes, surface, terrain, meeting point..."
-                style={{ ...styles.input, minHeight: 110, paddingTop: 12 }}
-              />
-            </label>
-
-            <label style={styles.field}>
-              <span>Visibility</span>
-              <select value={form.visibility} onChange={(event) => updateForm("visibility", event.target.value)} style={styles.input}>
-                <option value="public">Public</option>
-                <option value="team">Team</option>
-                <option value="private">Private</option>
-                <option value="selected">Selected people</option>
-                <option value="group">Group</option>
-              </select>
-            </label>
-
-            <label style={styles.field}>
-              <span>Distance km</span>
-              <input type="number" step="0.1" min="0" value={form.distance_km} onChange={(event) => updateForm("distance_km", event.target.value)} style={styles.input} />
-            </label>
-
-            <label style={styles.field}>
-              <span>Elevation gain m</span>
-              <input type="number" step="1" min="0" value={form.elevation_gain_m} onChange={(event) => updateForm("elevation_gain_m", event.target.value)} style={styles.input} />
-            </label>
-
-            <label style={styles.field}>
-              <span>GPX file URL</span>
-              <input value={form.gpx_file_url} onChange={(event) => updateForm("gpx_file_url", event.target.value)} placeholder="Optional external GPX link" style={styles.input} />
-            </label>
-
-            <section style={styles.gpxBox}>
+      {!checking && availableSports.length ? (
+        <>
+          <section className="endurance-shell create-route-v2-section">
+            <div className="route-builder-step">
+              <span>1</span>
               <div>
-                <strong>Import GPX file</strong>
-                <p>{formatRoutePointSummary(form.route_points)}</p>
+                <p className="eyebrow">Sport first</p>
+                <h2>Choose route sport</h2>
               </div>
-              <input
-                type="file"
-                accept=".gpx,application/gpx+xml,application/xml,text/xml"
-                onChange={(event) => importGpxFile(event.target.files?.[0])}
-                style={styles.fileInput}
-              />
-            </section>
-
-            <div style={styles.nextBox}>
-              <strong>Next route phase</strong>
-              <p>
-                Route Wizard will add GPX upload, route point editing and sport-specific OSM route quality scoring.
-              </p>
             </div>
 
-            <button type="submit" disabled={saving} style={styles.saveButton}>
-              {saving ? "Saving..." : "Save route"}
-            </button>
-          </form>
-        )}
-      </section>
-    
+            <div className="create-route-sport-grid">
+              {availableSports.map((sport) => (
+                <button
+                  key={sport.id}
+                  type="button"
+                  className={form.sport_id === sport.id ? "route-sport-card active" : "route-sport-card"}
+                  onClick={() => updateForm("sport_id", sport.id)}
+                >
+                  <span>{getSportLabel(sport.id).slice(0, 2).toUpperCase()}</span>
+                  <strong>{getSportLabel(sport.id)}</strong>
+                  <small>{routeProfileFor(sport.id).focus}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {selectedSport ? (
+            <section className="endurance-shell create-route-v2-section">
+              <div className="route-builder-step">
+                <span>2</span>
+                <div>
+                  <p className="eyebrow">{selectedProfile.title}</p>
+                  <h2>Choose route method</h2>
+                </div>
+              </div>
+
+              <div className="route-method-grid">
+                {Object.entries(METHOD_DETAILS).map(([methodId, method]) => (
+                  <button
+                    key={methodId}
+                    type="button"
+                    className={form.method === methodId ? "route-method-card active" : "route-method-card"}
+                    onClick={() => updateForm("method", methodId)}
+                  >
+                    <span>{method.eyebrow}</span>
+                    <b>{method.icon}</b>
+                    <strong>{method.title}</strong>
+                    <small>{method.body}</small>
+                  </button>
+                ))}
+              </div>
+
+              <article className="route-sport-intelligence endurance-card">
+                <p className="eyebrow">Sport-specific route intelligence</p>
+                <h3>{selectedProfile.title}</h3>
+                <div>
+                  <span><b>Focus</b>{selectedProfile.focus}</span>
+                  <span><b>Best method</b>{selectedProfile.best}</span>
+                  <span><b>Avoid</b>{selectedProfile.avoid}</span>
+                </div>
+              </article>
+            </section>
+          ) : null}
+
+          {form.method ? (
+            <section className="endurance-shell create-route-v2-section">
+              <div className="route-builder-step">
+                <span>3</span>
+                <div>
+                  <p className="eyebrow">{METHOD_DETAILS[form.method]?.title}</p>
+                  <h2>Route details</h2>
+                </div>
+              </div>
+
+              <div className="create-route-editor-grid">
+                <section className="create-route-form-card endurance-card">
+                  <label>
+                    Route title
+                    <input value={form.title} onChange={(event) => updateForm("title", event.target.value)} placeholder="Morning Trail Loop" />
+                  </label>
+
+                  <label>
+                    Description
+                    <textarea value={form.description} onChange={(event) => updateForm("description", event.target.value)} placeholder="Describe terrain, surface, scenery or warnings..." />
+                  </label>
+
+                  <div className="create-route-two">
+                    <label>
+                      Distance km
+                      <input type="number" step="0.01" value={form.distance_km} onChange={(event) => updateForm("distance_km", event.target.value)} />
+                    </label>
+
+                    <label>
+                      Elevation m
+                      <input type="number" step="1" value={form.elevation_gain_m} onChange={(event) => updateForm("elevation_gain_m", event.target.value)} />
+                    </label>
+                  </div>
+
+                  <label>
+                    Visibility
+                    <select value={form.visibility} onChange={(event) => updateForm("visibility", event.target.value)}>
+                      <option value="private">Private</option>
+                      <option value="team">Team</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </label>
+
+                  {form.method === "upload" ? (
+                    <label className="create-route-upload">
+                      <span>Upload GPX file</span>
+                      <input type="file" accept=".gpx,application/gpx+xml,text/xml" onChange={handleGpxUpload} />
+                    </label>
+                  ) : null}
+
+                  {form.method === "draw" ? (
+                    <div className="create-route-coming-soon">
+                      <strong>Draw mode foundation</strong>
+                      <span>Next step: map click-to-add points, snapping and rerouting between draggable points.</span>
+                    </div>
+                  ) : null}
+
+                  {form.method === "wizard" ? (
+                    <div className="create-route-coming-soon">
+                      <strong>Wizard foundation</strong>
+                      <span>Next step: distance, start point, loop preference and sport-specific routing profiles.</span>
+                    </div>
+                  ) : null}
+
+                  <button type="button" className="route-save-button" onClick={saveRoute} disabled={saving || !canSave}>
+                    {saving ? "Saving..." : "Save route"}
+                  </button>
+                </section>
+
+                <section className="create-route-preview-card endurance-card">
+                  <div className="route-section-title">
+                    <div>
+                      <p className="eyebrow">Route preview</p>
+                      <h2>{form.title || "New route"}</h2>
+                    </div>
+                    <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
+                  </div>
+
+                  <OSMRouteMap
+                    routePoints={form.route_points}
+                    title={form.title || "New route"}
+                    height={360}
+                    interactive
+                    showLegend
+                    showLayerControl
+                    defaultLayer="dark"
+                  />
+
+                  <div className="create-route-preview-stats">
+                    <span><b>{form.distance_km || "—"}</b>km</span>
+                    <span><b>{form.elevation_gain_m || "—"}</b>m</span>
+                    <span><b>{getSportLabel(form.sport_id)}</b>sport</span>
+                  </div>
+                </section>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+
       <BottomNav />
-</main>
+    </main>
   );
 }
-
-const baseButton = { border: 0, cursor: "pointer", fontWeight: 950 };
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-    color: "white",
-    padding: "18px 18px 42px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 18 },
-  backLink: { width: "fit-content", color: "#e4ef16", textDecoration: "none", fontWeight: 950, border: "1px solid rgba(228,239,22,0.24)", borderRadius: 999, padding: "10px 14px", background: "rgba(228,239,22,0.08)" },
-  header: { display: "grid", gap: 8 },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
-  subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 620 },
-  previewCard: { overflow: "hidden", borderRadius: 32, background: glass, border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
-  previewImage: { position: "relative", height: 220, background: "radial-gradient(circle at 78% 18%, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #151915, #060706)" },
-  previewOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
-  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
-  previewBody: { padding: 20, display: "grid", gap: 10 },
-  sportBadge: { display: "inline-flex", width: "fit-content", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
-  previewTitle: { margin: 0, fontSize: 32, letterSpacing: "-0.055em" },
-  previewText: { margin: 0, color: "rgba(255,255,255,0.66)" },
-  message: { borderRadius: 24, padding: 16, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.20)", color: "#e4ef16", fontWeight: 850 },
-  formCard: { borderRadius: 30, padding: 20, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
-  field: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontSize: 13, fontWeight: 850 },
-  input: { width: "100%", minHeight: 48, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.22)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
-  gpxBox: { gridColumn: "1 / -1", padding: 16, borderRadius: 22, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.10)", display: "grid", gap: 10, color: "rgba(255,255,255,0.74)", lineHeight: 1.45 },
-  fileInput: { width: "100%", color: "rgba(255,255,255,0.72)" },
-  nextBox: { gridColumn: "1 / -1", padding: 16, borderRadius: 22, background: "rgba(228,239,22,0.08)", border: "1px solid rgba(228,239,22,0.16)", color: "rgba(255,255,255,0.74)", lineHeight: 1.45 },
-  saveButton: { ...baseButton, gridColumn: "1 / -1", minHeight: 52, borderRadius: 999, background: "#e4ef16", color: "#101406", fontSize: 16 },
-};
