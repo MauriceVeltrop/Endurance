@@ -1789,3 +1789,67 @@ main {
   }
 }
 
+
+/* ===== PRIORITY 1C ROUTE TO TRAINING FLOW ===== */
+.create-route-prefill-card {
+  width: min(100% - 28px, 760px);
+  margin: 0 auto 16px;
+  border-radius: 28px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(230,255,0,0.12), transparent 30%),
+    linear-gradient(180deg, rgba(22,27,33,0.88), rgba(8,12,16,0.94));
+  border: 1px solid rgba(230,255,0,0.18);
+  color: white;
+}
+
+.create-route-prefill-card span,
+.create-route-prefill-card small,
+.create-route-mini-summary span {
+  display: block;
+  color: rgba(255,255,255,0.58);
+  font-weight: 850;
+}
+
+.create-route-prefill-card strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.02;
+  margin: 4px 0;
+}
+
+.create-route-prefill-card button {
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: white;
+  padding: 0 14px;
+  font-weight: 1000;
+}
+
+.create-route-mini-summary {
+  margin-top: 10px;
+  border-radius: 20px;
+  padding: 13px;
+  border: 1px solid rgba(230,255,0,0.16);
+  background: rgba(230,255,0,0.06);
+}
+
+.create-route-mini-summary b {
+  display: block;
+  color: white;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 420px) {
+  .create-route-prefill-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
