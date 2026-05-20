@@ -174,6 +174,7 @@ export default function NewRoutePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState(initialForm());
+  const [drawInsertMode, setDrawInsertMode] = useState(false);
 
   const selectedSport = useMemo(
     () => availableSports.find((sport) => sport.id === form.sport_id) || null,
@@ -338,6 +339,57 @@ export default function NewRoutePage() {
       distance_km: "",
       elevation_gain_m: "",
     }));
+  }
+
+  function closeDrawLoop() {
+    const currentPoints = normalizeRoutePoints(form.route_points);
+
+    if (currentPoints.length < 3) {
+      setMessage("Add at least three points before closing the loop.");
+      return;
+    }
+
+    const first = currentPoints[0];
+    const last = currentPoints[currentPoints.length - 1];
+
+    if (first.lat === last.lat && first.lon === last.lon) {
+      setMessage("This route is already closed.");
+      return;
+    }
+
+    handleDrawPointsChange([...currentPoints, { ...first }]);
+  }
+
+  function useCurrentLocationAsDrawStart() {
+    if (!navigator.geolocation) {
+      setMessage("Geolocation is not available on this device.");
+      return;
+    }
+
+    setMessage("Getting your current location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          lat: Number(position.coords.latitude.toFixed(6)),
+          lon: Number(position.coords.longitude.toFixed(6)),
+          ele: null,
+        };
+
+        const currentPoints = normalizeRoutePoints(form.route_points);
+        handleDrawPointsChange(currentPoints.length ? [point, ...currentPoints] : [point]);
+        setMessage("Current location added as start point.");
+      },
+      () => {
+        setMessage("Could not access current location. Check browser permission.");
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
+    );
+  }
+
+  function removeDrawPoint(indexToRemove) {
+    const currentPoints = normalizeRoutePoints(form.route_points);
+    handleDrawPointsChange(currentPoints.filter((_, index) => index !== indexToRemove));
   }
 
   async function saveRoute() {
@@ -531,12 +583,22 @@ export default function NewRoutePage() {
                   ) : null}
 
                   {form.method === "draw" ? (
-                    <div className="create-route-draw-tools">
+                    <div className="create-route-draw-tools route-draw-tools-expanded">
                       <div>
                         <strong>Draw route on map</strong>
                         <span>{normalizeRoutePoints(form.route_points).length} point(s) added</span>
                       </div>
+
                       <div>
+                        <button type="button" onClick={useCurrentLocationAsDrawStart}>
+                          Use location
+                        </button>
+                        <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
+                          Insert
+                        </button>
+                        <button type="button" onClick={closeDrawLoop} disabled={normalizeRoutePoints(form.route_points).length < 3}>
+                          Close loop
+                        </button>
                         <button type="button" onClick={undoDrawPoint} disabled={!normalizeRoutePoints(form.route_points).length}>
                           Undo
                         </button>
@@ -574,6 +636,7 @@ export default function NewRoutePage() {
                       onChange={handleDrawPointsChange}
                       height={390}
                       title={form.title || "Draw route"}
+                      insertMode={drawInsertMode}
                     />
                   ) : (
                     <OSMRouteMap
@@ -592,6 +655,22 @@ export default function NewRoutePage() {
                     <span><b>{form.elevation_gain_m || "—"}</b>m</span>
                     <span><b>{getSportLabel(form.sport_id)}</b>sport</span>
                   </div>
+
+                  {form.method === "draw" && normalizeRoutePoints(form.route_points).length ? (
+                    <div className="route-point-list">
+                      <div className="route-point-list-head">
+                        <strong>Route points</strong>
+                        <small>Tap marker or remove from list</small>
+                      </div>
+                      {normalizeRoutePoints(form.route_points).map((point, index) => (
+                        <div key={`${point.lat}-${point.lon}-${index}`} className="route-point-row">
+                          <span>{index + 1}</span>
+                          <small>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</small>
+                          <button type="button" onClick={() => removeDrawPoint(index)}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
               </div>
             </section>
