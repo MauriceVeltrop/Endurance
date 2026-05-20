@@ -46,12 +46,29 @@ function normalize(points) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
+
+function distanceToSegment(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(p.x - a.x, p.y - a.y);
+  }
+
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  const projectionX = a.x + t * dx;
+  const projectionY = a.y + t * dy;
+
+  return Math.hypot(p.x - projectionX, p.y - projectionY);
+}
+
 export default function RouteDrawMap({
   points = [],
   onChange,
   height = 420,
   center = [50.887, 6.023],
   title = "Draw route",
+  insertMode = false,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -94,14 +111,34 @@ export default function RouteDrawMap({
           }
 
           mapRef.current.on("click", (event) => {
-            const next = [
-              ...pointsRef.current,
-              {
-                lat: Number(event.latlng.lat.toFixed(6)),
-                lon: Number(event.latlng.lng.toFixed(6)),
-                ele: null,
-              },
-            ];
+            const newPoint = {
+              lat: Number(event.latlng.lat.toFixed(6)),
+              lon: Number(event.latlng.lng.toFixed(6)),
+              ele: null,
+            };
+
+            let next = [...pointsRef.current];
+
+            if (insertMode && next.length >= 2) {
+              let bestIndex = next.length;
+              let bestDistance = Infinity;
+
+              for (let index = 0; index < next.length - 1; index += 1) {
+                const a = mapRef.current.latLngToLayerPoint([next[index].lat, next[index].lon]);
+                const b = mapRef.current.latLngToLayerPoint([next[index + 1].lat, next[index + 1].lon]);
+                const p = mapRef.current.latLngToLayerPoint(event.latlng);
+                const distance = distanceToSegment(p, a, b);
+
+                if (distance < bestDistance) {
+                  bestDistance = distance;
+                  bestIndex = index + 1;
+                }
+              }
+
+              next.splice(bestIndex, 0, newPoint);
+            } else {
+              next.push(newPoint);
+            }
 
             onChange?.(next);
           });
@@ -188,6 +225,11 @@ export default function RouteDrawMap({
 
             onChange?.(next);
           })
+          .on("click", () => {
+            const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
+            onChange?.(next);
+          })
+          .bindTooltip(`Point ${index + 1} · tap to remove`, { direction: "top", opacity: 0.9 })
           .addTo(group);
       });
 
@@ -214,7 +256,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
-        <small>Tap map to add points · drag markers to adjust</small>
+        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap map to add points · drag markers · tap marker to remove"}</small>
       </div>
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />
       {error ? <div className="route-draw-error">{error}</div> : null}
