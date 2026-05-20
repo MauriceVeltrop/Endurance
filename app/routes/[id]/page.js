@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
+import RouteElevationProfile from "../../../components/routes/RouteElevationProfile";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import {
@@ -364,7 +365,7 @@ export default function RouteDetailPage() {
         ) : null}
       </section>
 
-      <section className="endurance-shell route-map-panel endurance-card">
+      <section className="endurance-shell route-map-panel route-map-panel-premium endurance-card">
         <div className="route-section-title">
           <div>
             <p className="eyebrow">Interactive map</p>
@@ -380,6 +381,8 @@ export default function RouteDetailPage() {
           interactive
           showLegend
           showFullscreen
+          showLayerControl
+          defaultLayer="dark"
           className="route-detail-map"
         />
       </section>
@@ -429,20 +432,7 @@ export default function RouteDetailPage() {
           {elevationStats.available ? <span>{elevationStats.min}–{elevationStats.max} m</span> : null}
         </div>
 
-        {elevationLine ? (
-          <svg viewBox="0 0 360 110" preserveAspectRatio="none" className="route-elevation-chart">
-            <defs>
-              <linearGradient id="routeElevationFill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="rgba(230,255,0,0.34)" />
-                <stop offset="100%" stopColor="rgba(230,255,0,0.02)" />
-              </linearGradient>
-            </defs>
-            <polyline points={elevationLine} fill="none" stroke="rgba(0,0,0,0.52)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points={elevationLine} fill="none" stroke="#e6ff00" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : (
-          <p className="route-detail-muted">No elevation profile found in this route yet.</p>
-        )}
+        <RouteElevationProfile routePoints={route.route_points} />
       </section>
 
       <section className="endurance-shell route-linked-trainings endurance-card">
