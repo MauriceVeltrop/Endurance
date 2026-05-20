@@ -4,9 +4,7 @@
 import Link from "next/link";
 import OSMRouteMap from "../OSMRouteMap";
 import { getSportLabel } from "../../lib/trainingHelpers";
-import { formatRoutePointSummary } from "../../lib/gpxUtils";
 import { getElevationStats } from "../../lib/routePreview";
-import { analyzeRouteQuality } from "../../lib/routeQuality";
 
 function distanceText(route) {
   return route?.distance_km ? `${route.distance_km} km` : "Distance not set";
@@ -22,19 +20,17 @@ export default function RouteCard({ route }) {
   const href = `/routes/${route.id}`;
   const sportLabel = getSportLabel(route.sport_id);
   const elevationStats = getElevationStats(route.route_points);
-  const quality = analyzeRouteQuality(route);
-  const pointSummary = formatRoutePointSummary(route.route_points);
 
   return (
-    <article className="training-card route-feed-card">
-      <Link href={href} className="training-card-media route-card-map" aria-label={route.title}>
+    <article className="training-card route-feed-card route-feed-card-compact">
+      <Link href={href} className="training-card-media route-card-map route-card-map-compact" aria-label={route.title}>
         <OSMRouteMap
           routePoints={route.route_points}
           title={route.title}
           compact
           interactive={false}
           showLegend={false}
-          height={190}
+          height={150}
         />
         <span className="route-card-map-label">OSM</span>
       </Link>
@@ -43,7 +39,6 @@ export default function RouteCard({ route }) {
         <div className="training-card-badges">
           <span className="sport-badge">{sportLabel}</span>
           <span className="status-badge">{route.visibility}</span>
-          <span className="status-badge">Score {quality.score}</span>
         </div>
 
         <Link href={href} className="training-card-title">
@@ -57,7 +52,6 @@ export default function RouteCard({ route }) {
         <div className="training-card-meta">
           <span>↗ {distanceText(route)}</span>
           <span>⛰ {elevationText(route)}</span>
-          <span>◇ {pointSummary}</span>
           <span>
             {elevationStats.available
               ? `Elevation ${elevationStats.min}-${elevationStats.max} m`
