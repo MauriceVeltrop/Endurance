@@ -49,11 +49,47 @@ function weatherIcon(code, night = false) {
   return night ? "🌙" : "🌡️";
 }
 
+function isEuropeLike(latitude, longitude) {
+  return latitude >= 34 && latitude <= 72 && longitude >= -25 && longitude <= 45;
+}
+
+function isNetherlandsBelgiumNearby(latitude, longitude) {
+  return latitude >= 49 && latitude <= 54 && longitude >= 2 && longitude <= 8;
+}
+
+function providerForCoordinates(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return {
+      endpoint: "forecast",
+      label: "Global weather",
+      source: "Open-Meteo global forecast",
+    };
+  }
+
+  if (isEuropeLike(latitude, longitude)) {
+    return {
+      endpoint: "knmi",
+      label: isNetherlandsBelgiumNearby(latitude, longitude)
+        ? "KNMI HARMONIE"
+        : "KNMI/European model",
+      source: isNetherlandsBelgiumNearby(latitude, longitude)
+        ? "KNMI HARMONIE via Open-Meteo"
+        : "KNMI/European forecast via Open-Meteo",
+    };
+  }
+
+  return {
+    endpoint: "forecast",
+    label: "Global forecast",
+    source: "Open-Meteo global best-match forecast",
+  };
+}
+
 async function geocodeLocation(location) {
   const query = String(location || "").trim();
   if (!query) return null;
 
-  const searchQuery = /netherlands|nederland/i.test(query) ? query : `${query}, Nederland`;
+  const searchQuery = /netherlands|nederland/i.test(query) ? query : query;
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=1&language=en&format=json`;
 
   const response = await fetch(url, {
@@ -71,7 +107,30 @@ async function geocodeLocation(location) {
     latitude: Number(place.latitude),
     longitude: Number(place.longitude),
     name: place.name || query,
+    country: place.country || "",
   };
+}
+
+async function fetchForecast({ latitude, longitude, targetDate, provider }) {
+  const targetDateString = targetDate.toISOString().slice(0, 10);
+
+  const url = [
+    `https://api.open-meteo.com/v1/${provider.endpoint}`,
+    `?latitude=${latitude}`,
+    `&longitude=${longitude}`,
+    "&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,uv_index",
+    `&start_date=${targetDateString}`,
+    `&end_date=${targetDateString}`,
+    "&timezone=auto",
+  ].join("");
+
+  const response = await fetch(url, {
+    next: { revalidate: 60 * 30 },
+  });
+
+  if (!response.ok) return null;
+
+  return response.json();
 }
 
 export async function GET(request) {
@@ -88,6 +147,7 @@ export async function GET(request) {
   let latitude = Number(searchParams.get("latitude"));
   let longitude = Number(searchParams.get("longitude"));
   let placeName = location;
+  let country = "";
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     const place = await geocodeLocation(location);
@@ -99,28 +159,26 @@ export async function GET(request) {
     latitude = place.latitude;
     longitude = place.longitude;
     placeName = place.name;
+    country = place.country;
   }
 
-  const targetDateString = targetDate.toISOString().slice(0, 10);
-  const forecastUrl = [
-    "https://api.open-meteo.com/v1/knmi",
-    `?latitude=${latitude}`,
-    `&longitude=${longitude}`,
-    "&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,uv_index",
-    `&start_date=${targetDateString}`,
-    `&end_date=${targetDateString}`,
-    "&timezone=Europe/Amsterdam",
-  ].join("");
+  let provider = providerForCoordinates(latitude, longitude);
+  let data = await fetchForecast({ latitude, longitude, targetDate, provider });
 
-  const response = await fetch(forecastUrl, {
-    next: { revalidate: 60 * 30 },
-  });
-
-  if (!response.ok) {
-    return Response.json({ ok: false, error: "KNMI forecast unavailable." }, { status: 502 });
+  // Robust fallback: if regional model is unavailable, fall back to global forecast.
+  if (!data && provider.endpoint !== "forecast") {
+    provider = {
+      endpoint: "forecast",
+      label: "Global fallback",
+      source: "Open-Meteo global fallback forecast",
+    };
+    data = await fetchForecast({ latitude, longitude, targetDate, provider });
   }
 
-  const data = await response.json();
+  if (!data) {
+    return Response.json({ ok: false, error: "Forecast unavailable." }, { status: 502 });
+  }
+
   const hourly = data?.hourly || {};
   const index = nearestIndex(hourly.time, targetDate);
 
@@ -135,10 +193,13 @@ export async function GET(request) {
 
   return Response.json({
     ok: true,
-    provider: "knmi-open-meteo",
+    provider: provider.endpoint,
+    providerLabel: provider.label,
     forecast: {
-      source: "KNMI HARMONIE via Open-Meteo",
-      place: placeName,
+      source: provider.source,
+      provider: provider.endpoint,
+      providerLabel: provider.label,
+      place: country ? `${placeName}, ${country}` : placeName,
       latitude,
       longitude,
       forecastTime,
