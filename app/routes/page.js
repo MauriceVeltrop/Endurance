@@ -29,7 +29,7 @@ function matchesSearch(route, search) {
   return haystack.includes(search.toLowerCase());
 }
 
-function supportsRouteSport(route, activeTab) {
+function matchesTab(route, activeTab) {
   if (activeTab === "all") return true;
   if (activeTab === "my") return route._isOwnRoute;
   if (activeTab === "public") return route.visibility === "public";
@@ -134,16 +134,12 @@ export default function RoutesPage() {
     loadRoutes();
   }, []);
 
-  const routeSportsCount = useMemo(() => {
-    return new Set(routes.map((route) => route.sport_id).filter(Boolean)).size;
-  }, [routes]);
-
-  const routeWithGpxCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
+  const mappedCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
   const ownRouteCount = routes.filter((route) => route._isOwnRoute).length;
   const trailRouteCount = routes.filter((route) => String(route.sport_id || "").includes("trail")).length;
 
   const tabs = useMemo(() => {
-    const sportTabs = preferredSportIds.slice(0, 4).map((sportId) => ({
+    const sportTabs = preferredSportIds.slice(0, 2).map((sportId) => ({
       id: sportId,
       label: getSportLabel(sportId),
     }));
@@ -152,20 +148,20 @@ export default function RoutesPage() {
       { id: "all", label: "All routes" },
       { id: "my", label: "My routes" },
       { id: "public", label: "Public" },
-      { id: "trail", label: "Trail" },
+      { id: "trail", label: "Trail Running" },
       ...sportTabs,
     ];
   }, [preferredSportIds]);
 
   const filteredRoutes = routes
     .filter((route) => matchesSearch(route, search))
-    .filter((route) => supportsRouteSport(route, activeTab));
+    .filter((route) => matchesTab(route, activeTab));
 
   return (
-    <main className="endurance-page">
+    <main className="endurance-page route-feed-page">
       <AppHeader active="routes" />
 
-      <section className="endurance-shell training-hero endurance-card">
+      <section className="endurance-shell training-hero endurance-card route-feed-hero">
         <div>
           <p className="eyebrow">Route feed</p>
           <h1>
@@ -182,22 +178,22 @@ export default function RoutesPage() {
         </Link>
       </section>
 
-      <section className="endurance-shell metric-grid">
+      <section className="endurance-shell metric-grid route-feed-metrics">
         <div className="metric-card highlight">
           <span>◇</span>
           <strong>{loading ? "…" : routes.length}</strong>
           <div>
             <b>Routes</b>
-            <p>Available route cards for your sports.</p>
+            <p>Available for your sports.</p>
           </div>
         </div>
 
         <div className="metric-card">
           <span>🧭</span>
-          <strong>{loading ? "…" : routeWithGpxCount}</strong>
+          <strong>{loading ? "…" : mappedCount}</strong>
           <div>
             <b>Mapped</b>
-            <p>Routes with GPX or route points.</p>
+            <p>GPX or route points.</p>
           </div>
         </div>
 
@@ -206,7 +202,7 @@ export default function RoutesPage() {
           <strong>{loading ? "…" : ownRouteCount}</strong>
           <div>
             <b>Your routes</b>
-            <p>Created or imported by you.</p>
+            <p>Created by you.</p>
           </div>
         </div>
 
@@ -214,13 +210,13 @@ export default function RoutesPage() {
           <span>⛰</span>
           <strong>{loading ? "…" : trailRouteCount}</strong>
           <div>
-            <b>Trail routes</b>
-            <p>Off-road focused routes in your feed.</p>
+            <b>Trail</b>
+            <p>Off-road focused.</p>
           </div>
         </div>
       </section>
 
-      <section className="endurance-shell feed-filter-card endurance-card">
+      <section className="endurance-shell feed-filter-card endurance-card route-filter-card">
         <p className="eyebrow">Smart route feed</p>
         <h2>Your route library</h2>
 
@@ -233,7 +229,7 @@ export default function RoutesPage() {
           />
         </label>
 
-        <div className="training-tabs">
+        <div className="training-tabs route-tabs">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -244,10 +240,13 @@ export default function RoutesPage() {
               {tab.label}
             </button>
           ))}
+          <button type="button" className="route-filter-icon" aria-label="Filters">
+            ⟡
+          </button>
         </div>
       </section>
 
-      <section className="endurance-shell training-feed-stack">
+      <section className="endurance-shell training-feed-stack route-feed-stack">
         {loading && <div className="endurance-card notification-empty">Loading routes...</div>}
 
         {!loading && message ? (
