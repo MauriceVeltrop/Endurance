@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
+import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
-import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
+import { parseGpxText, formatRoutePointSummary, haversineMeters } from "../../../lib/gpxUtils";
 
 const FALLBACK_ROUTE_SPORTS = [
   "running",
@@ -117,6 +118,51 @@ function normalizeRoutePoints(routePoints) {
   if (Array.isArray(routePoints)) return routePoints;
   if (Array.isArray(routePoints.points)) return routePoints.points;
   return [];
+}
+
+
+function routeMetricsFromPoints(points) {
+  const normalized = normalizeRoutePoints(points);
+
+  if (normalized.length < 2) {
+    return {
+      distance_km: "",
+      elevation_gain_m: "",
+    };
+  }
+
+  let distanceMeters = 0;
+  let elevationGain = 0;
+
+  for (let index = 1; index < normalized.length; index += 1) {
+    distanceMeters += haversineMeters(normalized[index - 1], normalized[index]);
+
+    const prevEle = Number(normalized[index - 1].ele);
+    const nextEle = Number(normalized[index].ele);
+
+    if (Number.isFinite(prevEle) && Number.isFinite(nextEle)) {
+      const diff = nextEle - prevEle;
+      if (diff > 1) elevationGain += diff;
+    }
+  }
+
+  return {
+    distance_km: Number((distanceMeters / 1000).toFixed(2)),
+    elevation_gain_m: Math.round(elevationGain),
+  };
+}
+
+function makeRoutePointPayload(points) {
+  const normalized = normalizeRoutePoints(points);
+
+  return {
+    points: normalized,
+    point_count: normalized.length,
+    distance_km: routeMetricsFromPoints(normalized).distance_km || null,
+    elevation_gain_m: routeMetricsFromPoints(normalized).elevation_gain_m || 0,
+    drawn_at: new Date().toISOString(),
+    source: "draw",
+  };
 }
 
 export default function NewRoutePage() {
@@ -264,6 +310,34 @@ export default function NewRoutePage() {
       console.error("GPX upload error", error);
       setMessage(error?.message || "Could not import GPX.");
     }
+  }
+
+
+  function handleDrawPointsChange(points) {
+    const metrics = routeMetricsFromPoints(points);
+    const payload = makeRoutePointPayload(points);
+
+    setForm((current) => ({
+      ...current,
+      method: "draw",
+      route_points: payload,
+      distance_km: metrics.distance_km ? String(metrics.distance_km) : current.distance_km,
+      elevation_gain_m: metrics.elevation_gain_m ? String(metrics.elevation_gain_m) : current.elevation_gain_m,
+    }));
+  }
+
+  function undoDrawPoint() {
+    const currentPoints = normalizeRoutePoints(form.route_points);
+    handleDrawPointsChange(currentPoints.slice(0, -1));
+  }
+
+  function clearDrawPoints() {
+    setForm((current) => ({
+      ...current,
+      route_points: null,
+      distance_km: "",
+      elevation_gain_m: "",
+    }));
   }
 
   async function saveRoute() {
@@ -457,9 +531,19 @@ export default function NewRoutePage() {
                   ) : null}
 
                   {form.method === "draw" ? (
-                    <div className="create-route-coming-soon">
-                      <strong>Draw mode foundation</strong>
-                      <span>Next step: map click-to-add points, snapping and rerouting between draggable points.</span>
+                    <div className="create-route-draw-tools">
+                      <div>
+                        <strong>Draw route on map</strong>
+                        <span>{normalizeRoutePoints(form.route_points).length} point(s) added</span>
+                      </div>
+                      <div>
+                        <button type="button" onClick={undoDrawPoint} disabled={!normalizeRoutePoints(form.route_points).length}>
+                          Undo
+                        </button>
+                        <button type="button" onClick={clearDrawPoints} disabled={!normalizeRoutePoints(form.route_points).length}>
+                          Clear
+                        </button>
+                      </div>
                     </div>
                   ) : null}
 
@@ -484,15 +568,24 @@ export default function NewRoutePage() {
                     <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
                   </div>
 
-                  <OSMRouteMap
-                    routePoints={form.route_points}
-                    title={form.title || "New route"}
-                    height={360}
-                    interactive
-                    showLegend
-                    showLayerControl
-                    defaultLayer="dark"
-                  />
+                  {form.method === "draw" ? (
+                    <RouteDrawMap
+                      points={normalizeRoutePoints(form.route_points)}
+                      onChange={handleDrawPointsChange}
+                      height={390}
+                      title={form.title || "Draw route"}
+                    />
+                  ) : (
+                    <OSMRouteMap
+                      routePoints={form.route_points}
+                      title={form.title || "New route"}
+                      height={360}
+                      interactive
+                      showLegend
+                      showLayerControl
+                      defaultLayer="dark"
+                    />
+                  )}
 
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
