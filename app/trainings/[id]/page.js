@@ -115,8 +115,14 @@ function weatherCodeText(code) {
   return "Forecast";
 }
 
-function weatherIcon(code) {
-  if (code === 0) return "☀️";
+function isNightHour(date) {
+  if (!date) return false;
+  const hour = date.getHours();
+  return hour >= 21 || hour < 6;
+}
+
+function weatherIcon(code, date) {
+  if (code === 0) return isNightHour(date) ? "🌙" : "☀️";
   if ([1, 2].includes(code)) return "⛅";
   if (code === 3) return "☁️";
   if ([45, 48].includes(code)) return "🌫️";
@@ -168,6 +174,118 @@ function getWorkoutBlockCount(workout) {
 }
 
 function WeatherForecastCard({ training }) {
+  const [status, setStatus] = useState("idle");
+  const [forecast, setForecast] = useState(null);
+
+  const startDate = getWeatherStartDate(training);
+  const location = training?.start_location || "";
+  const latitude = Number(training?.latitude);
+  const longitude = Number(training?.longitude);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+  const canTryForecast = Boolean(startDate && location && isWithinWeatherWindow(startDate));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForecast() {
+      setForecast(null);
+
+      if (!startDate || !location) {
+        setStatus("missing");
+        return;
+      }
+
+      if (!isWithinWeatherWindow(startDate)) {
+        setStatus("too_early");
+        return;
+      }
+
+      try {
+        setStatus("loading");
+
+        const params = new URLSearchParams({
+          time: startDate.toISOString(),
+          location,
+        });
+
+        if (hasCoordinates) {
+          params.set("latitude", String(latitude));
+          params.set("longitude", String(longitude));
+        }
+
+        const response = await fetch(`/api/weather?${params.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok || !data?.ok) {
+          if (!cancelled) setStatus("unavailable");
+          return;
+        }
+
+        if (!cancelled) {
+          setForecast(data.forecast);
+          setStatus("ready");
+        }
+      } catch (error) {
+        console.error("KNMI weather forecast error", error);
+        if (!cancelled) setStatus("unavailable");
+      }
+    }
+
+    loadForecast();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [training?.id, training?.start_location, training?.latitude, training?.longitude, training?.starts_at, training?.final_starts_at]);
+
+  let body = null;
+
+  if (!startDate) {
+    body = <span style={styles.weatherMuted}>Available after the final start time is set.</span>;
+  } else if (!location) {
+    body = <span style={styles.weatherMuted}>Set a start location to show weather.</span>;
+  } else if (!canTryForecast) {
+    const availableFrom = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    body = (
+      <>
+        <strong style={styles.weatherSoon}>Available soon</strong>
+        <span style={styles.weatherMuted}>
+          From {availableFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} · {startDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </>
+    );
+  } else if (status === "loading") {
+    body = <span style={styles.weatherMuted}>Loading KNMI forecast...</span>;
+  } else if (status === "ready" && forecast) {
+    const forecastDate = forecast.forecastTime ? new Date(forecast.forecastTime) : startDate;
+    body = (
+      <>
+        <div style={styles.weatherMainRow}>
+          <span style={styles.weatherIcon}>{forecast.icon || weatherIcon(forecast.code, forecastDate)}</span>
+          <span style={styles.weatherTemperature}>{forecast.temperature}°C</span>
+        </div>
+        <span style={styles.weatherCondition}>{forecast.condition || weatherCodeText(forecast.code)}</span>
+        <div style={styles.weatherDetails}>
+          <span>☔ {forecast.precipitation ?? "—"}%</span>
+          <span>💨 {forecast.wind} km/h</span>
+          <span>{forecast.isNight ? "🌙 Night" : `☀️ UV ${forecast.uv ?? "—"}`}</span>
+        </div>
+        <span style={styles.weatherSource}>
+          {forecast.source || "KNMI HARMONIE via Open-Meteo"} · indicative hourly forecast
+        </span>
+      </>
+    );
+  } else {
+    body = <span style={styles.weatherMuted}>KNMI forecast unavailable for this location.</span>;
+  }
+
+  return (
+    <div style={{ ...styles.quickCard, ...styles.weatherCard }}>
+      <span>KNMI forecast indication</span>
+      {body}
+    </div>
+  );
+}) {
   const [status, setStatus] = useState("idle");
   const [forecast, setForecast] = useState(null);
 
@@ -242,6 +360,7 @@ function WeatherForecastCard({ training }) {
             wind: Math.round(hourly.wind_speed_10m?.[index] || 0),
             uv: Math.round(hourly.uv_index?.[index] || 0),
             code: hourly.weather_code?.[index],
+            forecastTime: hourly.time?.[index],
             place: place.name,
           });
           setStatus("ready");
@@ -281,15 +400,18 @@ function WeatherForecastCard({ training }) {
     body = (
       <>
         <div style={styles.weatherMainRow}>
-          <span style={styles.weatherIcon}>{weatherIcon(forecast.code)}</span>
+          <span style={styles.weatherIcon}>{weatherIcon(forecast.code, forecast.forecastTime ? new Date(forecast.forecastTime) : startDate)}</span>
           <span style={styles.weatherTemperature}>{forecast.temperature}°C</span>
         </div>
         <span style={styles.weatherCondition}>{weatherCodeText(forecast.code)}</span>
         <div style={styles.weatherDetails}>
           <span>☔ {forecast.precipitation ?? "—"}%</span>
           <span>💨 {forecast.wind} km/h</span>
-          <span>☀️ UV {forecast.uv}</span>
+          <span>{isNightHour(forecast.forecastTime ? new Date(forecast.forecastTime) : startDate) ? "🌙 Night" : `☀️ UV ${forecast.uv}`}</span>
         </div>
+        <span style={styles.weatherSource}>
+          Open-Meteo · indicative hourly forecast
+        </span>
       </>
     );
   } else {
@@ -298,7 +420,7 @@ function WeatherForecastCard({ training }) {
 
   return (
     <div style={{ ...styles.quickCard, ...styles.weatherCard }}>
-      <span>Weather forecast</span>
+      <span>Forecast indication</span>
       {body}
     </div>
   );
@@ -1534,6 +1656,14 @@ const styles = {
     color: "rgba(255,255,255,0.60)",
     lineHeight: 1.35,
     fontWeight: 750,
+  },
+  weatherSource: {
+    display: "block",
+    marginTop: 8,
+    color: "rgba(255,255,255,0.42)",
+    fontSize: 11,
+    fontWeight: 750,
+    lineHeight: 1.25,
   },
   weatherMainRow: {
     display: "flex",
