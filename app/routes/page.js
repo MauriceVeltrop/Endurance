@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
+import OSMRouteMap from "../../components/OSMRouteMap";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { formatRoutePointSummary } from "../../lib/gpxUtils";
-import { makeSvgPolyline, getElevationStats } from "../../lib/routePreview";
+import { getElevationStats } from "../../lib/routePreview";
 import { analyzeRouteQuality } from "../../lib/routeQuality";
 
 export default function RoutesPage() {
@@ -156,7 +157,6 @@ export default function RoutesPage() {
           <section style={styles.grid}>
             {routes.map((route) => {
               const sportLabel = getSportLabel(route.sport_id);
-              const previewLine = makeSvgPolyline(route.route_points, 320, 190, 18);
               const elevationStats = getElevationStats(route.route_points);
               const quality = analyzeRouteQuality(route);
 
@@ -175,35 +175,18 @@ export default function RoutesPage() {
                   style={styles.routeCard}
                 >
                   <div style={styles.routeImage}>
-                    <div style={styles.mapTexture} />
+                    <OSMRouteMap
+                      routePoints={route.route_points}
+                      title={route.title}
+                      compact
+                      interactive={false}
+                      showLegend={false}
+                      height={260}
+                    />
 
-                    {previewLine ? (
-                      <svg
-                        viewBox="0 0 320 190"
-                        preserveAspectRatio="xMidYMid meet"
-                        style={styles.routeSvg}
-                      >
-                        <polyline
-                          points={previewLine}
-                          fill="none"
-                          stroke="rgba(0,0,0,0.58)"
-                          strokeWidth="12"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-
-                        <polyline
-                          points={previewLine}
-                          fill="none"
-                          stroke="#e4ef16"
-                          strokeWidth="6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    ) : null}
-
-                    <div style={styles.routeOverlay} />
+                    <div style={styles.routeMapLabel}>
+                      <span>OpenStreetMap</span>
+                    </div>
                   </div>
 
                   <div style={styles.routeBody}>
@@ -304,6 +287,24 @@ const styles = {
   routeImage: { position: "relative", height: 210, overflow: "hidden", background: "#050805", borderBottom: "1px solid rgba(255,255,255,0.08)" },
   routeOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
   routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
+  routeMapLabel: {
+    position: "absolute",
+    left: 16,
+    bottom: 14,
+    zIndex: 3,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    padding: "8px 11px",
+    background: "rgba(5,8,5,0.76)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.04em",
+    backdropFilter: "blur(10px)",
+  },
   routeBody: { padding: 20, display: "grid", gap: 14 },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
