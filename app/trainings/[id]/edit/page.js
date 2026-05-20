@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { uploadTrainingPhoto } from "../../../../lib/trainingPhotos";
 import ImageCropperModal from "../../../../components/ImageCropperModal";
+import BottomNav from "../../../../components/BottomNav";
 
 function toDateInput(value) {
   if (!value) return "";
@@ -327,7 +328,9 @@ export default function EditTrainingPage() {
           onConfirm={confirmTrainingPhotoCrop}
         />
       ) : null}
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
