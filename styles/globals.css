@@ -1087,113 +1087,240 @@ main {
 }
 
 
-/* ===== ROUTE FEED MATCHES TRAINING FEED ===== */
-.route-feed-card .training-card-media {
-  position: relative;
-  background: rgba(230,255,0,0.06);
-  border: 1px solid rgba(230,255,0,0.10);
+/* ===== PREMIUM ROUTE FEED CARDS ===== */
+.route-feed-page {
+  padding-bottom: max(150px, calc(118px + env(safe-area-inset-bottom)));
 }
 
-.route-card-map {
-  display: block;
-  min-height: 190px;
-}
-
-.route-card-map .leaflet-container {
-  background: #071008;
-}
-
-.route-card-map-label {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: 5;
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: rgba(5,8,5,0.76);
-  border: 1px solid rgba(230,255,0,0.24);
-  color: var(--endurance-lime);
-  font-size: 11px;
-  font-weight: 1000;
-  letter-spacing: 0.08em;
-  backdrop-filter: blur(10px);
-}
-
-.route-card-description {
-  margin: 0;
-  color: rgba(255,255,255,0.62);
-  font-size: 14px;
-  line-height: 1.35;
-  font-weight: 750;
-}
-
-.primary-action.small,
-.secondary-action.small {
-  min-height: 38px;
-  padding: 0 14px;
-  font-size: 14px;
-}
-
-
-/* ===== COMPACT ROUTE CARDS ===== */
-.route-feed-card-compact {
-  grid-template-columns: 112px 1fr;
-  gap: 13px;
-  padding: 12px;
-}
-
-.route-feed-card-compact .training-card-media,
-.route-card-map-compact {
-  min-height: 150px;
-  max-height: 150px;
-  border-radius: 22px;
-}
-
-.route-feed-card-compact .training-card-body {
-  gap: 8px;
-}
-
-.route-feed-card-compact .training-card-badges {
-  gap: 7px;
-}
-
-.route-feed-card-compact .sport-badge,
-.route-feed-card-compact .status-badge {
-  padding: 6px 9px;
-  font-size: 11px;
-}
-
-.route-feed-card-compact .training-card-title {
-  font-size: 25px;
-}
-
-.route-feed-card-compact .training-card-meta {
-  gap: 4px;
-  font-size: 14px;
-}
-
-.route-feed-card-compact .route-card-description {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.route-filter-card {
   overflow: hidden;
 }
 
-.route-feed-card-compact .training-card-actions {
-  margin-top: 2px;
+.route-tabs {
+  padding-bottom: 8px;
 }
 
-.route-feed-card-compact .primary-action.small,
-.route-feed-card-compact .secondary-action.small {
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
+.route-filter-icon {
+  min-width: 54px;
+  border: 1px solid var(--endurance-border);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  color: white;
+  padding: 12px 16px;
+  font-weight: 1000;
+  white-space: nowrap;
 }
 
-.route-feed-card-compact .route-card-map-label {
-  left: 10px;
-  bottom: 10px;
-  padding: 6px 9px;
-  font-size: 10px;
+.route-feed-stack {
+  gap: 16px;
+}
+
+.route-feed-card-premium {
+  position: relative;
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 188px;
+  padding: 16px;
+  border-radius: 30px;
+  border: 1px solid rgba(230,255,0,0.14);
+  background:
+    radial-gradient(circle at 78% 20%, rgba(230,255,0,0.08), transparent 36%),
+    linear-gradient(180deg, rgba(22,27,33,0.86), rgba(7,11,16,0.90));
+  box-shadow: 0 26px 80px rgba(0,0,0,0.26);
+  overflow: hidden;
+}
+
+.route-feed-card-premium::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255,255,255,0.035), transparent 42%);
+}
+
+.route-feed-map {
+  position: relative;
+  z-index: 1;
+  min-height: 164px;
+  height: 164px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(230,255,0,0.08);
+  border: 1px solid rgba(230,255,0,0.10);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.route-feed-map .leaflet-container {
+  background: #071008;
+}
+
+.route-feed-map-dot {
+  position: absolute;
+  left: 20%;
+  top: 52%;
+  z-index: 5;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 4px solid rgba(5,8,5,0.88);
+  box-shadow: 0 0 0 2px rgba(230,255,0,0.45), 0 0 22px rgba(230,255,0,0.25);
+  pointer-events: none;
+}
+
+.route-feed-content {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.route-feed-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.route-feed-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-feed-more {
+  color: rgba(255,255,255,0.78);
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  transform: translateY(2px);
+}
+
+.route-feed-title {
+  color: white;
+  text-decoration: none;
+  font-size: clamp(27px, 7vw, 38px);
+  line-height: 0.96;
+  font-weight: 1000;
+  letter-spacing: -0.07em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.route-feed-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255,255,255,0.66);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.route-feed-stats i {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.16);
+  display: inline-block;
+}
+
+.route-feed-elevation,
+.route-feed-place {
+  color: rgba(255,255,255,0.58);
+  font-weight: 850;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.route-feed-place {
+  margin-top: 1px;
+}
+
+.route-feed-actions {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.route-feed-open {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0 17px;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--endurance-lime);
+  color: #05070a;
+  text-decoration: none;
+  font-weight: 1000;
+  box-shadow: 0 0 26px rgba(230,255,0,0.16);
+}
+
+.route-feed-open span {
+  font-size: 19px;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 420px) {
+  .route-feed-card-premium {
+    grid-template-columns: 126px minmax(0, 1fr);
+    gap: 13px;
+    min-height: 174px;
+    padding: 13px;
+    border-radius: 28px;
+  }
+
+  .route-feed-map {
+    height: 152px;
+    min-height: 152px;
+    border-radius: 22px;
+  }
+
+  .route-feed-content {
+    gap: 7px;
+  }
+
+  .route-feed-title {
+    font-size: 29px;
+  }
+
+  .route-feed-stats {
+    font-size: 14px;
+    gap: 6px;
+  }
+
+  .route-feed-elevation,
+  .route-feed-place {
+    font-size: 13px;
+  }
+
+  .route-feed-open {
+    min-height: 40px;
+    padding: 0 15px;
+    font-size: 14px;
+  }
+
+  .route-feed-more {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .route-feed-card-premium {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .route-feed-map {
+    height: 144px;
+    min-height: 144px;
+  }
+
+  .route-feed-title {
+    font-size: 26px;
+  }
 }
 
