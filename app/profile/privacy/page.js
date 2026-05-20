@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
+import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
 
 const visibilityOptions = [
@@ -278,7 +279,9 @@ export default function PrivacySettingsPage() {
           </form>
         )}
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
