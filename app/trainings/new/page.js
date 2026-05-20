@@ -248,7 +248,9 @@ export default function CreateTrainingPage() {
 
           setForm((current) => ({
             ...current,
-            start_location: current.start_location?.trim() ? current.start_location : address,
+            start_location: current.start_location?.trim()
+              ? current.start_location
+              : address || `Current location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`,
             latitude,
             longitude,
           }));
@@ -595,6 +597,11 @@ export default function CreateTrainingPage() {
       }
 
       if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
+        if (/^(current location|huidige locatie|my location|near me)$/i.test(form.start_location.trim())) {
+          setMessage("Use the current location button first, so coordinates can be saved for weather and maps.");
+          return;
+        }
+
         const geocoded = await geocodeAddress(form.start_location);
         if (geocoded?.latitude && geocoded?.longitude) {
           setForm((current) => ({
