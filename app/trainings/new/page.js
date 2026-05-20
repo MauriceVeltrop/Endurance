@@ -1,8 +1,12 @@
-// NOTIFICATIONS_V1_PATCH: invite notification helpers available for create-training flow.
+
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
+// NOTIFICATIONS_V1_PATCH: invite notification helpers available for create-training flow.
+import { useEffect, useMemo, useState } from "react";
+
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import ImageCropperModal from "../../../components/ImageCropperModal";
@@ -135,7 +139,7 @@ function makeTimeOption(overrides = {}) {
   };
 }
 
-export default function CreateTrainingPage() {
+function NewTrainingInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1831,3 +1835,19 @@ const styles = {
     display: "none",
   },
 };
+
+
+
+export default function NewTrainingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white flex items-center justify-center">
+          Loading training form...
+        </div>
+      }
+    >
+      <NewTrainingInner />
+    </Suspense>
+  );
+}
