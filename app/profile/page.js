@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
+import BottomNav from "../../components/BottomNav";
 import { supabase } from "../../lib/supabase";
 
 export default function ProfilePage() {
@@ -30,7 +31,9 @@ export default function ProfilePage() {
         <AppHeader compact />
         <section style={styles.card}>Opening your profile...</section>
       </section>
-    </main>
+    
+      <BottomNav />
+</main>
   );
 }
 
