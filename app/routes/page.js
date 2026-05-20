@@ -1,25 +1,56 @@
+// app/routes/page.js
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
-import OSMRouteMap from "../../components/OSMRouteMap";
+import RouteCard from "../../components/routes/RouteCard";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
-import { formatRoutePointSummary } from "../../lib/gpxUtils";
-import { getElevationStats } from "../../lib/routePreview";
-import { analyzeRouteQuality } from "../../lib/routeQuality";
+
+function matchesSearch(route, search) {
+  if (!search) return true;
+
+  const haystack = [
+    route.title,
+    route.description,
+    route.visibility,
+    route.sport_id,
+    getSportLabel(route.sport_id),
+    route.distance_km,
+    route.elevation_gain_m,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(search.toLowerCase());
+}
+
+function supportsRouteSport(route, activeTab) {
+  if (activeTab === "all") return true;
+  if (activeTab === "my") return route._isOwnRoute;
+  if (activeTab === "public") return route.visibility === "public";
+  if (activeTab === "trail") return String(route.sport_id || "").includes("trail");
+  return route.sport_id === activeTab;
+}
 
 export default function RoutesPage() {
   const router = useRouter();
+
   const [profile, setProfile] = useState(null);
   const [routes, setRoutes] = useState([]);
   const [preferredSportIds, setPreferredSportIds] = useState([]);
+  const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  const loadRoutes = async () => {
+  async function loadRoutes() {
+    setLoading(true);
     setMessage("");
 
     try {
@@ -73,11 +104,23 @@ export default function RoutesPage() {
 
       if (error) throw error;
 
-      const filtered = profileRow?.role === "admin" || profileRow?.role === "moderator"
-        ? data || []
-        : (data || []).filter((route) => allowedSports.includes(route.sport_id) || route.creator_id === user.id);
+      const visibleRoutes =
+        profileRow?.role === "admin" || profileRow?.role === "moderator"
+          ? data || []
+          : (data || []).filter((route) => allowedSports.includes(route.sport_id) || route.creator_id === user.id);
 
-      setRoutes(filtered);
+      setRoutes(
+        visibleRoutes.map((route) => ({
+          ...route,
+          _isOwnRoute: route.creator_id === user.id,
+        }))
+      );
+
+      const [{ count: notificationCount }, { count: inviteCount }] = await Promise.all([
+        supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
+        supabase.from("training_invites").select("id", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending"),
+      ]);
+      setUnreadCount((notificationCount || 0) + (inviteCount || 0));
     } catch (err) {
       console.error("Routes load error", err);
       setMessage(err?.message || "Could not load routes.");
@@ -85,7 +128,7 @@ export default function RoutesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     loadRoutes();
@@ -95,273 +138,144 @@ export default function RoutesPage() {
     return new Set(routes.map((route) => route.sport_id).filter(Boolean)).size;
   }, [routes]);
 
+  const routeWithGpxCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
+  const ownRouteCount = routes.filter((route) => route._isOwnRoute).length;
+  const trailRouteCount = routes.filter((route) => String(route.sport_id || "").includes("trail")).length;
+
+  const tabs = useMemo(() => {
+    const sportTabs = preferredSportIds.slice(0, 4).map((sportId) => ({
+      id: sportId,
+      label: getSportLabel(sportId),
+    }));
+
+    return [
+      { id: "all", label: "All routes" },
+      { id: "my", label: "My routes" },
+      { id: "public", label: "Public" },
+      { id: "trail", label: "Trail" },
+      ...sportTabs,
+    ];
+  }, [preferredSportIds]);
+
+  const filteredRoutes = routes
+    .filter((route) => matchesSearch(route, search))
+    .filter((route) => supportsRouteSport(route, activeTab));
+
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+    <main className="endurance-page">
+      <AppHeader active="routes" />
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Routes</div>
-          <div style={styles.titleRow}>
-            <h1 style={styles.title}>Build better routes.</h1>
-            <button type="button" onClick={() => router.push("/routes/new")} style={styles.createButton}>
-              + Route
-            </button>
-          </div>
-          <p style={styles.subtitle}>
-            Save GPX routes and prepare them for future training sessions. Sport-specific route generation comes next.
+      <section className="endurance-shell training-hero endurance-card">
+        <div>
+          <p className="eyebrow">Route feed</p>
+          <h1>
+            Find your next
+            <br />
+            route<span>.</span>
+          </h1>
+          <p>
+            Browse saved routes on real map previews, filtered by your preferred sports and ready to become training sessions.
           </p>
+        </div>
+        <Link href="/routes/new" className="hero-create-button">
+          + Create route
+        </Link>
+      </section>
 
-          <div style={styles.actionRow}>
-            <button type="button" onClick={() => router.push("/trainings")} style={styles.secondaryButton}>
-              Training sessions
+      <section className="endurance-shell metric-grid">
+        <div className="metric-card highlight">
+          <span>◇</span>
+          <strong>{loading ? "…" : routes.length}</strong>
+          <div>
+            <b>Routes</b>
+            <p>Available route cards for your sports.</p>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <span>🧭</span>
+          <strong>{loading ? "…" : routeWithGpxCount}</strong>
+          <div>
+            <b>Mapped</b>
+            <p>Routes with GPX or route points.</p>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <span>👤</span>
+          <strong>{loading ? "…" : ownRouteCount}</strong>
+          <div>
+            <b>Your routes</b>
+            <p>Created or imported by you.</p>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <span>⛰</span>
+          <strong>{loading ? "…" : trailRouteCount}</strong>
+          <div>
+            <b>Trail routes</b>
+            <p>Off-road focused routes in your feed.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="endurance-shell feed-filter-card endurance-card">
+        <p className="eyebrow">Smart route feed</p>
+        <h2>Your route library</h2>
+
+        <label className="feed-search">
+          <span>⌕</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search route, place or sport..."
+          />
+        </label>
+
+        <div className="training-tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={activeTab === tab.id ? "active" : ""}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="endurance-shell training-feed-stack">
+        {loading && <div className="endurance-card notification-empty">Loading routes...</div>}
+
+        {!loading && message ? (
+          <div className="endurance-card notification-empty">
+            <h2>Could not load routes</h2>
+            <p>{message}</p>
+            <button type="button" className="primary-action" onClick={loadRoutes}>
+              Try again
             </button>
           </div>
-        </header>
-
-        <section style={styles.statsGrid}>
-          <div style={styles.statCard}>
-            <span style={styles.statLabel}>Routes</span>
-            <strong style={styles.statValue}>{loading ? "…" : routes.length}</strong>
-            <span style={styles.statHint}>available</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statLabel}>Sports</span>
-            <strong style={styles.statValue}>{loading ? "…" : routeSportsCount}</strong>
-            <span style={styles.statHint}>with routes</span>
-          </div>
-        </section>
-
-        {message ? <section style={styles.message}>{message}</section> : null}
-
-        {loading ? (
-          <section style={styles.emptyCard}>
-            <h2>Loading routes...</h2>
-            <p>Fetching saved routes from Endurance.</p>
-          </section>
         ) : null}
 
-        {!loading && !message && routes.length === 0 ? (
-          <section style={styles.emptyCard}>
-            <h2>No routes yet.</h2>
-            <p>
-              Create your first route placeholder now. Later this will connect to the route wizard, GPX upload and sport-aware routing.
-            </p>
-            <button type="button" onClick={() => router.push("/routes/new")} style={styles.primaryButton}>
-              Create first route
-            </button>
-          </section>
-        ) : null}
+        {!loading &&
+          !message &&
+          filteredRoutes.map((route) => <RouteCard key={route.id} route={route} />)}
 
-        {!loading && routes.length > 0 ? (
-          <section style={styles.grid}>
-            {routes.map((route) => {
-              const sportLabel = getSportLabel(route.sport_id);
-              const elevationStats = getElevationStats(route.route_points);
-              const quality = analyzeRouteQuality(route);
-
-              return (
-                <article
-                  key={route.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => router.push(`/routes/${route.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      router.push(`/routes/${route.id}`);
-                    }
-                  }}
-                  style={styles.routeCard}
-                >
-                  <div style={styles.routeImage}>
-                    <OSMRouteMap
-                      routePoints={route.route_points}
-                      title={route.title}
-                      compact
-                      interactive={false}
-                      showLegend={false}
-                      height={260}
-                    />
-
-                    <div style={styles.routeMapLabel}>
-                      <span>OpenStreetMap</span>
-                    </div>
-                  </div>
-
-                  <div style={styles.routeBody}>
-                    <div style={styles.cardTop}>
-                      <span style={styles.sportBadge}>{sportLabel}</span>
-                      <span style={styles.visibilityBadge}>{route.visibility}</span>
-                      <span style={styles.qualityMini}>{quality.score}</span>
-                    </div>
-
-                    <h2 style={styles.cardTitle}>{route.title}</h2>
-                    {route.description ? <p style={styles.cardText}>{route.description}</p> : null}
-
-                    <div style={styles.routeFacts}>
-                      <span>↗ {route.distance_km ? `${route.distance_km} km` : "Distance not set"}</span>
-                      <span>⛰ {route.elevation_gain_m ? `${route.elevation_gain_m} m` : "Elevation not set"}</span>
-                      <span>{formatRoutePointSummary(route.route_points)}</span>
-                      <span>{elevationStats.available ? `Elevation ${elevationStats.min}-${elevationStats.max} m` : "No elevation profile"}</span>
-                      <span>{route.gpx_file_url ? "GPX linked" : "No GPX link"}</span>
-                    </div>
-
-                    <div style={styles.cardActions}>
-                      <button
-                        type="button"
-                        style={styles.openButton}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          router.push(`/routes/${route.id}`);
-                        }}
-                      >
-                        Open route →
-                      </button>
-                      {route.creator_id === profile?.id ? (
-                        <button
-                          type="button"
-                          style={styles.templateButton}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            router.push(`/routes/${route.id}/edit`);
-                          }}
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        style={styles.templateButton}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          router.push(`/routes/new?from=${route.id}`);
-                        }}
-                      >
-                        Duplicate
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
+        {!loading && !message && !filteredRoutes.length ? (
+          <div className="endurance-card notification-empty">
+            <h2>No routes found</h2>
+            <p>Create a route or change your filters.</p>
+            <Link href="/routes/new" className="primary-action">
+              Create route
+            </Link>
+          </div>
         ) : null}
       </section>
-    
-      <BottomNav />
-</main>
+
+      <BottomNav unreadCount={unreadCount} />
+    </main>
   );
 }
-
-const baseButton = { border: 0, cursor: "pointer", fontWeight: 950 };
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-    color: "white",
-    padding: "18px 18px 42px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  shell: { width: "min(960px, 100%)", margin: "0 auto", display: "grid", gap: 20 },
-  header: { display: "grid", gap: 10 },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  titleRow: { display: "flex", justifyContent: "space-between", alignItems: "end", gap: 14, flexWrap: "wrap" },
-  title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
-  subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, maxWidth: 620 },
-  actionRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 },
-  createButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px", boxShadow: "0 18px 38px rgba(228,239,22,0.16)" },
-  secondaryButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", fontWeight: 950, padding: "0 16px", cursor: "pointer" },
-  statsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  statCard: { minHeight: 112, borderRadius: 26, padding: 16, boxSizing: "border-box", background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", alignContent: "space-between" },
-  statLabel: { color: "rgba(255,255,255,0.54)", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.12em" },
-  statValue: { fontSize: 42, letterSpacing: "-0.06em", lineHeight: 0.95 },
-  statHint: { color: "rgba(255,255,255,0.62)", fontSize: 13, fontWeight: 800 },
-  message: { borderRadius: 24, padding: 18, background: "rgba(80,10,10,0.50)", border: "1px solid rgba(255,80,80,0.20)", color: "rgba(255,255,255,0.82)" },
-  emptyCard: { borderRadius: 30, padding: 24, background: glass, border: "1px solid rgba(255,255,255,0.13)" },
-  primaryButton: { ...baseButton, minHeight: 48, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 18px" },
-  grid: { display: "grid", gap: 16 },
-  routeCard: { overflow: "hidden", borderRadius: 32, background: glass, border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)" },
-  routeImage: { position: "relative", height: 210, overflow: "hidden", background: "#050805", borderBottom: "1px solid rgba(255,255,255,0.08)" },
-  routeOverlay: { position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.62))" },
-  routeSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", padding: 14, boxSizing: "border-box", filter: "drop-shadow(0 12px 28px rgba(228,239,22,0.20))" },
-  routeMapLabel: {
-    position: "absolute",
-    left: 16,
-    bottom: 14,
-    zIndex: 3,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 999,
-    padding: "8px 11px",
-    background: "rgba(5,8,5,0.76)",
-    border: "1px solid rgba(228,239,22,0.24)",
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: "0.04em",
-    backdropFilter: "blur(10px)",
-  },
-  routeBody: { padding: 20, display: "grid", gap: 14 },
-  cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
-  visibilityBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.80)", textTransform: "capitalize", fontWeight: 900 },
-  qualityMini: { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 34, height: 34, borderRadius: 999, background: "#e4ef16", color: "#101406", fontWeight: 950 },
-  cardTitle: { margin: 0, fontSize: 30, letterSpacing: "-0.055em", lineHeight: 1 },
-  cardText: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 },
-  routeFacts: { display: "grid", gap: 7, color: "rgba(255,255,255,0.68)", fontWeight: 750 },
-  cardActions: { display: "flex", gap: 10, flexWrap: "wrap" },
-  openButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "#e4ef16", color: "#101406", padding: "0 16px" },
-  templateButton: { ...baseButton, justifySelf: "start", minHeight: 44, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "white", padding: "0 16px" },
-  routesPremiumBanner: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 34,
-    minHeight: 220,
-    background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.16), transparent 34%), linear-gradient(145deg, #121712, #050505)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    boxShadow: "0 22px 70px rgba(0,0,0,0.32)",
-  },
-
-  routesPremiumGlow: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "radial-gradient(circle at 84% 18%, rgba(228,239,22,0.18), transparent 24%)",
-  },
-
-  routesPremiumContent: {
-    position: "relative",
-    zIndex: 2,
-    padding: 26,
-    display: "grid",
-    gap: 14,
-  },
-
-  routesPremiumKicker: {
-    color: "#e4ef16",
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
-  },
-
-  routesPremiumTitle: {
-    margin: 0,
-    fontSize: "clamp(34px, 9vw, 58px)",
-    lineHeight: 0.92,
-    letterSpacing: "-0.08em",
-  },
-
-  routesPremiumText: {
-    margin: 0,
-    maxWidth: 520,
-    color: "rgba(255,255,255,0.68)",
-    lineHeight: 1.5,
-  },
-
-};
