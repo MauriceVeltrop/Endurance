@@ -356,7 +356,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap route-draw-map-wrap-light">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
-        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap map to add points · drag markers · tap marker to remove"}</small>
+        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap map to add routepoints · drag routepoints · tap routepoint to remove"}</small>
       </div>
 
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />

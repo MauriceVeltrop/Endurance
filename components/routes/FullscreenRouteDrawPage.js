@@ -44,7 +44,6 @@ export default function FullscreenRouteDrawPage() {
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [autoReroute, setAutoReroute] = useState(true);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -277,14 +276,14 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
-    if (!autoReroute || points.length < 2) return;
+    if (points.length < 2) return;
 
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
     }, 850);
 
     return () => window.clearTimeout(timeout);
-  }, [autoReroute, pointsPayload?.point_count]);
+  }, [pointsPayload?.point_count]);
 
 
   if (checking) {
@@ -340,17 +339,9 @@ export default function FullscreenRouteDrawPage() {
           <b>＋</b>
           <span>Insert</span>
         </button>
-        <button type="button" onClick={() => setAutoReroute((value) => !value)} className={autoReroute ? "active" : ""}>
-          <b>⚡</b>
-          <span>Auto</span>
-        </button>
         <button type="button" onClick={closeLoop} disabled={points.length < 3}>
           <b>↺</b>
           <span>Loop</span>
-        </button>
-        <button type="button" onClick={rerouteRoute} disabled={points.length < 2 || routingStatus === "routing"} className={routedPoints.length ? "active" : ""}>
-          <b>{routingStatus === "routing" ? "…" : "⇄"}</b>
-          <span>{routingStatus === "routing" ? "Route" : "Reroute"}</span>
         </button>
         <button type="button" onClick={undoPoint} disabled={!points.length}>
           <b>↶</b>
@@ -366,7 +357,7 @@ export default function FullscreenRouteDrawPage() {
 
       {routedPoints.length ? (
         <section className="route-draw-routing-status">
-          {autoReroute ? "Auto-routed over roads/paths" : "Routed over roads/paths"}
+          Route automatically follows roads/paths
         </section>
       ) : null}
 
@@ -411,7 +402,7 @@ export default function FullscreenRouteDrawPage() {
       ) : null}
 
       <section className="route-draw-tip">
-        Tap map to add points · drag markers to adjust · tap marker or point row to remove
+        Tap to add routepoints · drag routepoints to reshape · route follows roads/paths automatically
       </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
