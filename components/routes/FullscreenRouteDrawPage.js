@@ -47,12 +47,17 @@ export default function FullscreenRouteDrawPage() {
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [targetLocation, setTargetLocation] = useState(null);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
   const activeRoutePayload = routedPayload || pointsPayload;
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2;
+  const routeSignature = useMemo(
+    () => points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join("|"),
+    [points]
+  );
 
   useEffect(() => {
     async function bootstrap() {
@@ -113,13 +118,13 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation(false);
   }, []);
 
-  function requestCurrentLocation(addAsPoint = false) {
+  function requestCurrentLocation() {
     if (!navigator.geolocation) {
       setMessage("Geolocation is not available on this device.");
       return;
     }
 
-    setMessage(addAsPoint ? "Getting your current location..." : "Finding your current location...");
+    setMessage("Finding your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -127,16 +132,12 @@ export default function FullscreenRouteDrawPage() {
           lat: Number(position.coords.latitude.toFixed(6)),
           lon: Number(position.coords.longitude.toFixed(6)),
           accuracy: Math.round(position.coords.accuracy || 35),
+          label: "Current location",
         };
 
         setCurrentLocation(location);
-
-        if (addAsPoint) {
-          handlePointsChange(points.length ? [location, ...points] : [location]);
-          setMessage("Current location added as route point.");
-        } else {
-          setMessage("");
-        }
+        setTargetLocation(location);
+        setMessage("");
       },
       () => {
         setMessage("Could not access current location. You can still search or draw manually.");
@@ -183,38 +184,16 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function useCurrentLocation() {
-    if (!navigator.geolocation) {
-      setMessage("Geolocation is not available on this device.");
+    if (currentLocation?.lat && currentLocation?.lon) {
+      setTargetLocation({
+        ...currentLocation,
+        label: "Current location",
+      });
+      setMessage("Centered on current location.");
       return;
     }
 
-    setMessage("Centering on your current location...");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location = {
-          lat: Number(position.coords.latitude.toFixed(6)),
-          lon: Number(position.coords.longitude.toFixed(6)),
-          accuracy: Math.round(position.coords.accuracy || 35),
-        };
-
-        setCurrentLocation(location);
-
-        window.dispatchEvent(
-          new CustomEvent("endurance:fly-to-location", {
-            detail: {
-              lat: location.lat,
-              lon: location.lon,
-              label: "Current location",
-            },
-          })
-        );
-
-        setMessage("Centered on current location.");
-      },
-      () => setMessage("Could not access current location. Check browser permission."),
-      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
-    );
+    requestCurrentLocation();
   }
 
   function continueToDetails() {
@@ -268,30 +247,27 @@ export default function FullscreenRouteDrawPage() {
   }, [searchText]);
 
   function flyToLocation(result) {
-    window.dispatchEvent(
-      new CustomEvent("endurance:fly-to-location", {
-        detail: {
-          lat: result.lat,
-          lon: result.lon,
-          label: result.label,
-        },
-      })
-    );
+    const location = {
+      lat: Number(result.lat),
+      lon: Number(result.lon),
+      label: result.label || "Selected location",
+    };
 
+    setTargetLocation(location);
     setSearchResults([]);
     setSearchText(result.label || "");
   }
 
 
   useEffect(() => {
-    if (points.length < 2) return;
+    if (points.length < 2 || !routeSignature) return;
 
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
     }, 850);
 
     return () => window.clearTimeout(timeout);
-  }, [pointsPayload?.point_count]);
+  }, [routeSignature]);
 
 
   if (checking) {
@@ -369,6 +345,7 @@ export default function FullscreenRouteDrawPage() {
         routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
         focusCurrentLocation
+        targetLocation={targetLocation}
       />
 
       <section className="route-draw-side-tools" aria-label="Route drawing tools">

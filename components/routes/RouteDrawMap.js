@@ -92,6 +92,7 @@ export default function RouteDrawMap({
   routeMode = "routed",
   currentLocation = null,
   focusCurrentLocation = false,
+  targetLocation = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -282,7 +283,10 @@ export default function RouteDrawMap({
 
       const boundsSource = routeLatLngs.length >= 2 ? routeLatLngs : waypointLatLngs;
 
-      if (boundsSource.length >= 2) {
+      const hasExplicitTarget =
+        Number.isFinite(Number(targetLocation?.lat)) && Number.isFinite(Number(targetLocation?.lon));
+
+      if (boundsSource.length >= 2 && !hasExplicitTarget) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
           padding: [32, 32],
           maxZoom: 15,
@@ -296,7 +300,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [linePoints, waypoints, onChange, routeMode]);
+  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon]);
 
 
 
@@ -321,6 +325,22 @@ export default function RouteDrawMap({
       window.removeEventListener("endurance:fly-to-location", handleFlyTo);
     };
   }, []);
+
+
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const lat = Number(targetLocation?.lat);
+    const lon = Number(targetLocation?.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    mapRef.current.flyTo([lat, lon], 15, {
+      animate: true,
+      duration: 1.1,
+    });
+  }, [targetLocation?.lat, targetLocation?.lon]);
 
   useEffect(() => {
     let cancelled = false;
