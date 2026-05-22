@@ -3189,3 +3189,38 @@ main {
   }
 }
 
+
+/* ===== AUTO SNAP + CURRENT LOCATION PATCH ===== */
+.route-current-location-marker {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 999px;
+  background: rgba(45, 140, 255, 0.16);
+  border: 2px solid rgba(255,255,255,0.96);
+  box-shadow:
+    0 0 0 7px rgba(45, 140, 255, 0.20),
+    0 0 22px rgba(45, 140, 255, 0.74);
+}
+
+.route-current-location-marker span {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: block;
+  margin: 6px;
+  background: #2d8cff;
+  box-shadow: 0 0 14px rgba(45, 140, 255, 0.82);
+}
+
+.route-draw-polished .route-draw-side-tools {
+  max-height: calc(100vh - 250px);
+}
+
+.route-draw-polished .route-draw-side-tools button.active b {
+  color: var(--endurance-lime);
+}
+
+.route-draw-routing-status {
+  width: auto;
+}
+
