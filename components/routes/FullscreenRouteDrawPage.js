@@ -43,6 +43,8 @@ export default function FullscreenRouteDrawPage() {
   const [routedPayload, setRoutedPayload] = useState(null);
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [autoReroute, setAutoReroute] = useState(true);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -103,6 +105,43 @@ export default function FullscreenRouteDrawPage() {
 
     bootstrap();
   }, [router]);
+
+
+  useEffect(() => {
+    requestCurrentLocation(false);
+  }, []);
+
+  function requestCurrentLocation(addAsPoint = false) {
+    if (!navigator.geolocation) {
+      setMessage("Geolocation is not available on this device.");
+      return;
+    }
+
+    setMessage(addAsPoint ? "Getting your current location..." : "Finding your current location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lat: Number(position.coords.latitude.toFixed(6)),
+          lon: Number(position.coords.longitude.toFixed(6)),
+          accuracy: Math.round(position.coords.accuracy || 35),
+        };
+
+        setCurrentLocation(location);
+
+        if (addAsPoint) {
+          handlePointsChange(points.length ? [location, ...points] : [location]);
+          setMessage("Current location added as route point.");
+        } else {
+          setMessage("");
+        }
+      },
+      () => {
+        setMessage("Could not access current location. You can still search or draw manually.");
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
+    );
+  }
 
   function handlePointsChange(nextPoints) {
     setPointsPayload(makeRoutePointPayload(nextPoints));
@@ -166,7 +205,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
-  async function rerouteRoute() {
+  async function rerouteRoute({ silent = false } = {}) {
     if (points.length < 2) {
       setMessage("Add at least two points before rerouting.");
       return;
@@ -174,7 +213,7 @@ export default function FullscreenRouteDrawPage() {
 
     setRoutingStatus("routing");
     setRoutingError("");
-    setMessage("Rerouting route over roads and paths...");
+    if (!silent) setMessage("Rerouting route over roads and paths...");
 
     try {
       const response = await fetch("/api/routes/reroute", {
@@ -205,7 +244,7 @@ export default function FullscreenRouteDrawPage() {
 
       setRoutedPayload(routed);
       setRoutingStatus("done");
-      setMessage(`Route snapped using ${data.profile || "routing profile"}.`);
+      if (!silent) setMessage(`Route snapped using ${data.profile || "routing profile"}.`);
     } catch (error) {
       console.error("Fullscreen reroute error", error);
       setRoutingStatus("error");
@@ -235,6 +274,18 @@ export default function FullscreenRouteDrawPage() {
     window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
     router.push("/routes/new?routeDraft=1");
   }
+
+
+  useEffect(() => {
+    if (!autoReroute || points.length < 2) return;
+
+    const timeout = window.setTimeout(() => {
+      rerouteRoute({ silent: true });
+    }, 850);
+
+    return () => window.clearTimeout(timeout);
+  }, [autoReroute, pointsPayload?.point_count]);
+
 
   if (checking) {
     return (
@@ -276,6 +327,8 @@ export default function FullscreenRouteDrawPage() {
         layer={drawLayer}
         onLayerChange={setDrawLayer}
         routeMode={routedPoints.length ? "routed" : "drawn"}
+        currentLocation={currentLocation}
+        focusCurrentLocation
       />
 
       <section className="route-draw-side-tools" aria-label="Route drawing tools">
@@ -286,6 +339,10 @@ export default function FullscreenRouteDrawPage() {
         <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
           <b>＋</b>
           <span>Insert</span>
+        </button>
+        <button type="button" onClick={() => setAutoReroute((value) => !value)} className={autoReroute ? "active" : ""}>
+          <b>⚡</b>
+          <span>Auto</span>
         </button>
         <button type="button" onClick={closeLoop} disabled={points.length < 3}>
           <b>↺</b>
@@ -309,7 +366,7 @@ export default function FullscreenRouteDrawPage() {
 
       {routedPoints.length ? (
         <section className="route-draw-routing-status">
-          Routed over roads/paths
+          {autoReroute ? "Auto-routed over roads/paths" : "Routed over roads/paths"}
         </section>
       ) : null}
 
