@@ -426,7 +426,10 @@ export default function NewRoutePage() {
       rerouteDrawnRoute();
     }, 900);
 
-    return (
+    return () => window.clearTimeout(timeout);
+  }, [autoReroute, form.method, form.route_points?.point_count]);
+
+  return (
     <main className="endurance-page create-route-v2-page route-step-page">
       <AppHeader active="routes" />
 
