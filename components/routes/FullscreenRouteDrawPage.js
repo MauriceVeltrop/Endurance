@@ -39,9 +39,11 @@ export default function FullscreenRouteDrawPage() {
   const [drawLayer, setDrawLayer] = useState("light");
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(true);
+  const [showPointPanel, setShowPointPanel] = useState(false);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const metrics = useMemo(() => calculateRouteMetrics(pointsPayload), [pointsPayload]);
+  const canContinue = points.length >= 2;
 
   useEffect(() => {
     async function bootstrap() {
@@ -107,6 +109,11 @@ export default function FullscreenRouteDrawPage() {
 
   function clearRoute() {
     setPointsPayload(null);
+    setShowPointPanel(false);
+  }
+
+  function removePoint(indexToRemove) {
+    handlePointsChange(points.filter((_, index) => index !== indexToRemove));
   }
 
   function closeLoop() {
@@ -151,7 +158,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function continueToDetails() {
-    if (points.length < 2) {
+    if (!canContinue) {
       setMessage("Add at least two points before continuing.");
       return;
     }
@@ -181,19 +188,24 @@ export default function FullscreenRouteDrawPage() {
   }
 
   return (
-    <main className="route-draw-fullscreen">
-      <section className="route-draw-floating-top">
-        <button type="button" onClick={() => router.push("/routes/new")} aria-label="Close draw editor">
-          ×
+    <main className="route-draw-fullscreen route-draw-polished">
+      <section className="route-draw-topbar">
+        <button type="button" className="route-draw-round-btn" onClick={() => router.push("/routes/new")} aria-label="Close draw editor">
+          ←
         </button>
 
-        <div>
+        <div className="route-draw-title-block">
           <span>{getSportLabel(sportId)}</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} />
         </div>
 
-        <button type="button" className="route-draw-continue" onClick={continueToDetails}>
-          Continue
+        <button
+          type="button"
+          className="route-draw-save-btn"
+          onClick={continueToDetails}
+          disabled={!canContinue}
+        >
+          Save & continue
         </button>
       </section>
 
@@ -209,20 +221,71 @@ export default function FullscreenRouteDrawPage() {
         routeMode="drawn"
       />
 
-      <section className="route-draw-floating-stats">
-        <span><b>{metrics.distance_km || "—"}</b>km</span>
-        <span><b>{metrics.elevation_gain_m || "—"}</b>m gain</span>
-        <span><b>{estimateTimeText(metrics.distance_km, sportId)}</b>est.</span>
+      <section className="route-draw-side-tools" aria-label="Route drawing tools">
+        <button type="button" onClick={useCurrentLocation}>
+          <b>⌖</b>
+          <span>Location</span>
+        </button>
+        <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
+          <b>＋</b>
+          <span>Insert</span>
+        </button>
+        <button type="button" onClick={closeLoop} disabled={points.length < 3}>
+          <b>↺</b>
+          <span>Loop</span>
+        </button>
+        <button type="button" onClick={undoPoint} disabled={!points.length}>
+          <b>↶</b>
+          <span>Undo</span>
+        </button>
+        <button type="button" onClick={clearRoute} disabled={!points.length}>
+          <b>⌫</b>
+          <span>Clear</span>
+        </button>
       </section>
 
-      <section className="route-draw-floating-tools">
-        <button type="button" onClick={useCurrentLocation}>Location</button>
-        <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
-          Insert
+      <section className="route-draw-metrics-card">
+        <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
+          <span>Points</span>
+          <b>{points.length}</b>
         </button>
-        <button type="button" onClick={closeLoop} disabled={points.length < 3}>Close loop</button>
-        <button type="button" onClick={undoPoint} disabled={!points.length}>Undo</button>
-        <button type="button" onClick={clearRoute} disabled={!points.length}>Clear</button>
+        <div>
+          <span>Distance</span>
+          <b>{metrics.distance_km || "—"} km</b>
+        </div>
+        <div>
+          <span>Elevation</span>
+          <b>{metrics.elevation_gain_m || "—"} m</b>
+        </div>
+        <div>
+          <span>Est. time</span>
+          <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
+        </div>
+      </section>
+
+      {showPointPanel ? (
+        <section className="route-draw-point-panel">
+          <div>
+            <strong>Route points</strong>
+            <button type="button" onClick={() => setShowPointPanel(false)}>×</button>
+          </div>
+
+          {points.length ? (
+            points.map((point, index) => (
+              <button key={`${point.lat}-${point.lon}-${index}`} type="button" onClick={() => removePoint(index)}>
+                <span>{index + 1}</span>
+                <small>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</small>
+                <b>Remove</b>
+              </button>
+            ))
+          ) : (
+            <p>Tap on the map to add your first point.</p>
+          )}
+        </section>
+      ) : null}
+
+      <section className="route-draw-tip">
+        Tap map to add points · drag markers to adjust · tap marker or point row to remove
       </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
