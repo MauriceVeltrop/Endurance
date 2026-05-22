@@ -104,15 +104,6 @@ function initialForm() {
 }
 
 function routeProfileFor(sportId) {
-
-  useEffect(() => {
-    if (!autoReroute || form.method !== "draw") return;
-    const pts = normalizeRoutePoints(form.route_points);
-    if (pts.length < 2) return;
-    const timeout = window.setTimeout(() => rerouteDrawnRoute(), 900);
-    return () => window.clearTimeout(timeout);
-  }, [autoReroute, form.method, form.route_points?.point_count]);
-
   return (
     SPORT_ROUTE_PROFILES[sportId] || {
       title: `${getSportLabel(sportId)} route profile`,
@@ -384,6 +375,19 @@ export default function NewRoutePage() {
       console.error("Reroute failed", error); setRoutingStatus("error"); setRoutingError(error?.message || "Reroute failed. Straight line route remains available."); setMessage(error?.message || "Reroute failed. Straight line route remains available."); return null;
     }
   }
+
+  useEffect(() => {
+    if (!autoReroute || form.method !== "draw") return;
+
+    const points = normalizeRoutePoints(form.route_points);
+    if (points.length < 2) return;
+
+    const timeout = window.setTimeout(() => {
+      rerouteDrawnRoute();
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [autoReroute, form.method, form.route_points?.point_count]);
 
   async function saveRoute() {
     if (!canSave || saving) {
