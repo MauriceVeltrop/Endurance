@@ -3329,3 +3329,42 @@ main {
   font-size: 13px;
   font-weight: 700;
 }
+
+
+/* ===== LOCATION BUTTON + SEARCH POSITION FIX ===== */
+.route-draw-polished .route-search-bar {
+  position: fixed;
+  top: calc(96px + env(safe-area-inset-top));
+  left: 104px;
+  right: 14px;
+  z-index: 10038;
+}
+
+.route-draw-polished .route-search-input-wrap {
+  min-height: 48px;
+  border-radius: 18px;
+  background: rgba(5, 8, 5, 0.78);
+}
+
+.route-draw-polished .route-search-results {
+  max-height: 42vh;
+  overflow: auto;
+}
+
+@media (max-width: 460px) {
+  .route-draw-polished .route-search-bar {
+    top: calc(92px + env(safe-area-inset-top));
+    left: 96px;
+    right: 10px;
+  }
+
+  .route-draw-polished .route-search-input-wrap {
+    min-height: 46px;
+    padding-inline: 13px;
+  }
+
+  .route-draw-polished .route-search-input-wrap input {
+    font-size: 14px;
+  }
+}
+
