@@ -49,7 +49,12 @@ export default function FullscreenRouteDrawPage() {
 
       try {
         const params = new URLSearchParams(window.location.search);
-        const initialSport = params.get("sport_id") || "running";
+        const initialSport = params.get("sport_id");
+
+        if (!initialSport) {
+          router.replace("/routes/new");
+          return;
+        }
 
         setSportId(initialSport);
         setTitle(defaultTitle(initialSport));
@@ -205,18 +210,9 @@ export default function FullscreenRouteDrawPage() {
       />
 
       <section className="route-draw-floating-stats">
-        <span>
-          <b>{metrics.distance_km || "—"}</b>
-          km
-        </span>
-        <span>
-          <b>{metrics.elevation_gain_m || "—"}</b>
-          m gain
-        </span>
-        <span>
-          <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
-          est.
-        </span>
+        <span><b>{metrics.distance_km || "—"}</b>km</span>
+        <span><b>{metrics.elevation_gain_m || "—"}</b>m gain</span>
+        <span><b>{estimateTimeText(metrics.distance_km, sportId)}</b>est.</span>
       </section>
 
       <section className="route-draw-floating-tools">
