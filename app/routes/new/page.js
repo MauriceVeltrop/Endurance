@@ -140,6 +140,7 @@ export default function NewRoutePage() {
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [currentStep, setCurrentStep] = useState(1);
   const [form, setForm] = useState(initialForm());
   const [drawInsertMode, setDrawInsertMode] = useState(false);
   const [drawLayer, setDrawLayer] = useState("light");
@@ -161,6 +162,9 @@ export default function NewRoutePage() {
     Boolean(form.method) &&
     Boolean(form.title.trim()) &&
     routePoints.length >= 2;
+
+  const isOpenRouteConfigMessage = /OPENROUTE|ORS_API|OpenRouteService/i.test(message || "");
+  const visibleMessage = message && (!isOpenRouteConfigMessage || form.method === "wizard");
 
   useEffect(() => {
     loadAccess();
@@ -192,6 +196,7 @@ export default function NewRoutePage() {
       }));
 
       setRoutedPayload(draft.route_points);
+      setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
       window.sessionStorage.removeItem("endurance_route_draft");
       window.history.replaceState({}, "", "/routes/new");
@@ -421,54 +426,11 @@ export default function NewRoutePage() {
       rerouteDrawnRoute();
     }, 900);
 
-    return () => window.clearTimeout(timeout);
-  }, [autoReroute, form.method, form.route_points?.point_count]);
-
-  async function saveRoute() {
-    if (!canSave || saving) {
-      setMessage("Choose a sport, choose a method, add a title and import route points first.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-
-    try {
-      const payload = {
-        creator_id: profile.id,
-        sport_id: form.sport_id,
-        title: form.title.trim(),
-        description: form.description.trim() || "",
-        visibility: form.visibility,
-        distance_km: form.distance_km ? Number(form.distance_km) : null,
-        elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : null,
-        gpx_file_url: form.gpx_file_url.trim() || null,
-        route_points: form.route_points || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from("routes")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      router.push(`/routes/${data.id}`);
-    } catch (error) {
-      console.error("Save route error", error);
-      setMessage(error?.message || "Could not save route.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <main className="endurance-page create-route-v2-page">
+    return (
+    <main className="endurance-page create-route-v2-page route-step-page">
       <AppHeader active="routes" />
 
-      <section className="endurance-shell training-hero endurance-card create-route-v2-hero">
+      <section className="endurance-shell training-hero endurance-card create-route-v2-hero route-step-hero">
         <div>
           <p className="eyebrow">Create route</p>
           <h1>
@@ -477,15 +439,30 @@ export default function NewRoutePage() {
             for your sport<span>.</span>
           </h1>
           <p>
-            Choose a preferred sport first. Endurance then shows the route methods and logic that fit that sport.
+            Choose a preferred sport first, then choose how you want to create the route.
           </p>
         </div>
-        <Link href="/routes" className="hero-create-button">
-          Routes
-        </Link>
       </section>
 
-      {message ? <section className="endurance-shell create-route-v2-message">{message}</section> : null}
+      <section className="endurance-shell route-stepper">
+        {[1, 2, 3].map((step) => (
+          <button
+            key={step}
+            type="button"
+            className={currentStep === step ? "active" : ""}
+            onClick={() => {
+              if (step === 1) setCurrentStep(1);
+              if (step === 2 && form.sport_id) setCurrentStep(2);
+              if (step === 3 && form.method) setCurrentStep(3);
+            }}
+          >
+            <span>{step}</span>
+            {step === 1 ? "Sport" : step === 2 ? "Method" : "Details"}
+          </button>
+        ))}
+      </section>
+
+      {visibleMessage ? <section className="endurance-shell create-route-v2-message">{visibleMessage}</section> : null}
 
       {checking ? (
         <section className="endurance-shell endurance-card notification-empty">Loading route creator...</section>
@@ -501,34 +478,45 @@ export default function NewRoutePage() {
 
       {!checking && availableSports.length ? (
         <>
-          <section className="endurance-shell create-route-v2-section">
-            <div className="route-builder-step">
-              <span>1</span>
-              <div>
-                <p className="eyebrow">Sport first</p>
-                <h2>Choose route sport</h2>
+          {currentStep === 1 ? (
+            <section className="endurance-shell create-route-v2-section route-step-section">
+              <div className="route-builder-step compact">
+                <span>1</span>
+                <div>
+                  <p className="eyebrow">Sport first</p>
+                  <h2>Choose route sport</h2>
+                </div>
               </div>
-            </div>
 
-            <div className="create-route-sport-grid">
-              {availableSports.map((sport) => (
-                <button
-                  key={sport.id}
-                  type="button"
-                  className={form.sport_id === sport.id ? "route-sport-card active" : "route-sport-card"}
-                  onClick={() => updateForm("sport_id", sport.id)}
-                >
-                  <span>{getSportLabel(sport.id).slice(0, 2).toUpperCase()}</span>
-                  <strong>{getSportLabel(sport.id)}</strong>
-                  <small>{routeProfileFor(sport.id).focus}</small>
-                </button>
-              ))}
-            </div>
-          </section>
+              <div className="create-route-sport-grid compact">
+                {availableSports.map((sport) => (
+                  <button
+                    key={sport.id}
+                    type="button"
+                    className={form.sport_id === sport.id ? "route-sport-card active" : "route-sport-card"}
+                    onClick={() => updateForm("sport_id", sport.id)}
+                  >
+                    <span>{getSportLabel(sport.id).slice(0, 2).toUpperCase()}</span>
+                    <strong>{getSportLabel(sport.id)}</strong>
+                    <small>{routeProfileFor(sport.id).focus}</small>
+                  </button>
+                ))}
+              </div>
 
-          {selectedSport ? (
-            <section className="endurance-shell create-route-v2-section">
-              <div className="route-builder-step">
+              <button
+                type="button"
+                className="route-step-primary"
+                disabled={!form.sport_id}
+                onClick={() => setCurrentStep(2)}
+              >
+                Continue
+              </button>
+            </section>
+          ) : null}
+
+          {currentStep === 2 && selectedSport ? (
+            <section className="endurance-shell create-route-v2-section route-step-section">
+              <div className="route-builder-step compact">
                 <span>2</span>
                 <div>
                   <p className="eyebrow">{selectedProfile.title}</p>
@@ -536,7 +524,7 @@ export default function NewRoutePage() {
                 </div>
               </div>
 
-              <div className="route-method-grid">
+              <div className="route-method-grid route-method-step-grid">
                 {Object.entries(METHOD_DETAILS).map(([methodId, method]) => (
                   <button
                     key={methodId}
@@ -544,52 +532,46 @@ export default function NewRoutePage() {
                     className={form.method === methodId ? "route-method-card active" : "route-method-card"}
                     onClick={() => {
                       if (methodId === "draw") {
-                        const routeSportId = form.sport_id || selectedSport?.id;
-
-                        if (!routeSportId) {
-                          setMessage("Choose a route sport first.");
-                          return;
-                        }
-
-                        router.push(`/routes/draw?sport_id=${encodeURIComponent(routeSportId)}`);
+                        router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id || selectedSport.id)}`);
                         return;
                       }
 
                       updateForm("method", methodId);
+                      setCurrentStep(3);
                     }}
                   >
                     <span>{method.eyebrow}</span>
                     <b>{method.icon}</b>
                     <strong>{method.title}</strong>
                     <small>{method.body}</small>
-                    {methodId === "draw" ? <em className="route-method-fullscreen-label">Opens after sport selection</em> : null}
+                    {methodId === "draw" ? <em className="route-method-fullscreen-label">Opens fullscreen editor</em> : null}
                   </button>
                 ))}
               </div>
 
-              <article className="route-sport-intelligence endurance-card">
-                <p className="eyebrow">Sport-specific route intelligence</p>
-                <h3>{selectedProfile.title}</h3>
-                <div>
-                  <span><b>Focus</b>{selectedProfile.focus}</span>
-                  <span><b>Best method</b>{selectedProfile.best}</span>
-                  <span><b>Avoid</b>{selectedProfile.avoid}</span>
-                </div>
-              </article>
+              {form.method === "wizard" ? (
+                <section className="route-wizard-info">
+                  Route Wizard uses OpenRouteService for smart route generation.
+                </section>
+              ) : null}
+
+              <button type="button" className="route-step-secondary" onClick={() => setCurrentStep(1)}>
+                Back
+              </button>
             </section>
           ) : null}
 
-          {form.method ? (
-            <section className="endurance-shell create-route-v2-section">
-              <div className="route-builder-step">
+          {currentStep === 3 && form.method ? (
+            <section className="endurance-shell create-route-v2-section route-step-section">
+              <div className="route-builder-step compact">
                 <span>3</span>
                 <div>
                   <p className="eyebrow">{METHOD_DETAILS[form.method]?.title}</p>
-                  <h2>Route details</h2>
+                  <h2>{form.method === "draw" ? "Route details" : form.method === "upload" ? "Upload route" : "Wizard setup"}</h2>
                 </div>
               </div>
 
-              <div className="create-route-editor-grid">
+              <div className="create-route-editor-grid step-details-grid">
                 <section className="create-route-form-card endurance-card">
                   <label>
                     Route title
@@ -630,39 +612,12 @@ export default function NewRoutePage() {
                   ) : null}
 
                   {form.method === "draw" ? (
-                    <div className="create-route-draw-tools route-draw-tools-expanded">
-                      <div>
-                        <strong>Draw route on map</strong>
-                        <span>{normalizeRoutePoints(form.route_points).length} point(s) added</span>
-                      </div>
-
-                      <div>
-                        <button type="button" onClick={useCurrentLocationAsDrawStart}>
-                          Use location
-                        </button>
-                        <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
-                          Insert
-                        </button>
-                        <button type="button" onClick={closeDrawLoop} disabled={normalizeRoutePoints(form.route_points).length < 3}>
-                          Close loop
-                        </button>
-                        <button type="button" onClick={undoDrawPoint} disabled={!normalizeRoutePoints(form.route_points).length}>
-                          Undo
-                        </button>
-                        <button type="button" onClick={rerouteDrawnRoute} disabled={normalizeRoutePoints(form.route_points).length < 2 || routingStatus === "routing"}>
-                          {routingStatus === "routing" ? "Routing..." : "Reroute"}
-                        </button>
-                        <button type="button" onClick={clearDrawPoints} disabled={!normalizeRoutePoints(form.route_points).length}>
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {form.method === "draw" ? (
-                    <div className="route-routing-panel">
-                      <div><span>Routing mode</span><strong>{autoReroute ? "Auto reroute on" : "Manual reroute"}</strong><small>{routingError || "Uses OpenRouteService when configured. Falls back to drawn lines if routing fails."}</small></div>
-                      <label><input type="checkbox" checked={autoReroute} onChange={(event) => setAutoReroute(event.target.checked)} /> Auto reroute</label>
+                    <div className="create-route-coming-soon">
+                      <strong>Drawn route attached</strong>
+                      <span>{routePoints.length ? `${routePoints.length} route points loaded from the fullscreen editor.` : "Open the fullscreen editor to draw your route."}</span>
+                      <button type="button" className="route-inline-action" onClick={() => router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}`)}>
+                        Reopen map editor
+                      </button>
                     </div>
                   ) : null}
 
@@ -673,9 +628,14 @@ export default function NewRoutePage() {
                     </div>
                   ) : null}
 
-                  <button type="button" className="route-save-button" onClick={saveRoute} disabled={saving || !canSave}>
-                    {saving ? "Saving..." : "Save route"}
-                  </button>
+                  <div className="route-step-actions">
+                    <button type="button" className="route-step-secondary" onClick={() => setCurrentStep(2)}>
+                      Back
+                    </button>
+                    <button type="button" className="route-save-button" onClick={saveRoute} disabled={saving || !canSave}>
+                      {saving ? "Saving..." : "Save route"}
+                    </button>
+                  </div>
                 </section>
 
                 <section className="create-route-preview-card endurance-card">
@@ -687,51 +647,21 @@ export default function NewRoutePage() {
                     <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
                   </div>
 
-                  {form.method === "draw" ? (
-                    <RouteDrawMap
-                      points={normalizeRoutePoints(form.route_points?.waypoints || form.route_points)}
-                      routedPoints={normalizeRoutePoints(routedPayload || form.route_points)}
-                      onChange={handleDrawPointsChange}
-                      height={430}
-                      title={form.title || "Draw route"}
-                      insertMode={drawInsertMode}
-                      layer={drawLayer}
-                      onLayerChange={setDrawLayer}
-                      routeMode={routedPayload || form.route_points?.source === "openrouteservice" ? "routed" : "drawn"}
-                    />
-                  ) : (
-                    <OSMRouteMap
-                      routePoints={form.route_points}
-                      title={form.title || "New route"}
-                      height={360}
-                      interactive
-                      showLegend
-                      showLayerControl
-                      defaultLayer="dark"
-                    />
-                  )}
+                  <OSMRouteMap
+                    routePoints={form.route_points}
+                    title={form.title || "New route"}
+                    height={360}
+                    interactive
+                    showLegend
+                    showLayerControl
+                    defaultLayer="dark"
+                  />
 
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
                     <span><b>{form.elevation_gain_m || "—"}</b>m gain</span>
                     <span><b>{estimateTimeText(form.distance_km, form.sport_id)}</b>est. time</span>
                   </div>
-
-                  {form.method === "draw" && normalizeRoutePoints(form.route_points).length ? (
-                    <div className="route-point-list">
-                      <div className="route-point-list-head">
-                        <strong>Route points</strong>
-                        <small>Tap marker or remove from list</small>
-                      </div>
-                      {normalizeRoutePoints(form.route_points).map((point, index) => (
-                        <div key={`${point.lat}-${point.lon}-${index}`} className="route-point-row">
-                          <span>{index + 1}</span>
-                          <small>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</small>
-                          <button type="button" onClick={() => removeDrawPoint(index)}>Remove</button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                 </section>
               </div>
             </section>
