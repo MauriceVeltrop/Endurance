@@ -3142,3 +3142,50 @@ main {
   }
 }
 
+
+/* ===== FULLSCREEN DRAW REROUTE PATCH ===== */
+.route-draw-routing-status,
+.route-draw-routing-error {
+  position: fixed;
+  z-index: 10034;
+  left: 96px;
+  right: 12px;
+  bottom: calc(184px + env(safe-area-inset-bottom));
+  border-radius: 18px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 950;
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.route-draw-routing-status {
+  background: rgba(230,255,0,0.14);
+  color: var(--endurance-lime);
+  border-color: rgba(230,255,0,0.25);
+}
+
+.route-draw-routing-error {
+  background: rgba(120, 20, 20, 0.70);
+  color: white;
+  border-color: rgba(255,90,90,0.30);
+}
+
+.route-draw-polished .route-draw-side-tools {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.route-draw-polished .route-draw-side-tools::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 460px) {
+  .route-draw-routing-status,
+  .route-draw-routing-error {
+    left: 86px;
+    bottom: calc(176px + env(safe-area-inset-bottom));
+  }
+}
+
