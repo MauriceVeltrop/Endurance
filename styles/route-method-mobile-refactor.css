@@ -1,0 +1,61 @@
+
+.route-method-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 120px;
+}
+
+.route-method-card {
+  min-height: 148px;
+  border-radius: 28px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.route-method-icon {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.route-method-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.route-method-title {
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 800;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+
+.route-method-description {
+  opacity: 0.78;
+  line-height: 1.45;
+  font-size: 15px;
+}
+
+.route-method-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  margin-top: 14px;
+}
+
+.route-step-header {
+  margin-bottom: 18px;
+}
+
+.route-step-title {
+  font-size: 42px;
+  line-height: 0.95;
+}
