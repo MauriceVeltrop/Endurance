@@ -298,6 +298,30 @@ export default function RouteDrawMap({
     };
   }, [linePoints, waypoints, onChange, routeMode]);
 
+
+
+  useEffect(() => {
+    function handleFlyTo(event) {
+      if (!mapRef.current) return;
+
+      const lat = Number(event?.detail?.lat);
+      const lon = Number(event?.detail?.lon);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+      mapRef.current.flyTo([lat, lon], 15, {
+        animate: true,
+        duration: 1.1,
+      });
+    }
+
+    window.addEventListener("endurance:fly-to-location", handleFlyTo);
+
+    return () => {
+      window.removeEventListener("endurance:fly-to-location", handleFlyTo);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 

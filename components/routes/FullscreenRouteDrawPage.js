@@ -44,6 +44,9 @@ export default function FullscreenRouteDrawPage() {
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -275,6 +278,49 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
+
+  useEffect(() => {
+    const query = searchText.trim();
+
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setSearching(true);
+
+        const response = await fetch(`/api/geocode/search?text=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        setSearchResults(Array.isArray(data?.features) ? data.features : []);
+      } catch (error) {
+        console.error("Location search failed", error);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchText]);
+
+  function flyToLocation(result) {
+    window.dispatchEvent(
+      new CustomEvent("endurance:fly-to-location", {
+        detail: {
+          lat: result.lat,
+          lon: result.lon,
+          label: result.label,
+        },
+      })
+    );
+
+    setSearchResults([]);
+    setSearchText(result.label || "");
+  }
+
+
   useEffect(() => {
     if (points.length < 2) return;
 
@@ -315,6 +361,39 @@ export default function FullscreenRouteDrawPage() {
           Save & continue
         </button>
       </section>
+
+      <div className="route-search-bar">
+        <div className="route-search-input-wrap">
+          <span className="route-search-icon">⌕</span>
+          <input
+            type="text"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search location, address or place"
+          />
+        </div>
+
+        {searchResults.length ? (
+          <div className="route-search-results">
+            {searchResults.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                onClick={() => flyToLocation(result)}
+              >
+                <b>{result.label}</b>
+                <small>
+                  {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {searching ? (
+          <div className="route-search-loading">Searching locations...</div>
+        ) : null}
+      </div>
 
       <RouteDrawMap
         points={points}
