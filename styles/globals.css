@@ -3243,3 +3243,89 @@ main {
   font-weight: 1000;
 }
 
+
+
+
+/* ===== LOCATION SEARCH PATCH ===== */
+.route-search-bar {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  z-index: 500;
+}
+
+.route-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 18px;
+  border-radius: 22px;
+  background: rgba(8,12,18,0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.34);
+}
+
+.route-search-input-wrap input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.route-search-input-wrap input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
+.route-search-icon {
+  color: var(--endurance-lime);
+  font-size: 22px;
+  font-weight: 1000;
+}
+
+.route-search-results {
+  margin-top: 10px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(8,12,18,0.96);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+}
+
+.route-search-results button {
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: white;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.route-search-results button:last-child {
+  border-bottom: 0;
+}
+
+.route-search-results button b {
+  display: block;
+  font-size: 14px;
+}
+
+.route-search-results button small {
+  color: rgba(255,255,255,0.55);
+}
+
+.route-search-loading {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(8,12,18,0.92);
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  font-weight: 700;
+}
