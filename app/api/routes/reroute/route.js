@@ -3,29 +3,27 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-/**
- * HeiGIT/OpenRouteService endpoint handling.
- *
- * The public docs and migration notice currently point users from
- * api.openrouteservice.org to api.heigit.org, but endpoint paths may differ
- * during the migration. To keep Endurance working, we try the configured/new
- * endpoint first and then safely fall back to the classic ORS v2 endpoint.
- */
 const ROUTING_BASES = [
   process.env.ORS_API_BASE_URL,
   process.env.OPENROUTE_API_BASE_URL,
+  "https://api.heigit.org/routing/2/directions",
   "https://api.heigit.org/v2/directions",
   "https://api.openrouteservice.org/v2/directions",
 ].filter(Boolean);
 
 const PROFILE_MAP = {
-  running: "foot-walking",
+  // Road running should prefer paved/logical roads and cycle paths more than random unpaved footpaths.
+  // ORS foot-walking is too eager to use small/unpaved paths for road running.
+  running: "cycling-regular",
+
   trail_running: "foot-hiking",
   walking: "foot-walking",
   hiking: "foot-hiking",
+
   road_cycling: "cycling-road",
   cycling: "cycling-regular",
   gravel_cycling: "cycling-regular",
+
   mountain_biking: "cycling-mountain",
   mtb: "cycling-mountain",
 };
@@ -123,13 +121,7 @@ export async function POST(request) {
 
         if (!response.ok) {
           const text = await response.text();
-          const cleaned = cleanProviderError(text);
-
-          providerErrors.push(`${url} -> ${response.status}: ${cleaned}`);
-
-          // 404 usually means endpoint path/base is wrong, so try next provider.
-          // 401/403 means the key is invalid for the provider, but a fallback env
-          // base may still be configured, so continue through the list.
+          providerErrors.push(`${url} -> ${response.status}: ${cleanProviderError(text)}`);
           continue;
         }
 
