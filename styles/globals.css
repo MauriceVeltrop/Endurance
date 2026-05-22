@@ -3368,3 +3368,13 @@ main {
   }
 }
 
+
+/* ===== SEARCH FOCUS + AUTO SNAP FIX ===== */
+.route-draw-polished .route-search-results button {
+  cursor: pointer;
+}
+
+.route-draw-polished .route-search-results button:active {
+  background: rgba(230,255,0,0.10);
+}
+
