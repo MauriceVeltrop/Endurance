@@ -2815,3 +2815,330 @@ main {
   }
 }
 
+
+/* ===== FULLSCREEN DRAW POLISH PATCH ===== */
+.route-draw-polished {
+  touch-action: manipulation;
+}
+
+.route-draw-polished .route-draw-map-toolbar,
+.route-draw-polished .route-draw-floating-top,
+.route-draw-polished .route-draw-floating-tools,
+.route-draw-polished .route-draw-floating-stats {
+  display: none !important;
+}
+
+.route-draw-polished .route-draw-map-wrap {
+  border: 0 !important;
+  border-radius: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+.route-draw-polished .route-draw-map {
+  height: 100vh !important;
+  min-height: 100vh !important;
+}
+
+.route-draw-topbar {
+  position: fixed;
+  z-index: 10040;
+  top: max(10px, env(safe-area-inset-top));
+  left: 10px;
+  right: 10px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border-radius: 24px;
+  background: rgba(5, 8, 5, 0.78);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.34);
+}
+
+.route-draw-round-btn,
+.route-draw-save-btn {
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  font-weight: 1000;
+}
+
+.route-draw-round-btn {
+  width: 44px;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  font-size: 22px;
+}
+
+.route-draw-title-block {
+  min-width: 0;
+}
+
+.route-draw-title-block span {
+  display: block;
+  color: var(--endurance-lime);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.route-draw-title-block input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: white;
+  font-size: clamp(17px, 5vw, 22px);
+  font-weight: 1000;
+  letter-spacing: -0.045em;
+}
+
+.route-draw-save-btn {
+  padding: 0 14px;
+  background: var(--endurance-lime);
+  color: #05070a;
+  border: 0;
+  white-space: nowrap;
+}
+
+.route-draw-save-btn:disabled {
+  opacity: 0.48;
+}
+
+.route-draw-side-tools {
+  position: fixed;
+  z-index: 10030;
+  left: 12px;
+  top: 118px;
+  display: grid;
+  gap: 8px;
+  width: 74px;
+}
+
+.route-draw-side-tools button {
+  min-height: 64px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(5, 8, 5, 0.78);
+  color: white;
+  display: grid;
+  place-items: center;
+  padding: 8px 6px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.28);
+}
+
+.route-draw-side-tools button b {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.route-draw-side-tools button span {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.route-draw-side-tools button.active {
+  color: var(--endurance-lime);
+  border-color: rgba(230,255,0,0.36);
+  background: rgba(230,255,0,0.13);
+}
+
+.route-draw-side-tools button:disabled {
+  opacity: 0.42;
+}
+
+.route-draw-metrics-card {
+  position: fixed;
+  z-index: 10031;
+  left: 12px;
+  right: 12px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 26px;
+  background: rgba(5, 8, 5, 0.82);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 -14px 45px rgba(0,0,0,0.30);
+}
+
+.route-draw-metrics-card > div,
+.route-draw-metrics-card > button {
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px 10px;
+  border: 0;
+  background: rgba(255,255,255,0.03);
+  color: white;
+  text-align: left;
+}
+
+.route-draw-metrics-card span {
+  display: block;
+  color: rgba(255,255,255,0.58);
+  font-size: 10px;
+  font-weight: 900;
+  margin-bottom: 7px;
+}
+
+.route-draw-metrics-card b {
+  display: block;
+  color: white;
+  font-size: clamp(16px, 4.6vw, 22px);
+  line-height: 1;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.route-draw-tip {
+  position: fixed;
+  z-index: 10020;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100px + env(safe-area-inset-bottom));
+  border-radius: 18px;
+  padding: 10px 12px;
+  background: rgba(5,8,5,0.66);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.70);
+  font-weight: 850;
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.route-draw-point-panel {
+  position: fixed;
+  z-index: 10050;
+  left: 12px;
+  right: 12px;
+  bottom: calc(106px + env(safe-area-inset-bottom));
+  max-height: min(46vh, 360px);
+  overflow: auto;
+  border-radius: 28px;
+  padding: 14px;
+  background: rgba(5,8,5,0.92);
+  border: 1px solid rgba(230,255,0,0.18);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 -18px 60px rgba(0,0,0,0.42);
+}
+
+.route-draw-point-panel > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.route-draw-point-panel strong {
+  color: white;
+  font-size: 18px;
+}
+
+.route-draw-point-panel > div button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: white;
+  font-size: 22px;
+}
+
+.route-draw-point-panel > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 16px;
+  padding: 9px;
+  margin-top: 7px;
+  background: rgba(255,255,255,0.05);
+  color: white;
+  text-align: left;
+}
+
+.route-draw-point-panel > button span {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--endurance-lime);
+  color: #05070a;
+  font-weight: 1000;
+}
+
+.route-draw-point-panel > button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.70);
+  font-weight: 850;
+}
+
+.route-draw-point-panel > button b {
+  color: rgba(255,255,255,0.52);
+  font-size: 12px;
+}
+
+.route-draw-point-panel p {
+  color: rgba(255,255,255,0.66);
+  font-weight: 850;
+}
+
+.route-draw-polished .route-draw-toast {
+  top: calc(82px + env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  z-index: 10060;
+}
+
+.route-draw-polished .route-draw-layer-switcher {
+  right: 12px;
+  bottom: calc(190px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 460px) {
+  .route-draw-topbar {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+
+  .route-draw-save-btn {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .route-draw-side-tools {
+    width: 66px;
+    top: 108px;
+  }
+
+  .route-draw-side-tools button {
+    min-height: 58px;
+  }
+
+  .route-draw-metrics-card {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .route-draw-metrics-card > div,
+  .route-draw-metrics-card > button {
+    padding: 10px 7px;
+  }
+
+  .route-draw-metrics-card b {
+    font-size: 15px;
+  }
+}
+
