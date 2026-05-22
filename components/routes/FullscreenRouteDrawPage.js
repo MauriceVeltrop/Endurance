@@ -40,9 +40,14 @@ export default function FullscreenRouteDrawPage() {
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(true);
   const [showPointPanel, setShowPointPanel] = useState(false);
+  const [routedPayload, setRoutedPayload] = useState(null);
+  const [routingStatus, setRoutingStatus] = useState("idle");
+  const [routingError, setRoutingError] = useState("");
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
-  const metrics = useMemo(() => calculateRouteMetrics(pointsPayload), [pointsPayload]);
+  const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
+  const activeRoutePayload = routedPayload || pointsPayload;
+  const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2;
 
   useEffect(() => {
@@ -101,6 +106,9 @@ export default function FullscreenRouteDrawPage() {
 
   function handlePointsChange(nextPoints) {
     setPointsPayload(makeRoutePointPayload(nextPoints));
+    setRoutedPayload(null);
+    setRoutingStatus("idle");
+    setRoutingError("");
   }
 
   function undoPoint() {
@@ -157,6 +165,55 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
+
+  async function rerouteRoute() {
+    if (points.length < 2) {
+      setMessage("Add at least two points before rerouting.");
+      return;
+    }
+
+    setRoutingStatus("routing");
+    setRoutingError("");
+    setMessage("Rerouting route over roads and paths...");
+
+    try {
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Reroute failed.");
+      }
+
+      const routed = {
+        ...(data.route_points || {}),
+        source: "openrouteservice",
+        waypoints: points,
+        points: normalizeRoutePoints(data.route_points),
+        distance_km: data.distance_km || null,
+        elevation_gain_m: data.elevation_gain_m || 0,
+      };
+
+      setRoutedPayload(routed);
+      setRoutingStatus("done");
+      setMessage(`Route snapped using ${data.profile || "routing profile"}.`);
+    } catch (error) {
+      console.error("Fullscreen reroute error", error);
+      setRoutingStatus("error");
+      setRoutingError(error?.message || "Reroute failed. Drawn route is still available.");
+      setMessage(error?.message || "Reroute failed. Drawn route is still available.");
+    }
+  }
+
   function continueToDetails() {
     if (!canContinue) {
       setMessage("Add at least two points before continuing.");
@@ -171,7 +228,7 @@ export default function FullscreenRouteDrawPage() {
       distance_km: metrics.distance_km || "",
       elevation_gain_m: metrics.elevation_gain_m || "",
       estimated_time: estimateTimeText(metrics.distance_km, sportId),
-      route_points: makeRoutePointPayload(points),
+      route_points: routedPayload || makeRoutePointPayload(points),
       created_by: profile?.id || null,
     };
 
@@ -211,14 +268,14 @@ export default function FullscreenRouteDrawPage() {
 
       <RouteDrawMap
         points={points}
-        routedPoints={points}
+        routedPoints={routedPoints.length ? routedPoints : points}
         onChange={handlePointsChange}
         height="100vh"
         title={title || "Draw route"}
         insertMode={drawInsertMode}
         layer={drawLayer}
         onLayerChange={setDrawLayer}
-        routeMode="drawn"
+        routeMode={routedPoints.length ? "routed" : "drawn"}
       />
 
       <section className="route-draw-side-tools" aria-label="Route drawing tools">
@@ -234,6 +291,10 @@ export default function FullscreenRouteDrawPage() {
           <b>↺</b>
           <span>Loop</span>
         </button>
+        <button type="button" onClick={rerouteRoute} disabled={points.length < 2 || routingStatus === "routing"} className={routedPoints.length ? "active" : ""}>
+          <b>{routingStatus === "routing" ? "…" : "⇄"}</b>
+          <span>{routingStatus === "routing" ? "Route" : "Reroute"}</span>
+        </button>
         <button type="button" onClick={undoPoint} disabled={!points.length}>
           <b>↶</b>
           <span>Undo</span>
@@ -243,6 +304,14 @@ export default function FullscreenRouteDrawPage() {
           <span>Clear</span>
         </button>
       </section>
+
+      {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
+
+      {routedPoints.length ? (
+        <section className="route-draw-routing-status">
+          Routed over roads/paths
+        </section>
+      ) : null}
 
       <section className="route-draw-metrics-card">
         <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
