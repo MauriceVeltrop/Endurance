@@ -3224,3 +3224,22 @@ main {
   width: auto;
 }
 
+
+/* ===== ALWAYS AUTO ROUTING + ROUTEPOINT UX ===== */
+.route-draw-polished .route-draw-side-tools {
+  /* Fewer buttons now: keep the control cluster compact and inside the screen. */
+  max-height: calc(100vh - 210px);
+}
+
+.route-draw-marker {
+  cursor: grab;
+}
+
+.route-draw-marker:active {
+  cursor: grabbing;
+}
+
+.route-draw-routing-status {
+  font-weight: 1000;
+}
+
