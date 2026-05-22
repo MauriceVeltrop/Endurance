@@ -188,71 +188,33 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    setMessage("Getting your current location...");
+    setMessage("Centering on your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const point = {
+        const location = {
           lat: Number(position.coords.latitude.toFixed(6)),
           lon: Number(position.coords.longitude.toFixed(6)),
-          ele: null,
+          accuracy: Math.round(position.coords.accuracy || 35),
         };
 
-        handlePointsChange(points.length ? [point, ...points] : [point]);
-        setMessage("Current location added.");
+        setCurrentLocation(location);
+
+        window.dispatchEvent(
+          new CustomEvent("endurance:fly-to-location", {
+            detail: {
+              lat: location.lat,
+              lon: location.lon,
+              label: "Current location",
+            },
+          })
+        );
+
+        setMessage("Centered on current location.");
       },
       () => setMessage("Could not access current location. Check browser permission."),
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
     );
-  }
-
-
-  async function rerouteRoute({ silent = false } = {}) {
-    if (points.length < 2) {
-      setMessage("Add at least two points before rerouting.");
-      return;
-    }
-
-    setRoutingStatus("routing");
-    setRoutingError("");
-    if (!silent) setMessage("Rerouting route over roads and paths...");
-
-    try {
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Reroute failed.");
-      }
-
-      const routed = {
-        ...(data.route_points || {}),
-        source: "openrouteservice",
-        waypoints: points,
-        points: normalizeRoutePoints(data.route_points),
-        distance_km: data.distance_km || null,
-        elevation_gain_m: data.elevation_gain_m || 0,
-      };
-
-      setRoutedPayload(routed);
-      setRoutingStatus("done");
-      if (!silent) setMessage(`Route snapped using ${data.profile || "routing profile"}.`);
-    } catch (error) {
-      console.error("Fullscreen reroute error", error);
-      setRoutingStatus("error");
-      setRoutingError(error?.message || "Reroute failed. Drawn route is still available.");
-      setMessage(error?.message || "Reroute failed. Drawn route is still available.");
-    }
   }
 
   function continueToDetails() {
