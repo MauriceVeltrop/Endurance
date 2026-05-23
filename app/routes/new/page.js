@@ -141,6 +141,7 @@ export default function NewRoutePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
+  const [previewMapReady, setPreviewMapReady] = useState(false);
   const [form, setForm] = useState(initialForm());
   const [drawInsertMode, setDrawInsertMode] = useState(false);
   const [drawLayer, setDrawLayer] = useState("light");
@@ -168,6 +169,11 @@ export default function NewRoutePage() {
 
   useEffect(() => {
     loadAccess();
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
@@ -678,15 +684,22 @@ export default function NewRoutePage() {
                     <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
                   </div>
 
-                  <OSMRouteMap
-                    routePoints={form.route_points}
-                    title={form.title || "New route"}
-                    height={360}
-                    interactive
-                    showLegend
-                    showLayerControl
-                    defaultLayer="dark"
-                  />
+                  {previewMapReady && routePoints.length ? (
+                    <OSMRouteMap
+                      routePoints={form.route_points}
+                      title={form.title || "New route"}
+                      height={360}
+                      interactive
+                      showLegend
+                      showLayerControl
+                      defaultLayer="dark"
+                    />
+                  ) : (
+                    <div className="route-preview-placeholder">
+                      <strong>Route loaded</strong>
+                      <span>{routePoints.length ? `${routePoints.length} route points ready` : "No route points loaded yet"}</span>
+                    </div>
+                  )}
 
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
