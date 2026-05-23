@@ -112,11 +112,10 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
-  const [focusCurrentLocationOnLoad, setFocusCurrentLocationOnLoad] = useState(true);
-  const [lastEditReason, setLastEditReason] = useState("idle");
 
-  const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
+  const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
+  const points = controlPoints;
   const activeRoutePayload = routedPayload || pointsPayload;
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2;
@@ -143,11 +142,22 @@ export default function FullscreenRouteDrawPage() {
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
-          setFocusCurrentLocationOnLoad(false);
-          setPointsPayload(makeRoutePointPayload(editDraft.route_points.points, "draw-edit"));
-          setRoutedPayload(editDraft.route_points);
-          setTargetLocation(null);
-          setMessage("Existing route loaded. Edit the route and save again.");
+          const geometry = normalizeRoutePoints(editDraft.route_points.points);
+          const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints);
+          const editableControlPoints = savedWaypoints.length >= 2
+            ? savedWaypoints
+            : geometry.length >= 2
+              ? [geometry[0], geometry[geometry.length - 1]]
+              : geometry;
+
+          setPointsPayload(makeRoutePointPayload(editableControlPoints, "draw-edit-control-points"));
+          setRoutedPayload({
+            ...editDraft.route_points,
+            points: geometry,
+            waypoints: editableControlPoints,
+            point_count: geometry.length,
+          });
+          setMessage("Existing route loaded. Tap the route line to add a shaping point, then drag it to reshape.");
           window.sessionStorage.removeItem("endurance_route_edit_draft");
         }
 
@@ -194,7 +204,7 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation(false);
   }, []);
 
-  function requestCurrentLocation(shouldFocus = true) {
+  function requestCurrentLocation() {
     if (!navigator.geolocation) {
       setMessage("Geolocation is not available on this device.");
       return;
@@ -212,9 +222,7 @@ export default function FullscreenRouteDrawPage() {
         };
 
         setCurrentLocation(location);
-        if (shouldFocus) {
-          setTargetLocation({ ...location, selectedAt: Date.now() });
-        }
+        setTargetLocation(location);
         setMessage("");
       },
       () => {
@@ -224,11 +232,10 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
-  function handlePointsChange(nextPoints, meta = {}) {
+  function handlePointsChange(nextPoints) {
     setPointsPayload(makeRoutePointPayload(nextPoints));
     setRoutedPayload(null);
-    setLastEditReason(meta?.reason || "edit");
-    setRoutingStatus(meta?.reason === "drag" ? "routing" : "idle");
+    setRoutingStatus("idle");
     setRoutingError("");
   }
 
@@ -331,6 +338,8 @@ export default function FullscreenRouteDrawPage() {
         points
       );
 
+      safePayload.waypoints = compactRoutePoints(points, 80);
+
       const draft = {
         sport_id: sportId,
         title: title?.trim() || defaultTitle(sportId),
@@ -344,10 +353,8 @@ export default function FullscreenRouteDrawPage() {
         saved_at: new Date().toISOString(),
       };
 
-      const serializedDraft = JSON.stringify(draft);
-      window.sessionStorage.setItem("endurance_route_draft", serializedDraft);
-      window.localStorage.setItem("endurance_route_draft_backup", serializedDraft);
-      window.location.assign(`/routes/new?routeDraft=1&step=details&t=${Date.now()}`);
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.location.assign("/routes/new?routeDraft=1");
     } catch (error) {
       console.error("Could not save route draft", error);
       setMessage("Could not prepare the route details. Try again with fewer routepoints.");
@@ -399,14 +406,12 @@ export default function FullscreenRouteDrawPage() {
   useEffect(() => {
     if (points.length < 2 || !routeSignature) return;
 
-    const delay = lastEditReason === "drag" ? 180 : 650;
-
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
-    }, delay);
+    }, 850);
 
     return () => window.clearTimeout(timeout);
-  }, [routeSignature, sportId, lastEditReason]);
+  }, [routeSignature, sportId]);
 
 
   if (checking) {
@@ -483,7 +488,7 @@ export default function FullscreenRouteDrawPage() {
         onLayerChange={setDrawLayer}
         routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
-        focusCurrentLocation={focusCurrentLocationOnLoad}
+        focusCurrentLocation={!points.length}
         targetLocation={targetLocation}
       />
 
@@ -520,7 +525,7 @@ export default function FullscreenRouteDrawPage() {
 
       <section className="route-draw-metrics-card">
         <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-          <span>Points</span>
+          <span>Control points</span>
           <b>{points.length}</b>
         </button>
         <div>
@@ -559,7 +564,7 @@ export default function FullscreenRouteDrawPage() {
       ) : null}
 
       <section className="route-draw-tip">
-        Tap to add routepoints · drag routepoints to reshape · route follows roads/paths automatically
+        Tap map to add control points · tap the route line to add a shaping point · drag control points to reshape
       </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}

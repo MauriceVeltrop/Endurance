@@ -79,6 +79,53 @@ function distSeg(p, a, b) {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+function closestRoutePoint(eventLatLng, map, linePoints) {
+  if (!map || !Array.isArray(linePoints) || !linePoints.length) return null;
+
+  const clickPoint = map.latLngToLayerPoint(eventLatLng);
+  let best = null;
+  let bestDistance = Infinity;
+
+  linePoints.forEach((point) => {
+    const layerPoint = map.latLngToLayerPoint([point.lat, point.lon]);
+    const distance = Math.hypot(clickPoint.x - layerPoint.x, clickPoint.y - layerPoint.y);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = point;
+    }
+  });
+
+  return best
+    ? {
+        lat: Number(best.lat.toFixed(6)),
+        lon: Number(best.lon.toFixed(6)),
+        ele: best.ele ?? null,
+      }
+    : null;
+}
+
+function insertionIndexForRouteClick(eventLatLng, map, controlPoints) {
+  if (!map || !Array.isArray(controlPoints) || controlPoints.length < 2) return controlPoints.length;
+
+  const clickPoint = map.latLngToLayerPoint(eventLatLng);
+  let bestIndex = controlPoints.length;
+  let bestDistance = Infinity;
+
+  for (let index = 0; index < controlPoints.length - 1; index += 1) {
+    const a = map.latLngToLayerPoint([controlPoints[index].lat, controlPoints[index].lon]);
+    const b = map.latLngToLayerPoint([controlPoints[index + 1].lat, controlPoints[index + 1].lon]);
+    const distance = distSeg(clickPoint, a, b);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index + 1;
+    }
+  }
+
+  return bestIndex;
+}
+
 export default function RouteDrawMap({
   points = [],
   routedPoints = [],
@@ -101,7 +148,6 @@ export default function RouteDrawMap({
   const locationRef = useRef(null);
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
-  const hasFocusedRouteRef = useRef(false);
   const lastManualFocusRef = useRef(0);
   const [error, setError] = useState("");
 
@@ -229,6 +275,15 @@ export default function RouteDrawMap({
           opacity: 0.38,
           lineJoin: "round",
           lineCap: "round",
+          interactive: false,
+        }).addTo(group);
+
+        const routeLine = L.polyline(routeLatLngs, {
+          color: "#e6ff00",
+          weight: routeMode === "routed" ? 8 : 7,
+          opacity: 0,
+          lineJoin: "round",
+          lineCap: "round",
         }).addTo(group);
 
         L.polyline(routeLatLngs, {
@@ -237,7 +292,23 @@ export default function RouteDrawMap({
           opacity: 1,
           lineJoin: "round",
           lineCap: "round",
+          interactive: false,
         }).addTo(group);
+
+        routeLine.on("click", (event) => {
+          if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
+
+          const currentControlPoints = pointsRef.current;
+          const newControlPoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
+
+          if (!newControlPoint) return;
+
+          const next = [...currentControlPoints];
+          const insertAt = insertionIndexForRouteClick(event.latlng, mapRef.current, currentControlPoints);
+
+          next.splice(insertAt, 0, newControlPoint);
+          onChange?.(next);
+        });
       }
 
       waypoints.forEach((point, index) => {
@@ -255,30 +326,10 @@ export default function RouteDrawMap({
           iconAnchor: [14, 14],
         });
 
-        let lastDragUpdate = 0;
-
         L.marker([point.lat, point.lon], {
           icon,
           draggable: true,
         })
-          .on("drag", (event) => {
-            const now = Date.now();
-            if (now - lastDragUpdate < 90) return;
-            lastDragUpdate = now;
-
-            const latLng = event.target.getLatLng();
-            const next = pointsRef.current.map((existing, pointIndex) =>
-              pointIndex === index
-                ? {
-                    ...existing,
-                    lat: Number(latLng.lat.toFixed(6)),
-                    lon: Number(latLng.lng.toFixed(6)),
-                  }
-                : existing
-            );
-
-            onChange?.(next, { reason: "drag" });
-          })
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
@@ -291,11 +342,11 @@ export default function RouteDrawMap({
                 : existing
             );
 
-            onChange?.(next, { reason: "drag" });
+            onChange?.(next);
           })
           .on("click", () => {
             const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
-            onChange?.(next, { reason: "remove" });
+            onChange?.(next);
           })
           .addTo(group);
       });
@@ -314,13 +365,12 @@ export default function RouteDrawMap({
       const recentlyFocused =
         Date.now() - lastManualFocusRef.current < 8000;
 
-      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused && !hasFocusedRouteRef.current) {
+      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
-          padding: [42, 42],
+          padding: [32, 32],
           maxZoom: 15,
           animate: false,
         });
-        hasFocusedRouteRef.current = true;
       }
     }
 
@@ -414,9 +464,8 @@ export default function RouteDrawMap({
       layer.addTo(mapRef.current);
       locationRef.current = layer;
 
-      if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasFocusedRouteRef.current) {
-        mapRef.current.setView([lat, lon], 15, { animate: true });
-        hasFocusedLocationRef.current = true;
+      if (focusCurrentLocation && !hasFocusedLocationRef.current) {
+          mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
 
@@ -431,7 +480,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap route-draw-map-wrap-light">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
-        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap map to add routepoints · drag routepoints · tap routepoint to remove"}</small>
+        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap route line to create a draggable control point · drag control points"}</small>
       </div>
 
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />
