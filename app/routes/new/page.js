@@ -23,9 +23,6 @@ const FALLBACK_ROUTE_SPORTS = [
   "kayaking",
 ];
 
-const ROUTE_DRAFT_KEY = "endurance_route_draft";
-const ROUTE_DRAFT_BACKUP_KEY = "endurance_route_draft_backup";
-
 const METHOD_DETAILS = {
   upload: {
     title: "Upload GPX",
@@ -138,6 +135,11 @@ function makeRoutePointPayload(points, source = "draw") {
 function buildEditableRouteDraft(form, profileId) {
   const routePoints = form?.route_points || null;
   const points = normalizeRoutePoints(routePoints);
+  const waypoints = normalizeRoutePoints(routePoints?.waypoints).length >= 2
+    ? normalizeRoutePoints(routePoints?.waypoints)
+    : points.length >= 2
+      ? [points[0], points[points.length - 1]]
+      : points;
   const metrics = calculateRouteMetrics(points);
 
   return {
@@ -151,7 +153,9 @@ function buildEditableRouteDraft(form, profileId) {
       ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
       source: routePoints?.source || "draw-edit",
       points,
+      waypoints,
       point_count: points.length,
+      waypoint_count: waypoints.length,
       distance_km: form?.distance_km || routePoints?.distance_km || metrics.distance_km || null,
       elevation_gain_m: form?.elevation_gain_m || routePoints?.elevation_gain_m || metrics.elevation_gain_m || 0,
       edited_at: new Date().toISOString(),
@@ -209,18 +213,13 @@ export default function NewRoutePage() {
     if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
-    const shouldLoadDraft = params.get("routeDraft") === "1" || params.get("step") === "details";
+    const shouldLoadDraft = params.get("routeDraft") === "1";
 
     if (!shouldLoadDraft) return;
 
-    const rawDraft =
-      window.sessionStorage.getItem(ROUTE_DRAFT_KEY) ||
-      window.localStorage.getItem(ROUTE_DRAFT_BACKUP_KEY) ||
-      window.localStorage.getItem(ROUTE_DRAFT_KEY);
+    const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
 
     if (!rawDraft) {
-      setCurrentStep(3);
-      setMessage("The drawn route was not found on this device. Tap Reopen map editor and save again.");
       window.history.replaceState({}, "", "/routes/new");
       return;
     }
@@ -229,17 +228,19 @@ export default function NewRoutePage() {
       const draft = JSON.parse(rawDraft);
 
       const rawRoutePoints = draft?.route_points;
-      const safePoints = normalizeRoutePoints(rawRoutePoints);
+      const safePoints = Array.isArray(rawRoutePoints)
+        ? rawRoutePoints
+        : Array.isArray(rawRoutePoints?.points)
+          ? rawRoutePoints.points
+          : [];
 
       const safePayload = {
         source: rawRoutePoints?.source || "draw-fullscreen",
         profile: rawRoutePoints?.profile || null,
         provider_url: rawRoutePoints?.provider_url || null,
-        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? normalizeRoutePoints(rawRoutePoints.waypoints) : [],
+        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
         points: safePoints,
         point_count: safePoints.length,
-        distance_km: rawRoutePoints?.distance_km || draft?.distance_km || null,
-        elevation_gain_m: rawRoutePoints?.elevation_gain_m || draft?.elevation_gain_m || 0,
         routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
       };
 
@@ -261,13 +262,12 @@ export default function NewRoutePage() {
       setRoutedPayload(safePayload);
       setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
+      window.sessionStorage.removeItem("endurance_route_draft");
       window.history.replaceState({}, "", "/routes/new");
     } catch (error) {
       console.error("Could not safely load route draft", error);
-      window.sessionStorage.removeItem(ROUTE_DRAFT_KEY);
-      window.localStorage.removeItem(ROUTE_DRAFT_BACKUP_KEY);
+      window.sessionStorage.removeItem("endurance_route_draft");
       window.history.replaceState({}, "", "/routes/new");
-      setCurrentStep(2);
       setMessage("Could not load the drawn route. Please draw the route again.");
     }
   }, []);
@@ -495,55 +495,6 @@ export default function NewRoutePage() {
 
     return () => window.clearTimeout(timeout);
   }, [autoReroute, form.method, form.route_points?.point_count]);
-
-
-  async function saveRoute() {
-    if (!canSave) {
-      setMessage("Choose a sport, add a title and attach at least two route points before saving.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-
-    try {
-      const pointsPayload = form.route_points || makeRoutePointPayload(routePoints, "draw");
-      const metrics = calculateRouteMetrics(pointsPayload);
-
-      const payload = {
-        creator_id: profile.id,
-        sport_id: form.sport_id,
-        title: form.title.trim(),
-        description: form.description || "",
-        visibility: form.visibility || "team",
-        distance_km: form.distance_km ? Number(form.distance_km) : metrics.distance_km || null,
-        elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : metrics.elevation_gain_m || 0,
-        route_points: pointsPayload,
-        gpx_file_url: form.gpx_file_url || null,
-      };
-
-      const { data, error } = await supabase
-        .from("routes")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(ROUTE_DRAFT_KEY);
-        window.localStorage.removeItem(ROUTE_DRAFT_BACKUP_KEY);
-        window.localStorage.removeItem(ROUTE_DRAFT_KEY);
-      }
-
-      router.push(`/routes/${data.id}`);
-    } catch (error) {
-      console.error("Save route error", error);
-      setMessage(error?.message || "Could not save route.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <main className="endurance-page create-route-v2-page route-step-page">
