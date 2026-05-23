@@ -29,39 +29,17 @@ function defaultTitle(sportId) {
 }
 
 
-function serializePoint(point) {
-  const lat = Number(point?.lat ?? point?.latitude);
-  const lon = Number(point?.lon ?? point?.lng ?? point?.longitude);
-  const ele = point?.ele ?? point?.elevation ?? point?.elevation_m ?? null;
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-  const compact = [Number(lat.toFixed(6)), Number(lon.toFixed(6))];
-
-  if (Number.isFinite(Number(ele))) {
-    compact.push(Math.round(Number(ele)));
-  }
-
-  return compact;
-}
-
-function compactRoutePoints(points, maxPoints = 240) {
+function compactRoutePoints(points, maxPoints = 900) {
   const normalized = normalizeRoutePoints(points);
 
-  if (!normalized.length) return [];
+  if (normalized.length <= maxPoints) return normalized;
 
-  const step = Math.max(1, Math.ceil(normalized.length / maxPoints));
-  const compacted = normalized
-    .filter((_, index) => index % step === 0)
-    .map(serializePoint)
-    .filter(Boolean);
-  const last = serializePoint(normalized[normalized.length - 1]);
+  const step = Math.ceil(normalized.length / maxPoints);
+  const compacted = normalized.filter((_, index) => index % step === 0);
+  const last = normalized[normalized.length - 1];
 
-  if (last) {
-    const tail = compacted[compacted.length - 1];
-    if (!tail || tail[0] !== last[0] || tail[1] !== last[1]) {
-      compacted.push(last);
-    }
+  if (last && compacted[compacted.length - 1] !== last) {
+    compacted.push(last);
   }
 
   return compacted;
@@ -71,12 +49,12 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
   const payloadPoints = normalizeRoutePoints(payload);
   const fallback = normalizeRoutePoints(fallbackPoints);
   const points = compactRoutePoints(payloadPoints.length ? payloadPoints : fallback);
-  const waypoints = Array.isArray(payload?.waypoints) ? compactRoutePoints(payload.waypoints, 30) : compactRoutePoints(fallback, 30);
 
   return {
-    source: "draw-fullscreen",
+    source: payload?.source || "draw-fullscreen",
     profile: payload?.profile || null,
-    waypoints,
+    provider_url: payload?.provider_url || null,
+    waypoints: Array.isArray(payload?.waypoints) ? compactRoutePoints(payload.waypoints, 80) : [],
     points,
     point_count: points.length,
     distance_km: payload?.distance_km || null,
@@ -105,7 +83,6 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
-  const [isContinuing, setIsContinuing] = useState(false);
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -323,23 +300,8 @@ export default function FullscreenRouteDrawPage() {
         saved_at: new Date().toISOString(),
       };
 
-      const draftText = JSON.stringify(draft);
-
-      if (draftText.length > 180000) {
-        throw new Error("Route draft is too large for this device.");
-      }
-
-      window.sessionStorage.setItem("endurance_route_draft", draftText);
-
-      // Mobile Chrome can crash when a heavy Leaflet fullscreen view navigates immediately.
-      // First unmount the map UI, then navigate on the next tick with a light client transition.
-      setIsContinuing(true);
-      setPointsPayload(null);
-      setRoutedPayload(null);
-      setSearchResults([]);
-      window.setTimeout(() => {
-        router.replace("/routes/new?routeDraft=1");
-      }, 120);
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.location.assign("/routes/new?routeDraft=1");
     } catch (error) {
       console.error("Could not save route draft", error);
       setMessage("Could not prepare the route details. Try again with fewer routepoints.");
@@ -398,14 +360,6 @@ export default function FullscreenRouteDrawPage() {
     return () => window.clearTimeout(timeout);
   }, [routeSignature, sportId]);
 
-
-  if (isContinuing) {
-    return (
-      <main className="route-draw-fullscreen route-draw-polished">
-        <div className="route-draw-loading">Preparing route details...</div>
-      </main>
-    );
-  }
 
   if (checking) {
     return (
