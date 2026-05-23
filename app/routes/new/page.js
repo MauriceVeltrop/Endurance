@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
-import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
@@ -115,10 +114,21 @@ function routeProfileFor(sportId) {
 }
 
 function normalizeRoutePoints(routePoints) {
-  if (!routePoints) return [];
-  if (Array.isArray(routePoints)) return routePoints;
-  if (Array.isArray(routePoints.points)) return routePoints.points;
-  return [];
+  const raw = Array.isArray(routePoints) ? routePoints : Array.isArray(routePoints?.points) ? routePoints.points : [];
+
+  return raw
+    .map((point) => {
+      if (Array.isArray(point)) {
+        return { lat: Number(point[0]), lon: Number(point[1]), ele: point.length > 2 ? point[2] : null };
+      }
+
+      return {
+        lat: Number(point?.lat ?? point?.latitude),
+        lon: Number(point?.lon ?? point?.lng ?? point?.longitude),
+        ele: point?.ele ?? point?.elevation ?? point?.elevation_m ?? null,
+      };
+    })
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
 
@@ -130,6 +140,25 @@ function makeRoutePointPayload(points, source = "draw") {
   const normalized = normalizeRoutePoints(points);
   const metrics = calculateRouteMetrics(normalized);
   return { points: normalized, point_count: normalized.length, distance_km: metrics.distance_km || null, elevation_gain_m: metrics.elevation_gain_m || 0, elevation_loss_m: metrics.elevation_loss_m || 0, max_elevation_m: metrics.max_elevation_m || null, drawn_at: new Date().toISOString(), source };
+}
+
+function makePreviewPayload(routePoints, maxPoints = 220) {
+  const points = normalizeRoutePoints(routePoints);
+
+  if (points.length <= maxPoints) {
+    return { points, point_count: points.length };
+  }
+
+  const step = Math.ceil(points.length / maxPoints);
+  const compacted = points.filter((_, index) => index % step === 0);
+  const last = points[points.length - 1];
+  const tail = compacted[compacted.length - 1];
+
+  if (last && (!tail || tail.lat !== last.lat || tail.lon !== last.lon)) {
+    compacted.push(last);
+  }
+
+  return { points: compacted, point_count: compacted.length };
 }
 
 export default function NewRoutePage() {
@@ -157,6 +186,7 @@ export default function NewRoutePage() {
 
   const selectedProfile = routeProfileFor(form.sport_id);
   const routePoints = normalizeRoutePoints(form.route_points);
+  const previewRoutePayload = useMemo(() => makePreviewPayload(form.route_points), [form.route_points]);
   const canSave =
     Boolean(profile?.id) &&
     Boolean(form.sport_id) &&
@@ -172,9 +202,13 @@ export default function NewRoutePage() {
   }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
+    setPreviewMapReady(false);
+
+    if (!routePoints.length) return undefined;
+
+    const timeout = window.setTimeout(() => setPreviewMapReady(true), 1200);
     return () => window.clearTimeout(timeout);
-  }, []);
+  }, [routePoints.length]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -195,19 +229,17 @@ export default function NewRoutePage() {
       const draft = JSON.parse(rawDraft);
 
       const rawRoutePoints = draft?.route_points;
-      const safePoints = Array.isArray(rawRoutePoints)
-        ? rawRoutePoints
-        : Array.isArray(rawRoutePoints?.points)
-          ? rawRoutePoints.points
-          : [];
+      const safePoints = normalizeRoutePoints(rawRoutePoints);
+      const safeWaypoints = normalizeRoutePoints(rawRoutePoints?.waypoints);
 
       const safePayload = {
         source: rawRoutePoints?.source || "draw-fullscreen",
         profile: rawRoutePoints?.profile || null,
-        provider_url: rawRoutePoints?.provider_url || null,
-        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+        waypoints: safeWaypoints,
         points: safePoints,
         point_count: safePoints.length,
+        distance_km: rawRoutePoints?.distance_km || draft?.distance_km || null,
+        elevation_gain_m: rawRoutePoints?.elevation_gain_m || draft?.elevation_gain_m || 0,
         routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
       };
 
@@ -686,7 +718,7 @@ export default function NewRoutePage() {
 
                   {previewMapReady && routePoints.length ? (
                     <OSMRouteMap
-                      routePoints={form.route_points}
+                      routePoints={previewRoutePayload}
                       title={form.title || "New route"}
                       height={360}
                       interactive
