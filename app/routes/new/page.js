@@ -175,14 +175,39 @@ export default function NewRoutePage() {
 
     const params = new URLSearchParams(window.location.search);
     const shouldLoadDraft = params.get("routeDraft") === "1";
+
+    if (!shouldLoadDraft) return;
+
     const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
 
-    if (!shouldLoadDraft || !rawDraft) return;
+    if (!rawDraft) {
+      window.history.replaceState({}, "", "/routes/new");
+      return;
+    }
 
     try {
       const draft = JSON.parse(rawDraft);
 
-      if (!draft?.route_points) return;
+      const rawRoutePoints = draft?.route_points;
+      const safePoints = Array.isArray(rawRoutePoints)
+        ? rawRoutePoints
+        : Array.isArray(rawRoutePoints?.points)
+          ? rawRoutePoints.points
+          : [];
+
+      const safePayload = {
+        source: rawRoutePoints?.source || "draw-fullscreen",
+        profile: rawRoutePoints?.profile || null,
+        provider_url: rawRoutePoints?.provider_url || null,
+        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+        points: safePoints,
+        point_count: safePoints.length,
+        routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
+      };
+
+      if (!safePoints.length) {
+        throw new Error("Route draft has no valid route points.");
+      }
 
       setForm((current) => ({
         ...current,
@@ -192,16 +217,19 @@ export default function NewRoutePage() {
         description: draft.description || current.description,
         distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
         elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
-        route_points: draft.route_points,
+        route_points: safePayload,
       }));
 
-      setRoutedPayload(draft.route_points);
+      setRoutedPayload(safePayload);
       setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
       window.sessionStorage.removeItem("endurance_route_draft");
       window.history.replaceState({}, "", "/routes/new");
     } catch (error) {
-      console.error("Could not load route draft", error);
+      console.error("Could not safely load route draft", error);
+      window.sessionStorage.removeItem("endurance_route_draft");
+      window.history.replaceState({}, "", "/routes/new");
+      setMessage("Could not load the drawn route. Please draw the route again.");
     }
   }, []);
 
