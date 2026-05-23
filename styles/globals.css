@@ -3378,3 +3378,33 @@ main {
   background: rgba(230,255,0,0.10);
 }
 
+
+/* ===== FINAL ROUTE DRAW REPAIR ===== */
+.route-draw-polished .route-draw-toast {
+  top: calc(150px + env(safe-area-inset-top)) !important;
+  left: 104px !important;
+  right: 14px !important;
+  z-index: 10036 !important;
+  font-size: 13px !important;
+  padding: 10px 12px !important;
+  border-radius: 18px !important;
+}
+
+.route-draw-polished .route-draw-routing-error {
+  left: 104px !important;
+  right: 14px !important;
+  bottom: calc(190px + env(safe-area-inset-bottom)) !important;
+  z-index: 10035 !important;
+}
+
+@media (max-width: 460px) {
+  .route-draw-polished .route-draw-toast {
+    left: 96px !important;
+    top: calc(146px + env(safe-area-inset-top)) !important;
+  }
+
+  .route-draw-polished .route-draw-routing-error {
+    left: 96px !important;
+  }
+}
+
