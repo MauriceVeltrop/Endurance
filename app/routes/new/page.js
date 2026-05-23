@@ -483,6 +483,56 @@ export default function NewRoutePage() {
     }
   }
 
+
+
+  async function saveRoute() {
+    if (!canSave) {
+      setMessage("Complete the route details before saving.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const payload = {
+        creator_id: profile.id,
+        sport_id: form.sport_id,
+        title: form.title.trim(),
+        description: form.description || "",
+        visibility: form.visibility || "team",
+        distance_km: form.distance_km ? Number(form.distance_km) : null,
+        elevation_gain_m: form.elevation_gain_m ? Math.round(Number(form.elevation_gain_m)) : null,
+        gpx_file_url: form.gpx_file_url || null,
+        route_points: form.route_points || null,
+      };
+
+      const { data, error } = await supabase
+        .from("routes")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error) throw error;
+
+      try {
+        window.sessionStorage.removeItem("endurance_route_draft");
+        window.sessionStorage.removeItem("endurance_route_edit_draft");
+        window.localStorage.removeItem("endurance_route_draft");
+      } catch (_) {
+        // Ignore browser storage cleanup failures.
+      }
+
+      router.push(data?.id ? `/routes/${data.id}` : "/routes");
+    } catch (error) {
+      console.error("Save route error", error);
+      setMessage(error?.message || "Could not save route.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
   useEffect(() => {
     if (!autoReroute || form.method !== "draw") return;
 
