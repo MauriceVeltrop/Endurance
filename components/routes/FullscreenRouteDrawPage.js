@@ -28,6 +28,41 @@ function defaultTitle(sportId) {
   return `${getSportLabel(sportId || "running")} Route`;
 }
 
+
+function compactRoutePoints(points, maxPoints = 900) {
+  const normalized = normalizeRoutePoints(points);
+
+  if (normalized.length <= maxPoints) return normalized;
+
+  const step = Math.ceil(normalized.length / maxPoints);
+  const compacted = normalized.filter((_, index) => index % step === 0);
+  const last = normalized[normalized.length - 1];
+
+  if (last && compacted[compacted.length - 1] !== last) {
+    compacted.push(last);
+  }
+
+  return compacted;
+}
+
+function buildSafeDraftRoutePayload(payload, fallbackPoints) {
+  const payloadPoints = normalizeRoutePoints(payload);
+  const fallback = normalizeRoutePoints(fallbackPoints);
+  const points = compactRoutePoints(payloadPoints.length ? payloadPoints : fallback);
+
+  return {
+    source: payload?.source || "draw-fullscreen",
+    profile: payload?.profile || null,
+    provider_url: payload?.provider_url || null,
+    waypoints: Array.isArray(payload?.waypoints) ? compactRoutePoints(payload.waypoints, 80) : [],
+    points,
+    point_count: points.length,
+    distance_km: payload?.distance_km || null,
+    elevation_gain_m: payload?.elevation_gain_m || 0,
+    routed_at: payload?.routed_at || payload?.drawn_at || new Date().toISOString(),
+  };
+}
+
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
 
@@ -242,24 +277,35 @@ export default function FullscreenRouteDrawPage() {
 
   function continueToDetails() {
     if (!canContinue) {
-      setMessage("Add at least two points before continuing.");
+      setMessage("Add at least two routepoints before continuing.");
       return;
     }
 
-    const draft = {
-      sport_id: sportId,
-      title: title?.trim() || defaultTitle(sportId),
-      description: "",
-      method: "draw",
-      distance_km: metrics.distance_km || "",
-      elevation_gain_m: metrics.elevation_gain_m || "",
-      estimated_time: estimateTimeText(metrics.distance_km, sportId),
-      route_points: routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
-      created_by: profile?.id || null,
-    };
+    try {
+      const safePayload = buildSafeDraftRoutePayload(
+        routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
+        points
+      );
 
-    window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
-    router.push("/routes/new?routeDraft=1");
+      const draft = {
+        sport_id: sportId,
+        title: title?.trim() || defaultTitle(sportId),
+        description: "",
+        method: "draw",
+        distance_km: metrics.distance_km || safePayload.distance_km || "",
+        elevation_gain_m: metrics.elevation_gain_m || safePayload.elevation_gain_m || "",
+        estimated_time: estimateTimeText(metrics.distance_km || safePayload.distance_km, sportId),
+        route_points: safePayload,
+        created_by: profile?.id || null,
+        saved_at: new Date().toISOString(),
+      };
+
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.location.assign("/routes/new?routeDraft=1");
+    } catch (error) {
+      console.error("Could not save route draft", error);
+      setMessage("Could not prepare the route details. Try again with fewer routepoints.");
+    }
   }
 
 
