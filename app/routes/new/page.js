@@ -23,6 +23,9 @@ const FALLBACK_ROUTE_SPORTS = [
   "kayaking",
 ];
 
+const ROUTE_DRAFT_KEY = "endurance_route_draft";
+const ROUTE_DRAFT_BACKUP_KEY = "endurance_route_draft_backup";
+
 const METHOD_DETAILS = {
   upload: {
     title: "Upload GPX",
@@ -206,13 +209,18 @@ export default function NewRoutePage() {
     if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
-    const shouldLoadDraft = params.get("routeDraft") === "1";
+    const shouldLoadDraft = params.get("routeDraft") === "1" || params.get("step") === "details";
 
     if (!shouldLoadDraft) return;
 
-    const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
+    const rawDraft =
+      window.sessionStorage.getItem(ROUTE_DRAFT_KEY) ||
+      window.localStorage.getItem(ROUTE_DRAFT_BACKUP_KEY) ||
+      window.localStorage.getItem(ROUTE_DRAFT_KEY);
 
     if (!rawDraft) {
+      setCurrentStep(3);
+      setMessage("The drawn route was not found on this device. Tap Reopen map editor and save again.");
       window.history.replaceState({}, "", "/routes/new");
       return;
     }
@@ -221,19 +229,17 @@ export default function NewRoutePage() {
       const draft = JSON.parse(rawDraft);
 
       const rawRoutePoints = draft?.route_points;
-      const safePoints = Array.isArray(rawRoutePoints)
-        ? rawRoutePoints
-        : Array.isArray(rawRoutePoints?.points)
-          ? rawRoutePoints.points
-          : [];
+      const safePoints = normalizeRoutePoints(rawRoutePoints);
 
       const safePayload = {
         source: rawRoutePoints?.source || "draw-fullscreen",
         profile: rawRoutePoints?.profile || null,
         provider_url: rawRoutePoints?.provider_url || null,
-        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? normalizeRoutePoints(rawRoutePoints.waypoints) : [],
         points: safePoints,
         point_count: safePoints.length,
+        distance_km: rawRoutePoints?.distance_km || draft?.distance_km || null,
+        elevation_gain_m: rawRoutePoints?.elevation_gain_m || draft?.elevation_gain_m || 0,
         routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
       };
 
@@ -255,12 +261,13 @@ export default function NewRoutePage() {
       setRoutedPayload(safePayload);
       setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
-      window.sessionStorage.removeItem("endurance_route_draft");
       window.history.replaceState({}, "", "/routes/new");
     } catch (error) {
       console.error("Could not safely load route draft", error);
-      window.sessionStorage.removeItem("endurance_route_draft");
+      window.sessionStorage.removeItem(ROUTE_DRAFT_KEY);
+      window.localStorage.removeItem(ROUTE_DRAFT_BACKUP_KEY);
       window.history.replaceState({}, "", "/routes/new");
+      setCurrentStep(2);
       setMessage("Could not load the drawn route. Please draw the route again.");
     }
   }, []);
@@ -490,17 +497,9 @@ export default function NewRoutePage() {
   }, [autoReroute, form.method, form.route_points?.point_count]);
 
 
-
   async function saveRoute() {
-    if (!profile?.id) {
-      setMessage("You need to be logged in to save a route.");
-      return;
-    }
-
-    const points = normalizeRoutePoints(form.route_points);
-
-    if (!form.sport_id || !form.title.trim() || points.length < 2) {
-      setMessage("Add a title and at least two route points before saving.");
+    if (!canSave) {
+      setMessage("Choose a sport, add a title and attach at least two route points before saving.");
       return;
     }
 
@@ -508,41 +507,36 @@ export default function NewRoutePage() {
     setMessage("");
 
     try {
-      const metrics = calculateRouteMetrics(points);
-      const routePointsPayload = {
-        ...(form.route_points && typeof form.route_points === "object" && !Array.isArray(form.route_points) ? form.route_points : {}),
-        points,
-        point_count: points.length,
-        distance_km: Number(form.distance_km || metrics.distance_km || 0) || null,
-        elevation_gain_m: Number(form.elevation_gain_m || metrics.elevation_gain_m || 0) || 0,
-        source: form.route_points?.source || form.method || "draw",
-        saved_at: new Date().toISOString(),
+      const pointsPayload = form.route_points || makeRoutePointPayload(routePoints, "draw");
+      const metrics = calculateRouteMetrics(pointsPayload);
+
+      const payload = {
+        creator_id: profile.id,
+        sport_id: form.sport_id,
+        title: form.title.trim(),
+        description: form.description || "",
+        visibility: form.visibility || "team",
+        distance_km: form.distance_km ? Number(form.distance_km) : metrics.distance_km || null,
+        elevation_gain_m: form.elevation_gain_m ? Number(form.elevation_gain_m) : metrics.elevation_gain_m || 0,
+        route_points: pointsPayload,
+        gpx_file_url: form.gpx_file_url || null,
       };
 
       const { data, error } = await supabase
         .from("routes")
-        .insert({
-          creator_id: profile.id,
-          sport_id: form.sport_id,
-          title: form.title.trim(),
-          description: form.description || "",
-          visibility: form.visibility || "team",
-          distance_km: Number(form.distance_km || metrics.distance_km || 0) || null,
-          elevation_gain_m: Number(form.elevation_gain_m || metrics.elevation_gain_m || 0) || 0,
-          route_points: routePointsPayload,
-          gpx_file_url: form.gpx_file_url || null,
-        })
+        .insert(payload)
         .select("id")
         .single();
 
       if (error) throw error;
 
-      try {
-        window.sessionStorage.removeItem("endurance_route_draft");
-        window.sessionStorage.removeItem("endurance_route_edit_draft");
-      } catch (_) {}
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(ROUTE_DRAFT_KEY);
+        window.localStorage.removeItem(ROUTE_DRAFT_BACKUP_KEY);
+        window.localStorage.removeItem(ROUTE_DRAFT_KEY);
+      }
 
-      router.push(data?.id ? `/routes/${data.id}` : "/routes");
+      router.push(`/routes/${data.id}`);
     } catch (error) {
       console.error("Save route error", error);
       setMessage(error?.message || "Could not save route.");
