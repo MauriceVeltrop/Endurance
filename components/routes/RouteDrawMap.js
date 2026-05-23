@@ -101,7 +101,6 @@ export default function RouteDrawMap({
   const locationRef = useRef(null);
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
-  const lastTargetFocusRef = useRef(0);
   const [error, setError] = useState("");
 
   const waypoints = useMemo(() => norm(points), [points]);
@@ -284,9 +283,10 @@ export default function RouteDrawMap({
 
       const boundsSource = routeLatLngs.length >= 2 ? routeLatLngs : waypointLatLngs;
 
-      const recentTargetFocus = Date.now() - lastTargetFocusRef.current < 7000;
+      const hasExplicitTarget =
+        Number.isFinite(Number(targetLocation?.lat)) && Number.isFinite(Number(targetLocation?.lon));
 
-      if (boundsSource.length >= 2 && !recentTargetFocus) {
+      if (boundsSource.length >= 2 && !hasExplicitTarget) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
           padding: [32, 32],
           maxZoom: 15,
@@ -313,8 +313,6 @@ export default function RouteDrawMap({
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-      lastTargetFocusRef.current = Date.now();
-
       mapRef.current.flyTo([lat, lon], 15, {
         animate: true,
         duration: 1.1,
@@ -338,13 +336,11 @@ export default function RouteDrawMap({
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-    lastTargetFocusRef.current = Date.now();
-
     mapRef.current.flyTo([lat, lon], 15, {
       animate: true,
       duration: 1.1,
     });
-  }, [targetLocation?.lat, targetLocation?.lon, targetLocation?.selectedAt]);
+  }, [targetLocation?.lat, targetLocation?.lon]);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,8 +384,7 @@ export default function RouteDrawMap({
       locationRef.current = layer;
 
       if (focusCurrentLocation && !hasFocusedLocationRef.current) {
-        hasFocusedLocationRef.current = true;
-        mapRef.current.setView([lat, lon], 15, { animate: true });
+          mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
 

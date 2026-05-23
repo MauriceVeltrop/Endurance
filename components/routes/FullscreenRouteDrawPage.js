@@ -124,7 +124,7 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    setMessage("");
+    setMessage("Finding your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -133,7 +133,6 @@ export default function FullscreenRouteDrawPage() {
           lon: Number(position.coords.longitude.toFixed(6)),
           accuracy: Math.round(position.coords.accuracy || 35),
           label: "Current location",
-          selectedAt: Date.now(),
         };
 
         setCurrentLocation(location);
@@ -189,66 +188,13 @@ export default function FullscreenRouteDrawPage() {
       setTargetLocation({
         ...currentLocation,
         label: "Current location",
+        selectedAt: Date.now(),
       });
-      setMessage("");
+      setMessage("Centered on current location.");
       return;
     }
 
     requestCurrentLocation();
-  }
-
-
-  async function rerouteRoute({ silent = false } = {}) {
-    if (points.length < 2) return;
-
-    setRoutingStatus("routing");
-    setRoutingError("");
-    if (!silent) setMessage("Routing over roads and paths...");
-
-    try {
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data?.ok) {
-        const detail = Array.isArray(data?.details) ? ` ${data.details.join(" | ")}` : "";
-        throw new Error((data?.error || "Routing failed.") + detail);
-      }
-
-      const routed = {
-        ...(data.route_points || {}),
-        source: "openrouteservice",
-        waypoints: points,
-        points: normalizeRoutePoints(data.route_points),
-        distance_km: data.distance_km || null,
-        elevation_gain_m: data.elevation_gain_m || 0,
-        duration_min: data.duration_min || null,
-      };
-
-      const routedPointCount = normalizeRoutePoints(routed).length;
-
-      if (routedPointCount < 2) {
-        throw new Error("Routing provider returned too few route points.");
-      }
-
-      setRoutedPayload(routed);
-      setRoutingStatus("done");
-      if (!silent) setMessage("Route follows roads and paths.");
-    } catch (error) {
-      console.error("Auto routing error", error);
-      setRoutingStatus("error");
-      setRoutingError(error?.message || "Routing failed.");
-      if (!silent) setMessage(error?.message || "Routing failed.");
-    }
   }
 
   function continueToDetails() {
@@ -306,7 +252,6 @@ export default function FullscreenRouteDrawPage() {
       lat: Number(result.lat),
       lon: Number(result.lon),
       label: result.label || "Selected location",
-      selectedAt: Date.now(),
     };
 
     setTargetLocation(location);
@@ -323,7 +268,7 @@ export default function FullscreenRouteDrawPage() {
     }, 850);
 
     return () => window.clearTimeout(timeout);
-  }, [routeSignature, sportId]);
+  }, [routeSignature]);
 
 
   if (checking) {
