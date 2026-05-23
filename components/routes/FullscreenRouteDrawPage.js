@@ -59,8 +59,37 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
     point_count: points.length,
     distance_km: payload?.distance_km || null,
     elevation_gain_m: payload?.elevation_gain_m || 0,
-    routed_at: payload?.routed_at || payload?.drawn_at || new Date().toISOString(),
+    routed_at: payload?.routed_at || payload?.drawn_at || payload?.edited_at || new Date().toISOString(),
   };
+}
+
+function safeReadEditDraft() {
+  try {
+    if (typeof window === "undefined") return null;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("editDraft") !== "1") return null;
+
+    const raw = window.sessionStorage.getItem("endurance_route_edit_draft");
+    if (!raw) return null;
+
+    const draft = JSON.parse(raw);
+    const points = normalizeRoutePoints(draft?.route_points);
+
+    if (!points.length) return null;
+
+    return {
+      ...draft,
+      route_points: {
+        ...(draft.route_points && typeof draft.route_points === "object" && !Array.isArray(draft.route_points) ? draft.route_points : {}),
+        points,
+        point_count: points.length,
+      },
+    };
+  } catch (error) {
+    console.error("Could not load route edit draft", error);
+    return null;
+  }
 }
 
 export default function FullscreenRouteDrawPage() {
@@ -100,7 +129,8 @@ export default function FullscreenRouteDrawPage() {
 
       try {
         const params = new URLSearchParams(window.location.search);
-        const initialSport = params.get("sport_id");
+        const editDraft = safeReadEditDraft();
+        const initialSport = params.get("sport_id") || editDraft?.sport_id;
 
         if (!initialSport) {
           router.replace("/routes/new");
@@ -108,7 +138,14 @@ export default function FullscreenRouteDrawPage() {
         }
 
         setSportId(initialSport);
-        setTitle(defaultTitle(initialSport));
+        setTitle(editDraft?.title || defaultTitle(initialSport));
+
+        if (editDraft?.route_points?.points?.length) {
+          setPointsPayload(makeRoutePointPayload(editDraft.route_points.points, "draw-edit"));
+          setRoutedPayload(editDraft.route_points);
+          setMessage("Existing route loaded. Edit the route and save again.");
+          window.sessionStorage.removeItem("endurance_route_edit_draft");
+        }
 
         const { data } = await supabase.auth.getUser();
         const user = data?.user;
