@@ -101,6 +101,7 @@ export default function RouteDrawMap({
   const locationRef = useRef(null);
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
+  const hasFocusedRouteRef = useRef(false);
   const lastManualFocusRef = useRef(0);
   const [error, setError] = useState("");
 
@@ -254,10 +255,30 @@ export default function RouteDrawMap({
           iconAnchor: [14, 14],
         });
 
+        let lastDragUpdate = 0;
+
         L.marker([point.lat, point.lon], {
           icon,
           draggable: true,
         })
+          .on("drag", (event) => {
+            const now = Date.now();
+            if (now - lastDragUpdate < 90) return;
+            lastDragUpdate = now;
+
+            const latLng = event.target.getLatLng();
+            const next = pointsRef.current.map((existing, pointIndex) =>
+              pointIndex === index
+                ? {
+                    ...existing,
+                    lat: Number(latLng.lat.toFixed(6)),
+                    lon: Number(latLng.lng.toFixed(6)),
+                  }
+                : existing
+            );
+
+            onChange?.(next, { reason: "drag" });
+          })
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
@@ -270,11 +291,11 @@ export default function RouteDrawMap({
                 : existing
             );
 
-            onChange?.(next);
+            onChange?.(next, { reason: "drag" });
           })
           .on("click", () => {
             const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
-            onChange?.(next);
+            onChange?.(next, { reason: "remove" });
           })
           .addTo(group);
       });
@@ -293,12 +314,13 @@ export default function RouteDrawMap({
       const recentlyFocused =
         Date.now() - lastManualFocusRef.current < 8000;
 
-      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused) {
+      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused && !hasFocusedRouteRef.current) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
-          padding: [32, 32],
+          padding: [42, 42],
           maxZoom: 15,
           animate: false,
         });
+        hasFocusedRouteRef.current = true;
       }
     }
 
@@ -392,8 +414,9 @@ export default function RouteDrawMap({
       layer.addTo(mapRef.current);
       locationRef.current = layer;
 
-      if (focusCurrentLocation && !hasFocusedLocationRef.current) {
-          mapRef.current.setView([lat, lon], 15, { animate: true });
+      if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasFocusedRouteRef.current) {
+        mapRef.current.setView([lat, lon], 15, { animate: true });
+        hasFocusedLocationRef.current = true;
       }
     }
 

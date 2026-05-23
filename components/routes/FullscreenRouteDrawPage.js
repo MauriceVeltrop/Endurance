@@ -112,6 +112,8 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
+  const [focusCurrentLocationOnLoad, setFocusCurrentLocationOnLoad] = useState(true);
+  const [lastEditReason, setLastEditReason] = useState("idle");
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -141,8 +143,10 @@ export default function FullscreenRouteDrawPage() {
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
+          setFocusCurrentLocationOnLoad(false);
           setPointsPayload(makeRoutePointPayload(editDraft.route_points.points, "draw-edit"));
           setRoutedPayload(editDraft.route_points);
+          setTargetLocation(null);
           setMessage("Existing route loaded. Edit the route and save again.");
           window.sessionStorage.removeItem("endurance_route_edit_draft");
         }
@@ -190,7 +194,7 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation(false);
   }, []);
 
-  function requestCurrentLocation() {
+  function requestCurrentLocation(shouldFocus = true) {
     if (!navigator.geolocation) {
       setMessage("Geolocation is not available on this device.");
       return;
@@ -208,7 +212,9 @@ export default function FullscreenRouteDrawPage() {
         };
 
         setCurrentLocation(location);
-        setTargetLocation(location);
+        if (shouldFocus) {
+          setTargetLocation({ ...location, selectedAt: Date.now() });
+        }
         setMessage("");
       },
       () => {
@@ -218,10 +224,11 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
-  function handlePointsChange(nextPoints) {
+  function handlePointsChange(nextPoints, meta = {}) {
     setPointsPayload(makeRoutePointPayload(nextPoints));
     setRoutedPayload(null);
-    setRoutingStatus("idle");
+    setLastEditReason(meta?.reason || "edit");
+    setRoutingStatus(meta?.reason === "drag" ? "routing" : "idle");
     setRoutingError("");
   }
 
@@ -392,12 +399,14 @@ export default function FullscreenRouteDrawPage() {
   useEffect(() => {
     if (points.length < 2 || !routeSignature) return;
 
+    const delay = lastEditReason === "drag" ? 180 : 650;
+
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
-    }, 850);
+    }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [routeSignature, sportId]);
+  }, [routeSignature, sportId, lastEditReason]);
 
 
   if (checking) {
@@ -474,7 +483,7 @@ export default function FullscreenRouteDrawPage() {
         onLayerChange={setDrawLayer}
         routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
-        focusCurrentLocation
+        focusCurrentLocation={focusCurrentLocationOnLoad}
         targetLocation={targetLocation}
       />
 
