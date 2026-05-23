@@ -254,7 +254,7 @@ export default function FullscreenRouteDrawPage() {
       distance_km: metrics.distance_km || "",
       elevation_gain_m: metrics.elevation_gain_m || "",
       estimated_time: estimateTimeText(metrics.distance_km, sportId),
-      route_points: routedPayload || makeRoutePointPayload(points),
+      route_points: routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
       created_by: profile?.id || null,
     };
 
