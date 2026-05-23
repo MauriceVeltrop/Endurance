@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
+import OSMRouteMap from "../../../components/OSMRouteMap";
+import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
@@ -165,6 +167,7 @@ export default function NewRoutePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
+  const [previewMapReady, setPreviewMapReady] = useState(false);
   const [form, setForm] = useState(initialForm());
   const [drawInsertMode, setDrawInsertMode] = useState(false);
   const [drawLayer, setDrawLayer] = useState("light");
@@ -195,19 +198,21 @@ export default function NewRoutePage() {
   }, []);
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
-    const shouldLoadDraft =
-      params.get("routeDraft") === "1" ||
-      window.sessionStorage.getItem("endurance_route_draft_ready") === "1";
+    const shouldLoadDraft = params.get("routeDraft") === "1";
+
+    if (!shouldLoadDraft) return;
 
     const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
 
-    if (!shouldLoadDraft && !rawDraft) return;
-
     if (!rawDraft) {
-      window.sessionStorage.removeItem("endurance_route_draft_ready");
       window.history.replaceState({}, "", "/routes/new");
       return;
     }
@@ -251,12 +256,10 @@ export default function NewRoutePage() {
       setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
       window.sessionStorage.removeItem("endurance_route_draft");
-      window.sessionStorage.removeItem("endurance_route_draft_ready");
       window.history.replaceState({}, "", "/routes/new");
     } catch (error) {
       console.error("Could not safely load route draft", error);
       window.sessionStorage.removeItem("endurance_route_draft");
-      window.sessionStorage.removeItem("endurance_route_draft_ready");
       window.history.replaceState({}, "", "/routes/new");
       setMessage("Could not load the drawn route. Please draw the route again.");
     }
@@ -485,6 +488,68 @@ export default function NewRoutePage() {
 
     return () => window.clearTimeout(timeout);
   }, [autoReroute, form.method, form.route_points?.point_count]);
+
+
+
+  async function saveRoute() {
+    if (!profile?.id) {
+      setMessage("You need to be logged in to save a route.");
+      return;
+    }
+
+    const points = normalizeRoutePoints(form.route_points);
+
+    if (!form.sport_id || !form.title.trim() || points.length < 2) {
+      setMessage("Add a title and at least two route points before saving.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const metrics = calculateRouteMetrics(points);
+      const routePointsPayload = {
+        ...(form.route_points && typeof form.route_points === "object" && !Array.isArray(form.route_points) ? form.route_points : {}),
+        points,
+        point_count: points.length,
+        distance_km: Number(form.distance_km || metrics.distance_km || 0) || null,
+        elevation_gain_m: Number(form.elevation_gain_m || metrics.elevation_gain_m || 0) || 0,
+        source: form.route_points?.source || form.method || "draw",
+        saved_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("routes")
+        .insert({
+          creator_id: profile.id,
+          sport_id: form.sport_id,
+          title: form.title.trim(),
+          description: form.description || "",
+          visibility: form.visibility || "team",
+          distance_km: Number(form.distance_km || metrics.distance_km || 0) || null,
+          elevation_gain_m: Number(form.elevation_gain_m || metrics.elevation_gain_m || 0) || 0,
+          route_points: routePointsPayload,
+          gpx_file_url: form.gpx_file_url || null,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+
+      try {
+        window.sessionStorage.removeItem("endurance_route_draft");
+        window.sessionStorage.removeItem("endurance_route_edit_draft");
+      } catch (_) {}
+
+      router.push(data?.id ? `/routes/${data.id}` : "/routes");
+    } catch (error) {
+      console.error("Save route error", error);
+      setMessage(error?.message || "Could not save route.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <main className="endurance-page create-route-v2-page route-step-page">
@@ -720,14 +785,22 @@ export default function NewRoutePage() {
                     <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
                   </div>
 
-                  <div className="route-preview-placeholder">
-                    <strong>{routePoints.length ? "Route loaded safely" : "No route points loaded yet"}</strong>
-                    <span>
-                      {routePoints.length
-                        ? `${routePoints.length} compact route points ready. The map editor can be reopened for changes.`
-                        : "Draw or upload a route to continue."}
-                    </span>
-                  </div>
+                  {previewMapReady && routePoints.length ? (
+                    <OSMRouteMap
+                      routePoints={form.route_points}
+                      title={form.title || "New route"}
+                      height={360}
+                      interactive
+                      showLegend
+                      showLayerControl
+                      defaultLayer="dark"
+                    />
+                  ) : (
+                    <div className="route-preview-placeholder">
+                      <strong>Route loaded</strong>
+                      <span>{routePoints.length ? `${routePoints.length} route points ready` : "No route points loaded yet"}</span>
+                    </div>
+                  )}
 
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
