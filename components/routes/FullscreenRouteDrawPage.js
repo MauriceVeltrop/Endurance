@@ -197,6 +197,49 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation();
   }
 
+
+  async function rerouteRoute({ silent = false } = {}) {
+    if (points.length < 2) return;
+
+    try {
+      setRoutingStatus("routing");
+
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Routing failed.");
+      }
+
+      const routed = data.route_points || data;
+
+      if (!routed?.points?.length && !Array.isArray(routed)) {
+        throw new Error("No routed geometry returned.");
+      }
+
+      setRoutedPayload(routed);
+      setRoutingStatus("done");
+
+      if (!silent) {
+        setMessage("");
+      }
+    } catch (error) {
+      console.error("Routing failed", error);
+      setRoutingStatus("error");
+      setRoutingError(error?.message || "Routing failed.");
+    }
+  }
+
   function continueToDetails() {
     if (!canContinue) {
       setMessage("Add at least two points before continuing.");
@@ -252,6 +295,7 @@ export default function FullscreenRouteDrawPage() {
       lat: Number(result.lat),
       lon: Number(result.lon),
       label: result.label || "Selected location",
+      forceFocusAt: Date.now(),
     };
 
     setTargetLocation(location);
@@ -268,7 +312,7 @@ export default function FullscreenRouteDrawPage() {
     }, 850);
 
     return () => window.clearTimeout(timeout);
-  }, [routeSignature]);
+  }, [routeSignature, sportId]);
 
 
   if (checking) {
