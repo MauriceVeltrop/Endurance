@@ -29,7 +29,7 @@ function defaultTitle(sportId) {
 }
 
 
-function compactRoutePoints(points, maxPoints = 260) {
+function compactRoutePoints(points, maxPoints = 900) {
   const normalized = normalizeRoutePoints(points);
 
   if (normalized.length <= maxPoints) return normalized;
@@ -337,13 +337,10 @@ export default function FullscreenRouteDrawPage() {
         saved_at: new Date().toISOString(),
       };
 
-      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
-      window.sessionStorage.setItem("endurance_route_draft_ready", "1");
-
-      // Use a hard browser navigation instead of Next router state.
-      // This prevents mobile Chrome from keeping the heavy fullscreen Leaflet map
-      // alive while /routes/new mounts.
-      window.location.href = "/routes/new";
+      const serializedDraft = JSON.stringify(draft);
+      window.sessionStorage.setItem("endurance_route_draft", serializedDraft);
+      window.localStorage.setItem("endurance_route_draft_backup", serializedDraft);
+      window.location.assign(`/routes/new?routeDraft=1&step=details&t=${Date.now()}`);
     } catch (error) {
       console.error("Could not save route draft", error);
       setMessage("Could not prepare the route details. Try again with fewer routepoints.");
