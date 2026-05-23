@@ -3,25 +3,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
+import OSMRouteMap from "../../../components/OSMRouteMap";
+import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
 import { calculateRouteMetrics, estimateTimeText } from "../../../lib/routeMetrics";
-
-
-const OSMRouteMap = dynamic(() => import("../../../components/OSMRouteMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="route-preview-placeholder">
-      <strong>Loading map preview...</strong>
-      <span>Preparing route preview safely.</span>
-    </div>
-  ),
-});
 
 const FALLBACK_ROUTE_SPORTS = [
   "running",
@@ -142,6 +132,32 @@ function makeRoutePointPayload(points, source = "draw") {
   return { points: normalized, point_count: normalized.length, distance_km: metrics.distance_km || null, elevation_gain_m: metrics.elevation_gain_m || 0, elevation_loss_m: metrics.elevation_loss_m || 0, max_elevation_m: metrics.max_elevation_m || null, drawn_at: new Date().toISOString(), source };
 }
 
+function buildEditableRouteDraft(form, profileId) {
+  const routePoints = form?.route_points || null;
+  const points = normalizeRoutePoints(routePoints);
+  const metrics = calculateRouteMetrics(points);
+
+  return {
+    sport_id: form?.sport_id || "",
+    title: form?.title || "",
+    description: form?.description || "",
+    method: "draw",
+    distance_km: form?.distance_km || metrics.distance_km || "",
+    elevation_gain_m: form?.elevation_gain_m || metrics.elevation_gain_m || "",
+    route_points: {
+      ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
+      source: routePoints?.source || "draw-edit",
+      points,
+      point_count: points.length,
+      distance_km: form?.distance_km || routePoints?.distance_km || metrics.distance_km || null,
+      elevation_gain_m: form?.elevation_gain_m || routePoints?.elevation_gain_m || metrics.elevation_gain_m || 0,
+      edited_at: new Date().toISOString(),
+    },
+    created_by: profileId || null,
+    saved_at: new Date().toISOString(),
+  };
+}
+
 export default function NewRoutePage() {
   const router = useRouter();
 
@@ -181,8 +197,10 @@ export default function NewRoutePage() {
     loadAccess();
   }, []);
 
-  // Keep the preview map opt-in on mobile. Rendering Leaflet immediately after
-  // returning from the fullscreen draw editor can crash mobile Chrome.
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -471,64 +489,6 @@ export default function NewRoutePage() {
     return () => window.clearTimeout(timeout);
   }, [autoReroute, form.method, form.route_points?.point_count]);
 
-  async function saveRoute() {
-    if (!canSave) {
-      setMessage("Complete the route details before saving.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-
-    try {
-      const points = normalizeRoutePoints(form.route_points);
-      const safeRoutePoints = {
-        source: form.route_points?.source || form.method || "manual",
-        points,
-        point_count: points.length,
-        distance_km: Number(form.distance_km) || null,
-        elevation_gain_m: Number(form.elevation_gain_m) || 0,
-        saved_from: "routes/new",
-      };
-
-      if (Array.isArray(form.route_points?.waypoints) && form.route_points.waypoints.length) {
-        safeRoutePoints.waypoints = form.route_points.waypoints;
-      }
-
-      const payload = {
-        creator_id: profile.id,
-        sport_id: form.sport_id,
-        title: form.title.trim(),
-        description: form.description?.trim() || "",
-        visibility: form.visibility || "team",
-        distance_km: Number(form.distance_km) || null,
-        elevation_gain_m: Number(form.elevation_gain_m) || 0,
-        route_points: safeRoutePoints,
-        gpx_file_url: form.gpx_file_url || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from("routes")
-        .insert(payload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem("endurance_route_draft");
-      }
-
-      router.push(data?.id ? `/routes/${data.id}` : "/routes");
-    } catch (error) {
-      console.error("Save route error", error);
-      setMessage(error?.message || "Could not save route.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <main className="endurance-page create-route-v2-page route-step-page">
       <AppHeader active="routes" />
@@ -718,7 +678,20 @@ export default function NewRoutePage() {
                     <div className="create-route-coming-soon">
                       <strong>Drawn route attached</strong>
                       <span>{routePoints.length ? `${routePoints.length} route points loaded from the fullscreen editor.` : "Open the fullscreen editor to draw your route."}</span>
-                      <button type="button" className="route-inline-action" onClick={() => router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}`)}>
+                      <button
+                        type="button"
+                        className="route-inline-action"
+                        onClick={() => {
+                          try {
+                            const draft = buildEditableRouteDraft(form, profile?.id);
+                            window.sessionStorage.setItem("endurance_route_edit_draft", JSON.stringify(draft));
+                          } catch (error) {
+                            console.error("Could not prepare route edit draft", error);
+                          }
+
+                          router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}&editDraft=1`);
+                        }}
+                      >
                         Reopen map editor
                       </button>
                     </div>
@@ -762,13 +735,8 @@ export default function NewRoutePage() {
                     />
                   ) : (
                     <div className="route-preview-placeholder">
-                      <strong>{routePoints.length ? "Route loaded" : "No route loaded"}</strong>
-                      <span>{routePoints.length ? `${routePoints.length} route points ready. Map preview is disabled until you open it.` : "No route points loaded yet"}</span>
-                      {routePoints.length ? (
-                        <button type="button" className="route-inline-action" onClick={() => setPreviewMapReady(true)}>
-                          Show map preview
-                        </button>
-                      ) : null}
+                      <strong>Route loaded</strong>
+                      <span>{routePoints.length ? `${routePoints.length} route points ready` : "No route points loaded yet"}</span>
                     </div>
                   )}
 
