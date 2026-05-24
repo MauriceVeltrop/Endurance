@@ -12,7 +12,7 @@ const LAYERS = {
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     filter: "brightness(1.03) saturate(.92) contrast(.97)",
     maxZoom: 19,
-    attribution: selected.attribution || "&copy; OpenStreetMap contributors",
+    attribution: "&copy; OpenStreetMap contributors",
   },
   minimal: {
     label: "Minimal",
@@ -164,8 +164,7 @@ export default function RouteDrawMap({
   center = [50.887, 6.023],
   title = "Draw route",
   insertMode = false,
-  layer = "light",
-  onLayerChange,
+  layer = "minimal",
   routeMode = "routed",
   currentLocation = null,
   focusCurrentLocation = false,
@@ -274,7 +273,7 @@ export default function RouteDrawMap({
 
       tileRef.current = L.tileLayer(selected.url, {
         maxZoom: selected.maxZoom || 20,
-        attribution: selected.attribution || "&copy; OpenStreetMap contributors",
+        attribution: "&copy; OpenStreetMap contributors",
       }).addTo(mapRef.current);
 
       const tilePane = mapRef.current.getPane("tilePane");
