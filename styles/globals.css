@@ -3686,3 +3686,387 @@ main {
     font-size: 21px;
   }
 }
+
+/* Route Creation UI Consolidation v16 */
+.route-step-page {
+  padding-bottom: calc(108px + env(safe-area-inset-bottom));
+}
+
+.create-route-v2-hero.route-step-hero {
+  margin-top: 10px;
+  padding: 22px 20px;
+  min-height: auto;
+  border-radius: 28px;
+}
+
+.create-route-v2-hero.route-step-hero h1 {
+  font-size: clamp(38px, 11vw, 58px);
+  line-height: .92;
+  letter-spacing: -.075em;
+  margin: 8px 0 10px;
+}
+
+.create-route-v2-hero.route-step-hero p:not(.eyebrow) {
+  max-width: 33rem;
+  font-size: 15px;
+  line-height: 1.35;
+  color: rgba(255,255,255,.68);
+}
+
+.route-stepper {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  backdrop-filter: blur(16px);
+}
+
+.route-stepper button {
+  min-height: 52px;
+  border-radius: 18px;
+  font-size: 13px;
+}
+
+.route-stepper button span {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+
+.route-step-section {
+  margin-top: 12px;
+}
+
+.route-builder-step.compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 14px;
+}
+
+.route-builder-step.compact > span {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border-radius: 16px;
+  font-size: 20px;
+  box-shadow: 0 12px 34px rgba(230,255,0,.18);
+}
+
+.route-builder-step.compact .eyebrow {
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: .32em;
+}
+
+.route-builder-step.compact h2 {
+  font-size: clamp(31px, 8.8vw, 46px);
+  line-height: .92;
+}
+
+.sport-button-list,
+.create-route-sport-grid.compact.sport-button-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.route-sport-button {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 88% 8%, rgba(230,255,0,.11), transparent 31%),
+    linear-gradient(180deg, rgba(19,25,28,.74), rgba(8,11,14,.82));
+  color: white;
+  border-radius: 22px;
+  padding: 11px 12px;
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: 48px minmax(0,1fr) 22px;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 14px 34px rgba(0,0,0,.20);
+}
+
+.route-sport-button.active {
+  border-color: rgba(230,255,0,.40);
+  background:
+    radial-gradient(circle at 88% 8%, rgba(230,255,0,.18), transparent 34%),
+    linear-gradient(180deg, rgba(30,38,23,.86), rgba(8,11,14,.86));
+}
+
+.route-sport-icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: rgba(230,255,0,.09);
+  border: 1px solid rgba(230,255,0,.20);
+}
+
+.route-sport-icon img {
+  width: 30px !important;
+  height: 30px !important;
+  max-width: 30px !important;
+  max-height: 30px !important;
+  object-fit: contain !important;
+  display: block;
+  filter: saturate(.95) brightness(1.08);
+}
+
+.route-sport-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.route-sport-copy strong,
+.route-method-selected-sport strong {
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.05;
+  letter-spacing: -.04em;
+}
+
+.route-sport-copy small,
+.route-method-selected-sport small {
+  color: rgba(255,255,255,.58);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-sport-arrow,
+.route-method-option-arrow {
+  color: var(--endurance-lime);
+  font-size: 28px;
+  line-height: 1;
+  opacity: .95;
+}
+
+.route-method-premium-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 22px;
+  background: rgba(255,255,255,.045);
+}
+
+.route-method-selected-sport {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.route-method-selected-sport > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.route-method-premium-head button,
+.route-step-secondary,
+.route-method-back {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.065);
+  color: rgba(255,255,255,.86);
+  border-radius: 999px;
+  padding: 11px 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.route-method-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.route-method-option {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 24px;
+  padding: 13px;
+  color: white;
+  background:
+    radial-gradient(circle at 92% 10%, rgba(230,255,0,.08), transparent 30%),
+    linear-gradient(180deg, rgba(18,23,27,.80), rgba(7,10,13,.88));
+  display: grid;
+  grid-template-columns: 50px minmax(0,1fr) 22px;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 16px 40px rgba(0,0,0,.22);
+}
+
+.route-method-option.recommended {
+  border-color: rgba(230,255,0,.30);
+}
+
+.route-method-option-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(230,255,0,.08);
+  border: 1px solid rgba(230,255,0,.18);
+  font-size: 23px;
+}
+
+.route-method-option-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.route-method-option-topline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+}
+
+.route-method-option-topline em,
+.route-method-option-topline i {
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  font-size: 9px;
+  font-weight: 1000;
+}
+
+.route-method-option-topline em { color: var(--endurance-lime); }
+.route-method-option-topline i {
+  color: #071006;
+  background: var(--endurance-lime);
+  border-radius: 999px;
+  padding: 3px 6px;
+  letter-spacing: .06em;
+}
+
+.route-method-option strong {
+  display: block;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.03;
+  letter-spacing: -.045em;
+}
+
+.route-method-option small {
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  line-height: 1.28;
+  font-weight: 750;
+}
+
+.route-method-option-action {
+  color: rgba(230,255,0,.88);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.route-method-back {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 50px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.04);
+}
+
+.step-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.create-route-form-card,
+.create-route-preview-card {
+  border-radius: 26px;
+  padding: 16px;
+}
+
+.create-route-preview-card {
+  overflow: hidden;
+}
+
+.create-route-preview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.create-route-preview-stats span {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  padding: 10px 8px;
+  background: rgba(255,255,255,.045);
+  color: rgba(255,255,255,.62);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.create-route-preview-stats b {
+  display: block;
+  color: #fff;
+  font-size: 17px;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+
+@media (min-width: 720px) {
+  .sport-button-list,
+  .create-route-sport-grid.compact.sport-button-list {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+
+  .step-details-grid {
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  }
+}
+
+@media (max-width: 430px) {
+  .create-route-v2-hero.route-step-hero {
+    padding: 18px 18px;
+    border-radius: 26px;
+  }
+
+  .create-route-v2-hero.route-step-hero h1 {
+    font-size: clamp(34px, 10.5vw, 46px);
+  }
+
+  .route-method-option {
+    grid-template-columns: 44px minmax(0,1fr) 18px;
+    border-radius: 21px;
+    padding: 11px;
+  }
+
+  .route-method-option-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    font-size: 20px;
+  }
+
+  .route-method-option strong {
+    font-size: 18px;
+  }
+
+  .route-method-option small,
+  .route-method-option-action {
+    font-size: 11px;
+  }
+}
