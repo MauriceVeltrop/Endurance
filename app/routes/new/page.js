@@ -23,26 +23,79 @@ const FALLBACK_ROUTE_SPORTS = [
   "kayaking",
 ];
 
+const METHOD_ORDER = ["draw", "wizard", "upload"];
+
 const METHOD_DETAILS = {
-  upload: {
-    title: "Upload GPX",
-    eyebrow: "Fastest",
-    icon: "↥",
-    body: "Import a GPX route from Garmin, Komoot, Strava, RouteYou or another route planner.",
-  },
   draw: {
-    title: "Draw route",
+    title: "Draw Route",
     eyebrow: "Manual",
-    icon: "✎",
-    body: "Create a route by drawing on the map. Snapping and rerouting will be expanded next.",
+    icon: "✏️",
+    action: "Open fullscreen editor",
+    body: "Build the route yourself on the map. The line follows roads and paths automatically.",
   },
   wizard: {
-    title: "Route wizard",
+    title: "Route Wizard",
     eyebrow: "Smart",
-    icon: "✦",
-    body: "Let Endurance generate sport-specific route ideas using routing profiles and surface rules.",
+    icon: "✨",
+    action: "Set up route idea",
+    body: "Let Endurance create a sport-specific route based on distance, start point and terrain.",
+  },
+  upload: {
+    title: "Upload GPX",
+    eyebrow: "Import",
+    icon: "⬆️",
+    action: "Choose GPX file",
+    body: "Import an existing route from Garmin, Komoot, Strava, RouteYou or another planner.",
   },
 };
+
+const METHOD_COPY_BY_SPORT = {
+  running: {
+    draw: "Draw a paved running route yourself and let the app snap it to logical roads and paths.",
+    wizard: "Generate a paved running loop with quiet streets, parks and fluent running lines.",
+    upload: "Import a road-running GPX from Garmin, Strava, Komoot or another planner.",
+  },
+  trail_running: {
+    draw: "Shape your own trail route over forest paths, tracks and technical sections.",
+    wizard: "Generate a trail-focused loop with forest paths, unpaved surfaces and elevation.",
+    upload: "Import a trail GPX with known paths, climbs and terrain from another platform.",
+  },
+  road_cycling: {
+    draw: "Draw a road cycling route over asphalt and logical cycling roads.",
+    wizard: "Generate a fast road loop that prefers safe asphalt and cycling infrastructure.",
+    upload: "Import a road cycling GPX from Garmin, Strava, Komoot or RideWithGPS.",
+  },
+  gravel_cycling: {
+    draw: "Draw a gravel route and refine the line around roads, tracks and forest roads.",
+    wizard: "Generate a gravel loop with compacted paths, gravel surfaces and quiet links.",
+    upload: "Import a gravel GPX with known surfaces and sectors.",
+  },
+  mountain_biking: {
+    draw: "Draw an MTB route manually and keep control over technical sections.",
+    wizard: "Generate an MTB-focused route using trail logic and technical terrain signals.",
+    upload: "Import an MTB GPX with singletracks, climbs and known trail sections.",
+  },
+  walking: {
+    draw: "Draw a walking route through safe paths, nature and comfortable links.",
+    wizard: "Generate a walking loop focused on comfort, nature and low-traffic paths.",
+    upload: "Import a walking or hiking GPX from an existing route source.",
+  },
+  kayaking: {
+    draw: "Sketch a water route manually and save it as a kayaking route.",
+    wizard: "Later: generate water-specific routes from suitable launch points and waterways.",
+    upload: "Import an existing kayaking GPX from a known route or activity.",
+  },
+};
+
+function methodCopyFor(methodId, sportId) {
+  return METHOD_COPY_BY_SPORT[sportId]?.[methodId] || METHOD_DETAILS[methodId]?.body || "Choose this route method.";
+}
+
+function recommendedMethodFor(sportId) {
+  if (["running", "road_cycling", "walking"].includes(sportId)) return "draw";
+  if (["trail_running", "gravel_cycling", "mountain_biking"].includes(sportId)) return "upload";
+  return "draw";
+}
 
 const SPORT_ROUTE_PROFILES = {
   running: {
@@ -659,39 +712,57 @@ export default function NewRoutePage() {
                 </div>
               </div>
 
-              <div className="route-method-grid route-method-step-grid">
-                {Object.entries(METHOD_DETAILS).map(([methodId, method]) => (
-                  <button
-                    key={methodId}
-                    type="button"
-                    className={form.method === methodId ? "route-method-card active" : "route-method-card"}
-                    onClick={() => {
-                      if (methodId === "draw") {
-                        router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id || selectedSport.id)}`);
-                        return;
-                      }
-
-                      updateForm("method", methodId);
-                      setCurrentStep(3);
-                    }}
-                  >
-                    <span>{method.eyebrow}</span>
-                    <b>{method.icon}</b>
-                    <strong>{method.title}</strong>
-                    <small>{method.body}</small>
-                    {methodId === "draw" ? <em className="route-method-fullscreen-label">Opens fullscreen editor</em> : null}
-                  </button>
-                ))}
+              <div className="route-method-premium-head">
+                <div className="route-method-selected-sport">
+                  <span className="route-sport-icon" aria-hidden="true">
+                    <img src={sportIconFor(selectedSport.id)} alt="" />
+                  </span>
+                  <div>
+                    <strong>{getSportLabel(selectedSport.id)}</strong>
+                    <small>{selectedProfile.focus}</small>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setCurrentStep(1)}>Change sport</button>
               </div>
 
-              {form.method === "wizard" ? (
-                <section className="route-wizard-info">
-                  Route Wizard uses OpenRouteService for smart route generation.
-                </section>
-              ) : null}
+              <div className="route-method-cards">
+                {METHOD_ORDER.map((methodId) => {
+                  const method = METHOD_DETAILS[methodId];
+                  const recommended = recommendedMethodFor(form.sport_id) === methodId;
 
-              <button type="button" className="route-step-secondary" onClick={() => setCurrentStep(1)}>
-                Back
+                  return (
+                    <button
+                      key={methodId}
+                      type="button"
+                      className={recommended ? "route-method-option recommended" : "route-method-option"}
+                      onClick={() => {
+                        if (methodId === "draw") {
+                          router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id || selectedSport.id)}`);
+                          return;
+                        }
+
+                        updateForm("method", methodId);
+                        setCurrentStep(3);
+                      }}
+                    >
+                      <span className="route-method-option-icon" aria-hidden="true">{method.icon}</span>
+                      <span className="route-method-option-main">
+                        <span className="route-method-option-topline">
+                          <em>{method.eyebrow}</em>
+                          {recommended ? <i>Recommended</i> : null}
+                        </span>
+                        <strong>{method.title}</strong>
+                        <small>{methodCopyFor(methodId, form.sport_id)}</small>
+                        <span className="route-method-option-action">{method.action}</span>
+                      </span>
+                      <span className="route-method-option-arrow" aria-hidden="true">›</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button type="button" className="route-step-secondary route-method-back" onClick={() => setCurrentStep(1)}>
+                Back to sport
               </button>
             </section>
           ) : null}
