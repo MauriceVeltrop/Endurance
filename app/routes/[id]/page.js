@@ -13,7 +13,6 @@ import { getSportLabel } from "../../../lib/trainingHelpers";
 import {
   getRoutePoints,
   getRoutePreviewStats,
-  makeElevationPolyline,
   getElevationStats,
 } from "../../../lib/routePreview";
 
@@ -197,7 +196,6 @@ export default function RouteDetailPage() {
   const points = useMemo(() => getRoutePoints(route?.route_points), [route?.route_points]);
   const pointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
-  const elevationLine = useMemo(() => makeElevationPolyline(route?.route_points, 360, 110, 12), [route?.route_points]);
   const sportLabel = getSportLabel(route?.sport_id);
   const editable = canEditRoute(route, profile);
 
@@ -259,7 +257,7 @@ export default function RouteDetailPage() {
           <div className="route-detail-badges">
             <span className="sport-badge">{sportLabel}</span>
             <span className="status-badge">{route.visibility}</span>
-            <span className="status-badge">{pointStats.pointCount || 0} points</span>
+            <span className="status-badge">{pointStats.qualityLabel || "Route"}</span>
           </div>
 
           <h1>{route.title}</h1>
@@ -287,7 +285,7 @@ export default function RouteDetailPage() {
           </div>
           <div>
             <span>Elevation</span>
-            <strong>{elevationGainText(route)}</strong>
+            <strong>{elevationStats.available ? `${elevationStats.gain} m` : elevationGainText(route)}</strong>
           </div>
           <div>
             <span>Duration</span>
@@ -355,8 +353,10 @@ export default function RouteDetailPage() {
             <div><span>Distance</span><strong>{distanceText(route)}</strong></div>
             <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
             <div><span>Estimated time</span><strong>{estimateDuration(route)}</strong></div>
-            <div><span>Route points</span><strong>{pointStats.pointCount || 0}</strong></div>
-            <div><span>Elevation data</span><strong>{pointStats.hasElevation ? "Yes" : "No"}</strong></div>
+            <div><span>Control points</span><strong>{pointStats.controlPointCount || "—"}</strong></div>
+            <div><span>Geometry points</span><strong>{pointStats.pointCount || 0}</strong></div>
+            <div><span>Point density</span><strong>{pointStats.pointDensity ? `${pointStats.pointDensity}/km` : "—"}</strong></div>
+            <div><span>Elevation data</span><strong>{pointStats.hasElevation ? `${elevationStats.sampleCount} samples` : "No"}</strong></div>
           </div>
         </article>
 
@@ -370,6 +370,7 @@ export default function RouteDetailPage() {
 
           <div className="route-metadata-list">
             <span><b>Surface intelligence</b><small>Prepared for sport-specific scoring.</small></span>
+            <span><b>Route architecture</b><small>{pointStats.controlPointCount ? "Control points + geometry" : "Geometry only"}</small></span>
             <span><b>Route source</b><small>{route.gpx_file_url ? "GPX imported" : "Manual / saved points"}</small></span>
             <span><b>Visibility</b><small>{route.visibility}</small></span>
             <span><b>Updated</b><small>{formatDate(route.updated_at || route.created_at)}</small></span>
@@ -383,7 +384,7 @@ export default function RouteDetailPage() {
             <p className="eyebrow">Elevation profile</p>
             <h2>Climbs & terrain</h2>
           </div>
-          {elevationStats.available ? <span>{elevationStats.min}–{elevationStats.max} m</span> : null}
+          {elevationStats.available ? <span>{elevationStats.gain} m up / {elevationStats.loss} m down</span> : null}
         </div>
 
         <RouteElevationProfile routePoints={route.route_points} />
