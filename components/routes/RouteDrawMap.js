@@ -149,6 +149,7 @@ export default function RouteDrawMap({
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
   const lastManualFocusRef = useRef(0);
+  const isDraggingRef = useRef(false);
   const [error, setError] = useState("");
 
   const waypoints = useMemo(() => norm(points), [points]);
@@ -330,6 +331,9 @@ export default function RouteDrawMap({
           icon,
           draggable: true,
         })
+          .on("dragstart", () => {
+            isDraggingRef.current = true;
+          })
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
@@ -342,10 +346,14 @@ export default function RouteDrawMap({
                 : existing
             );
 
+            isDraggingRef.current = false;
+            lastManualFocusRef.current = Date.now();
             onChange?.(next);
           })
           .on("click", () => {
+            if (isDraggingRef.current) return;
             const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
+            lastManualFocusRef.current = Date.now();
             onChange?.(next);
           })
           .addTo(group);
@@ -365,7 +373,7 @@ export default function RouteDrawMap({
       const recentlyFocused =
         Date.now() - lastManualFocusRef.current < 8000;
 
-      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused) {
+      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused && !isDraggingRef.current) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
           padding: [32, 32],
           maxZoom: 15,
@@ -466,7 +474,6 @@ export default function RouteDrawMap({
 
       if (focusCurrentLocation && !hasFocusedLocationRef.current) {
         hasFocusedLocationRef.current = true;
-        lastManualFocusRef.current = Date.now();
         mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }

@@ -1,12 +1,12 @@
 // components/routes/FullscreenRouteDrawPage.js
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import RouteDrawMap from "./RouteDrawMap";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
-import { calculateRouteMetrics, estimateTimeText, normalizeRoutePoints } from "../../lib/routeMetrics";
+import { calculateRouteMetrics, estimateTimeText, normalizeRoutePoints, simplifyRoutePoints } from "../../lib/routeMetrics";
 
 function makeRoutePointPayload(points, source = "draw-fullscreen") {
   const normalized = normalizeRoutePoints(points);
@@ -31,18 +31,23 @@ function defaultTitle(sportId) {
 
 function compactRoutePoints(points, maxPoints = 900) {
   const normalized = normalizeRoutePoints(points);
+  const simplified = simplifyRoutePoints(normalized, normalized.length > 350 ? 6 : 2.5);
 
-  if (normalized.length <= maxPoints) return normalized;
+  if (simplified.length <= maxPoints) return simplified;
 
-  const step = Math.ceil(normalized.length / maxPoints);
-  const compacted = normalized.filter((_, index) => index % step === 0);
-  const last = normalized[normalized.length - 1];
+  const step = Math.ceil(simplified.length / maxPoints);
+  const compacted = simplified.filter((_, index) => index % step === 0);
+  const last = simplified[simplified.length - 1];
 
   if (last && compacted[compacted.length - 1] !== last) {
     compacted.push(last);
   }
 
   return compacted;
+}
+
+function compactControlPoints(points) {
+  return normalizeRoutePoints(points).slice(0, 40);
 }
 
 function buildSafeDraftRoutePayload(payload, fallbackPoints) {
@@ -94,6 +99,8 @@ function safeReadEditDraft() {
 
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
+  const loadedDraftRef = useRef(false);
+  const currentLocationRequestedRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -112,7 +119,6 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
-  const [loadedExistingRoute, setLoadedExistingRoute] = useState(false);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -143,6 +149,7 @@ export default function FullscreenRouteDrawPage() {
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
+          loadedDraftRef.current = true;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
           const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints);
           const editableControlPoints = savedWaypoints.length >= 2
@@ -158,7 +165,6 @@ export default function FullscreenRouteDrawPage() {
             waypoints: editableControlPoints,
             point_count: geometry.length,
           });
-          setLoadedExistingRoute(true);
           setMessage("Existing route loaded. Tap the route line to add a shaping point, then drag it to reshape.");
           window.sessionStorage.removeItem("endurance_route_edit_draft");
         }
@@ -203,18 +209,18 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
-    if (checking) return;
+    if (currentLocationRequestedRef.current) return;
+    currentLocationRequestedRef.current = true;
+    requestCurrentLocation({ focus: false });
+  }, []);
 
-    requestCurrentLocation({ focusMap: !loadedExistingRoute && points.length === 0, showMessage: false });
-  }, [checking, loadedExistingRoute]);
-
-  function requestCurrentLocation({ focusMap = true, showMessage = true } = {}) {
+  function requestCurrentLocation({ focus = true } = {}) {
     if (!navigator.geolocation) {
       setMessage("Geolocation is not available on this device.");
       return;
     }
 
-    if (showMessage) setMessage("Finding your current location...");
+    setMessage("Finding your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -227,24 +233,26 @@ export default function FullscreenRouteDrawPage() {
 
         setCurrentLocation(location);
 
-        if (focusMap) {
+        if (focus && !loadedDraftRef.current) {
           setTargetLocation({
             ...location,
             selectedAt: Date.now(),
           });
         }
 
-        if (showMessage) setMessage("");
+        setMessage("");
       },
       () => {
-        if (showMessage) setMessage("Could not access current location. You can still search or draw manually.");
+        setMessage("Could not access current location. You can still search or draw manually.");
       },
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
     );
   }
 
   function handlePointsChange(nextPoints) {
-    setPointsPayload(makeRoutePointPayload(nextPoints));
+    const safeControlPoints = compactControlPoints(nextPoints);
+    loadedDraftRef.current = false;
+    setPointsPayload(makeRoutePointPayload(safeControlPoints));
     setRoutedPayload(null);
     setRoutingStatus("idle");
     setRoutingError("");
@@ -291,7 +299,7 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    requestCurrentLocation({ focusMap: true, showMessage: true });
+    requestCurrentLocation({ focus: true });
   }
 
 
@@ -308,7 +316,7 @@ export default function FullscreenRouteDrawPage() {
         },
         body: JSON.stringify({
           sport_id: sportId,
-          points,
+          points: compactControlPoints(points),
         }),
       });
 
@@ -349,7 +357,9 @@ export default function FullscreenRouteDrawPage() {
         points
       );
 
-      safePayload.waypoints = compactRoutePoints(points, 80);
+      safePayload.waypoints = compactControlPoints(points);
+      safePayload.control_points = compactControlPoints(points);
+      safePayload.geometry_points = safePayload.points;
 
       const draft = {
         sport_id: sportId,
@@ -499,7 +509,7 @@ export default function FullscreenRouteDrawPage() {
         onLayerChange={setDrawLayer}
         routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
-        focusCurrentLocation={!points.length}
+        focusCurrentLocation={!points.length && !loadedDraftRef.current}
         targetLocation={targetLocation}
       />
 
