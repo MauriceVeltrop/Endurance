@@ -68,6 +68,22 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
   };
 }
 
+
+const MAP_STYLE_OPTIONS = [
+  { id: "standard", name: "Standard", provider: "OpenStreetMap", description: "Clear everyday map with streets and parks.", icon: "🗺️" },
+  { id: "minimal", name: "Minimal", provider: "Carto Positron", description: "Clean light map for running and city routes.", icon: "◻️" },
+  { id: "outdoor", name: "Outdoor", provider: "OpenTopoMap", description: "Terrain, paths and contours for trail and hiking.", icon: "⛰️" },
+  { id: "cycling", name: "Cycling", provider: "CyclOSM", description: "Cycle-friendly map with cycling infrastructure.", icon: "🚴" },
+  { id: "satellite", name: "Satellite", provider: "Esri World Imagery", description: "Aerial view for forests, fields and landmarks.", icon: "🛰️" },
+  { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Low-glare dark map for evening planning.", icon: "🌙" },
+];
+
+function defaultMapStyleForSport(sportId) {
+  if (["trail_running", "mountain_biking", "walking", "kayaking"].includes(sportId)) return "outdoor";
+  if (["road_cycling", "gravel_cycling"].includes(sportId)) return "cycling";
+  return "minimal";
+}
+
 function safeReadEditDraft() {
   try {
     if (typeof window === "undefined") return null;
@@ -145,7 +161,8 @@ export default function FullscreenRouteDrawPage() {
   const [title, setTitle] = useState("Draw Route");
   const [pointsPayload, setPointsPayload] = useState(null);
   const [drawInsertMode, setDrawInsertMode] = useState(false);
-  const [drawLayer, setDrawLayer] = useState("light");
+  const [drawLayer, setDrawLayer] = useState("minimal");
+  const [showMapStyleSheet, setShowMapStyleSheet] = useState(false);
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(true);
   const [showPointPanel, setShowPointPanel] = useState(false);
@@ -184,6 +201,10 @@ export default function FullscreenRouteDrawPage() {
         }
 
         setSportId(initialSport);
+        setDrawLayer((current) => current || defaultMapStyleForSport(initialSport));
+        if (!editDraft?.route_points?.points?.length) {
+          setDrawLayer(defaultMapStyleForSport(initialSport));
+        }
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
@@ -342,8 +363,7 @@ export default function FullscreenRouteDrawPage() {
         ...currentLocation,
         label: "Current location",
         selectedAt: Date.now(),
-        forceFocusAt: Date.now(),
-        zoom: 16,
+        zoom: 15,
       });
       setMessage("Centered on current location.");
       return;
@@ -569,6 +589,10 @@ export default function FullscreenRouteDrawPage() {
           <b>⌖</b>
           <span>Location</span>
         </button>
+        <button type="button" onClick={() => setShowMapStyleSheet(true)} className="map-style-trigger">
+          <b>▰</b>
+          <span>Map</span>
+        </button>
         <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""}>
           <b>＋</b>
           <span>Insert</span>
@@ -586,6 +610,44 @@ export default function FullscreenRouteDrawPage() {
           <span>Clear</span>
         </button>
       </section>
+
+      {showMapStyleSheet ? (
+        <section className="route-map-style-backdrop" onClick={() => setShowMapStyleSheet(false)}>
+          <div className="route-map-style-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="route-map-style-head">
+              <div>
+                <span>Map style</span>
+                <strong>Choose your map background</strong>
+              </div>
+              <button type="button" onClick={() => setShowMapStyleSheet(false)} aria-label="Close map style picker">×</button>
+            </div>
+
+            <div className="route-map-style-grid">
+              {MAP_STYLE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={drawLayer === option.id ? "active" : ""}
+                  onClick={() => {
+                    setDrawLayer(option.id);
+                    setShowMapStyleSheet(false);
+                  }}
+                >
+                  <span className={`route-map-style-preview ${option.id}`} aria-hidden="true">
+                    <i>{option.icon}</i>
+                  </span>
+                  <span>
+                    <strong>{option.name}</strong>
+                    <small>{option.provider}</small>
+                    <em>{option.description}</em>
+                  </span>
+                  <b>{drawLayer === option.id ? "✓" : "›"}</b>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
 

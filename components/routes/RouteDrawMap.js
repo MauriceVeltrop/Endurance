@@ -6,23 +6,53 @@ const CSS_ID = "endurance-leaflet-css";
 const SCRIPT_ID = "endurance-leaflet-script";
 
 const LAYERS = {
-  light: {
-    label: "Light",
+  standard: {
+    label: "Standard",
+    provider: "OpenStreetMap",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    filter: "brightness(1.03) saturate(.9) contrast(.96)",
+    filter: "brightness(1.03) saturate(.92) contrast(.97)",
+    maxZoom: 19,
+    attribution: selected.attribution || "&copy; OpenStreetMap contributors",
+  },
+  minimal: {
+    label: "Minimal",
+    provider: "Carto Positron",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    filter: "brightness(1.04) saturate(.78) contrast(.98)",
     maxZoom: 20,
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
   },
   outdoor: {
     label: "Outdoor",
+    provider: "OpenTopoMap",
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    filter: "brightness(1.05) saturate(.95) contrast(.98)",
+    filter: "brightness(1.04) saturate(.96) contrast(.98)",
     maxZoom: 17,
+    attribution: "&copy; OpenStreetMap contributors, SRTM | OpenTopoMap",
+  },
+  cycling: {
+    label: "Cycling",
+    provider: "CyclOSM",
+    url: "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+    filter: "brightness(1.03) saturate(.92) contrast(.98)",
+    maxZoom: 20,
+    attribution: "&copy; OpenStreetMap contributors | CyclOSM",
+  },
+  satellite: {
+    label: "Satellite",
+    provider: "Esri World Imagery",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    filter: "brightness(.92) saturate(.98) contrast(1.04)",
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri",
   },
   dark: {
     label: "Dark",
+    provider: "Carto Dark Matter",
     url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    filter: "brightness(.98) saturate(1.05) contrast(1.02)",
+    filter: "brightness(.98) saturate(1.04) contrast(1.03)",
     maxZoom: 20,
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
   },
 };
 
@@ -238,13 +268,13 @@ export default function RouteDrawMap({
       const L = await loadLeaflet();
       if (cancelled || !mapRef.current) return;
 
-      const selected = LAYERS[layer] || LAYERS.light;
+      const selected = LAYERS[layer] || LAYERS.standard;
 
       if (tileRef.current) tileRef.current.remove();
 
       tileRef.current = L.tileLayer(selected.url, {
         maxZoom: selected.maxZoom || 20,
-        attribution: "&copy; OpenStreetMap contributors",
+        attribution: selected.attribution || "&copy; OpenStreetMap contributors",
       }).addTo(mapRef.current);
 
       const tilePane = mapRef.current.getPane("tilePane");
@@ -403,7 +433,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [linePoints, waypoints, onChange, routeMode]);
+  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon]);
 
 
 
@@ -501,7 +531,7 @@ export default function RouteDrawMap({
       if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasExistingRoute) {
         hasFocusedLocationRef.current = true;
         lastManualFocusRef.current = Date.now();
-        mapRef.current.flyTo([lat, lon], 15, { animate: true, duration: 0.85 });
+        mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
 
@@ -521,19 +551,6 @@ export default function RouteDrawMap({
 
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />
 
-      <div className="route-draw-layer-switcher">
-        {Object.entries(LAYERS).map(([key, value]) => (
-          <button
-            key={key}
-            type="button"
-            className={layer === key ? "active" : ""}
-            onClick={() => onLayerChange?.(key)}
-          >
-            <span />
-            {value.label}
-          </button>
-        ))}
-      </div>
 
       {error ? <div className="route-draw-error">{error}</div> : null}
     </div>
