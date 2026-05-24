@@ -4156,3 +4156,11 @@ main {
     height: 60px;
   }
 }
+
+/* Endurance route map style cleanup: map backgrounds are now selected automatically per sport. */
+.route-draw-layer-switcher,
+.route-map-style-backdrop,
+.route-map-style-sheet,
+.route-draw-fab-toolbar .map-style-trigger {
+  display: none !important;
+}
