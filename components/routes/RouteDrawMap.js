@@ -465,7 +465,9 @@ export default function RouteDrawMap({
       locationRef.current = layer;
 
       if (focusCurrentLocation && !hasFocusedLocationRef.current) {
-          mapRef.current.setView([lat, lon], 15, { animate: true });
+        hasFocusedLocationRef.current = true;
+        lastManualFocusRef.current = Date.now();
+        mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
 

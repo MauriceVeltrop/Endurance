@@ -112,6 +112,7 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
+  const [loadedExistingRoute, setLoadedExistingRoute] = useState(false);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -157,6 +158,7 @@ export default function FullscreenRouteDrawPage() {
             waypoints: editableControlPoints,
             point_count: geometry.length,
           });
+          setLoadedExistingRoute(true);
           setMessage("Existing route loaded. Tap the route line to add a shaping point, then drag it to reshape.");
           window.sessionStorage.removeItem("endurance_route_edit_draft");
         }
@@ -201,16 +203,18 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
-    requestCurrentLocation(false);
-  }, []);
+    if (checking) return;
 
-  function requestCurrentLocation() {
+    requestCurrentLocation({ focusMap: !loadedExistingRoute && points.length === 0, showMessage: false });
+  }, [checking, loadedExistingRoute]);
+
+  function requestCurrentLocation({ focusMap = true, showMessage = true } = {}) {
     if (!navigator.geolocation) {
       setMessage("Geolocation is not available on this device.");
       return;
     }
 
-    setMessage("Finding your current location...");
+    if (showMessage) setMessage("Finding your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -222,11 +226,18 @@ export default function FullscreenRouteDrawPage() {
         };
 
         setCurrentLocation(location);
-        setTargetLocation(location);
-        setMessage("");
+
+        if (focusMap) {
+          setTargetLocation({
+            ...location,
+            selectedAt: Date.now(),
+          });
+        }
+
+        if (showMessage) setMessage("");
       },
       () => {
-        setMessage("Could not access current location. You can still search or draw manually.");
+        if (showMessage) setMessage("Could not access current location. You can still search or draw manually.");
       },
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
     );
@@ -280,7 +291,7 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    requestCurrentLocation();
+    requestCurrentLocation({ focusMap: true, showMessage: true });
   }
 
 
