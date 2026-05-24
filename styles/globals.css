@@ -3434,3 +3434,114 @@ main {
   font-weight: 850;
 }
 
+
+
+/* Compact sport picker: tap sport -> immediately goes to method step */
+.sport-button-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.route-sport-button {
+  width: 100%;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 52px 1fr 24px;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 1px solid rgba(230,255,0,0.16);
+  border-radius: 22px;
+  padding: 10px 14px 10px 10px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(230,255,0,0.08), transparent 30%),
+    linear-gradient(180deg, rgba(22,27,33,0.78), rgba(7,11,16,0.88));
+  box-shadow: 0 14px 42px rgba(0,0,0,0.22);
+  cursor: pointer;
+}
+
+.route-sport-button.active {
+  border-color: rgba(230,255,0,0.42);
+  background:
+    radial-gradient(circle at 85% 12%, rgba(230,255,0,0.14), transparent 32%),
+    linear-gradient(180deg, rgba(28,34,39,0.88), rgba(7,11,16,0.92));
+}
+
+.route-sport-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(230,255,0,0.10);
+  border: 1px solid rgba(230,255,0,0.20);
+  overflow: hidden;
+}
+
+.route-sport-icon img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(230,255,0,0.18));
+}
+
+.route-sport-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.route-sport-copy strong {
+  color: white;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.route-sport-copy small {
+  color: rgba(255,255,255,0.58);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.route-sport-arrow {
+  color: var(--endurance-lime);
+  font-size: 32px;
+  line-height: 1;
+  justify-self: end;
+}
+
+@media (max-width: 520px) {
+  .route-step-section .route-builder-step.compact {
+    margin-bottom: 10px;
+  }
+
+  .route-sport-button {
+    min-height: 66px;
+    grid-template-columns: 48px 1fr 20px;
+    border-radius: 20px;
+    padding: 9px 12px 9px 9px;
+  }
+
+  .route-sport-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .route-sport-icon img {
+    width: 29px;
+    height: 29px;
+  }
+
+  .route-sport-copy strong {
+    font-size: 19px;
+  }
+
+  .route-sport-copy small {
+    font-size: 12px;
+  }
+}
