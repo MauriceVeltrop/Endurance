@@ -3464,326 +3464,225 @@ main {
   }
 }
 
-/* ===== ROUTE CREATION UX POLISH V14 ===== */
-.create-route-v2-page.route-step-page {
-  padding-bottom: calc(118px + env(safe-area-inset-bottom)) !important;
+/* ===== FULLSCREEN DRAW UX V3: compact premium editor ===== */
+.route-draw-polished .route-draw-topbar {
+  grid-template-columns: 42px minmax(0, 1fr) auto !important;
+  left: 12px !important;
+  right: 12px !important;
+  padding: 8px !important;
+  border-radius: 26px !important;
+  background: linear-gradient(135deg, rgba(8, 13, 9, .88), rgba(18, 25, 18, .72)) !important;
+  box-shadow: 0 18px 50px rgba(0,0,0,.42) !important;
 }
 
-.create-route-v2-page .endurance-shell {
-  width: min(100% - 28px, 760px);
+.route-draw-polished .route-draw-round-btn {
+  width: 42px !important;
+  min-height: 42px !important;
+  background: rgba(255,255,255,.10) !important;
 }
 
-.create-route-v2-page .create-route-v2-hero {
-  margin-top: 10px;
-  padding: 22px 20px !important;
-  border-radius: 30px !important;
+.route-draw-polished .route-draw-save-btn {
+  min-height: 42px !important;
+  padding: 0 16px !important;
+  box-shadow: 0 0 0 1px rgba(230,255,0,.28), 0 10px 28px rgba(230,255,0,.14) !important;
 }
 
-.create-route-v2-page .create-route-v2-hero h1 {
-  font-size: clamp(42px, 12vw, 74px) !important;
-  line-height: .88 !important;
-  letter-spacing: -.085em !important;
-  margin: 8px 0 14px !important;
+.route-draw-fab-toolbar {
+  position: fixed;
+  z-index: 10035;
+  left: 12px;
+  top: calc(96px + env(safe-area-inset-top));
+  display: grid;
+  gap: 8px;
+  width: 52px;
 }
 
-.create-route-v2-page .create-route-v2-hero p {
-  font-size: 16px !important;
-  line-height: 1.35 !important;
-  max-width: 34rem;
+.route-draw-fab-toolbar button {
+  width: 52px;
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(5, 8, 5, .78);
+  color: white;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 14px 34px rgba(0,0,0,.34);
 }
 
-.create-route-v2-page .route-stepper {
-  margin-top: 12px !important;
-  gap: 8px !important;
+.route-draw-fab-toolbar button b {
+  font-size: 23px;
+  line-height: 1;
 }
 
-.create-route-v2-page .route-stepper button {
-  min-height: 54px !important;
-  border-radius: 19px !important;
-  font-size: 13px !important;
-  line-height: 1 !important;
+.route-draw-fab-toolbar button span {
+  position: absolute;
+  left: 60px;
+  min-width: max-content;
+  max-width: 160px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(5,8,5,.84);
+  border: 1px solid rgba(255,255,255,.10);
+  color: rgba(255,255,255,.82);
+  font-size: 11px;
+  font-weight: 950;
+  opacity: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+  backdrop-filter: blur(12px);
 }
 
-.create-route-v2-page .route-stepper button span {
-  width: 25px !important;
-  height: 25px !important;
-  font-size: 13px !important;
+.route-draw-fab-toolbar button:active span,
+.route-draw-fab-toolbar button:focus-visible span,
+.route-draw-fab-toolbar button:hover span {
+  opacity: 1;
+  transform: translateX(0);
 }
 
-.create-route-v2-page .route-step-section {
-  margin-top: 18px !important;
+.route-draw-fab-toolbar button.active {
+  color: var(--endurance-lime);
+  border-color: rgba(230,255,0,.42);
+  background: rgba(230,255,0,.14);
 }
 
-.create-route-v2-page .route-builder-step.compact {
-  display: flex !important;
-  align-items: center !important;
-  gap: 14px !important;
-  margin-bottom: 16px !important;
+.route-draw-fab-toolbar button:disabled {
+  opacity: .38;
 }
 
-.create-route-v2-page .route-builder-step.compact > span {
-  width: 48px !important;
-  height: 48px !important;
-  min-width: 48px !important;
-  border-radius: 16px !important;
-  font-size: 20px !important;
-}
-
-.create-route-v2-page .route-builder-step.compact h2 {
-  font-size: clamp(34px, 9vw, 54px) !important;
-  line-height: .92 !important;
-  margin: 0 !important;
-}
-
-/* Sport picker: compact buttons, not huge image cards */
-.create-route-v2-page .sport-button-list,
-.create-route-v2-page .create-route-sport-grid.compact.sport-button-list {
-  display: grid !important;
-  grid-template-columns: 1fr !important;
-  gap: 10px !important;
-}
-
-.create-route-v2-page .route-sport-button {
-  width: 100% !important;
-  min-height: 70px !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  border-radius: 22px !important;
-  padding: 11px 13px !important;
-  background:
-    radial-gradient(circle at 88% 18%, rgba(230,255,0,.08), transparent 34%),
-    linear-gradient(180deg, rgba(19,26,25,.82), rgba(7,10,13,.92)) !important;
-  color: white !important;
-  display: grid !important;
-  grid-template-columns: 50px minmax(0,1fr) 24px !important;
-  align-items: center !important;
-  gap: 12px !important;
-  text-align: left !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
-}
-
-.create-route-v2-page .route-sport-button.active {
-  border-color: rgba(230,255,0,.45) !important;
-  background:
-    radial-gradient(circle at 88% 18%, rgba(230,255,0,.15), transparent 36%),
-    linear-gradient(180deg, rgba(25,34,24,.9), rgba(8,12,13,.95)) !important;
-  box-shadow: 0 0 0 1px rgba(230,255,0,.14), 0 16px 48px rgba(0,0,0,.28) !important;
-}
-
-.create-route-v2-page .route-sport-icon {
-  width: 50px !important;
-  height: 50px !important;
-  min-width: 50px !important;
-  border-radius: 17px !important;
-  display: grid !important;
-  place-items: center !important;
-  overflow: hidden !important;
-  background: rgba(230,255,0,.09) !important;
-  border: 1px solid rgba(230,255,0,.18) !important;
-}
-
-.create-route-v2-page .route-sport-icon img {
-  width: 32px !important;
-  height: 32px !important;
-  max-width: 32px !important;
-  max-height: 32px !important;
-  display: block !important;
-  object-fit: contain !important;
-  border: 0 !important;
-  background: transparent !important;
-}
-
-.create-route-v2-page .route-sport-copy {
-  display: grid !important;
+.route-draw-polished .route-draw-layer-switcher {
+  right: 12px !important;
+  bottom: calc(130px + env(safe-area-inset-bottom)) !important;
+  padding: 7px !important;
+  border-radius: 18px !important;
   gap: 5px !important;
-  min-width: 0 !important;
 }
 
-.create-route-v2-page .route-sport-copy strong,
-.create-route-v2-page .route-method-selected-sport strong {
-  color: white !important;
-  font-size: 20px !important;
-  line-height: 1 !important;
-  letter-spacing: -.045em !important;
-  font-weight: 1000 !important;
+.route-draw-polished .route-draw-layer-switcher button {
+  font-size: 0 !important;
+  padding: 6px !important;
 }
 
-.create-route-v2-page .route-sport-copy small,
-.create-route-v2-page .route-method-selected-sport small {
-  color: rgba(255,255,255,.60) !important;
-  font-size: 12px !important;
-  line-height: 1.25 !important;
-  font-weight: 850 !important;
-  white-space: normal !important;
+.route-draw-polished .route-draw-layer-switcher button span {
+  width: 24px !important;
+  height: 24px !important;
 }
 
-.create-route-v2-page .route-sport-arrow,
-.create-route-v2-page .route-method-option-arrow {
-  color: var(--endurance-lime) !important;
-  font-size: 26px !important;
-  line-height: 1 !important;
-  justify-self: end !important;
+.route-draw-elevation-mini {
+  position: fixed;
+  z-index: 10029;
+  left: 12px;
+  right: 12px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  height: 42px;
+  border-radius: 18px;
+  padding: 7px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  background: rgba(5,8,5,.70);
+  border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 -10px 34px rgba(0,0,0,.24);
 }
 
-/* Method screen */
-.create-route-v2-page .route-method-premium-head {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 10px !important;
-  margin: -2px 0 14px !important;
-  padding: 10px !important;
+.route-draw-elevation-mini span {
+  color: rgba(255,255,255,.62);
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.route-draw-elevation-mini svg {
+  width: 100%;
+  height: 30px;
+  overflow: visible;
+}
+
+.route-draw-elevation-mini .fill {
+  fill: rgba(230,255,0,.12);
+}
+
+.route-draw-elevation-mini .line {
+  fill: none;
+  stroke: #e6ff00;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(230,255,0,.35));
+}
+
+.route-draw-polished .route-draw-metrics-card {
+  left: 12px !important;
+  right: 12px !important;
+  bottom: max(16px, env(safe-area-inset-bottom)) !important;
+  grid-template-columns: .9fr 1.1fr 1fr 1fr !important;
   border-radius: 22px !important;
-  background: rgba(255,255,255,.045) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
+  box-shadow: 0 -16px 44px rgba(0,0,0,.34) !important;
 }
 
-.create-route-v2-page .route-method-selected-sport {
-  display: grid !important;
-  grid-template-columns: 44px minmax(0,1fr) !important;
-  align-items: center !important;
-  gap: 10px !important;
-  min-width: 0 !important;
+.route-draw-polished .route-draw-metrics-card > div,
+.route-draw-polished .route-draw-metrics-card > button {
+  min-height: 58px !important;
+  padding: 9px 9px !important;
 }
 
-.create-route-v2-page .route-method-selected-sport .route-sport-icon {
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  border-radius: 15px !important;
-}
-
-.create-route-v2-page .route-method-selected-sport .route-sport-icon img {
-  width: 28px !important;
-  height: 28px !important;
-}
-
-.create-route-v2-page .route-method-premium-head button,
-.create-route-v2-page .route-method-back {
-  min-height: 40px !important;
-  width: auto !important;
-  border-radius: 999px !important;
-  padding: 0 13px !important;
-  background: rgba(255,255,255,.07) !important;
-  color: white !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  font-size: 12px !important;
-  font-weight: 1000 !important;
-  white-space: nowrap !important;
-}
-
-.create-route-v2-page .route-method-cards {
-  display: grid !important;
-  gap: 10px !important;
-}
-
-.create-route-v2-page .route-method-option {
-  width: 100% !important;
-  min-height: 96px !important;
-  display: grid !important;
-  grid-template-columns: 48px minmax(0,1fr) 22px !important;
-  align-items: center !important;
-  gap: 12px !important;
-  padding: 13px !important;
-  border-radius: 24px !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  background:
-    radial-gradient(circle at 88% 10%, rgba(230,255,0,.07), transparent 33%),
-    linear-gradient(180deg, rgba(19,25,26,.82), rgba(7,10,13,.94)) !important;
-  color: white !important;
-  text-align: left !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
-}
-
-.create-route-v2-page .route-method-option.recommended {
-  border-color: rgba(230,255,0,.30) !important;
-}
-
-.create-route-v2-page .route-method-option-icon {
-  width: 48px !important;
-  height: 48px !important;
-  border-radius: 17px !important;
-  display: grid !important;
-  place-items: center !important;
-  font-size: 22px !important;
-  background: rgba(230,255,0,.09) !important;
-  border: 1px solid rgba(230,255,0,.16) !important;
-}
-
-.create-route-v2-page .route-method-option-main {
-  min-width: 0 !important;
-  display: grid !important;
-  gap: 4px !important;
-}
-
-.create-route-v2-page .route-method-option-topline {
-  display: flex !important;
-  align-items: center !important;
-  gap: 7px !important;
-  min-width: 0 !important;
-}
-
-.create-route-v2-page .route-method-option-topline em,
-.create-route-v2-page .route-method-option-topline i {
-  font-style: normal !important;
-  text-transform: uppercase !important;
-  letter-spacing: .12em !important;
+.route-draw-polished .route-draw-metrics-card span {
   font-size: 9px !important;
-  font-weight: 1000 !important;
+  margin-bottom: 5px !important;
 }
 
-.create-route-v2-page .route-method-option-topline em {
-  color: var(--endurance-lime) !important;
+.route-draw-polished .route-draw-metrics-card b {
+  font-size: clamp(14px, 4.2vw, 19px) !important;
 }
 
-.create-route-v2-page .route-method-option-topline i {
-  color: #071008 !important;
-  background: var(--endurance-lime) !important;
-  border-radius: 999px !important;
-  padding: 3px 6px !important;
-}
-
-.create-route-v2-page .route-method-option-main strong {
-  display: block !important;
-  color: white !important;
-  font-size: 20px !important;
-  line-height: 1 !important;
-  letter-spacing: -.045em !important;
-  font-weight: 1000 !important;
-}
-
-.create-route-v2-page .route-method-option-main small {
-  display: block !important;
-  color: rgba(255,255,255,.62) !important;
-  font-size: 12px !important;
-  line-height: 1.25 !important;
-  font-weight: 800 !important;
-  white-space: normal !important;
-}
-
-.create-route-v2-page .route-method-option-action {
-  display: inline-flex !important;
-  width: max-content !important;
-  max-width: 100% !important;
-  margin-top: 3px !important;
-  color: var(--endurance-lime) !important;
+.route-draw-polished .route-draw-tip {
+  left: 74px !important;
+  right: 12px !important;
+  bottom: calc(138px + env(safe-area-inset-bottom)) !important;
+  padding: 8px 10px !important;
+  border-radius: 16px !important;
   font-size: 11px !important;
-  line-height: 1 !important;
+  background: rgba(5,8,5,.58) !important;
+}
+
+.route-draw-polished .route-draw-routing-status,
+.route-draw-polished .route-draw-routing-error {
+  left: 74px !important;
+  right: 12px !important;
+  bottom: calc(176px + env(safe-area-inset-bottom)) !important;
+  font-size: 11px !important;
+  padding: 8px 10px !important;
+}
+
+.route-draw-marker {
+  border-width: 3px !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,.40), 0 0 0 3px rgba(230,255,0,.18) !important;
+}
+
+.route-draw-marker span {
   font-weight: 1000 !important;
 }
 
-.create-route-v2-page .route-method-back {
-  margin-top: 14px !important;
-  min-height: 48px !important;
-  width: 100% !important;
-}
+@media (max-width: 420px) {
+  .route-draw-polished .route-draw-save-btn {
+    padding: 0 12px !important;
+    font-size: 12px !important;
+  }
 
-@media (max-width: 430px) {
-  .create-route-v2-page .endurance-shell { width: min(100% - 24px, 760px); }
-  .create-route-v2-page .create-route-v2-hero { padding: 20px 18px !important; }
-  .create-route-v2-page .create-route-v2-hero h1 { font-size: clamp(40px, 13vw, 58px) !important; }
-  .create-route-v2-page .route-sport-button { min-height: 66px !important; grid-template-columns: 46px minmax(0,1fr) 20px !important; }
-  .create-route-v2-page .route-sport-icon { width: 46px !important; height: 46px !important; min-width: 46px !important; }
-  .create-route-v2-page .route-sport-icon img { width: 30px !important; height: 30px !important; }
-  .create-route-v2-page .route-method-option { grid-template-columns: 44px minmax(0,1fr) 20px !important; padding: 12px !important; }
-  .create-route-v2-page .route-method-option-icon { width: 44px !important; height: 44px !important; }
+  .route-draw-fab-toolbar {
+    width: 48px;
+  }
+
+  .route-draw-fab-toolbar button {
+    width: 48px;
+    min-height: 48px;
+    border-radius: 17px;
+  }
+
+  .route-draw-fab-toolbar button b {
+    font-size: 21px;
+  }
 }
