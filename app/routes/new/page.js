@@ -103,6 +103,22 @@ function initialForm() {
   };
 }
 
+
+function sportIconFor(sportId) {
+  const map = {
+    running: "/training-images/running.svg",
+    trail_running: "/training-images/trail-running.svg",
+    road_cycling: "/training-images/road-cycling.svg",
+    gravel_cycling: "/training-images/gravel-cycling.svg",
+    mountain_biking: "/training-images/mountain-biking.svg",
+    walking: "/training-images/walking.svg",
+    kayaking: "/training-images/kayaking.svg",
+    swimming: "/training-images/swimming.svg",
+  };
+
+  return map[sportId] || "/training-images/training.svg";
+}
+
 function routeProfileFor(sportId) {
   return (
     SPORT_ROUTE_PROFILES[sportId] || {
@@ -608,29 +624,28 @@ export default function NewRoutePage() {
                 </div>
               </div>
 
-              <div className="create-route-sport-grid compact">
+              <div className="create-route-sport-grid compact sport-button-list">
                 {availableSports.map((sport) => (
                   <button
                     key={sport.id}
                     type="button"
-                    className={form.sport_id === sport.id ? "route-sport-card active" : "route-sport-card"}
-                    onClick={() => updateForm("sport_id", sport.id)}
+                    className={form.sport_id === sport.id ? "route-sport-button active" : "route-sport-button"}
+                    onClick={() => {
+                      updateForm("sport_id", sport.id);
+                      setCurrentStep(2);
+                    }}
                   >
-                    <span>{getSportLabel(sport.id).slice(0, 2).toUpperCase()}</span>
-                    <strong>{getSportLabel(sport.id)}</strong>
-                    <small>{routeProfileFor(sport.id).focus}</small>
+                    <span className="route-sport-icon" aria-hidden="true">
+                      <img src={sportIconFor(sport.id)} alt="" />
+                    </span>
+                    <span className="route-sport-copy">
+                      <strong>{getSportLabel(sport.id)}</strong>
+                      <small>{routeProfileFor(sport.id).focus}</small>
+                    </span>
+                    <span className="route-sport-arrow" aria-hidden="true">›</span>
                   </button>
                 ))}
               </div>
-
-              <button
-                type="button"
-                className="route-step-primary"
-                disabled={!form.sport_id}
-                onClick={() => setCurrentStep(2)}
-              >
-                Continue
-              </button>
             </section>
           ) : null}
 
