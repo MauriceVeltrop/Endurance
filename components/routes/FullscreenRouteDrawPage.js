@@ -157,6 +157,7 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
+  const [showHint, setShowHint] = useState(true);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -423,6 +424,28 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeout = window.setTimeout(() => {
+      setMessage("");
+    }, 2600);
+
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
+    if (!showHint) return;
+    if (points.length < 2) return;
+
+    const timeout = window.setTimeout(() => {
+      setShowHint(false);
+    }, 4800);
+
+    return () => window.clearTimeout(timeout);
+  }, [showHint, points.length]);
+
+
+  useEffect(() => {
     const query = searchText.trim();
 
     if (query.length < 2) {
@@ -576,31 +599,34 @@ export default function FullscreenRouteDrawPage() {
 
       {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
 
-      {routedPoints.length ? (
-        <section className="route-draw-routing-status">
-          Route automatically follows roads/paths
+      <section className="route-draw-bottom-sheet" aria-label="Route summary">
+        {routedPoints.length ? (
+          <div className="route-draw-autosnap-pill">
+            <span>Auto-snap</span>
+            <b>Roads & paths</b>
+          </div>
+        ) : null}
+
+        <ElevationMiniStrip points={activeRoutePayload} />
+
+        <section className="route-draw-metrics-card route-draw-metrics-compact">
+          <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
+            <span>Points</span>
+            <b>{points.length}</b>
+          </button>
+          <div>
+            <span>Distance</span>
+            <b>{metrics.distance_km || "—"} km</b>
+          </div>
+          <div>
+            <span>Elev.</span>
+            <b>{metrics.elevation_gain_m || "—"} m</b>
+          </div>
+          <div>
+            <span>Time</span>
+            <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
+          </div>
         </section>
-      ) : null}
-
-      <ElevationMiniStrip points={activeRoutePayload} />
-
-      <section className="route-draw-metrics-card">
-        <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-          <span>Points</span>
-          <b>{points.length}</b>
-        </button>
-        <div>
-          <span>Distance</span>
-          <b>{metrics.distance_km || "—"} km</b>
-        </div>
-        <div>
-          <span>Elevation</span>
-          <b>{metrics.elevation_gain_m || "—"} m</b>
-        </div>
-        <div>
-          <span>Est. time</span>
-          <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
-        </div>
       </section>
 
       {showPointPanel ? (
@@ -624,9 +650,11 @@ export default function FullscreenRouteDrawPage() {
         </section>
       ) : null}
 
-      <section className="route-draw-tip">
-        Tap map to add points · tap route line to shape · drag points to reshape
-      </section>
+      {showHint ? (
+        <section className="route-draw-tip">
+          Tap map to add points · tap route line to shape · drag control points
+        </section>
+      ) : null}
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
     </main>
