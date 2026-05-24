@@ -271,9 +271,18 @@ export default function RouteDrawMap({
 
       if (routeLatLngs.length >= 2) {
         L.polyline(routeLatLngs, {
-          color: "#000",
-          weight: 7,
-          opacity: 0.38,
+          color: "#031006",
+          weight: routeMode === "routed" ? 11 : 9,
+          opacity: 0.42,
+          lineJoin: "round",
+          lineCap: "round",
+          interactive: false,
+        }).addTo(group);
+
+        L.polyline(routeLatLngs, {
+          color: "#e6ff00",
+          weight: routeMode === "routed" ? 8 : 6,
+          opacity: 0.24,
           lineJoin: "round",
           lineCap: "round",
           interactive: false,
@@ -281,7 +290,7 @@ export default function RouteDrawMap({
 
         const routeLine = L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 8 : 7,
+          weight: 20,
           opacity: 0,
           lineJoin: "round",
           lineCap: "round",
@@ -289,8 +298,17 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 3 : 2.6,
+          weight: routeMode === "routed" ? 4 : 3,
           opacity: 1,
+          lineJoin: "round",
+          lineCap: "round",
+          interactive: false,
+        }).addTo(group);
+
+        L.polyline(routeLatLngs, {
+          color: "#ffffff",
+          weight: 1.15,
+          opacity: routeMode === "routed" ? 0.62 : 0.35,
           lineJoin: "round",
           lineCap: "round",
           interactive: false,

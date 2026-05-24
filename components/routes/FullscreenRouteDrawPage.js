@@ -97,6 +97,44 @@ function safeReadEditDraft() {
   }
 }
 
+
+function ElevationMiniStrip({ points = [] }) {
+  const normalized = normalizeRoutePoints(points);
+  const elevationPoints = normalized.filter((point) => Number.isFinite(Number(point.ele)));
+
+  if (normalized.length < 2) return null;
+
+  const values = elevationPoints.length >= 2
+    ? normalized.map((point) => Number.isFinite(Number(point.ele)) ? Number(point.ele) : null)
+    : normalized.map((_, index) => Math.sin((index / Math.max(1, normalized.length - 1)) * Math.PI) * 0.25 + 0.5);
+
+  const numericValues = values.filter((value) => Number.isFinite(Number(value)));
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const range = Math.max(1, max - min);
+  const width = 220;
+  const height = 38;
+
+  const path = values
+    .map((value, index) => {
+      const safe = Number.isFinite(Number(value)) ? Number(value) : min;
+      const x = (index / Math.max(1, values.length - 1)) * width;
+      const y = height - 5 - ((safe - min) / range) * (height - 10);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <section className="route-draw-elevation-mini" aria-label="Elevation preview">
+      <span>Elevation</span>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+        <path d={`${path} L ${width} ${height} L 0 ${height} Z`} className="fill" />
+        <path d={path} className="line" />
+      </svg>
+    </section>
+  );
+}
+
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
   const loadedDraftRef = useRef(false);
@@ -513,7 +551,7 @@ export default function FullscreenRouteDrawPage() {
         targetLocation={targetLocation}
       />
 
-      <section className="route-draw-side-tools" aria-label="Route drawing tools">
+      <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
         <button type="button" onClick={useCurrentLocation}>
           <b>⌖</b>
           <span>Location</span>
@@ -544,9 +582,11 @@ export default function FullscreenRouteDrawPage() {
         </section>
       ) : null}
 
+      <ElevationMiniStrip points={activeRoutePayload} />
+
       <section className="route-draw-metrics-card">
         <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-          <span>Control points</span>
+          <span>Points</span>
           <b>{points.length}</b>
         </button>
         <div>
@@ -585,7 +625,7 @@ export default function FullscreenRouteDrawPage() {
       ) : null}
 
       <section className="route-draw-tip">
-        Tap map to add control points · tap the route line to add a shaping point · drag control points to reshape
+        Tap map to add points · tap route line to shape · drag points to reshape
       </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
