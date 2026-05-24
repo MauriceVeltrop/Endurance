@@ -403,7 +403,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon]);
+  }, [linePoints, waypoints, onChange, routeMode]);
 
 
 
@@ -501,7 +501,7 @@ export default function RouteDrawMap({
       if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasExistingRoute) {
         hasFocusedLocationRef.current = true;
         lastManualFocusRef.current = Date.now();
-        mapRef.current.setView([lat, lon], 15, { animate: true });
+        mapRef.current.flyTo([lat, lon], 15, { animate: true, duration: 0.85 });
       }
     }
 

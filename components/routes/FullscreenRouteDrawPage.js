@@ -342,7 +342,8 @@ export default function FullscreenRouteDrawPage() {
         ...currentLocation,
         label: "Current location",
         selectedAt: Date.now(),
-        zoom: 15,
+        forceFocusAt: Date.now(),
+        zoom: 16,
       });
       setMessage("Centered on current location.");
       return;
