@@ -157,7 +157,6 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
-  const [showHint, setShowHint] = useState(true);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -248,18 +247,22 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
+    if (checking || !sportId) return;
     if (currentLocationRequestedRef.current) return;
-    currentLocationRequestedRef.current = true;
-    requestCurrentLocation({ focus: false });
-  }, []);
 
-  function requestCurrentLocation({ focus = true } = {}) {
+    currentLocationRequestedRef.current = true;
+
+    const shouldFocusCurrentLocation = !loadedDraftRef.current && points.length === 0 && routedPoints.length === 0;
+    requestCurrentLocation({ focus: shouldFocusCurrentLocation, quiet: true });
+  }, [checking, sportId, points.length, routedPoints.length]);
+
+  function requestCurrentLocation({ focus = true, quiet = false, allowRouteFocus = false } = {}) {
     if (!navigator.geolocation) {
-      setMessage("Geolocation is not available on this device.");
+      if (!quiet) setMessage("Geolocation is not available on this device.");
       return;
     }
 
-    setMessage("Finding your current location...");
+    if (!quiet) setMessage("Finding your current location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -272,17 +275,23 @@ export default function FullscreenRouteDrawPage() {
 
         setCurrentLocation(location);
 
-        if (focus && !loadedDraftRef.current) {
+        const hasRoute = points.length >= 2 || routedPoints.length >= 2;
+        const mayFocus = focus && (!loadedDraftRef.current || allowRouteFocus) && (!hasRoute || allowRouteFocus);
+
+        if (mayFocus) {
           setTargetLocation({
             ...location,
             selectedAt: Date.now(),
+            zoom: 15,
           });
         }
 
-        setMessage("");
+        if (!quiet) {
+          setMessage(mayFocus ? "Centered on current location." : "Current location updated.");
+        }
       },
       () => {
-        setMessage("Could not access current location. You can still search or draw manually.");
+        if (!quiet) setMessage("Could not access current location. You can still search or draw manually.");
       },
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
     );
@@ -333,12 +342,13 @@ export default function FullscreenRouteDrawPage() {
         ...currentLocation,
         label: "Current location",
         selectedAt: Date.now(),
+        zoom: 15,
       });
       setMessage("Centered on current location.");
       return;
     }
 
-    requestCurrentLocation({ focus: true });
+    requestCurrentLocation({ focus: true, quiet: false, allowRouteFocus: true });
   }
 
 
@@ -421,28 +431,6 @@ export default function FullscreenRouteDrawPage() {
     }
   }
 
-
-
-  useEffect(() => {
-    if (!message) return;
-
-    const timeout = window.setTimeout(() => {
-      setMessage("");
-    }, 2600);
-
-    return () => window.clearTimeout(timeout);
-  }, [message]);
-
-  useEffect(() => {
-    if (!showHint) return;
-    if (points.length < 2) return;
-
-    const timeout = window.setTimeout(() => {
-      setShowHint(false);
-    }, 4800);
-
-    return () => window.clearTimeout(timeout);
-  }, [showHint, points.length]);
 
 
   useEffect(() => {
@@ -572,6 +560,7 @@ export default function FullscreenRouteDrawPage() {
         currentLocation={currentLocation}
         focusCurrentLocation={!points.length && !loadedDraftRef.current}
         targetLocation={targetLocation}
+        onTargetLocationHandled={() => setTargetLocation(null)}
       />
 
       <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
@@ -599,34 +588,31 @@ export default function FullscreenRouteDrawPage() {
 
       {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
 
-      <section className="route-draw-bottom-sheet" aria-label="Route summary">
-        {routedPoints.length ? (
-          <div className="route-draw-autosnap-pill">
-            <span>Auto-snap</span>
-            <b>Roads & paths</b>
-          </div>
-        ) : null}
-
-        <ElevationMiniStrip points={activeRoutePayload} />
-
-        <section className="route-draw-metrics-card route-draw-metrics-compact">
-          <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-            <span>Points</span>
-            <b>{points.length}</b>
-          </button>
-          <div>
-            <span>Distance</span>
-            <b>{metrics.distance_km || "—"} km</b>
-          </div>
-          <div>
-            <span>Elev.</span>
-            <b>{metrics.elevation_gain_m || "—"} m</b>
-          </div>
-          <div>
-            <span>Time</span>
-            <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
-          </div>
+      {routedPoints.length ? (
+        <section className="route-draw-routing-status">
+          Route automatically follows roads/paths
         </section>
+      ) : null}
+
+      <ElevationMiniStrip points={activeRoutePayload} />
+
+      <section className="route-draw-metrics-card">
+        <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
+          <span>Points</span>
+          <b>{points.length}</b>
+        </button>
+        <div>
+          <span>Distance</span>
+          <b>{metrics.distance_km || "—"} km</b>
+        </div>
+        <div>
+          <span>Elevation</span>
+          <b>{metrics.elevation_gain_m || "—"} m</b>
+        </div>
+        <div>
+          <span>Est. time</span>
+          <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
+        </div>
       </section>
 
       {showPointPanel ? (
@@ -650,11 +636,9 @@ export default function FullscreenRouteDrawPage() {
         </section>
       ) : null}
 
-      {showHint ? (
-        <section className="route-draw-tip">
-          Tap map to add points · tap route line to shape · drag control points
-        </section>
-      ) : null}
+      <section className="route-draw-tip">
+        Tap map to add points · tap route line to shape · drag points to reshape
+      </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
     </main>

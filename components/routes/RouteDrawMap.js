@@ -140,6 +140,7 @@ export default function RouteDrawMap({
   currentLocation = null,
   focusCurrentLocation = false,
   targetLocation = null,
+  onTargetLocationHandled,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -149,6 +150,7 @@ export default function RouteDrawMap({
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
   const lastManualFocusRef = useRef(0);
+  const lastTargetFocusKeyRef = useRef("");
   const isDraggingRef = useRef(false);
   const [error, setError] = useState("");
 
@@ -385,15 +387,11 @@ export default function RouteDrawMap({
           ? routeLatLngs
           : waypointLatLngs;
 
-      const hasExplicitTarget =
-        Number.isFinite(Number(targetLocation?.lat)) && Number.isFinite(Number(targetLocation?.lon));
+      const recentlyFocused = Date.now() - lastManualFocusRef.current < 3500;
 
-      const recentlyFocused =
-        Date.now() - lastManualFocusRef.current < 8000;
-
-      if (boundsSource.length >= 2 && !hasExplicitTarget && !recentlyFocused && !isDraggingRef.current) {
+      if (boundsSource.length >= 2 && !recentlyFocused && !isDraggingRef.current) {
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
-          padding: [32, 32],
+          padding: [42, 42],
           maxZoom: 15,
           animate: false,
         });
@@ -441,13 +439,21 @@ export default function RouteDrawMap({
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
+    const focusKey = `${lat.toFixed(6)}:${lon.toFixed(6)}:${targetLocation?.selectedAt || targetLocation?.forceFocusAt || "manual"}`;
+    if (lastTargetFocusKeyRef.current === focusKey) return;
+
+    lastTargetFocusKeyRef.current = focusKey;
     lastManualFocusRef.current = Date.now();
 
-    mapRef.current.flyTo([lat, lon], 15, {
+    mapRef.current.flyTo([lat, lon], Number(targetLocation?.zoom || 15), {
       animate: true,
-      duration: 1.1,
+      duration: 0.85,
     });
-  }, [targetLocation?.lat, targetLocation?.lon]);
+
+    window.setTimeout(() => {
+      onTargetLocationHandled?.();
+    }, 900);
+  }, [targetLocation?.lat, targetLocation?.lon, targetLocation?.selectedAt, targetLocation?.forceFocusAt, targetLocation?.zoom, onTargetLocationHandled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -490,8 +496,11 @@ export default function RouteDrawMap({
       layer.addTo(mapRef.current);
       locationRef.current = layer;
 
-      if (focusCurrentLocation && !hasFocusedLocationRef.current) {
+      const hasExistingRoute = pointsRef.current.length > 0 || linePoints.length >= 2;
+
+      if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasExistingRoute) {
         hasFocusedLocationRef.current = true;
+        lastManualFocusRef.current = Date.now();
         mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
@@ -501,7 +510,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [currentLocation, focusCurrentLocation]);
+  }, [currentLocation, focusCurrentLocation, linePoints.length]);
 
   return (
     <div className="route-draw-map-wrap route-draw-map-wrap-light">
