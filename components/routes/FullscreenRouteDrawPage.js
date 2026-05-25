@@ -465,28 +465,12 @@ export default function FullscreenRouteDrawPage() {
     setRoutingStatus("idle");
     setRoutingError("");
 
-    if (meta?.type === "promote_shape_handle" && safeControlPoints.length >= 3) {
-      const safeInsertAt = Math.max(1, Math.min(Number(meta.insertAt) || safeControlPoints.length - 1, safeControlPoints.length - 1));
-      const previewSegment = [
-        safeControlPoints[safeInsertAt - 1],
-        safeControlPoints[safeInsertAt],
-        safeControlPoints[safeInsertAt + 1],
-      ].filter(Boolean);
-
-      const previewGeometry = mergeLocalSegmentGeometry(
-        routedPoints.length ? routedPoints : previousControlPoints,
-        previousControlPoints,
-        safeControlPoints,
-        safeInsertAt,
-        previewSegment
-      );
-
-      setRoutedPayload(routePayloadFromGeometry(previewGeometry, safeControlPoints, "local-segment-preview"));
-      rerouteLocalSegment({
-        previousControlPoints,
-        nextControlPoints: safeControlPoints,
-        insertAt: safeInsertAt,
-      });
+    if (["promote_shape_handle", "move_control_point"].includes(meta?.type) && safeControlPoints.length >= 2) {
+      // Keep the existing routed geometry visible while the new route is calculated.
+      // This prevents the temporary straight-line spike/uitstulping that happens when
+      // a moved handle is rendered before ORS has returned the snapped route.
+      setRoutingStatus("routing");
+      rerouteControlPoints(safeControlPoints, { silent: true });
       return;
     }
 
@@ -539,8 +523,9 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
-  async function rerouteRoute({ silent = false } = {}) {
-    if (points.length < 2) return;
+  async function rerouteControlPoints(controlPoints, { silent = false } = {}) {
+    const control = compactControlPoints(controlPoints);
+    if (control.length < 2) return;
 
     try {
       setRoutingStatus("routing");
@@ -552,7 +537,7 @@ export default function FullscreenRouteDrawPage() {
         },
         body: JSON.stringify({
           sport_id: sportId,
-          points: compactControlPoints(points),
+          points: control,
         }),
       });
 
@@ -568,7 +553,17 @@ export default function FullscreenRouteDrawPage() {
         throw new Error("No routed geometry returned.");
       }
 
-      setRoutedPayload(routed);
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+      const routePayload = geometry.length >= 2
+        ? {
+            ...routePayloadFromGeometry(geometry, control, "full-controlpoint-reroute"),
+            profile: routed?.profile || null,
+            provider_url: routed?.provider_url || null,
+            routed_at: new Date().toISOString(),
+          }
+        : routed;
+
+      setRoutedPayload(routePayload);
       setRoutingStatus("done");
 
       if (!silent) {
@@ -579,6 +574,10 @@ export default function FullscreenRouteDrawPage() {
       setRoutingStatus("error");
       setRoutingError(error?.message || "Routing failed.");
     }
+  }
+
+  async function rerouteRoute({ silent = false } = {}) {
+    return rerouteControlPoints(points, { silent });
   }
 
   function continueToDetails() {
