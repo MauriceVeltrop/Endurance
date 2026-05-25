@@ -4842,103 +4842,56 @@ main {
   height: 10px !important;
 }
 
-/* ===== v32 compact toolbar + expandable search ===== */
-.route-draw-polished .route-search-bar {
-  display: none !important;
-}
-
-.route-draw-polished .route-search-bar.route-search-bar-expanded {
-  display: block !important;
-  position: fixed !important;
-  top: calc(96px + env(safe-area-inset-top)) !important;
-  left: 76px !important;
-  right: 12px !important;
-  z-index: 10042 !important;
-}
-
-.route-draw-polished .route-search-input-wrap {
-  min-height: 44px !important;
-  padding: 0 10px 0 13px !important;
-  border-radius: 18px !important;
-  background: rgba(5, 8, 5, 0.86) !important;
-  box-shadow: 0 14px 36px rgba(0,0,0,.36) !important;
-}
-
-.route-draw-polished .route-search-input-wrap input {
-  font-size: 13px !important;
-  font-weight: 850 !important;
-}
-
-.route-search-close {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255,255,255,.10);
-  color: rgba(255,255,255,.86);
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-}
-
+/* ===== ROUTE EDITOR V33 — COMPACT ACTION TOOLBAR / SAVE DRAFT / GPX ===== */
 .route-draw-fab-toolbar {
-  top: calc(92px + env(safe-area-inset-top)) !important;
-  left: 12px !important;
-  width: 44px !important;
+  width: 50px !important;
   gap: 7px !important;
-  max-height: calc(100vh - 185px) !important;
 }
 
 .route-draw-fab-toolbar button {
-  width: 44px !important;
-  min-height: 44px !important;
-  height: 44px !important;
-  border-radius: 15px !important;
+  width: 48px !important;
+  min-height: 48px !important;
+  height: 48px !important;
+  border-radius: 17px !important;
   padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
 }
 
 .route-draw-fab-toolbar button b {
   font-size: 19px !important;
+  line-height: 1 !important;
 }
 
 .route-draw-fab-toolbar button span {
   display: none !important;
 }
 
-.route-draw-polished .route-draw-toast,
-.route-draw-polished .route-draw-routing-error {
-  left: 76px !important;
-  right: 12px !important;
+.route-draw-fab-toolbar button:disabled {
+  opacity: 0.34 !important;
+  filter: grayscale(1) !important;
 }
 
-@media (max-width: 460px) {
-  .route-draw-polished .route-search-bar.route-search-bar-expanded {
-    top: calc(91px + env(safe-area-inset-top)) !important;
-    left: 70px !important;
-    right: 10px !important;
-  }
+.route-draw-fab-toolbar button[aria-label="Save route draft"] b,
+.route-draw-fab-toolbar button[aria-label="Download GPX"] b {
+  font-size: 17px !important;
+}
 
+@media (max-width: 480px) {
   .route-draw-fab-toolbar {
-    left: 10px !important;
-    width: 42px !important;
-    gap: 7px !important;
+    left: 14px !important;
+    top: 146px !important;
+    width: 46px !important;
   }
 
   .route-draw-fab-toolbar button {
-    width: 42px !important;
-    min-height: 42px !important;
-    height: 42px !important;
-    border-radius: 14px !important;
+    width: 45px !important;
+    height: 45px !important;
+    min-height: 45px !important;
+    border-radius: 16px !important;
   }
 
   .route-draw-fab-toolbar button b {
     font-size: 18px !important;
-  }
-
-  .route-draw-polished .route-draw-toast,
-  .route-draw-polished .route-draw-routing-error {
-    left: 70px !important;
   }
 }
