@@ -252,6 +252,9 @@ export default function RouteDrawMap({
   const pointsRef = useRef(points);
   const hasFocusedLocationRef = useRef(false);
   const lastManualFocusRef = useRef(0);
+  const userOwnsCameraRef = useRef(false);
+  const hasInitialRouteFitRef = useRef(false);
+  const lastRouteFitKeyRef = useRef("");
   const lastTargetFocusKeyRef = useRef("");
   const isDraggingRef = useRef(false);
   const isMultiTouchRef = useRef(false);
@@ -269,6 +272,14 @@ export default function RouteDrawMap({
   useEffect(() => {
     pointsRef.current = waypoints;
   }, [waypoints]);
+
+  useEffect(() => {
+    if (waypoints.length < 2 && linePoints.length < 2) {
+      hasInitialRouteFitRef.current = false;
+      lastRouteFitKeyRef.current = "";
+      userOwnsCameraRef.current = false;
+    }
+  }, [waypoints.length, linePoints.length]);
 
   useEffect(() => {
     setDynamicHandle(null);
@@ -293,6 +304,14 @@ export default function RouteDrawMap({
             touchZoom: true,
           }).setView(center, 13);
 
+          const markUserCamera = () => {
+            userOwnsCameraRef.current = true;
+            lastManualFocusRef.current = Date.now();
+          };
+
+          mapRef.current.on("zoomstart", markUserCamera);
+          mapRef.current.on("movestart", markUserCamera);
+          mapRef.current.on("dragstart", markUserCamera);
           mapRef.current.on("zoomend", () => {
             setMapZoom(Number(mapRef.current?.getZoom?.() || 13));
           });
@@ -300,6 +319,8 @@ export default function RouteDrawMap({
           const container = mapRef.current.getContainer?.();
           const startMultiTouch = (event) => {
             if (Number(event?.touches?.length || 0) > 1) {
+              userOwnsCameraRef.current = true;
+              lastManualFocusRef.current = Date.now();
               isMultiTouchRef.current = true;
               isDraggingRef.current = false;
               disableMarkerDragging(markerRefs.current);
@@ -644,8 +665,23 @@ export default function RouteDrawMap({
           : waypointLatLngs;
 
       const recentlyFocused = Date.now() - lastManualFocusRef.current < 3500;
+      const routeFitKey = boundsSource.length >= 2
+        ? `${boundsSource[0]?.lat?.toFixed?.(5) || boundsSource[0]?.[0] || ""}:${boundsSource[0]?.lon?.toFixed?.(5) || boundsSource[0]?.lng?.toFixed?.(5) || boundsSource[0]?.[1] || ""}:${boundsSource.length}`
+        : "";
 
-      if (boundsSource.length >= 2 && !recentlyFocused && !isDraggingRef.current) {
+      const mayAutoFitRoute =
+        boundsSource.length >= 2 &&
+        !hasInitialRouteFitRef.current &&
+        !userOwnsCameraRef.current &&
+        !recentlyFocused &&
+        !isDraggingRef.current &&
+        !isMultiTouchRef.current &&
+        routeFitKey &&
+        lastRouteFitKeyRef.current !== routeFitKey;
+
+      if (mayAutoFitRoute) {
+        hasInitialRouteFitRef.current = true;
+        lastRouteFitKeyRef.current = routeFitKey;
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
           padding: [42, 42],
           maxZoom: 15,
