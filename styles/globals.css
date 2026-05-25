@@ -4701,3 +4701,35 @@ main {
 .route-draw-metrics-card {
   bottom: max(14px, env(safe-area-inset-bottom)) !important;
 }
+
+/* ===== ROUTE EDITOR V23 — SHAPE HANDLES / CONTROLPOINT PROMOTION ===== */
+.route-shape-handle {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.route-shape-handle span {
+  width: 12px;
+  height: 12px;
+  display: block;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.96);
+  border: 2px solid rgba(230,255,0,0.92);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.28), 0 0 0 5px rgba(230,255,0,0.14);
+}
+
+.route-shape-handle:hover span,
+.route-shape-handle:active span {
+  transform: scale(1.18);
+  background: var(--endurance-lime, #e6ff00);
+  border-color: #071008;
+}
+
+.route-draw-routing-status:empty,
+.route-draw-toast:empty {
+  display: none !important;
+}
