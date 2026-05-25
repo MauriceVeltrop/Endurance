@@ -462,7 +462,11 @@ export default function RouteDrawMap({
               isDraggingRef.current = false;
               lastManualFocusRef.current = Date.now();
               setDynamicHandle(null);
-              onChange?.(next);
+              onChange?.(next, {
+                type: "promote_shape_handle",
+                insertAt,
+                segmentIndex: Number(handle.segmentIndex),
+              });
             })
             .on("click", (event) => {
               if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
@@ -502,7 +506,11 @@ export default function RouteDrawMap({
             isDraggingRef.current = false;
             lastManualFocusRef.current = Date.now();
             setDynamicHandle(null);
-            onChange?.(next);
+            onChange?.(next, {
+              type: "promote_shape_handle",
+              insertAt,
+              segmentIndex: Number(dynamicHandle.insertAt) - 1,
+            });
           })
           .on("click", (event) => {
             if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
