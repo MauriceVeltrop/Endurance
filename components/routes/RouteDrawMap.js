@@ -255,6 +255,9 @@ export default function RouteDrawMap({
   const lastTargetFocusKeyRef = useRef("");
   const isDraggingRef = useRef(false);
   const isMultiTouchRef = useRef(false);
+  const userOwnsCameraRef = useRef(false);
+  const initialRouteFitDoneRef = useRef(false);
+  const allowProgrammaticCameraUntilRef = useRef(0);
   const markerRefs = useRef([]);
   const [error, setError] = useState("");
   const [dynamicHandle, setDynamicHandle] = useState(null);
@@ -293,6 +296,14 @@ export default function RouteDrawMap({
             touchZoom: true,
           }).setView(center, 13);
 
+          const markUserCamera = () => {
+            if (Date.now() < allowProgrammaticCameraUntilRef.current) return;
+            userOwnsCameraRef.current = true;
+          };
+
+          mapRef.current.on("zoomstart", markUserCamera);
+          mapRef.current.on("movestart", markUserCamera);
+          mapRef.current.on("dragstart", markUserCamera);
           mapRef.current.on("zoomend", () => {
             setMapZoom(Number(mapRef.current?.getZoom?.() || 13));
           });
@@ -302,6 +313,7 @@ export default function RouteDrawMap({
             if (Number(event?.touches?.length || 0) > 1) {
               isMultiTouchRef.current = true;
               isDraggingRef.current = false;
+              userOwnsCameraRef.current = true;
               disableMarkerDragging(markerRefs.current);
               mapRef.current?.dragging?.enable?.();
               mapRef.current?.touchZoom?.enable?.();
@@ -363,7 +375,7 @@ export default function RouteDrawMap({
           });
         }
 
-        setTimeout(() => mapRef.current?.invalidateSize(true), 140);
+        setTimeout(() => mapRef.current?.invalidateSize(false), 140);
       } catch (err) {
         console.error("Route draw map error", err);
         setError(err?.message || "Could not load map.");
@@ -507,6 +519,7 @@ export default function RouteDrawMap({
                 return;
               }
               isDraggingRef.current = true;
+              userOwnsCameraRef.current = true;
               mapRef.current?.dragging?.disable?.();
             })
             .on("dragend", (event) => {
@@ -553,6 +566,7 @@ export default function RouteDrawMap({
         })
           .on("dragstart", () => {
             isDraggingRef.current = true;
+            userOwnsCameraRef.current = true;
           })
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
@@ -602,6 +616,7 @@ export default function RouteDrawMap({
         })
           .on("dragstart", () => {
             isDraggingRef.current = true;
+            userOwnsCameraRef.current = true;
           })
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
@@ -639,13 +654,24 @@ export default function RouteDrawMap({
           : waypointLatLngs;
 
       const recentlyFocused = Date.now() - lastManualFocusRef.current < 3500;
+      const mayAutoFitRoute =
+        boundsSource.length >= 2 &&
+        !initialRouteFitDoneRef.current &&
+        !userOwnsCameraRef.current &&
+        !recentlyFocused &&
+        !isDraggingRef.current;
 
-      if (boundsSource.length >= 2 && !recentlyFocused && !isDraggingRef.current) {
+      if (mayAutoFitRoute) {
+        allowProgrammaticCameraUntilRef.current = Date.now() + 700;
         mapRef.current.fitBounds(L.latLngBounds(boundsSource), {
           padding: [42, 42],
           maxZoom: 15,
           animate: false,
         });
+        initialRouteFitDoneRef.current = true;
+        window.setTimeout(() => {
+          allowProgrammaticCameraUntilRef.current = 0;
+        }, 750);
       }
     }
 
@@ -667,6 +693,8 @@ export default function RouteDrawMap({
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
+      allowProgrammaticCameraUntilRef.current = Date.now() + 1400;
+      userOwnsCameraRef.current = false;
       mapRef.current.flyTo([lat, lon], 15, {
         animate: true,
         duration: 1.1,
@@ -696,6 +724,8 @@ export default function RouteDrawMap({
     lastTargetFocusKeyRef.current = focusKey;
     lastManualFocusRef.current = Date.now();
 
+    allowProgrammaticCameraUntilRef.current = Date.now() + 1200;
+    userOwnsCameraRef.current = false;
     mapRef.current.flyTo([lat, lon], Number(targetLocation?.zoom || 15), {
       animate: true,
       duration: 0.85,
@@ -752,6 +782,8 @@ export default function RouteDrawMap({
       if (focusCurrentLocation && !hasFocusedLocationRef.current && !hasExistingRoute) {
         hasFocusedLocationRef.current = true;
         lastManualFocusRef.current = Date.now();
+        allowProgrammaticCameraUntilRef.current = Date.now() + 1200;
+        userOwnsCameraRef.current = false;
         mapRef.current.setView([lat, lon], 15, { animate: true });
       }
     }
