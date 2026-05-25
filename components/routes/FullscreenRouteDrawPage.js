@@ -145,6 +145,57 @@ function routePayloadFromGeometry(points, waypoints, source = "local-segment-rer
 }
 
 
+function xmlEscape(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function routePointsToGpx(points, name = "Endurance Route") {
+  const normalized = normalizeRoutePoints(points);
+  const trackPoints = normalized
+    .map((point) => {
+      const ele = Number.isFinite(Number(point.ele)) ? `\n        <ele>${Number(point.ele).toFixed(1)}</ele>` : "";
+      return `      <trkpt lat="${Number(point.lat).toFixed(6)}" lon="${Number(point.lon).toFixed(6)}">${ele}\n      </trkpt>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Endurance" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata>\n    <name>${xmlEscape(name)}</name>\n    <time>${new Date().toISOString()}</time>\n  </metadata>\n  <trk>\n    <name>${xmlEscape(name)}</name>\n    <trkseg>\n${trackPoints}\n    </trkseg>\n  </trk>\n</gpx>`;
+}
+
+function downloadTextFile({ filename, text, type = "application/gpx+xml" }) {
+  if (typeof window === "undefined") return;
+
+  const blob = new Blob([text], { type });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
+}
+
+function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload }) {
+  return {
+    sport_id: sportId,
+    title: title?.trim() || defaultTitle(sportId),
+    description: "",
+    method,
+    distance_km: metrics.distance_km || routePayload.distance_km || "",
+    elevation_gain_m: metrics.elevation_gain_m || routePayload.elevation_gain_m || "",
+    estimated_time: estimateTimeText(metrics.distance_km || routePayload.distance_km, sportId),
+    route_points: routePayload,
+    created_by: profileId || null,
+    saved_at: new Date().toISOString(),
+  };
+}
+
+
 const MAP_STYLE_OPTIONS = [
   { id: "standard", name: "Standard", provider: "OpenStreetMap", description: "Clear everyday map with streets and parks.", icon: "🗺️" },
   { id: "minimal", name: "Minimal", provider: "Carto Positron", description: "Clean light map for running and city routes.", icon: "◻️" },
@@ -231,6 +282,7 @@ export default function FullscreenRouteDrawPage() {
   const router = useRouter();
   const loadedDraftRef = useRef(false);
   const currentLocationRequestedRef = useRef(false);
+  const draftSavedMessageTimerRef = useRef(null);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -245,7 +297,6 @@ export default function FullscreenRouteDrawPage() {
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -484,6 +535,11 @@ export default function FullscreenRouteDrawPage() {
 
   function clearRoute() {
     setPointsPayload(null);
+    setRoutedPayload(null);
+    setRoutingStatus("idle");
+    setRoutingError("");
+    setDrawInsertMode(false);
+    setMessage("");
     setShowPointPanel(false);
   }
 
@@ -581,6 +637,62 @@ export default function FullscreenRouteDrawPage() {
     return rerouteControlPoints(points, { silent });
   }
 
+
+  function buildCurrentDraft() {
+    const safePayload = buildSafeDraftRoutePayload(
+      routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
+      points
+    );
+
+    safePayload.waypoints = compactControlPoints(points);
+    safePayload.control_points = compactControlPoints(points);
+    safePayload.geometry_points = safePayload.points;
+
+    return makeRouteDraft({
+      sportId,
+      title,
+      method: "draw",
+      profileId: profile?.id,
+      metrics,
+      routePayload: safePayload,
+    });
+  }
+
+  function saveDraftLocally() {
+    if (!canContinue) {
+      setMessage("Add at least two routepoints before saving a draft.");
+      return;
+    }
+
+    try {
+      const draft = buildCurrentDraft();
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
+      setMessage("Draft saved.");
+
+      if (draftSavedMessageTimerRef.current) {
+        window.clearTimeout(draftSavedMessageTimerRef.current);
+      }
+      draftSavedMessageTimerRef.current = window.setTimeout(() => setMessage(""), 1200);
+    } catch (error) {
+      console.error("Could not save route draft", error);
+      setMessage("Could not save this route draft.");
+    }
+  }
+
+  function downloadGpx() {
+    const exportPoints = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
+
+    if (exportPoints.length < 2) {
+      setMessage("Add at least two routepoints before downloading GPX.");
+      return;
+    }
+
+    const safeTitle = (title?.trim() || defaultTitle(sportId)).replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "endurance-route";
+    const gpx = routePointsToGpx(exportPoints, title?.trim() || defaultTitle(sportId));
+    downloadTextFile({ filename: `${safeTitle}.gpx`, text: gpx });
+  }
+
   function continueToDetails() {
     if (!canContinue) {
       setMessage("Add at least two routepoints before continuing.");
@@ -588,29 +700,9 @@ export default function FullscreenRouteDrawPage() {
     }
 
     try {
-      const safePayload = buildSafeDraftRoutePayload(
-        routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
-        points
-      );
-
-      safePayload.waypoints = compactControlPoints(points);
-      safePayload.control_points = compactControlPoints(points);
-      safePayload.geometry_points = safePayload.points;
-
-      const draft = {
-        sport_id: sportId,
-        title: title?.trim() || defaultTitle(sportId),
-        description: "",
-        method: "draw",
-        distance_km: metrics.distance_km || safePayload.distance_km || "",
-        elevation_gain_m: metrics.elevation_gain_m || safePayload.elevation_gain_m || "",
-        estimated_time: estimateTimeText(metrics.distance_km || safePayload.distance_km, sportId),
-        route_points: safePayload,
-        created_by: profile?.id || null,
-        saved_at: new Date().toISOString(),
-      };
-
+      const draft = buildCurrentDraft();
       window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
       window.location.assign("/routes/new?routeDraft=1");
     } catch (error) {
       console.error("Could not save route draft", error);
@@ -657,7 +749,6 @@ export default function FullscreenRouteDrawPage() {
     setTargetLocation(location);
     setSearchResults([]);
     setSearchText(result.label || "");
-    setSearchOpen(false);
   }
 
 
@@ -702,53 +793,38 @@ export default function FullscreenRouteDrawPage() {
         </button>
       </section>
 
-      {searchOpen ? (
-        <div className="route-search-bar route-search-bar-expanded">
-          <div className="route-search-input-wrap">
-            <span className="route-search-icon">⌕</span>
-            <input
-              type="text"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search location, address or place"
-              autoFocus
-            />
-            <button
-              type="button"
-              className="route-search-close"
-              onClick={() => {
-                setSearchOpen(false);
-                setSearchResults([]);
-                setSearchText("");
-              }}
-              aria-label="Close search"
-            >
-              ×
-            </button>
-          </div>
-
-          {searchResults.length ? (
-            <div className="route-search-results">
-              {searchResults.map((result) => (
-                <button
-                  key={result.id}
-                  type="button"
-                  onClick={() => flyToLocation(result)}
-                >
-                  <b>{result.label}</b>
-                  <small>
-                    {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
-                  </small>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {searching ? (
-            <div className="route-search-loading">Searching locations...</div>
-          ) : null}
+      <div className="route-search-bar">
+        <div className="route-search-input-wrap">
+          <span className="route-search-icon">⌕</span>
+          <input
+            type="text"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search location, address or place"
+          />
         </div>
-      ) : null}
+
+        {searchResults.length ? (
+          <div className="route-search-results">
+            {searchResults.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                onClick={() => flyToLocation(result)}
+              >
+                <b>{result.label}</b>
+                <small>
+                  {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {searching ? (
+          <div className="route-search-loading">Searching locations...</div>
+        ) : null}
+      </div>
 
       <RouteDrawMap
         points={points}
@@ -766,27 +842,27 @@ export default function FullscreenRouteDrawPage() {
       />
 
       <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
-        <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search location">
-          <b>⌕</b>
-          <span>Search</span>
-        </button>
-        <button type="button" onClick={useCurrentLocation} aria-label="Current location">
+        <button type="button" onClick={useCurrentLocation}>
           <b>⌖</b>
           <span>Location</span>
         </button>
-        <button type="button" onClick={() => setDrawInsertMode((value) => !value)} className={drawInsertMode ? "active" : ""} aria-label="Insert routepoint">
-          <b>＋</b>
-          <span>Insert</span>
+        <button type="button" onClick={saveDraftLocally} disabled={!canContinue} aria-label="Save route draft">
+          <b>💾</b>
+          <span>Save draft</span>
         </button>
-        <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close loop">
+        <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX">
+          <b>⇩</b>
+          <span>GPX</span>
+        </button>
+        <button type="button" onClick={closeLoop} disabled={points.length < 3}>
           <b>↺</b>
           <span>Loop</span>
         </button>
-        <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo point">
+        <button type="button" onClick={undoPoint} disabled={!points.length}>
           <b>↶</b>
           <span>Undo</span>
         </button>
-        <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear route">
+        <button type="button" onClick={clearRoute} disabled={!points.length}>
           <b>⌫</b>
           <span>Clear</span>
         </button>
