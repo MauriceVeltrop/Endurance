@@ -50,6 +50,51 @@ function compactControlPoints(points) {
   return normalizeRoutePoints(points).slice(0, 40);
 }
 
+function nearestRoutePointIndex(target, geometry) {
+  const point = normalizeRoutePoints([target])[0];
+  const line = normalizeRoutePoints(geometry);
+
+  if (!point || !line.length) return -1;
+
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+
+  line.forEach((candidate, index) => {
+    const distance = Math.hypot(candidate.lat - point.lat, candidate.lon - point.lon);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function mergeSegmentGeometry({ previousGeometry, previousControls, nextControls, segmentStartIndex, segmentEndIndex, segmentGeometry }) {
+  const oldGeometry = normalizeRoutePoints(previousGeometry);
+  const oldControls = normalizeRoutePoints(previousControls);
+  const controls = normalizeRoutePoints(nextControls);
+  const segment = normalizeRoutePoints(segmentGeometry);
+
+  if (!oldGeometry.length || !segment.length || controls.length < 2) return segment.length ? segment : oldGeometry;
+
+  const lastControlIndex = controls.length - 1;
+  const startControl = oldControls[segmentStartIndex] || controls[segmentStartIndex];
+  const endControl = oldControls[segmentEndIndex] || controls[segmentEndIndex];
+
+  let startGeometryIndex = segmentStartIndex <= 0 ? 0 : nearestRoutePointIndex(startControl, oldGeometry);
+  let endGeometryIndex = segmentEndIndex >= lastControlIndex ? oldGeometry.length - 1 : nearestRoutePointIndex(endControl, oldGeometry);
+
+  if (startGeometryIndex < 0 || endGeometryIndex < 0 || startGeometryIndex > endGeometryIndex) {
+    return segment;
+  }
+
+  const before = oldGeometry.slice(0, startGeometryIndex);
+  const after = oldGeometry.slice(endGeometryIndex + 1);
+
+  return compactRoutePoints([...before, ...segment, ...after], 1200);
+}
+
 function buildSafeDraftRoutePayload(payload, fallbackPoints) {
   const payloadPoints = normalizeRoutePoints(payload);
   const fallback = normalizeRoutePoints(fallbackPoints);
@@ -155,6 +200,8 @@ export default function FullscreenRouteDrawPage() {
   const router = useRouter();
   const loadedDraftRef = useRef(false);
   const currentLocationRequestedRef = useRef(false);
+  const skipNextFullRerouteRef = useRef(false);
+  const localRerouteRequestRef = useRef(0);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -317,13 +364,37 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
-  function handlePointsChange(nextPoints) {
+  function handlePointsChange(nextPoints, meta = {}) {
     const safeControlPoints = compactControlPoints(nextPoints);
+    const previousControlPoints = compactControlPoints(points);
+    const previousRoutedPayload = routedPayload;
+    const previousGeometry = normalizeRoutePoints(previousRoutedPayload);
+
     loadedDraftRef.current = false;
     setPointsPayload(makeRoutePointPayload(safeControlPoints));
+    setRoutingError("");
+
+    const canLocalReroute =
+      meta?.localReroute &&
+      safeControlPoints.length >= 2 &&
+      previousGeometry.length >= 2 &&
+      previousControlPoints.length >= 2 &&
+      Number.isInteger(meta.index);
+
+    if (canLocalReroute) {
+      skipNextFullRerouteRef.current = true;
+      rerouteLocalSegment({
+        nextControlPoints: safeControlPoints,
+        previousControlPoints,
+        previousRoutedPayload,
+        changedIndex: meta.index,
+        action: meta.type,
+      });
+      return;
+    }
+
     setRoutedPayload(null);
     setRoutingStatus("idle");
-    setRoutingError("");
   }
 
   function undoPoint() {
@@ -372,6 +443,87 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
+  async function fetchRoutedSegment(segmentPoints) {
+    const response = await fetch("/api/routes/reroute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sport_id: sportId,
+        points: compactControlPoints(segmentPoints),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data?.ok) {
+      throw new Error(data?.error || "Segment routing failed.");
+    }
+
+    const routed = data.route_points || data;
+    const segmentGeometry = normalizeRoutePoints(routed);
+
+    if (segmentGeometry.length < 2) {
+      throw new Error("No segment geometry returned.");
+    }
+
+    return { data, routed, segmentGeometry };
+  }
+
+  async function rerouteLocalSegment({ nextControlPoints, previousControlPoints, previousRoutedPayload, changedIndex }) {
+    const requestId = localRerouteRequestRef.current + 1;
+    localRerouteRequestRef.current = requestId;
+
+    try {
+      setRoutingStatus("routing");
+
+      const controls = compactControlPoints(nextControlPoints);
+      const lastIndex = controls.length - 1;
+      const safeChangedIndex = Math.max(0, Math.min(lastIndex, Number(changedIndex)));
+      const segmentStartIndex = Math.max(0, safeChangedIndex - 1);
+      const segmentEndIndex = Math.min(lastIndex, safeChangedIndex + 1);
+      const segmentControls = controls.slice(segmentStartIndex, segmentEndIndex + 1);
+
+      if (segmentControls.length < 2) {
+        throw new Error("Not enough local points to reroute.");
+      }
+
+      const { routed, segmentGeometry } = await fetchRoutedSegment(segmentControls);
+
+      if (localRerouteRequestRef.current !== requestId) return;
+
+      const mergedGeometry = mergeSegmentGeometry({
+        previousGeometry: previousRoutedPayload,
+        previousControls: previousControlPoints,
+        nextControls: controls,
+        segmentStartIndex,
+        segmentEndIndex,
+        segmentGeometry,
+      });
+
+      setRoutedPayload({
+        ...(previousRoutedPayload && typeof previousRoutedPayload === "object" && !Array.isArray(previousRoutedPayload) ? previousRoutedPayload : {}),
+        source: routed?.source || previousRoutedPayload?.source || "openrouteservice",
+        profile: routed?.profile || previousRoutedPayload?.profile || null,
+        provider_url: routed?.provider_url || previousRoutedPayload?.provider_url || null,
+        waypoints: controls,
+        control_points: controls,
+        geometry_points: mergedGeometry,
+        points: mergedGeometry,
+        point_count: mergedGeometry.length,
+        edited_at: new Date().toISOString(),
+      });
+      setRoutingStatus("done");
+      setMessage("");
+    } catch (error) {
+      console.error("Local segment routing failed", error);
+      setRoutedPayload(null);
+      setRoutingStatus("error");
+      setRoutingError(error?.message || "Could not reroute this segment.");
+    }
+  }
+
   async function rerouteRoute({ silent = false } = {}) {
     if (points.length < 2) return;
 
@@ -401,7 +553,11 @@ export default function FullscreenRouteDrawPage() {
         throw new Error("No routed geometry returned.");
       }
 
-      setRoutedPayload(routed);
+      setRoutedPayload({
+        ...(routed && typeof routed === "object" && !Array.isArray(routed) ? routed : { points: normalizeRoutePoints(routed) }),
+        waypoints: compactControlPoints(points),
+        control_points: compactControlPoints(points),
+      });
       setRoutingStatus("done");
 
       if (!silent) {
@@ -495,6 +651,11 @@ export default function FullscreenRouteDrawPage() {
 
   useEffect(() => {
     if (points.length < 2 || !routeSignature) return;
+
+    if (skipNextFullRerouteRef.current) {
+      skipNextFullRerouteRef.current = false;
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });

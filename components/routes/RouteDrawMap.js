@@ -409,7 +409,7 @@ export default function RouteDrawMap({
           const insertAt = insertionIndexForRouteClick(event.latlng, mapRef.current, currentControlPoints);
 
           next.splice(insertAt, 0, newControlPoint);
-          onChange?.(next);
+          onChange?.(next, { type: "promote_route_click", index: insertAt, localReroute: true });
         });
       }
 
@@ -441,11 +441,12 @@ export default function RouteDrawMap({
             };
 
             const next = [...pointsRef.current];
-            next.splice(shapePoint.segmentIndex + 1, 0, promoted);
+            const insertAt = shapePoint.segmentIndex + 1;
+            next.splice(insertAt, 0, promoted);
 
             isDraggingRef.current = false;
             lastManualFocusRef.current = Date.now();
-            onChange?.(next);
+            onChange?.(next, { type: "promote_shape_handle", index: insertAt, localReroute: true });
           })
           .addTo(group);
       });
@@ -486,7 +487,7 @@ export default function RouteDrawMap({
 
             isDraggingRef.current = false;
             lastManualFocusRef.current = Date.now();
-            onChange?.(next);
+            onChange?.(next, { type: "move_control_point", index, localReroute: true });
           })
           .on("click", () => {
             if (isDraggingRef.current) return;
