@@ -234,6 +234,7 @@ export default function RouteDrawMap({
   const lastTargetFocusKeyRef = useRef("");
   const isDraggingRef = useRef(false);
   const [error, setError] = useState("");
+  const [dynamicHandle, setDynamicHandle] = useState(null);
 
   const waypoints = useMemo(() => norm(points), [points]);
   const linePoints = useMemo(() => {
@@ -244,6 +245,10 @@ export default function RouteDrawMap({
   useEffect(() => {
     pointsRef.current = waypoints;
   }, [waypoints]);
+
+  useEffect(() => {
+    setDynamicHandle(null);
+  }, [waypoints.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -401,33 +406,33 @@ export default function RouteDrawMap({
           if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
 
           const currentControlPoints = pointsRef.current;
-          const newControlPoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
+          if (!currentControlPoints || currentControlPoints.length < 2) return;
 
-          if (!newControlPoint) return;
+          const newShapePoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
+          if (!newShapePoint) return;
 
-          const next = [...currentControlPoints];
           const insertAt = insertionIndexForRouteClick(event.latlng, mapRef.current, currentControlPoints);
 
-          next.splice(insertAt, 0, newControlPoint);
-          onChange?.(next, { type: "promote_route_click", index: insertAt, localReroute: true });
+          setDynamicHandle({
+            ...newShapePoint,
+            insertAt,
+            createdAt: Date.now(),
+          });
         });
       }
 
-      const currentZoom = mapRef.current.getZoom?.() || 13;
-      const shapeHandles = currentZoom >= 14 ? buildShapeHandles(waypoints, linePoints) : [];
-
-      shapeHandles.forEach((shapePoint) => {
+      if (dynamicHandle && Number.isFinite(dynamicHandle.lat) && Number.isFinite(dynamicHandle.lon)) {
         const icon = L.divIcon({
-          className: "route-shape-handle",
-          html: "<span></span>",
-          iconSize: [18, 18],
-          iconAnchor: [9, 9],
+          className: "route-dynamic-shape-handle",
+          html: "<span></span><em>Drag to shape</em>",
+          iconSize: [94, 34],
+          iconAnchor: [17, 17],
         });
 
-        L.marker([shapePoint.lat, shapePoint.lon], {
+        L.marker([dynamicHandle.lat, dynamicHandle.lon], {
           icon,
           draggable: true,
-          zIndexOffset: 450,
+          zIndexOffset: 650,
         })
           .on("dragstart", () => {
             isDraggingRef.current = true;
@@ -441,15 +446,19 @@ export default function RouteDrawMap({
             };
 
             const next = [...pointsRef.current];
-            const insertAt = shapePoint.segmentIndex + 1;
+            const insertAt = Math.max(1, Math.min(Number(dynamicHandle.insertAt) || next.length, next.length));
             next.splice(insertAt, 0, promoted);
 
             isDraggingRef.current = false;
             lastManualFocusRef.current = Date.now();
-            onChange?.(next, { type: "promote_shape_handle", index: insertAt, localReroute: true });
+            setDynamicHandle(null);
+            onChange?.(next);
+          })
+          .on("click", (event) => {
+            if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
           })
           .addTo(group);
-      });
+      }
 
       waypoints.forEach((point, index) => {
         const isStart = index === 0;
@@ -487,7 +496,7 @@ export default function RouteDrawMap({
 
             isDraggingRef.current = false;
             lastManualFocusRef.current = Date.now();
-            onChange?.(next, { type: "move_control_point", index, localReroute: true });
+            onChange?.(next);
           })
           .on("click", () => {
             if (isDraggingRef.current) return;
@@ -522,7 +531,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon]);
+  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt]);
 
 
 
@@ -635,7 +644,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap route-draw-map-wrap-light">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
-        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap route line to create a draggable control point · drag control points"}</small>
+        <small>{insertMode ? "Insert mode · tap near a segment" : "Tap route line for a temporary handle · drag it to create a numbered point"}</small>
       </div>
 
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />
