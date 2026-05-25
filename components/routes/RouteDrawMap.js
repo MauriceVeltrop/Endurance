@@ -207,6 +207,27 @@ function buildShapeHandles(controlPoints, linePoints) {
   }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
+function disableMarkerDragging(markers) {
+  (markers || []).forEach((marker) => {
+    try {
+      marker?.dragging?.disable?.();
+    } catch (_) {}
+  });
+}
+
+function enableMarkerDragging(markers) {
+  (markers || []).forEach((marker) => {
+    try {
+      marker?.dragging?.enable?.();
+    } catch (_) {}
+  });
+}
+
+function isMultiTouchEvent(event) {
+  const source = event?.originalEvent || event;
+  return Number(source?.touches?.length || 0) > 1 || Number(source?.targetTouches?.length || 0) > 1;
+}
+
 export default function RouteDrawMap({
   points = [],
   routedPoints = [],
@@ -233,6 +254,8 @@ export default function RouteDrawMap({
   const lastManualFocusRef = useRef(0);
   const lastTargetFocusKeyRef = useRef("");
   const isDraggingRef = useRef(false);
+  const isMultiTouchRef = useRef(false);
+  const markerRefs = useRef([]);
   const [error, setError] = useState("");
   const [dynamicHandle, setDynamicHandle] = useState(null);
   const [mapZoom, setMapZoom] = useState(13);
@@ -274,7 +297,39 @@ export default function RouteDrawMap({
             setMapZoom(Number(mapRef.current?.getZoom?.() || 13));
           });
 
+          const container = mapRef.current.getContainer?.();
+          const startMultiTouch = (event) => {
+            if (Number(event?.touches?.length || 0) > 1) {
+              isMultiTouchRef.current = true;
+              isDraggingRef.current = false;
+              disableMarkerDragging(markerRefs.current);
+              mapRef.current?.dragging?.enable?.();
+              mapRef.current?.touchZoom?.enable?.();
+            }
+          };
+          const endMultiTouch = (event) => {
+            if (Number(event?.touches?.length || 0) <= 1) {
+              window.setTimeout(() => {
+                isMultiTouchRef.current = false;
+                enableMarkerDragging(markerRefs.current);
+              }, 120);
+            }
+          };
+
+          container?.addEventListener("touchstart", startMultiTouch, { passive: true, capture: true });
+          container?.addEventListener("touchmove", startMultiTouch, { passive: true, capture: true });
+          container?.addEventListener("touchend", endMultiTouch, { passive: true, capture: true });
+          container?.addEventListener("touchcancel", endMultiTouch, { passive: true, capture: true });
+
+          mapRef.current.__enduranceTouchCleanup = () => {
+            container?.removeEventListener("touchstart", startMultiTouch, { capture: true });
+            container?.removeEventListener("touchmove", startMultiTouch, { capture: true });
+            container?.removeEventListener("touchend", endMultiTouch, { capture: true });
+            container?.removeEventListener("touchcancel", endMultiTouch, { capture: true });
+          };
+
           mapRef.current.on("click", (event) => {
+            if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
             const point = {
               lat: Number(event.latlng.lat.toFixed(6)),
               lon: Number(event.latlng.lng.toFixed(6)),
@@ -357,6 +412,7 @@ export default function RouteDrawMap({
       if (cancelled || !mapRef.current) return;
 
       if (routeRef.current) routeRef.current.remove();
+      markerRefs.current = [];
 
       const group = L.layerGroup();
       const routeLatLngs = linePoints.map((point) => [point.lat, point.lon]);
@@ -408,6 +464,7 @@ export default function RouteDrawMap({
         }).addTo(group);
 
         routeLine.on("click", (event) => {
+          if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
           if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
 
           const currentControlPoints = pointsRef.current;
@@ -444,8 +501,13 @@ export default function RouteDrawMap({
             draggable: true,
             zIndexOffset: 520,
           })
-            .on("dragstart", () => {
+            .on("dragstart", (event) => {
+              if (isMultiTouchRef.current || isMultiTouchEvent(event)) {
+                isDraggingRef.current = false;
+                return;
+              }
               isDraggingRef.current = true;
+              mapRef.current?.dragging?.disable?.();
             })
             .on("dragend", (event) => {
               const latLng = event.target.getLatLng();
@@ -460,6 +522,7 @@ export default function RouteDrawMap({
               next.splice(insertAt, 0, promoted);
 
               isDraggingRef.current = false;
+              mapRef.current?.dragging?.enable?.();
               lastManualFocusRef.current = Date.now();
               setDynamicHandle(null);
               onChange?.(next, {
@@ -567,6 +630,8 @@ export default function RouteDrawMap({
 
       group.addTo(mapRef.current);
       routeRef.current = group;
+      markerRefs.current = group.getLayers ? group.getLayers().filter((layer) => layer?.dragging) : [];
+      if (isMultiTouchRef.current) disableMarkerDragging(markerRefs.current);
 
       const boundsSource =
         routeLatLngs.length >= 2
