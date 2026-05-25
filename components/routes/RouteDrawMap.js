@@ -7,12 +7,12 @@ const SCRIPT_ID = "endurance-leaflet-script";
 
 const LAYERS = {
   standard: {
-    label: "Clean",
-    provider: "Carto Voyager",
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    filter: "brightness(1) saturate(.98) contrast(1)",
-    maxZoom: 20,
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    label: "OSM",
+    provider: "OpenStreetMap",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    filter: "none",
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
   },
   minimal: {
     label: "Minimal",
@@ -808,7 +808,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap route-draw-map-wrap-light">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
-        <small>{insertMode ? "Insert mode · tap near a segment" : "Drag small white handles to shape route · they become numbered points"}</small>
+        <small>{insertMode ? "Insert mode · tap near a segment" : "Drag white handles to shape the route"}</small>
       </div>
 
       <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />

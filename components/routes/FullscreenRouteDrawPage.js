@@ -205,9 +205,7 @@ const MAP_STYLE_OPTIONS = [
   { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Low-glare dark map for evening planning.", icon: "🌙" },
 ];
 
-function defaultMapStyleForSport(sportId) {
-  if (["trail_running", "mountain_biking", "walking", "kayaking"].includes(sportId)) return "outdoor";
-  if (["road_cycling", "gravel_cycling"].includes(sportId)) return "cycling";
+function defaultMapStyleForSport() {
   return "standard";
 }
 
@@ -301,7 +299,6 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
-  const [showSearch, setShowSearch] = useState(false);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -750,13 +747,6 @@ export default function FullscreenRouteDrawPage() {
     setTargetLocation(location);
     setSearchResults([]);
     setSearchText(result.label || "");
-    setShowSearch(false);
-  }
-
-  function closeSearch() {
-    setShowSearch(false);
-    setSearchResults([]);
-    setSearchText("");
   }
 
 
@@ -801,44 +791,38 @@ export default function FullscreenRouteDrawPage() {
         </button>
       </section>
 
-      {showSearch ? (
-        <div className="route-search-bar route-search-bar-expanded">
-          <div className="route-search-input-wrap">
-            <span className="route-search-icon">⌕</span>
-            <input
-              type="text"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search location, address or place"
-              autoFocus
-            />
-            <button type="button" className="route-search-close" onClick={closeSearch} aria-label="Close search">
-              ×
-            </button>
-          </div>
-
-          {searchResults.length ? (
-            <div className="route-search-results">
-              {searchResults.map((result) => (
-                <button
-                  key={result.id}
-                  type="button"
-                  onClick={() => flyToLocation(result)}
-                >
-                  <b>{result.label}</b>
-                  <small>
-                    {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
-                  </small>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {searching ? (
-            <div className="route-search-loading">Searching locations...</div>
-          ) : null}
+      <div className="route-search-bar">
+        <div className="route-search-input-wrap">
+          <span className="route-search-icon">⌕</span>
+          <input
+            type="text"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search location, address or place"
+          />
         </div>
-      ) : null}
+
+        {searchResults.length ? (
+          <div className="route-search-results">
+            {searchResults.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                onClick={() => flyToLocation(result)}
+              >
+                <b>{result.label}</b>
+                <small>
+                  {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {searching ? (
+          <div className="route-search-loading">Searching locations...</div>
+        ) : null}
+      </div>
 
       <RouteDrawMap
         points={points}
@@ -847,7 +831,7 @@ export default function FullscreenRouteDrawPage() {
         height="100vh"
         title={title || "Draw route"}
         insertMode={drawInsertMode}
-        layer={drawLayer}
+        layer="standard"
         routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
         focusCurrentLocation={!points.length && !loadedDraftRef.current}
@@ -855,33 +839,30 @@ export default function FullscreenRouteDrawPage() {
         onTargetLocationHandled={() => setTargetLocation(null)}
       />
 
+      <section className="route-draw-distance-pill" aria-label="Current route distance">
+        <strong>{metrics.distance_km || "0.00"} km</strong>
+        <span>{metrics.elevation_gain_m ? `${metrics.elevation_gain_m} m+` : "0 m+"}</span>
+      </section>
+
       <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
-        <button type="button" onClick={() => setShowSearch((value) => !value)} className={showSearch ? "active" : ""} aria-label="Search location">
-          <b>⌕</b>
-          <span>Search</span>
+        <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
+          <b>📍</b>
+          <span>My location</span>
         </button>
-        <button type="button" onClick={useCurrentLocation}>
-          <b>⌖</b>
-          <span>Location</span>
+        <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX file">
+          <b>GPX</b>
+          <span>Download</span>
         </button>
-        <button type="button" onClick={saveDraftLocally} disabled={!canContinue} aria-label="Save route draft">
-          <b>💾</b>
-          <span>Save draft</span>
+        <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close route loop">
+          <b>🔁</b>
+          <span>Close loop</span>
         </button>
-        <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX">
-          <b>⇩</b>
-          <span>GPX</span>
-        </button>
-        <button type="button" onClick={closeLoop} disabled={points.length < 3}>
-          <b>↺</b>
-          <span>Loop</span>
-        </button>
-        <button type="button" onClick={undoPoint} disabled={!points.length}>
+        <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo last route point">
           <b>↶</b>
           <span>Undo</span>
         </button>
-        <button type="button" onClick={clearRoute} disabled={!points.length}>
-          <b>⌫</b>
+        <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear entire route">
+          <b>🗑</b>
           <span>Clear</span>
         </button>
       </section>
