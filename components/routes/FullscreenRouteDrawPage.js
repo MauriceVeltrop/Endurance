@@ -299,6 +299,7 @@ export default function FullscreenRouteDrawPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -747,6 +748,7 @@ export default function FullscreenRouteDrawPage() {
     setTargetLocation(location);
     setSearchResults([]);
     setSearchText(result.label || "");
+    setSearchOpen(false);
   }
 
 
@@ -791,38 +793,52 @@ export default function FullscreenRouteDrawPage() {
         </button>
       </section>
 
-      <div className="route-search-bar">
-        <div className="route-search-input-wrap">
-          <span className="route-search-icon">⌕</span>
-          <input
-            type="text"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="Search location, address or place"
-          />
-        </div>
-
-        {searchResults.length ? (
-          <div className="route-search-results">
-            {searchResults.map((result) => (
-              <button
-                key={result.id}
-                type="button"
-                onClick={() => flyToLocation(result)}
-              >
-                <b>{result.label}</b>
-                <small>
-                  {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
-                </small>
-              </button>
-            ))}
+      {searchOpen ? (
+        <div className="route-search-bar route-search-bar-expanded">
+          <div className="route-search-input-wrap">
+            <span className="route-search-icon">⌕</span>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search location, address or place"
+              autoFocus
+            />
+            <button
+              type="button"
+              className="route-search-close"
+              onClick={() => {
+                setSearchOpen(false);
+                setSearchResults([]);
+              }}
+              aria-label="Close search"
+            >
+              ×
+            </button>
           </div>
-        ) : null}
 
-        {searching ? (
-          <div className="route-search-loading">Searching locations...</div>
-        ) : null}
-      </div>
+          {searchResults.length ? (
+            <div className="route-search-results">
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  type="button"
+                  onClick={() => flyToLocation(result)}
+                >
+                  <b>{result.label}</b>
+                  <small>
+                    {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
+                  </small>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {searching ? (
+            <div className="route-search-loading">Searching locations...</div>
+          ) : null}
+        </div>
+      ) : null}
 
       <RouteDrawMap
         points={points}
@@ -845,8 +861,17 @@ export default function FullscreenRouteDrawPage() {
       </section>
 
       <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
+        <button
+          type="button"
+          onClick={() => setSearchOpen((value) => !value)}
+          aria-label="Search location"
+          className={searchOpen ? "active" : ""}
+        >
+          <b>⌕</b>
+          <span>Search</span>
+        </button>
         <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
-          <b>📍</b>
+          <b>◎</b>
           <span>My location</span>
         </button>
         <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX file">
@@ -854,7 +879,7 @@ export default function FullscreenRouteDrawPage() {
           <span>Download</span>
         </button>
         <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close route loop">
-          <b>🔁</b>
+          <b>↻</b>
           <span>Close loop</span>
         </button>
         <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo last route point">
@@ -862,7 +887,7 @@ export default function FullscreenRouteDrawPage() {
           <span>Undo</span>
         </button>
         <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear entire route">
-          <b>🗑</b>
+          <b>⌧</b>
           <span>Clear</span>
         </button>
       </section>
