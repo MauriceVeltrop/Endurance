@@ -156,6 +156,57 @@ function insertionIndexForRouteClick(eventLatLng, map, controlPoints) {
   return bestIndex;
 }
 
+function nearestPointIndex(target, linePoints) {
+  if (!target || !Array.isArray(linePoints) || !linePoints.length) return -1;
+
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+
+  linePoints.forEach((point, index) => {
+    const distance = Math.hypot(Number(point.lat) - Number(target.lat), Number(point.lon) - Number(target.lon));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function buildShapeHandles(controlPoints, linePoints) {
+  if (!Array.isArray(controlPoints) || controlPoints.length < 2) return [];
+
+  return controlPoints.slice(0, -1).map((point, index) => {
+    const next = controlPoints[index + 1];
+    let handle = {
+      lat: Number(((Number(point.lat) + Number(next.lat)) / 2).toFixed(6)),
+      lon: Number(((Number(point.lon) + Number(next.lon)) / 2).toFixed(6)),
+      segmentIndex: index,
+    };
+
+    if (Array.isArray(linePoints) && linePoints.length >= 2) {
+      const startIndex = nearestPointIndex(point, linePoints);
+      const endIndex = nearestPointIndex(next, linePoints);
+
+      if (startIndex >= 0 && endIndex >= 0 && startIndex !== endIndex) {
+        const low = Math.min(startIndex, endIndex);
+        const high = Math.max(startIndex, endIndex);
+        const mid = linePoints[Math.round((low + high) / 2)];
+
+        if (mid) {
+          handle = {
+            lat: Number(Number(mid.lat).toFixed(6)),
+            lon: Number(Number(mid.lon).toFixed(6)),
+            segmentIndex: index,
+          };
+        }
+      }
+    }
+
+    return handle;
+  }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+}
+
 export default function RouteDrawMap({
   points = [],
   routedPoints = [],
@@ -361,6 +412,43 @@ export default function RouteDrawMap({
           onChange?.(next);
         });
       }
+
+      const currentZoom = mapRef.current.getZoom?.() || 13;
+      const shapeHandles = currentZoom >= 14 ? buildShapeHandles(waypoints, linePoints) : [];
+
+      shapeHandles.forEach((shapePoint) => {
+        const icon = L.divIcon({
+          className: "route-shape-handle",
+          html: "<span></span>",
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+
+        L.marker([shapePoint.lat, shapePoint.lon], {
+          icon,
+          draggable: true,
+          zIndexOffset: 450,
+        })
+          .on("dragstart", () => {
+            isDraggingRef.current = true;
+          })
+          .on("dragend", (event) => {
+            const latLng = event.target.getLatLng();
+            const promoted = {
+              lat: Number(latLng.lat.toFixed(6)),
+              lon: Number(latLng.lng.toFixed(6)),
+              ele: null,
+            };
+
+            const next = [...pointsRef.current];
+            next.splice(shapePoint.segmentIndex + 1, 0, promoted);
+
+            isDraggingRef.current = false;
+            lastManualFocusRef.current = Date.now();
+            onChange?.(next);
+          })
+          .addTo(group);
+      });
 
       waypoints.forEach((point, index) => {
         const isStart = index === 0;

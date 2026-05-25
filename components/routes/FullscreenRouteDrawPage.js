@@ -223,7 +223,7 @@ export default function FullscreenRouteDrawPage() {
             waypoints: editableControlPoints,
             point_count: geometry.length,
           });
-          setMessage("Existing route loaded. Tap the route line to add a shaping point, then drag it to reshape.");
+          setMessage("");
           window.sessionStorage.removeItem("endurance_route_edit_draft");
         }
 
@@ -282,7 +282,7 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    if (!quiet) setMessage("Finding your current location...");
+    if (!quiet) setMessage("");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -307,7 +307,7 @@ export default function FullscreenRouteDrawPage() {
         }
 
         if (!quiet) {
-          setMessage(mayFocus ? "Centered on current location." : "Current location updated.");
+          setMessage("");
         }
       },
       () => {
@@ -364,7 +364,7 @@ export default function FullscreenRouteDrawPage() {
         selectedAt: Date.now(),
         zoom: 15,
       });
-      setMessage("Centered on current location.");
+      setMessage("");
       return;
     }
 
@@ -611,7 +611,7 @@ export default function FullscreenRouteDrawPage() {
 
       {routedPoints.length ? (
         <section className="route-draw-routing-status">
-          Route automatically follows roads/paths
+          
         </section>
       ) : null}
 
