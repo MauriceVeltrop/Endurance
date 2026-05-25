@@ -4157,10 +4157,547 @@ main {
   }
 }
 
-/* Endurance route map style cleanup: map backgrounds are now selected automatically per sport. */
-.route-draw-layer-switcher,
+
+/* ===== ROUTE CREATION FULL UI CONSOLIDATION V22 ===== */
+.create-route-v2-page,
+.route-step-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 85% 8%, rgba(230,255,0,.13), transparent 30%),
+    radial-gradient(circle at 10% 25%, rgba(54,107,55,.14), transparent 35%),
+    #05080b !important;
+  color: #fff;
+  overflow-x: hidden;
+  padding-bottom: max(140px, calc(108px + env(safe-area-inset-bottom))) !important;
+}
+
+.create-route-v2-hero,
+.route-step-hero {
+  margin-top: 10px !important;
+  padding: 22px 22px 24px !important;
+  border-radius: 30px !important;
+  min-height: 0 !important;
+}
+
+.create-route-v2-hero h1,
+.route-step-hero h1 {
+  font-size: clamp(40px, 11vw, 64px) !important;
+  line-height: .9 !important;
+  letter-spacing: -.075em !important;
+  margin: 6px 0 14px !important;
+}
+
+.create-route-v2-hero p,
+.route-step-hero p {
+  max-width: 34rem !important;
+  color: rgba(255,255,255,.62) !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  font-weight: 800 !important;
+}
+
+.route-stepper {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+
+.route-stepper button {
+  appearance: none !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.035)) !important;
+  color: rgba(255,255,255,.62) !important;
+  min-height: 64px !important;
+  border-radius: 24px !important;
+  display: grid !important;
+  place-items: center !important;
+  gap: 5px !important;
+  font-weight: 1000 !important;
+  font-size: 13px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+.route-stepper button span {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: rgba(255,255,255,.10) !important;
+  color: rgba(255,255,255,.72) !important;
+}
+
+.route-stepper button.active {
+  color: white !important;
+  border-color: rgba(230,255,0,.34) !important;
+  background: linear-gradient(180deg, rgba(230,255,0,.14), rgba(230,255,0,.045)) !important;
+}
+
+.route-stepper button.active span {
+  background: #e6ff00 !important;
+  color: #060805 !important;
+}
+
+.route-step-section {
+  margin-top: 18px !important;
+}
+
+.route-builder-step.compact {
+  display: grid !important;
+  grid-template-columns: 54px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 14px !important;
+  margin: 8px 0 16px !important;
+}
+
+.route-builder-step.compact > span {
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 18px !important;
+  background: #e6ff00 !important;
+  color: #050805 !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 24px !important;
+  font-weight: 1000 !important;
+  box-shadow: 0 16px 36px rgba(230,255,0,.18) !important;
+}
+
+.route-builder-step.compact .eyebrow,
+.route-builder-step.compact p.eyebrow {
+  margin: 0 0 5px !important;
+  color: #e6ff00 !important;
+  font-size: 12px !important;
+  letter-spacing: .26em !important;
+  text-transform: uppercase !important;
+  font-weight: 1000 !important;
+}
+
+.route-builder-step.compact h2 {
+  margin: 0 !important;
+  color: white !important;
+  font-size: clamp(34px, 9.5vw, 52px) !important;
+  line-height: .9 !important;
+  letter-spacing: -.075em !important;
+  font-weight: 1000 !important;
+}
+
+.create-route-sport-grid.compact,
+.sport-button-list {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
+.route-sport-button {
+  appearance: none !important;
+  width: 100% !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(230,255,0,.10), transparent 28%),
+    linear-gradient(180deg, rgba(19,28,25,.86), rgba(8,12,16,.92)) !important;
+  color: white !important;
+  border-radius: 24px !important;
+  padding: 12px !important;
+  min-height: 76px !important;
+  display: grid !important;
+  grid-template-columns: 52px minmax(0,1fr) 24px !important;
+  align-items: center !important;
+  gap: 12px !important;
+  text-align: left !important;
+  box-shadow: 0 14px 42px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+
+.route-sport-button.active {
+  border-color: rgba(230,255,0,.44) !important;
+  box-shadow: 0 0 0 1px rgba(230,255,0,.10), 0 18px 50px rgba(0,0,0,.28) !important;
+}
+
+.route-sport-icon {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  max-width: 52px !important;
+  border-radius: 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  overflow: hidden !important;
+  background: rgba(230,255,0,.08) !important;
+  border: 1px solid rgba(230,255,0,.16) !important;
+}
+
+.route-sport-icon img {
+  width: 34px !important;
+  height: 34px !important;
+  max-width: 34px !important;
+  max-height: 34px !important;
+  object-fit: contain !important;
+  display: block !important;
+  filter: brightness(1.12) saturate(.9) !important;
+}
+
+.route-sport-copy {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 4px !important;
+}
+
+.route-sport-copy strong,
+.route-method-selected-sport strong,
+.route-method-option-main strong {
+  display: block !important;
+  color: white !important;
+  font-size: 20px !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.045em !important;
+  font-weight: 1000 !important;
+  white-space: normal !important;
+}
+
+.route-sport-copy small,
+.route-method-selected-sport small,
+.route-method-option-main small {
+  display: block !important;
+  color: rgba(255,255,255,.58) !important;
+  font-size: 13px !important;
+  line-height: 1.28 !important;
+  font-weight: 800 !important;
+  white-space: normal !important;
+}
+
+.route-sport-arrow,
+.route-method-option-arrow {
+  color: rgba(255,255,255,.58) !important;
+  font-size: 32px !important;
+  line-height: 1 !important;
+  justify-self: end !important;
+}
+
+.route-method-premium-head {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+  padding: 12px !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.045) !important;
+}
+
+.route-method-selected-sport {
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: 48px minmax(0,1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.route-method-premium-head > button,
+.route-step-secondary,
+.route-inline-action {
+  appearance: none !important;
+  min-height: 42px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.07) !important;
+  color: white !important;
+  padding: 0 14px !important;
+  font-weight: 1000 !important;
+  white-space: nowrap !important;
+}
+
+.route-method-cards {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
+.route-method-option {
+  appearance: none !important;
+  width: 100% !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(230,255,0,.09), transparent 30%),
+    linear-gradient(180deg, rgba(20,27,27,.92), rgba(8,12,16,.96)) !important;
+  color: white !important;
+  border-radius: 24px !important;
+  padding: 14px !important;
+  display: grid !important;
+  grid-template-columns: 50px minmax(0,1fr) 22px !important;
+  gap: 12px !important;
+  align-items: center !important;
+  text-align: left !important;
+  box-shadow: 0 14px 42px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+
+.route-method-option.recommended {
+  border-color: rgba(230,255,0,.30) !important;
+}
+
+.route-method-option-icon {
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 24px !important;
+  background: rgba(230,255,0,.10) !important;
+  border: 1px solid rgba(230,255,0,.16) !important;
+}
+
+.route-method-option-main {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 4px !important;
+}
+
+.route-method-option-topline {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.route-method-option-topline em,
+.route-method-option-topline i {
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+  color: #e6ff00 !important;
+  background: rgba(230,255,0,.08) !important;
+  border: 1px solid rgba(230,255,0,.12) !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  font-style: normal !important;
+  font-weight: 1000 !important;
+}
+
+.route-method-option-topline i {
+  color: rgba(255,255,255,.72) !important;
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(255,255,255,.10) !important;
+}
+
+.route-method-option-action {
+  color: #e6ff00 !important;
+  font-size: 12px !important;
+  font-weight: 1000 !important;
+}
+
+.route-method-back {
+  width: 100% !important;
+  margin-top: 14px !important;
+  min-height: 54px !important;
+  border-radius: 22px !important;
+}
+
+.create-route-editor-grid,
+.step-details-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 14px !important;
+}
+
+.create-route-form-card,
+.create-route-preview-card {
+  border-radius: 28px !important;
+  padding: 16px !important;
+}
+
+.create-route-form-card label {
+  display: grid !important;
+  gap: 7px !important;
+  color: rgba(255,255,255,.72) !important;
+  font-size: 12px !important;
+  font-weight: 1000 !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 12px !important;
+}
+
+.create-route-form-card input,
+.create-route-form-card textarea,
+.create-route-form-card select {
+  width: 100% !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.07) !important;
+  color: white !important;
+  border-radius: 18px !important;
+  min-height: 48px !important;
+  padding: 12px 14px !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.create-route-form-card textarea {
+  min-height: 104px !important;
+  resize: vertical !important;
+}
+
+.create-route-two {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.route-step-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1.4fr !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+
+.route-save-button {
+  min-height: 54px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #e6ff00 !important;
+  color: #050805 !important;
+  font-weight: 1000 !important;
+  font-size: 16px !important;
+}
+
+.route-save-button:disabled {
+  opacity: .42 !important;
+}
+
+.create-route-coming-soon,
+.route-preview-placeholder {
+  border: 1px solid rgba(230,255,0,.14) !important;
+  background: rgba(230,255,0,.06) !important;
+  border-radius: 22px !important;
+  padding: 14px !important;
+  display: grid !important;
+  gap: 8px !important;
+  color: rgba(255,255,255,.66) !important;
+  font-weight: 800 !important;
+}
+
+.create-route-coming-soon strong,
+.route-preview-placeholder strong {
+  color: white !important;
+  font-size: 18px !important;
+  letter-spacing: -.035em !important;
+}
+
+.create-route-preview-stats {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+  gap: 8px !important;
+  margin-top: 12px !important;
+}
+
+.create-route-preview-stats span {
+  border-radius: 18px !important;
+  padding: 10px !important;
+  background: rgba(255,255,255,.055) !important;
+  color: rgba(255,255,255,.58) !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+
+.create-route-preview-stats b {
+  display: block !important;
+  color: white !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  margin-bottom: 4px !important;
+}
+
+.route-section-title {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+.route-section-title h2 {
+  margin: 0 !important;
+  font-size: 24px !important;
+  letter-spacing: -.05em !important;
+}
+
+/* Force old/prototype route creation cards to never leak through visually. */
+.route-sport-card,
+.route-method-card,
+.route-method-grid button:not(.route-method-option),
+.create-route-sport-grid:not(.sport-button-list) button:not(.route-sport-button) {
+  max-width: 100% !important;
+}
+
+@media (max-width: 430px) {
+  .create-route-v2-hero,
+  .route-step-hero {
+    margin-left: 12px !important;
+    margin-right: 12px !important;
+  }
+
+  .route-method-premium-head {
+    grid-template-columns: 1fr !important;
+  }
+
+  .route-method-premium-head > button {
+    width: max-content !important;
+  }
+}
+
+/* ===== MAP DRAW CLEANUP V22 ===== */
+.route-draw-fab-toolbar .map-style-trigger,
 .route-map-style-backdrop,
 .route-map-style-sheet,
-.route-draw-fab-toolbar .map-style-trigger {
+.route-map-style-grid,
+.route-map-style-head {
   display: none !important;
+}
+
+.route-draw-fab-toolbar {
+  width: 58px !important;
+  gap: 8px !important;
+}
+
+.route-draw-fab-toolbar button {
+  width: 56px !important;
+  min-height: 56px !important;
+  border-radius: 20px !important;
+}
+
+.route-draw-fab-toolbar button span {
+  display: none !important;
+}
+
+.route-draw-fab-toolbar button b {
+  font-size: 22px !important;
+}
+
+.route-draw-map .leaflet-tile-pane {
+  opacity: 1 !important;
+}
+
+.route-draw-tip {
+  max-width: calc(100vw - 110px) !important;
+  right: 14px !important;
+  left: auto !important;
+  bottom: max(112px, calc(95px + env(safe-area-inset-bottom))) !important;
+  border-radius: 18px !important;
+  padding: 10px 14px !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+}
+
+.route-draw-elevation-mini {
+  bottom: max(96px, calc(78px + env(safe-area-inset-bottom))) !important;
+}
+
+.route-draw-metrics-card {
+  bottom: max(14px, env(safe-area-inset-bottom)) !important;
 }
