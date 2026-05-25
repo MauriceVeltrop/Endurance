@@ -7,18 +7,18 @@ const SCRIPT_ID = "endurance-leaflet-script";
 
 const LAYERS = {
   standard: {
-    label: "Standard",
-    provider: "OpenStreetMap",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    filter: "brightness(1.03) saturate(.92) contrast(.97)",
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
+    label: "Clean",
+    provider: "Carto Voyager",
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    filter: "brightness(1) saturate(.98) contrast(1)",
+    maxZoom: 20,
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
   },
   minimal: {
     label: "Minimal",
     provider: "Carto Positron",
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    filter: "brightness(1.04) saturate(.78) contrast(.98)",
+    filter: "brightness(1) saturate(.92) contrast(1.02)",
     maxZoom: 20,
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
   },
@@ -164,7 +164,8 @@ export default function RouteDrawMap({
   center = [50.887, 6.023],
   title = "Draw route",
   insertMode = false,
-  layer = "minimal",
+  layer = "light",
+  onLayerChange,
   routeMode = "routed",
   currentLocation = null,
   focusCurrentLocation = false,
@@ -273,7 +274,7 @@ export default function RouteDrawMap({
 
       tileRef.current = L.tileLayer(selected.url, {
         maxZoom: selected.maxZoom || 20,
-        attribution: "&copy; OpenStreetMap contributors",
+        attribution: selected.attribution || "&copy; OpenStreetMap contributors",
       }).addTo(mapRef.current);
 
       const tilePane = mapRef.current.getPane("tilePane");

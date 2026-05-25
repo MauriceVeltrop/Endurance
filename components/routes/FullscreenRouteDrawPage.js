@@ -69,23 +69,19 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
 }
 
 
+const MAP_STYLE_OPTIONS = [
+  { id: "standard", name: "Standard", provider: "OpenStreetMap", description: "Clear everyday map with streets and parks.", icon: "🗺️" },
+  { id: "minimal", name: "Minimal", provider: "Carto Positron", description: "Clean light map for running and city routes.", icon: "◻️" },
+  { id: "outdoor", name: "Outdoor", provider: "OpenTopoMap", description: "Terrain, paths and contours for trail and hiking.", icon: "⛰️" },
+  { id: "cycling", name: "Cycling", provider: "CyclOSM", description: "Cycle-friendly map with cycling infrastructure.", icon: "🚴" },
+  { id: "satellite", name: "Satellite", provider: "Esri World Imagery", description: "Aerial view for forests, fields and landmarks.", icon: "🛰️" },
+  { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Low-glare dark map for evening planning.", icon: "🌙" },
+];
 
 function defaultMapStyleForSport(sportId) {
-  const id = String(sportId || "").toLowerCase();
-
-  if (["trail_running", "mountain_biking", "mtb", "hiking", "walking"].includes(id)) {
-    return "outdoor";
-  }
-
-  if (["road_cycling", "cycling", "gravel_cycling", "gravel"].includes(id)) {
-    return "cycling";
-  }
-
-  if (["swimming", "open_water_swimming"].includes(id)) {
-    return "satellite";
-  }
-
-  return "minimal";
+  if (["trail_running", "mountain_biking", "walking", "kayaking"].includes(sportId)) return "outdoor";
+  if (["road_cycling", "gravel_cycling"].includes(sportId)) return "cycling";
+  return "standard";
 }
 
 function safeReadEditDraft() {
@@ -165,7 +161,7 @@ export default function FullscreenRouteDrawPage() {
   const [title, setTitle] = useState("Draw Route");
   const [pointsPayload, setPointsPayload] = useState(null);
   const [drawInsertMode, setDrawInsertMode] = useState(false);
-  const [drawLayer, setDrawLayer] = useState("minimal");
+  const [drawLayer, setDrawLayer] = useState("standard");
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(true);
   const [showPointPanel, setShowPointPanel] = useState(false);
@@ -204,7 +200,10 @@ export default function FullscreenRouteDrawPage() {
         }
 
         setSportId(initialSport);
-        setDrawLayer(defaultMapStyleForSport(initialSport));
+        setDrawLayer((current) => current || defaultMapStyleForSport(initialSport));
+        if (!editDraft?.route_points?.points?.length) {
+          setDrawLayer(defaultMapStyleForSport(initialSport));
+        }
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
@@ -605,6 +604,8 @@ export default function FullscreenRouteDrawPage() {
           <span>Clear</span>
         </button>
       </section>
+
+      {/* Map style picker removed: map style is selected automatically per sport. */}
 
       {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
 
