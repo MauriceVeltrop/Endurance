@@ -4,6 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const CSS_ID = "endurance-leaflet-css";
 const SCRIPT_ID = "endurance-leaflet-script";
+  useEffect(() => {
+    document.documentElement.style.overscrollBehavior = "none";
+    document.body.style.overscrollBehavior = "none";
+    document.body.style.touchAction = "manipulation";
+
+    return () => {
+      document.documentElement.style.overscrollBehavior = "";
+      document.body.style.overscrollBehavior = "";
+      document.body.style.touchAction = "";
+    };
+  }, []);
+
 
 const LAYERS = {
   standard: {
