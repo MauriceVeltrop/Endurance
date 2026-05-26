@@ -26,6 +26,32 @@ function matchesSearch(training, search) {
   return haystack.includes(search.toLowerCase());
 }
 
+function getTrainingReferenceDate(training) {
+  const value =
+    training.final_starts_at ||
+    training.starts_at ||
+    (training.flexible_date
+      ? `${training.flexible_date}T${training.flexible_end_time || training.flexible_start_time || "23:59:59"}`
+      : null);
+
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date;
+}
+
+function isTrainingStillVisible(training, now = Date.now()) {
+  const referenceDate = getTrainingReferenceDate(training);
+
+  // Keep trainings without a date visible so drafts / flexible ideas are not lost.
+  if (!referenceDate) return true;
+
+  const hideAfterMs = 24 * 60 * 60 * 1000;
+  return referenceDate.getTime() >= now - hideAfterMs;
+}
+
 export default function TrainingsPage() {
   const router = useRouter();
   const [trainings, setTrainings] = useState([]);
@@ -76,7 +102,7 @@ export default function TrainingsPage() {
       .order("starts_at", { ascending: true, nullsFirst: false })
       .limit(80);
 
-    const sessionRows = sessions || [];
+    const sessionRows = (sessions || []).filter((session) => isTrainingStillVisible(session));
     setTrainings(sessionRows);
 
     const ids = sessionRows.map((session) => session.id);
