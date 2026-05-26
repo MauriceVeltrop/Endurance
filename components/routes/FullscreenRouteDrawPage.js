@@ -763,6 +763,16 @@ export default function FullscreenRouteDrawPage() {
   }, [routeSignature, sportId]);
 
 
+
+  function dispatchMapControl(action) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("endurance:route-map-control", {
+        detail: { action },
+      })
+    );
+  }
+
   if (checking) {
     return (
       <main className="route-draw-fullscreen">
@@ -860,38 +870,6 @@ export default function FullscreenRouteDrawPage() {
         <span>{metrics.elevation_gain_m ? `${metrics.elevation_gain_m} m+` : "0 m+"}</span>
       </section>
 
-      <section className="route-draw-rail" aria-label="Route drawing tools">
-        <button
-          type="button"
-          onClick={() => setSearchOpen((value) => !value)}
-          aria-label="Search location"
-          className={searchOpen ? "active" : ""}
-        >
-          <b>⌕</b>
-          <span>Search</span>
-        </button>
-        <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
-          <b>◎</b>
-          <span>Locate</span>
-        </button>
-        <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX file">
-          <b>GPX</b>
-          <span>GPX</span>
-        </button>
-        <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close route loop">
-          <b>↻</b>
-          <span>Loop</span>
-        </button>
-        <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo last route point">
-          <b>↶</b>
-          <span>Undo</span>
-        </button>
-        <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear entire route">
-          <b>⌧</b>
-          <span>Clear</span>
-        </button>
-      </section>
-
       <section className="route-draw-bottom-hud" aria-label="Route status and actions">
         <div className="route-draw-hud-metrics">
           <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
@@ -959,6 +937,45 @@ export default function FullscreenRouteDrawPage() {
 
       <section className="route-draw-tip">
         Tap map to add points · tap route line to shape · drag points to reshape
+      </section>
+
+
+      <section className="route-editor-control-layer" aria-label="Route editor controls">
+        <div className="route-editor-left-rail" aria-label="Route tools">
+          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search location">
+            <b>⌕</b>
+          </button>
+          <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
+            <b>◎</b>
+          </button>
+          <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX">
+            <b>GPX</b>
+          </button>
+          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close loop">
+            <b>↻</b>
+          </button>
+          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
+            <b>↶</b>
+          </button>
+          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear route">
+            <b>⌧</b>
+          </button>
+        </div>
+
+        <div className="route-editor-right-rail" aria-label="Map controls">
+          <button type="button" onClick={() => dispatchMapControl("zoom-in")} aria-label="Zoom in">
+            <b>+</b>
+          </button>
+          <button type="button" onClick={() => dispatchMapControl("zoom-out")} aria-label="Zoom out">
+            <b>−</b>
+          </button>
+          <button type="button" onClick={() => dispatchMapControl("fit-route")} disabled={!canContinue} aria-label="Fit route">
+            <b>⌖</b>
+          </button>
+          <button type="button" onClick={() => dispatchMapControl("center-current")} disabled={!currentLocation} aria-label="Center on current location">
+            <b>◎</b>
+          </button>
+        </div>
       </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}

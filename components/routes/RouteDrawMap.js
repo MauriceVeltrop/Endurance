@@ -844,6 +844,65 @@ export default function RouteDrawMap({
     });
   };
 
+
+  useEffect(() => {
+    function handleMapControl(event) {
+      const action = event?.detail?.action;
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (action === "zoom-in") {
+        userOwnsCameraRef.current = true;
+        lastManualFocusRef.current = Date.now();
+        map.zoomIn?.();
+        return;
+      }
+
+      if (action === "zoom-out") {
+        userOwnsCameraRef.current = true;
+        lastManualFocusRef.current = Date.now();
+        map.zoomOut?.();
+        return;
+      }
+
+      if (action === "fit-route") {
+        const source = linePoints.length >= 2 ? linePoints : waypoints;
+        if (source.length < 2) return;
+
+        loadLeaflet().then((L) => {
+          userOwnsCameraRef.current = false;
+          lastManualFocusRef.current = 0;
+          map.fitBounds(L.latLngBounds(source.map((point) => [point.lat, point.lon])), {
+            padding: [72, 72],
+            maxZoom: 16,
+            animate: true,
+          });
+        });
+        return;
+      }
+
+      if (action === "center-current") {
+        const lat = Number(currentLocation?.lat);
+        const lon = Number(currentLocation?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        userOwnsCameraRef.current = true;
+        lastManualFocusRef.current = Date.now();
+        map.flyTo([lat, lon], 16, {
+          animate: true,
+          duration: 0.75,
+        });
+      }
+    }
+
+    window.addEventListener("endurance:route-map-control", handleMapControl);
+
+    return () => {
+      window.removeEventListener("endurance:route-map-control", handleMapControl);
+    };
+  }, [linePoints, waypoints, currentLocation?.lat, currentLocation?.lon]);
+
+
   return (
     <div className="route-draw-map-wrap route-draw-map-wrap-light route-draw-map-immersive">
       <div className="route-draw-map-stage">
