@@ -12,6 +12,27 @@ import TrainingFeedTabs from "../../components/trainings/TrainingFeedTabs";
 import TrainingFilters from "../../components/trainings/TrainingFilters";
 import FlexibleSessionCard from "../../components/trainings/FlexibleSessionCard";
 
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function getTrainingReferenceTime(training) {
+  if (training.final_starts_at) return new Date(training.final_starts_at).getTime();
+  if (training.starts_at) return new Date(training.starts_at).getTime();
+
+  if (training.planning_type === "flexible" && training.flexible_date) {
+    const time = training.flexible_end_time || training.flexible_start_time || "23:59:59";
+    return new Date(`${training.flexible_date}T${time}`).getTime();
+  }
+
+  return null;
+}
+
+function isNotOlderThanOneDay(training, nowMs = Date.now()) {
+  const referenceTime = getTrainingReferenceTime(training);
+  if (!referenceTime || Number.isNaN(referenceTime)) return true;
+  return referenceTime >= nowMs - ONE_DAY_MS;
+}
+
 function matchesSearch(training, search) {
   if (!search) return true;
   const haystack = [
@@ -24,32 +45,6 @@ function matchesSearch(training, search) {
     .toLowerCase();
 
   return haystack.includes(search.toLowerCase());
-}
-
-function getTrainingReferenceDate(training) {
-  const value =
-    training.final_starts_at ||
-    training.starts_at ||
-    (training.flexible_date
-      ? `${training.flexible_date}T${training.flexible_end_time || training.flexible_start_time || "23:59:59"}`
-      : null);
-
-  if (!value) return null;
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date;
-}
-
-function isTrainingStillVisible(training, now = Date.now()) {
-  const referenceDate = getTrainingReferenceDate(training);
-
-  // Keep trainings without a date visible so drafts / flexible ideas are not lost.
-  if (!referenceDate) return true;
-
-  const hideAfterMs = 24 * 60 * 60 * 1000;
-  return referenceDate.getTime() >= now - hideAfterMs;
 }
 
 export default function TrainingsPage() {
@@ -102,7 +97,7 @@ export default function TrainingsPage() {
       .order("starts_at", { ascending: true, nullsFirst: false })
       .limit(80);
 
-    const sessionRows = (sessions || []).filter((session) => isTrainingStillVisible(session));
+    const sessionRows = (sessions || []).filter((session) => isNotOlderThanOneDay(session));
     setTrainings(sessionRows);
 
     const ids = sessionRows.map((session) => session.id);
