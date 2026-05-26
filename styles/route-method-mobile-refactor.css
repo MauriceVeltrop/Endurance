@@ -59,3 +59,79 @@
   font-size: 42px;
   line-height: 0.95;
 }
+
+
+/* =====================================================
+   ENDURANCE FULLSCREEN MAP FOUNDATION
+   Phase 1.3.1
+===================================================== */
+
+.endurance-fullscreen-map-shell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  background: #050505;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+.endurance-fullscreen-map-shell .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #0a0a0a;
+}
+
+.endurance-map-overlay-top {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 14px;
+  right: 14px;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.endurance-map-overlay-top > * {
+  pointer-events: auto;
+}
+
+.endurance-map-overlay-bottom {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 500;
+  pointer-events: none;
+}
+
+.endurance-map-overlay-bottom > * {
+  pointer-events: auto;
+}
+
+.endurance-map-floating-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(18,18,18,.92);
+  backdrop-filter: blur(18px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,.32);
+}
+
+.leaflet-control-container .leaflet-top,
+.leaflet-control-container .leaflet-bottom {
+  z-index: 400;
+}
+
+@media (max-width: 768px) {
+  .leaflet-touch .leaflet-control-zoom a {
+    width: 42px;
+    height: 42px;
+    line-height: 42px;
+    font-size: 20px;
+  }
+}
