@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import AppHeader from "../../components/AppHeader";
@@ -26,6 +27,7 @@ function matchesSearch(training, search) {
 }
 
 export default function TrainingsPage() {
+  const router = useRouter();
   const [trainings, setTrainings] = useState([]);
   const [participantsBySession, setParticipantsBySession] = useState({});
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -38,6 +40,35 @@ export default function TrainingsPage() {
 
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
+
+    if (!user?.id) {
+      setLoading(false);
+      router.replace("/login");
+      return;
+    }
+
+    const { data: profileRow, error: profileError } = await supabase
+      .from("profiles")
+      .select("id,onboarding_completed,blocked")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Profile check failed", profileError);
+    }
+
+    if (profileRow?.blocked) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      router.replace("/login?blocked=1");
+      return;
+    }
+
+    if (!profileRow?.onboarding_completed) {
+      setLoading(false);
+      router.replace("/onboarding");
+      return;
+    }
 
     const { data: sessions } = await supabase
       .from("training_sessions")
