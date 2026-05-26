@@ -772,7 +772,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
   return (
-    <main className="route-draw-fullscreen route-draw-polished">
+    <main className="route-draw-fullscreen route-draw-polished route-draw-immersive">
       <section className="route-draw-topbar">
         <button type="button" className="route-draw-round-btn" onClick={() => router.push("/routes/new")} aria-label="Close draw editor">
           ←
@@ -860,7 +860,7 @@ export default function FullscreenRouteDrawPage() {
         <span>{metrics.elevation_gain_m ? `${metrics.elevation_gain_m} m+` : "0 m+"}</span>
       </section>
 
-      <section className="route-draw-fab-toolbar" aria-label="Route drawing tools">
+      <section className="route-draw-rail" aria-label="Route drawing tools">
         <button
           type="button"
           onClick={() => setSearchOpen((value) => !value)}
@@ -872,15 +872,15 @@ export default function FullscreenRouteDrawPage() {
         </button>
         <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
           <b>◎</b>
-          <span>My location</span>
+          <span>Locate</span>
         </button>
         <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX file">
           <b>GPX</b>
-          <span>Download</span>
+          <span>GPX</span>
         </button>
         <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close route loop">
           <b>↻</b>
-          <span>Close loop</span>
+          <span>Loop</span>
         </button>
         <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo last route point">
           <b>↶</b>
@@ -889,6 +889,36 @@ export default function FullscreenRouteDrawPage() {
         <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear entire route">
           <b>⌧</b>
           <span>Clear</span>
+        </button>
+      </section>
+
+      <section className="route-draw-bottom-hud" aria-label="Route status and actions">
+        <div className="route-draw-hud-metrics">
+          <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
+            <span>Points</span>
+            <b>{points.length}</b>
+          </button>
+          <div>
+            <span>Distance</span>
+            <b>{metrics.distance_km || "0.00"} km</b>
+          </div>
+          <div>
+            <span>Gain</span>
+            <b>{metrics.elevation_gain_m || 0} m+</b>
+          </div>
+          <div>
+            <span>Time</span>
+            <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="route-draw-hud-save"
+          onClick={continueToDetails}
+          disabled={!canContinue}
+        >
+          Save route
         </button>
       </section>
 
@@ -904,24 +934,7 @@ export default function FullscreenRouteDrawPage() {
 
       <ElevationMiniStrip points={activeRoutePayload} />
 
-      <section className="route-draw-metrics-card">
-        <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-          <span>Points</span>
-          <b>{points.length}</b>
-        </button>
-        <div>
-          <span>Distance</span>
-          <b>{metrics.distance_km || "—"} km</b>
-        </div>
-        <div>
-          <span>Elevation</span>
-          <b>{metrics.elevation_gain_m || "—"} m</b>
-        </div>
-        <div>
-          <span>Est. time</span>
-          <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
-        </div>
-      </section>
+
 
       {showPointPanel ? (
         <section className="route-draw-point-panel">
