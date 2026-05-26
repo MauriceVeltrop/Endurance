@@ -484,3 +484,81 @@
     text-overflow: ellipsis;
   }
 }
+
+
+/* FORCE IMMERSIVE CONTROLS */
+
+.route-draw-rail {
+  position: fixed !important;
+  left: 12px !important;
+  top: 160px !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.route-draw-rail button {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(8,10,8,.82) !important;
+  color: #eaff00 !important;
+  display: grid !important;
+  place-items: center !important;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.35);
+}
+
+.route-map-premium-controls {
+  position: fixed !important;
+  right: 12px !important;
+  top: 160px !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.route-map-premium-controls button {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(8,10,8,.82) !important;
+  color: #eaff00 !important;
+  font-size: 22px !important;
+  font-weight: 900 !important;
+}
+
+.route-draw-bottom-hud {
+  position: fixed !important;
+  left: 50% !important;
+  bottom: calc(env(safe-area-inset-bottom) + 14px) !important;
+  transform: translateX(-50%) !important;
+  z-index: 99999 !important;
+}
+
+.route-draw-bottom-pill {
+  padding: 14px 18px !important;
+  border-radius: 999px !important;
+  background: rgba(10,12,10,.82) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  color: white !important;
+  backdrop-filter: blur(18px);
+  display: flex !important;
+  gap: 10px !important;
+  align-items: center !important;
+  box-shadow: 0 16px 40px rgba(0,0,0,.35);
+}
+
+.route-draw-bottom-pill strong {
+  color: white;
+  font-size: 20px;
+}
+
+.route-draw-bottom-pill span {
+  color: #dfff22;
+  font-weight: 800;
+}
