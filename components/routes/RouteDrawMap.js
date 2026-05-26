@@ -907,15 +907,7 @@ export default function RouteDrawMap({
     <div className="route-draw-map-wrap route-draw-map-wrap-light route-draw-map-immersive">
       <div className="route-draw-map-stage">
         <div ref={containerRef} className="route-draw-map endurance-premium-map" style={{ height, minHeight: height }} />
-
-        <div className="route-map-premium-controls route-map-premium-dock" aria-label="Map controls">
-          <button type="button" onClick={zoomIn} aria-label="Zoom in">+</button>
-          <button type="button" onClick={zoomOut} aria-label="Zoom out">−</button>
-          <button type="button" onClick={fitRoute} aria-label="Fit route">⌖</button>
-          <button type="button" onClick={centerOnMe} aria-label="Center on current location" disabled={!currentLocation}>◎</button>
-        </div>
-
-        <div className="route-draw-instruction-chip">
+<div className="route-draw-instruction-chip">
           {insertMode ? "Tap near a segment to insert" : "Tap to add · drag points to shape"}
         </div>
       </div>

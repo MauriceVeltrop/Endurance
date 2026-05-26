@@ -870,34 +870,17 @@ export default function FullscreenRouteDrawPage() {
         <span>{metrics.elevation_gain_m ? `${metrics.elevation_gain_m} m+` : "0 m+"}</span>
       </section>
 
-      <section className="route-draw-bottom-hud" aria-label="Route status and actions">
-        <div className="route-draw-hud-metrics">
-          <button type="button" onClick={() => setShowPointPanel((value) => !value)}>
-            <span>Points</span>
-            <b>{points.length}</b>
-          </button>
+      <section className="route-draw-bottom-hud route-draw-bottom-hud-compact" aria-label="Route status">
+        <div className="route-draw-hud-metrics route-draw-hud-metrics-compact">
           <div>
             <span>Distance</span>
             <b>{metrics.distance_km || "0.00"} km</b>
           </div>
           <div>
-            <span>Gain</span>
+            <span>Elevation</span>
             <b>{metrics.elevation_gain_m || 0} m+</b>
           </div>
-          <div>
-            <span>Time</span>
-            <b>{estimateTimeText(metrics.distance_km, sportId)}</b>
-          </div>
         </div>
-
-        <button
-          type="button"
-          className="route-draw-hud-save"
-          onClick={continueToDetails}
-          disabled={!canContinue}
-        >
-          Save route
-        </button>
       </section>
 
       {/* Map style picker removed: map style is selected automatically per sport. */}
@@ -942,14 +925,11 @@ export default function FullscreenRouteDrawPage() {
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
         <div className="route-editor-left-rail" aria-label="Route tools">
+          <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
+            <b>⌖</b>
+          </button>
           <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search location">
             <b>⌕</b>
-          </button>
-          <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
-            <b>◎</b>
-          </button>
-          <button type="button" onClick={downloadGpx} disabled={!canContinue} aria-label="Download GPX">
-            <b>GPX</b>
           </button>
           <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close loop">
             <b>↻</b>
@@ -961,22 +941,7 @@ export default function FullscreenRouteDrawPage() {
             <b>⌧</b>
           </button>
         </div>
-
-        <div className="route-editor-right-rail" aria-label="Map controls">
-          <button type="button" onClick={() => dispatchMapControl("zoom-in")} aria-label="Zoom in">
-            <b>+</b>
-          </button>
-          <button type="button" onClick={() => dispatchMapControl("zoom-out")} aria-label="Zoom out">
-            <b>−</b>
-          </button>
-          <button type="button" onClick={() => dispatchMapControl("fit-route")} disabled={!canContinue} aria-label="Fit route">
-            <b>⌖</b>
-          </button>
-          <button type="button" onClick={() => dispatchMapControl("center-current")} disabled={!currentLocation} aria-label="Center on current location">
-            <b>◎</b>
-          </button>
-        </div>
-      </section>
+</section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
     </main>
