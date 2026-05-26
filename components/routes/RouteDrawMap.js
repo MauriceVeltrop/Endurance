@@ -442,8 +442,8 @@ export default function RouteDrawMap({
       if (routeLatLngs.length >= 2) {
         L.polyline(routeLatLngs, {
           color: "#031006",
-          weight: routeMode === "routed" ? 9 : 7,
-          opacity: 0.42,
+          weight: routeMode === "routed" ? 7 : 5.5,
+          opacity: 0.58,
           lineJoin: "round",
           lineCap: "round",
           interactive: false,
@@ -451,8 +451,8 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 6 : 4,
-          opacity: 0.24,
+          weight: routeMode === "routed" ? 4.2 : 3,
+          opacity: 0.14,
           lineJoin: "round",
           lineCap: "round",
           interactive: false,
@@ -468,7 +468,7 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 3.5 : 2.75,
+          weight: routeMode === "routed" ? 2.7 : 2.1,
           opacity: 1,
           lineJoin: "round",
           lineCap: "round",
@@ -477,8 +477,8 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#ffffff",
-          weight: 1.15,
-          opacity: routeMode === "routed" ? 0.62 : 0.35,
+          weight: 0.9,
+          opacity: routeMode === "routed" ? 0.45 : 0.25,
           lineJoin: "round",
           lineCap: "round",
           interactive: false,
@@ -612,9 +612,9 @@ export default function RouteDrawMap({
             : isFinish
               ? "route-draw-marker route-draw-marker-finish"
               : "route-draw-marker",
-          html: `<span>${isStart ? "▶" : isFinish ? "⚑" : index + 1}</span>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          html: `<span>${isStart ? "▶" : isFinish ? "■" : ""}</span>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
         });
 
         L.marker([point.lat, point.lon], {
@@ -779,8 +779,8 @@ export default function RouteDrawMap({
         icon: L.divIcon({
           className: "route-current-location-marker",
           html: "<span></span>",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
         }),
         interactive: false,
       }).addTo(layer);
