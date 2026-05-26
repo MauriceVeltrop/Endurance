@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import { getCurrentSession } from "../../lib/authFlow";
+import { getCurrentSession, getProfile, getNextAuthPath } from "../../lib/authFlow";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +23,8 @@ export default function LoginPage() {
         if (!mounted) return;
 
         if (session?.user?.id) {
-          router.replace("/trainings");
+          const profile = await getProfile(session.user.id);
+          router.replace(getNextAuthPath(profile));
           return;
         }
 
@@ -53,23 +54,30 @@ export default function LoginPage() {
       setLoading(true);
 
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         });
         if (error) throw error;
+
+        if (data?.session?.user?.id) {
+          router.replace("/onboarding");
+          return;
+        }
+
         setMessage("Account created. Check your email if confirmation is enabled, then sign in.");
         setMode("signin");
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
       if (error) throw error;
 
-      router.replace("/trainings");
+      const profile = await getProfile(data?.user?.id);
+      router.replace(getNextAuthPath(profile));
     } catch (error) {
       console.error("Auth error", error);
       setMessage(error?.message || "Authentication failed.");
