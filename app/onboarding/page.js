@@ -202,6 +202,7 @@ export default function OnboardingPage() {
     if (!form.last_name.trim()) return setMessage("Last name is required.");
     if (!form.email.trim()) return setMessage("Email address is required.");
     if (!form.avatar_url.trim()) return setMessage("Profile photo is required.");
+    if (!form.location.trim()) return setMessage("City / region is required.");
     if (!form.sports.length) return setMessage("Choose at least one preferred sport.");
 
     try {
@@ -218,7 +219,7 @@ export default function OnboardingPage() {
         name: fullName,
         email: form.email.trim(),
         avatar_url: form.avatar_url.trim(),
-        location: form.location.trim() || null,
+        location: form.location.trim(),
         birth_date: form.birth_date || null,
         role: currentRole || "user",
         onboarding_completed: true,
@@ -353,11 +354,12 @@ export default function OnboardingPage() {
             </div>
 
             <label style={styles.label}>
-              City / region
+              City / region *
               <input
                 value={form.location}
                 onChange={(event) => update("location", event.target.value)}
                 placeholder="Landgraaf"
+                required
                 style={styles.input}
               />
             </label>
