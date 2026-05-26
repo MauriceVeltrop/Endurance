@@ -562,3 +562,96 @@
   color: #dfff22;
   font-weight: 800;
 }
+
+
+/* =====================================================
+   DEDICATED ROUTE EDITOR CONTROL LAYER
+   Controls are rendered outside Leaflet to avoid clipping.
+===================================================== */
+
+.route-editor-control-layer {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483000 !important;
+  pointer-events: none !important;
+}
+
+.route-editor-left-rail,
+.route-editor-right-rail {
+  position: fixed !important;
+  top: 160px !important;
+  z-index: 2147483001 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  pointer-events: auto !important;
+}
+
+.route-editor-left-rail {
+  left: 12px !important;
+}
+
+.route-editor-right-rail {
+  right: 12px !important;
+}
+
+.route-editor-left-rail button,
+.route-editor-right-rail button {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+  background: rgba(8,10,8,.84) !important;
+  color: #eaff00 !important;
+  display: grid !important;
+  place-items: center !important;
+  box-shadow: 0 14px 32px rgba(0,0,0,.38) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.route-editor-left-rail button b,
+.route-editor-right-rail button b {
+  font-size: 18px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+}
+
+.route-editor-left-rail button.active {
+  border-color: rgba(230,255,0,.45) !important;
+  box-shadow:
+    0 0 0 3px rgba(230,255,0,.12),
+    0 14px 32px rgba(0,0,0,.38) !important;
+}
+
+.route-editor-left-rail button:disabled,
+.route-editor-right-rail button:disabled {
+  opacity: .38 !important;
+}
+
+.route-draw-map-immersive .route-map-premium-controls {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .route-editor-left-rail,
+  .route-editor-right-rail {
+    top: 154px !important;
+    gap: 9px !important;
+  }
+
+  .route-editor-left-rail button,
+  .route-editor-right-rail button {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 17px !important;
+  }
+
+  .route-editor-left-rail {
+    left: 10px !important;
+  }
+
+  .route-editor-right-rail {
+    right: 10px !important;
+  }
+}
