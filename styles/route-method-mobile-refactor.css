@@ -62,76 +62,111 @@
 
 
 /* =====================================================
-   ENDURANCE FULLSCREEN MAP FOUNDATION
-   Phase 1.3.1
+   ENDURANCE DRAW ROUTE STABILIZATION
+   Phase 1.3.2
 ===================================================== */
 
-.endurance-fullscreen-map-shell {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100dvh;
-  background: #050505;
+.route-draw-map-stable {
+  position: relative;
+}
+
+.route-draw-map-stage {
+  position: relative;
   overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: pan-x pan-y pinch-zoom;
+  border-radius: 28px;
+  background: #050705;
+  isolation: isolate;
 }
 
-.endurance-fullscreen-map-shell .leaflet-container {
-  width: 100%;
-  height: 100%;
-  background: #0a0a0a;
+.route-draw-map-stage .route-draw-map {
+  border-radius: inherit;
 }
 
-.endurance-map-overlay-top {
+.route-map-premium-controls {
   position: absolute;
-  top: max(14px, env(safe-area-inset-top));
-  left: 14px;
-  right: 14px;
-  z-index: 500;
-  pointer-events: none;
-}
-
-.endurance-map-overlay-top > * {
+  right: 12px;
+  top: 72px;
+  z-index: 520;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   pointer-events: auto;
 }
 
-.endurance-map-overlay-bottom {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: max(14px, env(safe-area-inset-bottom));
-  z-index: 500;
-  pointer-events: none;
+.route-map-premium-controls button {
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(8,10,8,.86);
+  color: #f4ff45;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 28px rgba(0,0,0,.34);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.endurance-map-overlay-bottom > * {
-  pointer-events: auto;
+.route-map-premium-controls button:disabled {
+  opacity: .34;
 }
 
-.endurance-map-floating-btn {
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(18,18,18,.92);
-  backdrop-filter: blur(18px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 30px rgba(0,0,0,.32);
+.route-draw-marker {
+  transform: scale(.92);
 }
 
-.leaflet-control-container .leaflet-top,
-.leaflet-control-container .leaflet-bottom {
-  z-index: 400;
+.route-draw-marker span {
+  min-width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.route-draw-marker-finish span {
+  padding: 0 8px;
+  min-width: 44px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.route-shape-handle-visible {
+  opacity: .86;
+}
+
+.route-shape-handle-visible span {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 5px rgba(228,239,22,.14);
+}
+
+.route-dynamic-shape-handle em {
+  font-size: 10px;
+  padding: 5px 8px;
 }
 
 @media (max-width: 768px) {
-  .leaflet-touch .leaflet-control-zoom a {
-    width: 42px;
-    height: 42px;
-    line-height: 42px;
-    font-size: 20px;
+  .route-map-premium-controls {
+    top: 64px;
+    right: 10px;
+    gap: 7px;
+  }
+
+  .route-map-premium-controls button {
+    width: 40px;
+    height: 40px;
+    border-radius: 15px;
+  }
+
+  .route-draw-map-toolbar {
+    padding-right: 60px;
+  }
+
+  .route-draw-map-toolbar small {
+    max-width: calc(100vw - 150px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
