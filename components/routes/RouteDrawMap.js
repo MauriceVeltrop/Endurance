@@ -295,7 +295,7 @@ export default function RouteDrawMap({
 
         if (!mapRef.current) {
           mapRef.current = L.map(containerRef.current, {
-            zoomControl: false,
+            zoomControl: true,
             attributionControl: false,
             scrollWheelZoom: false,
             doubleClickZoom: true,
@@ -442,7 +442,7 @@ export default function RouteDrawMap({
       if (routeLatLngs.length >= 2) {
         L.polyline(routeLatLngs, {
           color: "#031006",
-          weight: routeMode === "routed" ? 9 : 7,
+          weight: routeMode === "routed" ? 11 : 9,
           opacity: 0.42,
           lineJoin: "round",
           lineCap: "round",
@@ -451,7 +451,7 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 6 : 4,
+          weight: routeMode === "routed" ? 8 : 6,
           opacity: 0.24,
           lineJoin: "round",
           lineCap: "round",
@@ -468,7 +468,7 @@ export default function RouteDrawMap({
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
-          weight: routeMode === "routed" ? 3.5 : 2.75,
+          weight: routeMode === "routed" ? 4 : 3,
           opacity: 1,
           lineJoin: "round",
           lineCap: "round",
@@ -613,8 +613,8 @@ export default function RouteDrawMap({
               ? "route-draw-marker route-draw-marker-finish"
               : "route-draw-marker",
           html: `<span>${isStart ? "▶" : isFinish ? "⚑" : index + 1}</span>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         });
 
         L.marker([point.lat, point.lon], {
@@ -779,8 +779,8 @@ export default function RouteDrawMap({
         icon: L.divIcon({
           className: "route-current-location-marker",
           html: "<span></span>",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         }),
         interactive: false,
       }).addTo(layer);
@@ -804,63 +804,15 @@ export default function RouteDrawMap({
     };
   }, [currentLocation, focusCurrentLocation, linePoints.length]);
 
-  const zoomIn = () => {
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current?.zoomIn?.();
-  };
-
-  const zoomOut = () => {
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current?.zoomOut?.();
-  };
-
-  const fitRoute = async () => {
-    const L = await loadLeaflet();
-    const map = mapRef.current;
-    const source = linePoints.length >= 2 ? linePoints : waypoints;
-    if (!map || source.length < 2) return;
-
-    userOwnsCameraRef.current = false;
-    lastManualFocusRef.current = 0;
-    map.fitBounds(L.latLngBounds(source.map((point) => [point.lat, point.lon])), {
-      padding: [52, 52],
-      maxZoom: 15,
-      animate: true,
-    });
-  };
-
-  const centerOnMe = () => {
-    const lat = Number(currentLocation?.lat);
-    const lon = Number(currentLocation?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !mapRef.current) return;
-
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current.flyTo([lat, lon], 16, {
-      animate: true,
-      duration: 0.75,
-    });
-  };
-
   return (
-    <div className="route-draw-map-wrap route-draw-map-wrap-light route-draw-map-stable">
+    <div className="route-draw-map-wrap route-draw-map-wrap-light">
       <div className="route-draw-map-toolbar">
         <span>{title}</span>
         <small>{insertMode ? "Insert mode · tap near a segment" : "Drag white handles to shape the route"}</small>
       </div>
 
-      <div className="route-draw-map-stage">
-        <div ref={containerRef} className="route-draw-map" style={{ height, minHeight: height }} />
+      <div ref={containerRef} className="route-draw-map endurance-premium-map" style={{ height, minHeight: height }} />
 
-        <div className="route-map-premium-controls" aria-label="Map controls">
-          <button type="button" onClick={zoomIn} aria-label="Zoom in">+</button>
-          <button type="button" onClick={zoomOut} aria-label="Zoom out">−</button>
-          <button type="button" onClick={fitRoute} aria-label="Fit route">⌖</button>
-          <button type="button" onClick={centerOnMe} aria-label="Center on current location" disabled={!currentLocation}>◎</button>
-        </div>
-      </div>
 
       {error ? <div className="route-draw-error">{error}</div> : null}
     </div>
