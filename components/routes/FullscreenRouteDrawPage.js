@@ -866,19 +866,21 @@ export default function FullscreenRouteDrawPage() {
         onTargetLocationHandled={() => setTargetLocation(null)}
       />
 
-
-      <section className="route-draw-bottom-hud route-draw-bottom-hud-compact" aria-label="Route status">
-        <div className="route-draw-hud-metrics route-draw-hud-metrics-compact">
+      <section className="route-draw-bottom-hud route-draw-bottom-hud-final route-draw-bottom-hud-compact" aria-label="Route metrics">
+        <div className="route-draw-hud-metrics route-draw-hud-metrics-final">
           <div>
+            <i className="route-hud-icon route-hud-distance" aria-hidden="true"></i>
             <span>Distance</span>
             <b>{metrics.distance_km || "0.00"} km</b>
           </div>
           <div>
+            <i className="route-hud-icon route-hud-elevation" aria-hidden="true"></i>
             <span>Elevation</span>
             <b>{metrics.elevation_gain_m || 0} m+</b>
           </div>
         </div>
       </section>
+
 
       {/* Map style picker removed: map style is selected automatically per sport. */}
 
@@ -931,14 +933,27 @@ export default function FullscreenRouteDrawPage() {
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
 
-        <div className="route-editor-left-rail route-editor-left-rail-labeled route-editor-left-rail-slim" aria-label="Route tools">
-          <button type="button" onClick={useCurrentLocation} aria-label="Current Location"><b>⌖</b><span>Current<br />Location</span></button>
-          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search"><b>⌕</b><span>Search</span></button>
-          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop"><b>◌</b><span>Loop</span></button>
-          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo"><b>↶</b><span>Undo</span></button>
-          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear"><b className="route-tool-danger">⌫</b><span>Clear</span></button>
-          <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile"><b>△</b><span>Elevation</span></button>
+        <div className="route-editor-left-rail route-editor-left-rail-labeled route-editor-left-rail-compact" aria-label="Route tools">
+          <button type="button" onClick={useCurrentLocation} aria-label="Current Location">
+            <b>⌖</b><span>Current<br />Location</span>
+          </button>
+          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search">
+            <b>⌕</b><span>Search</span>
+          </button>
+          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop">
+            <b>◌</b><span>Loop</span>
+          </button>
+          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
+            <b>↶</b><span>Undo</span>
+          </button>
+          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
+            <b className="route-tool-danger">⌫</b><span>Clear</span>
+          </button>
+          <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile">
+            <b>△</b><span>Elevation</span>
+          </button>
         </div>
+
 
 </section>
 
