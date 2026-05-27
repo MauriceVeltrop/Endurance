@@ -865,10 +865,6 @@ export default function FullscreenRouteDrawPage() {
         onTargetLocationHandled={() => setTargetLocation(null)}
       />
 
-      <section className="route-draw-distance-pill" aria-label="Current route distance">
-        <strong>{metrics.distance_km || "0.00"} km</strong>
-        <span>{metrics.elevation_gain_m ? `${metrics.elevation_gain_m} m+` : "0 m+"}</span>
-      </section>
 
       <section className="route-draw-bottom-hud route-draw-bottom-hud-compact" aria-label="Route status">
         <div className="route-draw-hud-metrics route-draw-hud-metrics-compact">
@@ -924,23 +920,25 @@ export default function FullscreenRouteDrawPage() {
 
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
-        <div className="route-editor-left-rail" aria-label="Route tools">
-          <button type="button" onClick={useCurrentLocation} aria-label="Center on my location">
-            <b>⌖</b>
+
+        <div className="route-editor-left-rail route-editor-left-rail-labeled" aria-label="Route tools">
+          <button type="button" onClick={useCurrentLocation} aria-label="Current Location">
+            <b>⌖</b><span>Current<br />Location</span>
           </button>
-          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search location">
-            <b>⌕</b>
+          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search">
+            <b>⌕</b><span>Search</span>
           </button>
-          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Close loop">
-            <b>↻</b>
+          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop">
+            <b>◌</b><span>Loop</span>
           </button>
           <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
-            <b>↶</b>
+            <b>↶</b><span>Undo</span>
           </button>
-          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear route">
-            <b>⌧</b>
+          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
+            <b className="route-tool-danger">⌫</b><span>Clear</span>
           </button>
         </div>
+
 </section>
 
       {message ? <section className="route-draw-toast">{message}</section> : null}
