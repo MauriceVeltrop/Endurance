@@ -291,6 +291,7 @@ export default function FullscreenRouteDrawPage() {
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(true);
   const [showPointPanel, setShowPointPanel] = useState(false);
+  const [showElevationPanel, setShowElevationPanel] = useState(false);
   const [routedPayload, setRoutedPayload] = useState(null);
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
@@ -889,7 +890,16 @@ export default function FullscreenRouteDrawPage() {
         </section>
       ) : null}
 
-      <ElevationMiniStrip points={activeRoutePayload} />
+      {showElevationPanel ? (
+        <section className="route-elevation-panel-expanded" aria-label="Elevation profile">
+          <div className="route-elevation-panel-header">
+            <span>△</span>
+            <strong>Elevation profile</strong>
+            <button type="button" onClick={() => setShowElevationPanel(false)} aria-label="Close elevation profile">⌃</button>
+          </div>
+          <ElevationMiniStrip points={activeRoutePayload} />
+        </section>
+      ) : null}
 
 
 
@@ -921,22 +931,13 @@ export default function FullscreenRouteDrawPage() {
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
 
-        <div className="route-editor-left-rail route-editor-left-rail-labeled" aria-label="Route tools">
-          <button type="button" onClick={useCurrentLocation} aria-label="Current Location">
-            <b>⌖</b><span>Current<br />Location</span>
-          </button>
-          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search">
-            <b>⌕</b><span>Search</span>
-          </button>
-          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop">
-            <b>◌</b><span>Loop</span>
-          </button>
-          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
-            <b>↶</b><span>Undo</span>
-          </button>
-          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
-            <b className="route-tool-danger">⌫</b><span>Clear</span>
-          </button>
+        <div className="route-editor-left-rail route-editor-left-rail-labeled route-editor-left-rail-slim" aria-label="Route tools">
+          <button type="button" onClick={useCurrentLocation} aria-label="Current Location"><b>⌖</b><span>Current<br />Location</span></button>
+          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search"><b>⌕</b><span>Search</span></button>
+          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop"><b>◌</b><span>Loop</span></button>
+          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo"><b>↶</b><span>Undo</span></button>
+          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear"><b className="route-tool-danger">⌫</b><span>Clear</span></button>
+          <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile"><b>△</b><span>Elevation</span></button>
         </div>
 
 </section>
