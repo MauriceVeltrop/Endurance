@@ -248,7 +248,9 @@ export default function AdminPage() {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
 
-        if (!token) throw new Error("No active session.");
+        if (!token) {
+          throw new Error("No active admin session.");
+        }
 
         const response = await fetch("/api/admin/create-user", {
           method: "POST",
@@ -265,31 +267,18 @@ export default function AdminPage() {
           }),
         });
 
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          const stage = payload?.debug?.stage ? ` Stage: ${payload.debug.stage}.` : "";
-          const claim = payload?.debug?.env?.service_role_claim
-            ? ` Service key role: ${payload.debug.env.service_role_claim}.`
-            : "";
-          const keyRef = payload?.debug?.env?.service_key_ref
-            ? ` Key ref: ${payload.debug.env.service_key_ref}.`
-            : "";
-          const keyType = payload?.debug?.env?.service_key_type
-            ? ` Key type: ${payload.debug.env.service_key_type}.`
-            : "";
-          const expectedRef = payload?.debug?.env?.expected_project_ref
-            ? ` URL ref: ${payload.debug.env.expected_project_ref}.`
-            : "";
-          throw new Error(`${payload?.error || "Could not create user."}${stage}${claim}${keyRef}${keyType}${expectedRef}`);
+          throw new Error(payload?.error || payload?.message || "Could not create user.");
         }
 
         setLastCreated({
           email,
           temporary_password: temporaryPassword,
-          role,
         });
-        setMessage(`User created for ${firstName} ${lastName}. Share the temporary password discreetly.`);
+
+        setMessage(`User created for ${firstName} ${lastName}.`);
       } else {
         const { error } = await supabase
           .from("admin_user_invites")
@@ -1165,11 +1154,6 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))",
     gap: 8,
     alignItems: "center",
-    display: "grid",
-    gridTemplateColumns: "minmax(120px, 1fr) minmax(120px, 1fr)",
-    gap: 10,
-    width: "100%",
-    minWidth: 0,
   },
   statusPill: {
     minHeight: 38,
@@ -1205,14 +1189,7 @@ const styles = {
     padding: "0 10px",
     fontWeight: 900,
   },
-    userActionButtons: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 8,
-    width: "100%",
-    minWidth: 0,
-  },
-blockButton: {
+  blockButton: {
     minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(255,90,90,0.22)",
