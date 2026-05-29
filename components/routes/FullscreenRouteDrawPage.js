@@ -865,9 +865,14 @@ export default function FullscreenRouteDrawPage() {
           ←
         </button>
 
-        <div className="route-draw-title-block">
-          <span>{getSportLabel(sportId)}</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+        <div className="route-draw-title-block route-draw-title-block-single">
+          <input
+            value={title}
+            onChange={(event) => {
+              setTitleEditedManually?.(true);
+              setTitle(event.target.value);
+            }}
+          />
         </div>
 
         <button
