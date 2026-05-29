@@ -190,15 +190,15 @@ export default function TrainingsPage() {
     : ["running", "road_cycling", "mountain_biking"];
 
   return (
-    <main className="endurance-page training-feed-redesign">
+    <main className="endurance-page training-feed-redesign training-feed-compact-final">
       <AppHeader active="trainings" />
 
       <section className="endurance-shell training-dashboard">
         <div className="training-dashboard-top">
           <div>
-            <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)} 👋</p>
+            <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)}</p>
             <p className="training-subline">
-              <strong>{matchingSessions}</strong> matching sessions near you
+              <strong>{matchingSessions}</strong> matching session{matchingSessions === 1 ? "" : "s"} near you
             </p>
           </div>
 
@@ -301,10 +301,6 @@ export default function TrainingsPage() {
           </div>
         )}
       </section>
-
-      <Link href="/trainings/new" className="floating-create-training" aria-label="Create training">
-        +
-      </Link>
 
       <BottomNav unreadCount={unreadCount} />
     </main>
