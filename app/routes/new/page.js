@@ -234,6 +234,29 @@ function buildEditableRouteDraft(form, profileId) {
   };
 }
 
+function cleanRouteLocationName(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "Startlocatie";
+
+  return raw
+    .replace(/,\s*(Netherlands|Nederland)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim() || "Startlocatie";
+}
+
+function formatRouteDistanceLabel(value) {
+  const distance = Number(value);
+
+  if (!Number.isFinite(distance) || distance <= 0) return "0.0 km";
+
+  return `${distance.toFixed(1)} km`;
+}
+
+function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
+  return `${cleanRouteLocationName(startLocation)} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+}
+
 export default function NewRoutePage() {
   const router = useRouter();
 
@@ -311,6 +334,7 @@ export default function NewRoutePage() {
         points: safePoints,
         point_count: safePoints.length,
         routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
+        start_location: draft.start_location || rawRoutePoints?.start_location || rawRoutePoints?.startLocation || "Startlocatie",
       };
 
       if (!safePoints.length) {
@@ -321,7 +345,11 @@ export default function NewRoutePage() {
         ...current,
         sport_id: draft.sport_id || current.sport_id,
         method: "draw",
-        title: draft.title || current.title || `${getSportLabel(draft.sport_id)} Route`,
+        title: buildAutomaticRouteTitle({
+          startLocation: draft.start_location || rawRoutePoints?.start_location || rawRoutePoints?.startLocation || "Startlocatie",
+          distanceKm: draft.distance_km || rawRoutePoints?.distance_km || calculateRouteMetrics(safePoints).distance_km,
+          sportId: draft.sport_id || current.sport_id,
+        }),
         description: draft.description || current.description,
         distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
         elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
