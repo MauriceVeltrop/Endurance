@@ -6408,3 +6408,58 @@ main {
     min-height: 41px !important;
   }
 }
+
+
+/* =====================================================
+   ROUTE TOPBAR TITLE FIX
+   - no duplicated sport eyebrow
+   - full title visible
+   - smaller title text
+===================================================== */
+
+.route-draw-title-block-single,
+.route-draw-title-block {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+.route-draw-title-block-single span,
+.route-draw-title-block > span {
+  display: none !important;
+}
+
+.route-draw-title-block-single input,
+.route-draw-title-block input {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: block !important;
+  font-size: clamp(18px, 4.3vw, 27px) !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.045em !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.route-draw-immersive .route-draw-topbar {
+  grid-template-columns: 54px minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+}
+
+@media (max-width: 760px) {
+  .route-draw-title-block-single input,
+  .route-draw-title-block input {
+    font-size: clamp(16px, 3.95vw, 22px) !important;
+    letter-spacing: -0.055em !important;
+  }
+
+  .route-draw-immersive .route-draw-topbar {
+    grid-template-columns: 50px minmax(0, 1fr) auto !important;
+    gap: 10px !important;
+  }
+
+  .route-draw-immersive .route-draw-save-btn {
+    padding-inline: 16px !important;
+    font-size: 14px !important;
+  }
+}
