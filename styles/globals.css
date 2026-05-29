@@ -7299,3 +7299,126 @@ main {
     font-size: 12px !important;
   }
 }
+
+
+/* =====================================================
+   TRAINING FEED FINAL CARD TWEAKS
+   - clickable location
+   - lower image / less tall feed cards
+   - title max 2 lines
+===================================================== */
+
+.training-location-link {
+  color: rgba(255,255,255,.74) !important;
+  text-decoration: none !important;
+  font-weight: 850 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.training-location-link:hover,
+.training-location-link:focus-visible {
+  color: var(--endurance-lime) !important;
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+}
+
+.training-card-title,
+.visual-training-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-height: 2.15em !important;
+}
+
+.training-feed-compact-final .compact-training-card,
+.compact-training-card {
+  min-height: 124px !important;
+}
+
+.training-feed-compact-final .compact-training-media,
+.compact-training-media {
+  min-height: 124px !important;
+  height: 124px !important;
+}
+
+.training-feed-compact-final .compact-training-body,
+.compact-training-body {
+  padding: 9px 11px !important;
+  gap: 4px !important;
+}
+
+.training-feed-compact-final .visual-training-title,
+.compact-training-card .visual-training-title,
+.compact-training-card .training-card-title {
+  font-size: clamp(16px, 4.2vw, 20px) !important;
+  line-height: 1.04 !important;
+}
+
+.training-feed-compact-final .visual-distance-line,
+.compact-training-card .visual-distance-line {
+  font-size: 13.5px !important;
+  line-height: 1.1 !important;
+}
+
+.training-feed-compact-final .compact-training-meta,
+.compact-training-meta {
+  font-size: 10.8px !important;
+  gap: 2px !important;
+  line-height: 1.15 !important;
+}
+
+.training-feed-compact-final .visual-status,
+.compact-training-card .visual-status {
+  padding: 3px 7px !important;
+  font-size: 10px !important;
+}
+
+.training-feed-compact-final .visual-sport-icon,
+.compact-training-card .visual-sport-icon {
+  font-size: 17px !important;
+}
+
+.training-feed-compact-final .compact-join-button,
+.compact-training-card .compact-join-button {
+  min-width: 58px !important;
+  min-height: 32px !important;
+  padding-inline: 10px !important;
+  font-size: 12px !important;
+}
+
+.training-feed-compact-final .media-sport-label,
+.compact-training-card .media-sport-label {
+  left: 8px !important;
+  bottom: 8px !important;
+  padding: 4px 7px !important;
+  font-size: 8.8px !important;
+}
+
+@media (max-width: 390px) {
+  .training-feed-compact-final .compact-training-card,
+  .compact-training-card {
+    min-height: 116px !important;
+  }
+
+  .training-feed-compact-final .compact-training-media,
+  .compact-training-media {
+    min-height: 116px !important;
+    height: 116px !important;
+  }
+
+  .training-feed-compact-final .visual-training-title,
+  .compact-training-card .visual-training-title,
+  .compact-training-card .training-card-title {
+    font-size: 15.5px !important;
+  }
+
+  .training-feed-compact-final .compact-training-meta,
+  .compact-training-meta {
+    font-size: 10px !important;
+  }
+}
