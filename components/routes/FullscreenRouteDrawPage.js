@@ -610,6 +610,7 @@ export default function FullscreenRouteDrawPage() {
       setRoutingError("");
     } catch (error) {
       console.error("Local segment rerouting failed", error);
+
       setRoutingStatus("error");
       setRoutingError(error?.message || "Local rerouting failed.");
     }
@@ -735,6 +736,7 @@ export default function FullscreenRouteDrawPage() {
       }
     } catch (error) {
       console.error("Routing failed", error);
+
       setRoutingStatus("error");
       setRoutingError(error?.message || "Routing failed.");
     }
