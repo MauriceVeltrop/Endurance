@@ -111,7 +111,17 @@ export default function TrainingCard({ training, participants = [] }) {
         ) : null}
 
         <div className="training-card-meta visual-training-meta compact-training-meta">
-          {training.start_location && <span>⌖ {training.start_location}</span>}
+          {training.start_location && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(training.start_location)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="training-location-link"
+              onClick={(event) => event.stopPropagation()}
+            >
+              ⌖ {training.start_location}
+            </a>
+          )}
           <span>◷ {formatDate(training)}{participants.length ? ` • ${participants.length}${training.max_participants ? ` / ${training.max_participants}` : ""} deelnemers` : ""}</span>
         </div>
 
