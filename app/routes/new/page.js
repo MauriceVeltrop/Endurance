@@ -257,7 +257,13 @@ function pickPlaceNameFromLabel(value) {
 }
 
 function cleanRouteLocationName(value) {
-  return pickPlaceNameFromLabel(value) || "Locatie bepalen";
+  const place = pickPlaceNameFromLabel(value);
+
+  if (!place || /^(locatie bepalen|startlocatie|current location)$/i.test(place)) {
+    return "";
+  }
+
+  return place;
 }
 
 function formatRouteDistanceLabel(value) {
@@ -269,7 +275,9 @@ function formatRouteDistanceLabel(value) {
 }
 
 function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
-  return `${cleanRouteLocationName(startLocation)} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+  const location = cleanRouteLocationName(startLocation) || "Locatie bepalen";
+
+  return `${location} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
 }
 
 export default function NewRoutePage() {
