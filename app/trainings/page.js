@@ -11,6 +11,7 @@ import TrainingCard from "../../components/trainings/TrainingCard";
 import TrainingFeedTabs from "../../components/trainings/TrainingFeedTabs";
 import TrainingFilters from "../../components/trainings/TrainingFilters";
 import FlexibleSessionCard from "../../components/trainings/FlexibleSessionCard";
+import { sportOptions } from "../../lib/sportsConfig";
 
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,6 +48,33 @@ function matchesSearch(training, search) {
   return haystack.includes(search.toLowerCase());
 }
 
+
+function firstNameFromProfile(profile) {
+  return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice";
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function sportLabelFromId(sportId) {
+  return sportOptions.find((sport) => sport.id === sportId)?.label || String(sportId || "").replaceAll("_", " ");
+}
+
+function sportIconFromId(sportId) {
+  if (sportId === "running") return "🏃";
+  if (sportId === "trail_running") return "△";
+  if (sportId === "road_cycling" || sportId === "gravel_cycling") return "🚴";
+  if (sportId === "mountain_biking") return "🚵";
+  if (sportId === "walking") return "🚶";
+  if (sportId === "strength_training") return "🏋";
+  return "✦";
+}
+
+
 export default function TrainingsPage() {
   const router = useRouter();
   const [trainings, setTrainings] = useState([]);
@@ -54,6 +82,8 @@ export default function TrainingsPage() {
   const [activeTab, setActiveTab] = useState("upcoming");
   const [search, setSearch] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [profile, setProfile] = useState(null);
+  const [preferredSports, setPreferredSports] = useState([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -70,13 +100,15 @@ export default function TrainingsPage() {
 
     const { data: profileRow, error: profileError } = await supabase
       .from("profiles")
-      .select("id,onboarding_completed,blocked")
+      .select("id,name,first_name,last_name,onboarding_completed,blocked")
       .eq("id", user.id)
       .maybeSingle();
 
     if (profileError) {
       console.error("Profile check failed", profileError);
     }
+
+    setProfile(profileRow || null);
 
     if (profileRow?.blocked) {
       await supabase.auth.signOut();
@@ -152,68 +184,97 @@ export default function TrainingsPage() {
   const prepared = trainings.filter((training) => training.route_id || training.workout_id).length;
   const teamSessions = trainings.filter((training) => training.visibility === "team" || training.visibility === "selected").length;
 
+  const matchingSessions = filtered.length;
+  const preferredSportIds = preferredSports.length
+    ? preferredSports.slice(0, 4)
+    : ["running", "road_cycling", "mountain_biking"];
+
   return (
-    <main className="endurance-page">
+    <main className="endurance-page training-feed-redesign">
       <AppHeader active="trainings" />
 
-      <section className="endurance-shell training-hero endurance-card">
+      <section className="endurance-shell training-dashboard">
+        <div className="training-dashboard-top">
+          <div>
+            <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)} 👋</p>
+            <p className="training-subline">
+              <strong>{matchingSessions}</strong> matching sessions near you
+            </p>
+          </div>
+
+          <Link href="/trainings/new" className="training-create-compact">
+            + Create training
+          </Link>
+        </div>
+
+        <div className="training-metric-row">
+          <div className="training-metric-tile">
+            <span>⚡</span>
+            <strong>{needsDecision ? 1 : 0}</strong>
+            <small>Need planning</small>
+          </div>
+          <div className="training-metric-tile">
+            <span>⏱</span>
+            <strong>{startingSoon}</strong>
+            <small>Starting soon</small>
+          </div>
+          <div className="training-metric-tile">
+            <span>👥</span>
+            <strong>{teamSessions}</strong>
+            <small>Team sessions</small>
+          </div>
+          <div className="training-metric-tile">
+            <span>🧭</span>
+            <strong>{prepared}</strong>
+            <small>Prepared</small>
+          </div>
+        </div>
+
+        <div className="preferred-sports-strip">
+          <div className="preferred-title">Your sports</div>
+          <div className="preferred-sports-row">
+            {preferredSportIds.map((sportId) => (
+              <button
+                key={sportId}
+                type="button"
+                onClick={() => setSearch(sportLabelFromId(sportId))}
+                className="preferred-sport-chip"
+              >
+                <span>{sportIconFromId(sportId)}</span>
+                {sportLabelFromId(sportId)}
+                <b>♥</b>
+              </button>
+            ))}
+            <Link href="/profile" className="preferred-sport-chip add">+ Add</Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="endurance-shell feed-control-row">
         <div>
-          <p className="eyebrow">Training feed</p>
-          <h1>
-            Find your next
-            <br />
-            session<span>.</span>
-          </h1>
-          <p>
-            Join verified sport sessions, respond to flexible planning and see what your team is training next.
-          </p>
+          <h2>Upcoming sessions</h2>
+          <p>Join your next verified training.</p>
         </div>
-        <Link href="/trainings/new" className="hero-create-button">
-          + Create training
-        </Link>
-      </section>
-
-      <section className="endurance-shell metric-grid">
-        <div className="metric-card highlight">
-          <span>⚡</span>
-          <strong>{needsDecision ? 1 : 0}</strong>
-          <div>
-            <b>Need planning</b>
-            <p>Flexible sessions waiting for availability or a final time.</p>
-          </div>
-        </div>
-        <div className="metric-card">
-          <span>⏱</span>
-          <strong>{startingSoon}</strong>
-          <div>
-            <b>Starting soon</b>
-            <p>Next 72 hours</p>
-          </div>
-        </div>
-        <div className="metric-card">
-          <span>🧭</span>
-          <strong>{prepared}</strong>
-          <div>
-            <b>Prepared</b>
-            <p>Route or workout attached</p>
-          </div>
-        </div>
-        <div className="metric-card">
-          <span>👥</span>
-          <strong>{teamSessions}</strong>
-          <div>
-            <b>Team sessions</b>
-            <p>Upcoming sessions with your team</p>
-          </div>
+        <div className="feed-control-actions">
+          <select
+            value={activeTab}
+            onChange={(event) => setActiveTab(event.target.value)}
+            className="feed-select-pill"
+          >
+            <option value="upcoming">All sports</option>
+            <option value="flexible">Flexible</option>
+            <option value="team">Team</option>
+            <option value="nearby">Nearby</option>
+          </select>
         </div>
       </section>
 
-      <section className="endurance-shell">
+      <section className="endurance-shell smart-search-row">
         <TrainingFilters value={search} onChange={setSearch} />
         <TrainingFeedTabs active={activeTab} onChange={setActiveTab} />
       </section>
 
-      <section className="endurance-shell training-feed-stack">
+      <section className="endurance-shell training-feed-stack visual-feed-stack">
         {loading && <div className="endurance-card notification-empty">Loading training feed...</div>}
 
         {!loading && needsDecision && activeTab !== "nearby" && (
@@ -233,15 +294,20 @@ export default function TrainingsPage() {
           ))}
 
         {!loading && !filtered.length && (
-          <div className="endurance-card notification-empty">
+          <div className="endurance-card notification-empty redesigned-empty-state">
             <h2>No sessions found</h2>
-            <p>Create a training or change your filters.</p>
+            <p>Create the first session for your preferred sports or adjust the filters.</p>
             <Link href="/trainings/new" className="primary-action">Create training</Link>
           </div>
         )}
       </section>
 
+      <Link href="/trainings/new" className="floating-create-training" aria-label="Create training">
+        +
+      </Link>
+
       <BottomNav unreadCount={unreadCount} />
     </main>
   );
 }
+
