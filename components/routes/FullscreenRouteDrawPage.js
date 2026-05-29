@@ -946,7 +946,7 @@ export default function FullscreenRouteDrawPage() {
               type="text"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search location, address or place"
+              placeholder="Search address, café, restaurant or place"
               autoFocus
             />
             <button
@@ -999,14 +999,8 @@ export default function FullscreenRouteDrawPage() {
         targetLocation={targetLocation}
         onTargetLocationHandled={() => setTargetLocation(null)}
       />
-
-      <section className="route-draw-bottom-hud route-draw-bottom-hud-final route-draw-bottom-hud-compact" aria-label="Route metrics">
-        <div className="route-draw-hud-metrics route-draw-hud-metrics-final">
-          <div>
-            <i className="route-hud-icon route-hud-distance" aria-hidden="true"></i>
-            <span>Distance</span>
-            <b>{metrics.distance_km || "0.00"} km</b>
-          </div>
+      <section className="route-draw-bottom-hud route-draw-bottom-hud-final route-draw-bottom-hud-elevation-only" aria-label="Route elevation">
+        <div className="route-draw-hud-metrics route-draw-hud-metrics-final route-draw-hud-metrics-elevation-only">
           <div>
             <i className="route-hud-icon route-hud-elevation" aria-hidden="true"></i>
             <span>Elevation</span>
