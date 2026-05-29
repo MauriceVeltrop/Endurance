@@ -601,26 +601,15 @@ export default function FullscreenRouteDrawPage() {
       );
 
       setRoutedPayload({
-        ...routePayloadFromGeometry(mergedGeometry, next, data?.routed === false ? "manual-local-segment" : "local-segment-reroute"),
+        ...routePayloadFromGeometry(mergedGeometry, next, "local-segment-reroute"),
         profile: routed?.profile || null,
         provider_url: routed?.provider_url || null,
         routed_at: new Date().toISOString(),
       });
       setRoutingStatus("done");
       setRoutingError("");
-      if (data?.routed === false) {
-        setMessage(data?.warning || "No snapped path found. Using the drawn line.");
-      }
     } catch (error) {
       console.error("Local segment rerouting failed", error);
-
-      if (next.length >= 2) {
-        setRoutedPayload(routePayloadFromGeometry(next, next, "manual-client-fallback"));
-        setRoutingStatus("done");
-        setRoutingError("");
-        return;
-      }
-
       setRoutingStatus("error");
       setRoutingError(error?.message || "Local rerouting failed.");
     }
@@ -741,22 +730,11 @@ export default function FullscreenRouteDrawPage() {
       setRoutingStatus("done");
       setRoutingError("");
 
-      if (data?.routed === false) {
-        if (!silent) setMessage(data?.warning || "No snapped path found. Using the drawn line.");
-      } else if (!silent) {
+      if (!silent) {
         setMessage("");
       }
     } catch (error) {
       console.error("Routing failed", error);
-
-      if (control.length >= 2) {
-        setRoutedPayload(routePayloadFromGeometry(control, control, "manual-client-fallback"));
-        setRoutingStatus("done");
-        setRoutingError("");
-        if (!silent) setMessage("No snapped path found. The route is kept as a drawn line.");
-        return;
-      }
-
       setRoutingStatus("error");
       setRoutingError(error?.message || "Routing failed.");
     }
