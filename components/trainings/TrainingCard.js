@@ -80,8 +80,8 @@ export default function TrainingCard({ training, participants = [] }) {
     training.max_participants && participants.length >= Math.max(1, training.max_participants - 2);
 
   return (
-    <article className="training-card visual-training-card">
-      <Link href={href} className="training-card-media visual-training-media" aria-label={training.title}>
+    <article className="training-card visual-training-card compact-training-card">
+      <Link href={href} className="training-card-media visual-training-media compact-training-media" aria-label={training.title}>
         {image ? (
           <img
             src={image}
@@ -94,7 +94,7 @@ export default function TrainingCard({ training, participants = [] }) {
         <span className="media-sport-label">{sportLabel(training)}</span>
       </Link>
 
-      <div className="training-card-body visual-training-body">
+      <div className="training-card-body visual-training-body compact-training-body">
         <div className="visual-card-topline">
           <span className="visual-sport-icon">{sportIcon(training)}</span>
           <span className={limited ? "visual-status limited" : "visual-status"}>
@@ -110,16 +110,14 @@ export default function TrainingCard({ training, participants = [] }) {
           <div className="visual-distance-line">{distanceLine(training)}</div>
         ) : null}
 
-        <div className="training-card-meta visual-training-meta">
+        <div className="training-card-meta visual-training-meta compact-training-meta">
           {training.start_location && <span>⌖ {training.start_location}</span>}
-          <span>◷ {formatDate(training)}</span>
-          {training.route_id && <span>◇ Route attached</span>}
-          {training.workout_id && <span>✦ Workout attached</span>}
+          <span>◷ {formatDate(training)}{participants.length ? ` • ${participants.length}${training.max_participants ? ` / ${training.max_participants}` : ""} deelnemers` : ""}</span>
         </div>
 
-        <div className="visual-card-bottom">
+        <div className="visual-card-bottom compact-card-bottom">
           <TrainingParticipants participants={participants} maxParticipants={training.max_participants} />
-          <Link href={href} className="primary-action visual-join-button">
+          <Link href={href} className="primary-action visual-join-button compact-join-button">
             {flexible ? "Respond" : "Join"}
           </Link>
         </div>
