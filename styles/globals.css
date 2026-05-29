@@ -6524,3 +6524,102 @@ main {
     font-size: 13px !important;
   }
 }
+
+
+/* =====================================================
+   ROUTE TOPBAR TWO-LINE TITLE
+   Full route title fits in the top bar on mobile.
+===================================================== */
+
+.route-draw-title-block-two-line,
+.route-draw-title-block-single,
+.route-draw-title-block {
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+
+.route-draw-title-block-two-line > span,
+.route-draw-title-block-single > span,
+.route-draw-title-block > span {
+  display: none !important;
+}
+
+.route-draw-title-block-two-line textarea,
+.route-draw-title-block-single textarea,
+.route-draw-title-block textarea {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 48px !important;
+  max-height: 52px !important;
+  resize: none !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: #fff !important;
+  font-family: inherit !important;
+  font-size: clamp(18px, 4vw, 24px) !important;
+  font-weight: 950 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.055em !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.route-draw-title-block-two-line input,
+.route-draw-title-block-single input,
+.route-draw-title-block input {
+  width: 100% !important;
+  min-width: 0 !important;
+  font-size: clamp(18px, 4vw, 24px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.055em !important;
+  text-overflow: clip !important;
+}
+
+.route-draw-immersive .route-draw-topbar {
+  grid-template-columns: 54px minmax(0, 1fr) auto !important;
+  min-height: 82px !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+@media (max-width: 760px) {
+  .route-draw-immersive .route-draw-topbar {
+    grid-template-columns: 50px minmax(0, 1fr) auto !important;
+    min-height: 82px !important;
+    gap: 9px !important;
+    padding: 9px !important;
+  }
+
+  .route-draw-title-block-two-line textarea,
+  .route-draw-title-block-single textarea,
+  .route-draw-title-block textarea {
+    height: 48px !important;
+    font-size: clamp(17px, 3.85vw, 21px) !important;
+    line-height: 1.08 !important;
+  }
+
+  .route-draw-immersive .route-draw-save-btn {
+    min-height: 52px !important;
+    padding-inline: 15px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .route-draw-title-block-two-line textarea,
+  .route-draw-title-block-single textarea,
+  .route-draw-title-block textarea {
+    font-size: 16px !important;
+  }
+
+  .route-draw-immersive .route-draw-save-btn {
+    padding-inline: 12px !important;
+    font-size: 13px !important;
+  }
+}
