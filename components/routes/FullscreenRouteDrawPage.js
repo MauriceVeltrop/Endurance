@@ -112,7 +112,7 @@ function compactRoutePoints(points, maxPoints = 900) {
 }
 
 function compactControlPoints(points) {
-  return normalizeRoutePoints(points).slice(0, 40);
+  return normalizeRoutePoints(points).slice(0, 80);
 }
 
 function buildSafeDraftRoutePayload(payload, fallbackPoints) {
@@ -601,21 +601,21 @@ export default function FullscreenRouteDrawPage() {
       );
 
       setRoutedPayload({
-        ...routePayloadFromGeometry(mergedGeometry, next, "local-segment-reroute"),
+        ...routePayloadFromGeometry(mergedGeometry, next, data?.routed === false ? "manual-local-segment" : "local-segment-reroute"),
         profile: routed?.profile || null,
         provider_url: routed?.provider_url || null,
         routed_at: new Date().toISOString(),
       });
       setRoutingStatus("done");
       setRoutingError("");
-      if (!data?.provider_url && !routed?.provider_url) {
-        setMessage("Route calculated, but provider details were not returned.");
+      if (data?.routed === false) {
+        setMessage(data?.warning || "No snapped path found. Using the drawn line.");
       }
     } catch (error) {
       console.error("Local segment rerouting failed", error);
       setRoutingStatus("error");
       setRoutingError(error?.message || "Local rerouting failed.");
-      setMessage(error?.message || "Local rerouting failed.");
+      setMessage(error?.message || "Could not snap this segment to roads/paths.");
     }
   }
 
@@ -734,15 +734,16 @@ export default function FullscreenRouteDrawPage() {
       setRoutingStatus("done");
       setRoutingError("");
 
-      if (!silent) {
+      if (data?.routed === false) {
+        if (!silent) setMessage(data?.warning || "No snapped path found. Using the drawn line.");
+      } else if (!silent) {
         setMessage("");
       }
     } catch (error) {
       console.error("Routing failed", error);
-      setRoutedPayload(null);
       setRoutingStatus("error");
       setRoutingError(error?.message || "Routing failed.");
-      setMessage(error?.message || "Routing failed.");
+      if (!silent) setMessage(error?.message || "Could not snap this route to roads/paths.");
     }
   }
 
@@ -810,6 +811,16 @@ export default function FullscreenRouteDrawPage() {
   function continueToDetails() {
     if (!canContinue) {
       setMessage("Add at least two routepoints before continuing.");
+      return;
+    }
+
+    if (routingStatus === "routing") {
+      setMessage("Route is still snapping to roads/paths. Wait a moment and try again.");
+      return;
+    }
+
+    if (points.length >= 2 && !routedPayload?.points?.length) {
+      setMessage("This route has not been snapped yet. Tap the route again or wait for routing to finish.");
       return;
     }
 
@@ -994,7 +1005,7 @@ export default function FullscreenRouteDrawPage() {
 
       <RouteDrawMap
         points={points}
-        routedPoints={routedPoints}
+        routedPoints={routedPoints.length ? routedPoints : points}
         onChange={handlePointsChange}
         height="100vh"
         title={title || "Draw route"}
@@ -1019,7 +1030,7 @@ export default function FullscreenRouteDrawPage() {
 
       {/* Map style picker removed: map style is selected automatically per sport. */}
 
-      {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
+      {routingError && points.length < 2 ? <section className="route-draw-routing-error">{routingError}</section> : null}
 
       {routedPoints.length ? (
         <section className="route-draw-routing-status">
