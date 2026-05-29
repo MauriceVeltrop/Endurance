@@ -608,11 +608,14 @@ export default function FullscreenRouteDrawPage() {
       });
       setRoutingStatus("done");
       setRoutingError("");
+      if (!data?.provider_url && !routed?.provider_url) {
+        setMessage("Route calculated, but provider details were not returned.");
+      }
     } catch (error) {
       console.error("Local segment rerouting failed", error);
-
       setRoutingStatus("error");
       setRoutingError(error?.message || "Local rerouting failed.");
+      setMessage(error?.message || "Local rerouting failed.");
     }
   }
 
@@ -736,9 +739,10 @@ export default function FullscreenRouteDrawPage() {
       }
     } catch (error) {
       console.error("Routing failed", error);
-
+      setRoutedPayload(null);
       setRoutingStatus("error");
       setRoutingError(error?.message || "Routing failed.");
+      setMessage(error?.message || "Routing failed.");
     }
   }
 
@@ -990,7 +994,7 @@ export default function FullscreenRouteDrawPage() {
 
       <RouteDrawMap
         points={points}
-        routedPoints={routedPoints.length ? routedPoints : points}
+        routedPoints={routedPoints}
         onChange={handlePointsChange}
         height="100vh"
         title={title || "Draw route"}
@@ -1015,7 +1019,7 @@ export default function FullscreenRouteDrawPage() {
 
       {/* Map style picker removed: map style is selected automatically per sport. */}
 
-      {routingError && points.length < 2 ? <section className="route-draw-routing-error">{routingError}</section> : null}
+      {routingError ? <section className="route-draw-routing-error">{routingError}</section> : null}
 
       {routedPoints.length ? (
         <section className="route-draw-routing-status">
