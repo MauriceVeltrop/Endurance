@@ -176,6 +176,13 @@ export default function AdminPage() {
     return false;
   }
 
+  function canDeleteUser(targetUser) {
+    if (!profile || !targetUser) return false;
+    if (profile.id === targetUser.id) return false;
+
+    return profile.role === "admin";
+  }
+
   function canSetRole(targetUser, nextRole) {
     if (!profile || !targetUser) return false;
 
@@ -373,6 +380,39 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Block user error", error);
       setMessage(error?.message || "Could not update user status.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function deleteUser(targetUser) {
+    if (!canDeleteUser(targetUser)) {
+      setMessage("Only admins can delete users.");
+      return;
+    }
+
+    const name = displayName(targetUser);
+    const confirmed = window.confirm(
+      `Delete ${name}?\n\nThis removes the user profile and related app records. This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setBusyId(targetUser.id);
+    setMessage("");
+
+    try {
+      const { error } = await supabase.rpc("admin_delete_user", {
+        p_user_id: targetUser.id,
+      });
+
+      if (error) throw error;
+
+      setUsers((current) => current.filter((user) => user.id !== targetUser.id));
+      setMessage(`${name} deleted.`);
+    } catch (error) {
+      console.error("Delete user error", error);
+      setMessage(error?.message || "Could not delete user.");
     } finally {
       setBusyId("");
     }
@@ -659,14 +699,27 @@ export default function AdminPage() {
                           </select>
 
                           {editable ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleBlocked(user)}
-                              disabled={busyId === user.id}
-                              style={user.blocked ? styles.unblockButton : styles.blockButton}
-                            >
-                              {user.blocked ? "Unblock" : "Block"}
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => toggleBlocked(user)}
+                                disabled={busyId === user.id}
+                                style={user.blocked ? styles.unblockButton : styles.blockButton}
+                              >
+                                {user.blocked ? "Unblock" : "Block"}
+                              </button>
+
+                              {canDeleteUser(user) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteUser(user)}
+                                  disabled={busyId === user.id}
+                                  style={styles.deleteButton}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </>
                           ) : null}
                         </div>
                       </article>
@@ -1157,7 +1210,17 @@ const styles = {
     fontWeight: 950,
     cursor: "pointer",
   },
-  unblockButton: {
+    deleteButton: {
+    border: "1px solid rgba(255,99,99,0.52)",
+    background: "linear-gradient(135deg, rgba(120,20,20,0.42), rgba(255,75,75,0.14))",
+    color: "#ffb4b4",
+    borderRadius: 999,
+    padding: "12px 16px",
+    fontWeight: 950,
+    cursor: "pointer",
+    width: "100%",
+  },
+unblockButton: {
     minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.24)",
