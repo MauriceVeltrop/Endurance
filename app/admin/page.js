@@ -1165,6 +1165,11 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))",
     gap: 8,
     alignItems: "center",
+    display: "grid",
+    gridTemplateColumns: "minmax(120px, 1fr) minmax(120px, 1fr)",
+    gap: 10,
+    width: "100%",
+    minWidth: 0,
   },
   statusPill: {
     minHeight: 38,
@@ -1200,7 +1205,14 @@ const styles = {
     padding: "0 10px",
     fontWeight: 900,
   },
-  blockButton: {
+    userActionButtons: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 8,
+    width: "100%",
+    minWidth: 0,
+  },
+blockButton: {
     minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(255,90,90,0.22)",
