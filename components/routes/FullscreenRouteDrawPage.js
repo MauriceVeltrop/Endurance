@@ -39,7 +39,13 @@ function pickPlaceNameFromLabel(value) {
 }
 
 function cleanRouteLocationName(value) {
-  return pickPlaceNameFromLabel(value) || "Locatie bepalen";
+  const place = pickPlaceNameFromLabel(value);
+
+  if (!place || /^(locatie bepalen|startlocatie|current location)$/i.test(place)) {
+    return "";
+  }
+
+  return place;
 }
 
 function formatRouteDistanceLabel(value) {
@@ -49,7 +55,9 @@ function formatRouteDistanceLabel(value) {
 }
 
 function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
-  return `${cleanRouteLocationName(startLocation)} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+  const location = cleanRouteLocationName(startLocation) || "Locatie bepalen";
+
+  return `${location} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
 }
 
 
@@ -72,6 +80,8 @@ async function resolvePlaceNameFromCoordinates({ lat, lon }) {
       data?.town ||
       data?.village ||
       data?.municipality ||
+      data?.locality ||
+      data?.county ||
       data?.label ||
       data?.display_name ||
       ""
@@ -81,6 +91,8 @@ async function resolvePlaceNameFromCoordinates({ lat, lon }) {
     return "";
   }
 }
+
+
 
 function compactRoutePoints(points, maxPoints = 900) {
   const normalized = normalizeRoutePoints(points);
@@ -334,6 +346,7 @@ export default function FullscreenRouteDrawPage() {
   const loadedDraftRef = useRef(false);
   const currentLocationRequestedRef = useRef(false);
   const draftSavedMessageTimerRef = useRef(null);
+  const routeStartLookupRef = useRef("");
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -367,6 +380,44 @@ export default function FullscreenRouteDrawPage() {
     () => points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join("|"),
     [points]
   );
+
+  // route-start-location-reverse-lookup
+  useEffect(() => {
+    const firstPoint = points[0] || routedPoints[0];
+
+    if (!firstPoint) {
+      routeStartLookupRef.current = "";
+      if (!titleEditedManually) {
+        setRouteStartLocation("Locatie bepalen");
+      }
+      return;
+    }
+
+    const lat = Number(firstPoint.lat);
+    const lon = Number(firstPoint.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+
+    if (routeStartLookupRef.current === key) return;
+
+    routeStartLookupRef.current = key;
+
+    let cancelled = false;
+
+    resolvePlaceNameFromCoordinates({ lat, lon }).then((placeName) => {
+      if (cancelled) return;
+
+      if (placeName) {
+        setRouteStartLocation(placeName);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [points, routedPoints, titleEditedManually]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -702,7 +753,7 @@ export default function FullscreenRouteDrawPage() {
     safePayload.waypoints = compactControlPoints(points);
     safePayload.control_points = compactControlPoints(points);
     safePayload.geometry_points = safePayload.points;
-    safePayload.start_location = cleanRouteLocationName(routeStartLocation);
+    safePayload.start_location = cleanRouteLocationName(routeStartLocation) || "Locatie bepalen";
 
     return makeRouteDraft({
       sportId,
@@ -867,6 +918,7 @@ export default function FullscreenRouteDrawPage() {
 
         <div className="route-draw-title-block route-draw-title-block-single">
           <input
+            aria-label="Route title"
             value={title}
             onChange={(event) => {
               setTitleEditedManually?.(true);
