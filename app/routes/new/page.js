@@ -234,15 +234,30 @@ function buildEditableRouteDraft(form, profileId) {
   };
 }
 
-function cleanRouteLocationName(value) {
+function pickPlaceNameFromLabel(value) {
   const raw = String(value || "").trim();
 
-  if (!raw) return "Startlocatie";
+  if (!raw) return "";
 
-  return raw
-    .replace(/,\s*(Netherlands|Nederland)$/i, "")
-    .replace(/\s+/g, " ")
-    .trim() || "Startlocatie";
+  const parts = raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !/^(netherlands|nederland)$/i.test(part));
+
+  const postalCodeIndex = parts.findIndex((part) => /\b\d{4}\s?[A-Z]{2}\b/i.test(part));
+
+  if (postalCodeIndex >= 0 && parts[postalCodeIndex + 1]) {
+    return parts[postalCodeIndex + 1];
+  }
+
+  const likelyPlace = parts.find((part) => !/^(street|road|route|unnamed|current location|startlocatie)$/i.test(part) && !/\d/.test(part));
+
+  return likelyPlace || parts[0] || "";
+}
+
+function cleanRouteLocationName(value) {
+  return pickPlaceNameFromLabel(value) || "Locatie bepalen";
 }
 
 function formatRouteDistanceLabel(value) {
@@ -334,7 +349,6 @@ export default function NewRoutePage() {
         points: safePoints,
         point_count: safePoints.length,
         routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
-        start_location: draft.start_location || rawRoutePoints?.start_location || rawRoutePoints?.startLocation || "Startlocatie",
       };
 
       if (!safePoints.length) {
@@ -345,11 +359,7 @@ export default function NewRoutePage() {
         ...current,
         sport_id: draft.sport_id || current.sport_id,
         method: "draw",
-        title: buildAutomaticRouteTitle({
-          startLocation: draft.start_location || rawRoutePoints?.start_location || rawRoutePoints?.startLocation || "Startlocatie",
-          distanceKm: draft.distance_km || rawRoutePoints?.distance_km || calculateRouteMetrics(safePoints).distance_km,
-          sportId: draft.sport_id || current.sport_id,
-        }),
+        title: draft.title || current.title || `${getSportLabel(draft.sport_id)} Route`,
         description: draft.description || current.description,
         distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
         elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
