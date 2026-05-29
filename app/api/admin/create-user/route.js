@@ -119,7 +119,13 @@ export async function POST(request) {
         blocked: false,
       }, { onConflict: "id" });
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      // This usually means a database trigger on public.profiles enforces:
+      // "Profile id must match authenticated user". That trigger blocks admin-created users.
+      throw new Error(
+        `Profile save blocked by database trigger: ${profileError.message}. Use Invite only, or run the admin profile trigger SQL fix.`
+      );
+    }
 
     await admin
       .from("admin_user_invites")
