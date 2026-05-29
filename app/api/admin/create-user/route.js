@@ -1,363 +1,155 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const ADMIN_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const runtime = "nodejs";
 
-const ROLE_OPTIONS = ["user", "organizer", "moderator", "admin"];
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-function json(status, body) {
-  return NextResponse.json(body, { status });
-}
-
-function isSbSecretKey(key) {
-  return typeof key === "string" && key.startsWith("sb_secret_");
-}
-
-function isLegacyJwtKey(key) {
-  return typeof key === "string" && key.startsWith("eyJ");
-}
-
-function adminHeaders(extra = {}) {
-  const headers = {
-    apikey: ADMIN_KEY,
-    "Content-Type": "application/json",
-    ...extra,
-  };
-
-  if (isLegacyJwtKey(ADMIN_KEY)) {
-    headers.Authorization = `Bearer ${ADMIN_KEY}`;
+  if (!url || !serviceRoleKey) {
+    throw new Error("Missing Supabase service role configuration.");
   }
 
-  return headers;
-}
-
-function createUserClient(accessToken) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  return createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
     },
   });
 }
 
-function createLegacyAdminClient() {
-  return createClient(SUPABASE_URL, ADMIN_KEY, {
+function getAnonClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error("Missing Supabase anon configuration.");
+  }
+
+  return createClient(url, anonKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
-      detectSessionInUrl: false,
     },
   });
-}
-
-async function apiFetch(path, options = {}) {
-  const res = await fetch(`${SUPABASE_URL}${path}`, {
-    cache: "no-store",
-    ...options,
-  });
-
-  const text = await res.text();
-  let payload = null;
-
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = text;
-  }
-
-  if (!res.ok) {
-    throw new Error(`${options.label || "Supabase request"} failed (${res.status}): ${text || res.statusText}`);
-  }
-
-  return payload;
-}
-
-async function getRequesterProfile(requesterId) {
-  const rows = await apiFetch(
-    `/rest/v1/profiles?id=eq.${encodeURIComponent(requesterId)}&select=id,role,blocked,email`,
-    {
-      method: "GET",
-      headers: adminHeaders(),
-      label: "Read requester profile",
-    }
-  );
-
-  return Array.isArray(rows) ? rows[0] : null;
-}
-
-async function listAuthUsers() {
-  return apiFetch("/auth/v1/admin/users?page=1&per_page=1000", {
-    method: "GET",
-    headers: adminHeaders(),
-    label: "List auth users",
-  });
-}
-
-async function findAuthUserByEmail(email) {
-  const payload = await listAuthUsers();
-  const users = payload?.users || [];
-
-  return (
-    users.find(
-      (user) => String(user.email || "").trim().toLowerCase() === email
-    ) || null
-  );
-}
-
-async function createAuthUser({ email, password, firstName, lastName, fullName }) {
-  return apiFetch("/auth/v1/admin/users", {
-    method: "POST",
-    headers: adminHeaders(),
-    body: JSON.stringify({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        first_name: firstName,
-        last_name: lastName,
-        name: fullName,
-      },
-    }),
-    label: "Create auth user",
-  });
-}
-
-async function updateAuthUser({ id, password, firstName, lastName, fullName }) {
-  return apiFetch(`/auth/v1/admin/users/${id}`, {
-    method: "PUT",
-    headers: adminHeaders(),
-    body: JSON.stringify({
-      password,
-      email_confirm: true,
-      user_metadata: {
-        first_name: firstName,
-        last_name: lastName,
-        name: fullName,
-      },
-    }),
-    label: "Update auth user",
-  });
-}
-
-async function saveProfile(profile) {
-  return apiFetch("/rest/v1/profiles?on_conflict=id", {
-    method: "POST",
-    headers: adminHeaders({
-      Prefer: "resolution=merge-duplicates,return=representation",
-    }),
-    body: JSON.stringify(profile),
-    label: "Save profile",
-  });
-}
-
-async function saveInvite(invite) {
-  try {
-    const rows = await apiFetch(
-      `/rest/v1/admin_user_invites?email=eq.${encodeURIComponent(invite.email)}&select=id`,
-      {
-        method: "GET",
-        headers: adminHeaders(),
-        label: "Find invite",
-      }
-    );
-
-    const ids = Array.isArray(rows) ? rows.map((row) => row.id).filter(Boolean) : [];
-
-    if (ids.length) {
-      await apiFetch(`/rest/v1/admin_user_invites?id=in.(${ids.join(",")})`, {
-        method: "PATCH",
-        headers: adminHeaders({ Prefer: "return=minimal" }),
-        body: JSON.stringify(invite),
-        label: "Update invite",
-      });
-    } else {
-      await apiFetch("/rest/v1/admin_user_invites", {
-        method: "POST",
-        headers: adminHeaders({ Prefer: "return=minimal" }),
-        body: JSON.stringify(invite),
-        label: "Insert invite",
-      });
-    }
-
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, warning: error?.message || "Invite record could not be saved." };
-  }
 }
 
 export async function POST(request) {
-  const debug = {
-    stage: "start",
-    key_type: isSbSecretKey(ADMIN_KEY)
-      ? "sb_secret"
-      : isLegacyJwtKey(ADMIN_KEY)
-        ? "legacy_jwt"
-        : "unknown",
-  };
-
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !ADMIN_KEY) {
-      return json(500, { error: "Missing Supabase environment variables.", debug });
-    }
-
-    if (!isSbSecretKey(ADMIN_KEY) && !isLegacyJwtKey(ADMIN_KEY)) {
-      return json(500, {
-        error: "SUPABASE_SERVICE_ROLE_KEY must start with sb_secret_ or eyJ.",
-        debug,
-      });
-    }
-
-    debug.stage = "verify_session";
-    const token = (request.headers.get("authorization") || "").replace("Bearer ", "").trim();
+    const authHeader = request.headers.get("authorization") || "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
 
     if (!token) {
-      return json(401, { error: "Not authenticated.", debug });
+      return NextResponse.json({ error: "Missing admin session token." }, { status: 401 });
     }
 
-    const userClient = createUserClient(token);
-    const { data: userData, error: userError } = await userClient.auth.getUser();
+    const anon = getAnonClient();
+    const { data: sessionData, error: sessionError } = await anon.auth.getUser(token);
 
-    if (userError || !userData?.user?.id) {
-      return json(401, { error: userError?.message || "Invalid session.", debug });
+    if (sessionError || !sessionData?.user?.id) {
+      return NextResponse.json({ error: "Invalid admin session." }, { status: 401 });
     }
 
-    const requesterId = userData.user.id;
-    debug.requester_id = requesterId;
+    const admin = getAdminClient();
 
-    debug.stage = "requester_profile";
-    const requesterProfile = isLegacyJwtKey(ADMIN_KEY)
-      ? await createLegacyAdminClient()
-          .from("profiles")
-          .select("id,role,blocked,email")
-          .eq("id", requesterId)
-          .maybeSingle()
-          .then(({ data, error }) => {
-            if (error) throw new Error(`Read requester profile failed: ${error.message}`);
-            return data;
-          })
-      : await getRequesterProfile(requesterId);
+    const { data: adminProfile, error: adminProfileError } = await admin
+      .from("profiles")
+      .select("id, role, blocked")
+      .eq("id", sessionData.user.id)
+      .maybeSingle();
 
-    if (!requesterProfile || requesterProfile.blocked) {
-      return json(403, { error: "No admin access.", debug });
+    if (adminProfileError) throw adminProfileError;
+
+    if (!adminProfile || adminProfile.blocked || !["admin", "moderator"].includes(adminProfile.role)) {
+      return NextResponse.json({ error: "Not allowed to create users." }, { status: 403 });
     }
-
-    if (!["admin", "moderator"].includes(requesterProfile.role)) {
-      return json(403, { error: "Only admins and moderators can create users.", debug });
-    }
-
-    debug.requester_role = requesterProfile.role;
-    debug.stage = "validate_payload";
 
     const body = await request.json();
     const firstName = String(body.first_name || "").trim();
     const lastName = String(body.last_name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.temporary_password || "");
     const role = String(body.role || "user").trim();
-    const fullName = `${firstName} ${lastName}`.trim();
+    const temporaryPassword = String(body.temporary_password || "").trim();
 
-    if (!firstName || !lastName || !email || !password) {
-      return json(400, { error: "First name, last name, email and temporary password are required.", debug });
+    if (!firstName) return NextResponse.json({ error: "First name is required." }, { status: 400 });
+    if (!lastName) return NextResponse.json({ error: "Last name is required." }, { status: 400 });
+    if (!email) return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    if (temporaryPassword.length < 8) {
+      return NextResponse.json({ error: "Temporary password must be at least 8 characters." }, { status: 400 });
     }
 
-    if (password.length < 8) {
-      return json(400, { error: "Temporary password must be at least 8 characters.", debug });
+    const allowedRoles = adminProfile.role === "admin"
+      ? ["user", "organizer", "moderator", "admin"]
+      : ["user", "organizer"];
+
+    if (!allowedRoles.includes(role)) {
+      return NextResponse.json({ error: "You cannot assign that role." }, { status: 403 });
     }
 
-    if (!ROLE_OPTIONS.includes(role)) {
-      return json(400, { error: "Invalid role.", debug });
-    }
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password: temporaryPassword,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        name: `${firstName} ${lastName}`.trim(),
+      },
+    });
 
-    if (requesterProfile.role === "moderator" && !["user", "organizer"].includes(role)) {
-      return json(403, { error: "Moderators can only create users or organizers.", debug });
-    }
+    if (createError) throw createError;
 
-    debug.stage = "auth_user";
-    const existingAuthUser = await findAuthUserByEmail(email);
-
-    let authUser;
-    let createdNewAuthUser = false;
-
-    if (existingAuthUser?.id) {
-      authUser = await updateAuthUser({
-        id: existingAuthUser.id,
-        password,
-        firstName,
-        lastName,
-        fullName,
-      });
-    } else {
-      authUser = await createAuthUser({
-        email,
-        password,
-        firstName,
-        lastName,
-        fullName,
-      });
-      createdNewAuthUser = true;
-    }
-
-    const userId = authUser?.id || authUser?.user?.id;
+    const userId = created?.user?.id;
 
     if (!userId) {
-      return json(500, { error: "Auth user was not created or found.", debug });
+      throw new Error("User was created without an id.");
     }
 
-    debug.created_user_id = userId;
-    debug.stage = "profile_save";
+    const { error: profileError } = await admin
+      .from("profiles")
+      .upsert({
+        id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        name: `${firstName} ${lastName}`.trim(),
+        email,
+        role,
+        onboarding_completed: false,
+        blocked: false,
+      }, { onConflict: "id" });
 
-    await saveProfile({
-      id: userId,
-      first_name: firstName,
-      last_name: lastName,
-      name: fullName,
-      email,
-      role,
-      onboarding_completed: false,
-      blocked: false,
-    });
+    if (profileError) throw profileError;
 
-    debug.stage = "invite_save";
+    await admin
+      .from("admin_user_invites")
+      .upsert({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        role,
+        status: "accepted",
+        invited_by: sessionData.user.id,
+        accepted_user_id: userId,
+        accepted_at: new Date().toISOString(),
+      }, { onConflict: "email" });
 
-    const inviteResult = await saveInvite({
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      role,
-      status: "accepted",
-      invited_by: requesterId,
-      accepted_user_id: userId,
-      accepted_at: new Date().toISOString(),
-    });
-
-    debug.invite = inviteResult;
-    debug.stage = "done";
-
-    return json(200, {
-      id: userId,
-      email,
-      role,
-      created_new_auth_user: createdNewAuthUser,
-      warning: inviteResult.ok ? null : inviteResult.warning,
-      message: createdNewAuthUser
-        ? "User created with temporary password."
-        : "Existing user updated and profile saved.",
-      debug,
+    return NextResponse.json({
+      ok: true,
+      user: {
+        id: userId,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        name: `${firstName} ${lastName}`.trim(),
+        role,
+      },
     });
   } catch (error) {
-    console.error("Admin create user route error", error);
-
-    return json(500, {
-      error: error?.message || "Could not create user.",
-      debug,
-    });
+    console.error("Admin create user failed", error);
+    return NextResponse.json(
+      { error: error?.message || "Could not create user." },
+      { status: 500 }
+    );
   }
 }
