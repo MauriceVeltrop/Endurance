@@ -916,14 +916,15 @@ export default function FullscreenRouteDrawPage() {
           ←
         </button>
 
-        <div className="route-draw-title-block route-draw-title-block-single">
-          <input
-            aria-label="Route title"
+        <div className="route-draw-title-block route-draw-title-block-single route-draw-title-block-two-line">
+          <textarea
             value={title}
+            rows={2}
             onChange={(event) => {
               setTitleEditedManually?.(true);
               setTitle(event.target.value);
             }}
+            aria-label="Route title"
           />
         </div>
 
