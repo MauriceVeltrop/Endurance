@@ -28,6 +28,29 @@ function defaultTitle(sportId) {
   return `${getSportLabel(sportId || "running")} Route`;
 }
 
+function cleanRouteLocationName(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "Startlocatie";
+
+  return raw
+    .replace(/,\s*(Netherlands|Nederland)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim() || "Startlocatie";
+}
+
+function formatRouteDistanceLabel(value) {
+  const distance = Number(value);
+
+  if (!Number.isFinite(distance) || distance <= 0) return "0.0 km";
+
+  return `${distance.toFixed(1)} km`;
+}
+
+function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
+  return `${cleanRouteLocationName(startLocation)} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+}
+
 
 function compactRoutePoints(points, maxPoints = 900) {
   const normalized = normalizeRoutePoints(points);
@@ -180,10 +203,11 @@ function downloadTextFile({ filename, text, type = "application/gpx+xml" }) {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
-function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload }) {
+function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload, startLocation }) {
   return {
     sport_id: sportId,
-    title: title?.trim() || defaultTitle(sportId),
+    title: title?.trim() || buildAutomaticRouteTitle({ startLocation, distanceKm: metrics.distance_km || routePayload.distance_km, sportId }),
+    start_location: cleanRouteLocationName(startLocation),
     description: "",
     method,
     distance_km: metrics.distance_km || routePayload.distance_km || "",
@@ -296,6 +320,8 @@ export default function FullscreenRouteDrawPage() {
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [routeStartLocation, setRouteStartLocation] = useState("Startlocatie");
+  const [titleEditedManually, setTitleEditedManually] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -333,6 +359,15 @@ export default function FullscreenRouteDrawPage() {
           setDrawLayer(defaultMapStyleForSport(initialSport));
         }
         setTitle(editDraft?.title || defaultTitle(initialSport));
+        setTitleEditedManually(Boolean(editDraft?.title));
+        setRouteStartLocation(
+          cleanRouteLocationName(
+            editDraft?.start_location ||
+            editDraft?.route_points?.start_location ||
+            editDraft?.route_points?.startLocation ||
+            "Startlocatie"
+          )
+        );
 
         if (editDraft?.route_points?.points?.length) {
           loadedDraftRef.current = true;
@@ -572,6 +607,7 @@ export default function FullscreenRouteDrawPage() {
         selectedAt: Date.now(),
         zoom: 15,
       });
+      setRouteStartLocation("Current location");
       setMessage("");
       return;
     }
@@ -647,6 +683,7 @@ export default function FullscreenRouteDrawPage() {
     safePayload.waypoints = compactControlPoints(points);
     safePayload.control_points = compactControlPoints(points);
     safePayload.geometry_points = safePayload.points;
+    safePayload.start_location = cleanRouteLocationName(routeStartLocation);
 
     return makeRouteDraft({
       sportId,
@@ -655,6 +692,7 @@ export default function FullscreenRouteDrawPage() {
       profileId: profile?.id,
       metrics,
       routePayload: safePayload,
+      startLocation: routeStartLocation,
     });
   }
 
@@ -747,6 +785,7 @@ export default function FullscreenRouteDrawPage() {
     };
 
     setTargetLocation(location);
+    setRouteStartLocation(cleanRouteLocationName(result.label || searchText || "Startlocatie"));
     setSearchResults([]);
     setSearchText(result.label || "");
     setSearchOpen(false);
@@ -762,6 +801,26 @@ export default function FullscreenRouteDrawPage() {
 
     return () => window.clearTimeout(timeout);
   }, [routeSignature, sportId]);
+
+
+  useEffect(() => {
+    if (titleEditedManually) return;
+
+    const distanceKm = metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0;
+
+    setTitle(buildAutomaticRouteTitle({
+      startLocation: routeStartLocation,
+      distanceKm,
+      sportId,
+    }));
+  }, [
+    titleEditedManually,
+    routeStartLocation,
+    metrics.distance_km,
+    routedPayload?.distance_km,
+    pointsPayload?.distance_km,
+    sportId,
+  ]);
 
 
 
@@ -791,7 +850,7 @@ export default function FullscreenRouteDrawPage() {
 
         <div className="route-draw-title-block">
           <span>{getSportLabel(sportId)}</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          <input value={title} onChange={(event) => { setTitleEditedManually(true); setTitle(event.target.value); }} />
         </div>
 
         <button
