@@ -6623,3 +6623,105 @@ main {
     font-size: 13px !important;
   }
 }
+
+
+/* =====================================================
+   ROUTE EDITOR FINAL POLISH
+   - compact save button
+   - lime centered back arrow
+   - bottom HUD elevation only
+   - search supports broader place/POI UX
+===================================================== */
+
+.route-draw-immersive .route-draw-round-btn {
+  color: #eaff00 !important;
+  display: grid !important;
+  place-items: center !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
+  padding: 0 !important;
+}
+
+.route-draw-immersive .route-draw-save-btn {
+  min-height: 48px !important;
+  min-width: auto !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  letter-spacing: -0.02em !important;
+  white-space: nowrap !important;
+  box-shadow:
+    0 0 24px rgba(224,255,0,.20),
+    0 12px 26px rgba(0,0,0,.22) !important;
+}
+
+.route-draw-bottom-hud-elevation-only,
+.route-draw-bottom-hud-final.route-draw-bottom-hud-elevation-only {
+  min-width: 164px !important;
+  width: auto !important;
+  max-width: calc(100vw - 40px) !important;
+  padding: 7px 16px !important;
+  border-radius: 20px !important;
+}
+
+.route-draw-hud-metrics-elevation-only,
+.route-draw-bottom-hud-elevation-only .route-draw-hud-metrics {
+  display: grid !important;
+  grid-template-columns: minmax(132px, 1fr) !important;
+}
+
+.route-draw-hud-metrics-elevation-only > div,
+.route-draw-bottom-hud-elevation-only .route-draw-hud-metrics > div {
+  border-left: 0 !important;
+  padding: 0 8px !important;
+  grid-template-columns: 26px minmax(0, 1fr) !important;
+  column-gap: 9px !important;
+}
+
+.route-draw-bottom-hud-elevation-only .route-hud-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.route-draw-bottom-hud-elevation-only span {
+  font-size: 8.5px !important;
+}
+
+.route-draw-bottom-hud-elevation-only b {
+  font-size: 16px !important;
+}
+
+.route-search-bar-expanded {
+  z-index: 2147483600 !important;
+}
+
+.route-search-input-wrap input::placeholder {
+  color: rgba(255,255,255,.48) !important;
+}
+
+@media (max-width: 760px) {
+  .route-draw-immersive .route-draw-save-btn {
+    min-height: 46px !important;
+    padding-inline: 13px !important;
+    font-size: 12.5px !important;
+  }
+
+  .route-draw-immersive .route-draw-round-btn {
+    font-size: 25px !important;
+  }
+
+  .route-draw-bottom-hud-elevation-only {
+    min-width: 154px !important;
+    padding: 6px 14px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .route-draw-immersive .route-draw-save-btn {
+    padding-inline: 11px !important;
+    font-size: 12px !important;
+  }
+}
