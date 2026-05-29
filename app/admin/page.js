@@ -54,7 +54,7 @@ export default function AdminPage() {
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [createMode, setCreateMode] = useState("auth");
+  const [createMode, setCreateMode] = useState("invite");
   const [inviteForm, setInviteForm] = useState({
     first_name: "",
     last_name: "",
@@ -177,10 +177,7 @@ export default function AdminPage() {
   }
 
   function canDeleteUser(targetUser) {
-    if (!profile || !targetUser) return false;
-    if (profile.id === targetUser.id) return false;
-
-    return profile.role === "admin";
+    return canEditUser(targetUser);
   }
 
   function canSetRole(targetUser, nextRole) {
@@ -270,7 +267,7 @@ export default function AdminPage() {
         const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(payload?.error || payload?.message || "Could not create user.");
+          throw new Error(payload?.error || payload?.message || "Could not create login. Use Invite only until the profile trigger is fixed.");
         }
 
         setLastCreated({
@@ -688,7 +685,7 @@ export default function AdminPage() {
                           </select>
 
                           {editable ? (
-                            <>
+                            <div style={styles.adminActionColumn}>
                               <button
                                 type="button"
                                 onClick={() => toggleBlocked(user)}
@@ -698,17 +695,15 @@ export default function AdminPage() {
                                 {user.blocked ? "Unblock" : "Block"}
                               </button>
 
-                              {canDeleteUser(user) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => deleteUser(user)}
-                                  disabled={busyId === user.id}
-                                  style={styles.deleteButton}
-                                >
-                                  Delete
-                                </button>
-                              ) : null}
-                            </>
+                              <button
+                                type="button"
+                                onClick={() => deleteUser(user)}
+                                disabled={busyId === user.id}
+                                style={styles.deleteButton}
+                              >
+                                Delete
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                       </article>
@@ -1149,11 +1144,20 @@ const styles = {
     overflowWrap: "anywhere",
     wordBreak: "break-word",
   },
+  adminActionColumn: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 8,
+    width: "100%",
+    minWidth: 0,
+  },
   userControls: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))",
+    gridTemplateColumns: "1fr",
     gap: 8,
-    alignItems: "center",
+    alignItems: "stretch",
+    width: "100%",
+    minWidth: 0,
   },
   statusPill: {
     minHeight: 38,
@@ -1200,16 +1204,17 @@ const styles = {
     cursor: "pointer",
   },
     deleteButton: {
-    border: "1px solid rgba(255,99,99,0.52)",
-    background: "linear-gradient(135deg, rgba(120,20,20,0.42), rgba(255,75,75,0.14))",
-    color: "#ffb4b4",
+    minHeight: 38,
     borderRadius: 999,
-    padding: "12px 16px",
+    border: "1px solid rgba(255,99,99,0.62)",
+    background: "linear-gradient(135deg, rgba(120,20,20,0.50), rgba(255,75,75,0.18))",
+    color: "#ffb4b4",
+    padding: "0 12px",
     fontWeight: 950,
     cursor: "pointer",
     width: "100%",
   },
-unblockButton: {
+  unblockButton: {
     minHeight: 38,
     borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.24)",
