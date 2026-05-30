@@ -11,9 +11,6 @@ import TrainingCard from "../../components/trainings/TrainingCard";
 import TrainingFeedTabs from "../../components/trainings/TrainingFeedTabs";
 import TrainingFilters from "../../components/trainings/TrainingFilters";
 import FlexibleSessionCard from "../../components/trainings/FlexibleSessionCard";
-import { sportOptions } from "../../lib/sportsConfig";
-
-
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function getTrainingReferenceTime(training) {
@@ -48,20 +45,6 @@ function matchesSearch(training, search) {
   return haystack.includes(search.toLowerCase());
 }
 
-function normalizeSports(value) {
-  if (Array.isArray(value)) return value.filter(Boolean).map((item) => String(item));
-  if (!value) return [];
-  if (typeof value === "string") return [value];
-  return [];
-}
-
-function matchesPreferredSports(training, preferredSportIds) {
-  if (!preferredSportIds?.length) return true;
-  const trainingSportIds = normalizeSports(training?.sports);
-  if (!trainingSportIds.length) return false;
-  return trainingSportIds.some((sportId) => preferredSportIds.includes(sportId));
-}
-
 
 function firstNameFromProfile(profile) {
   return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice";
@@ -74,19 +57,6 @@ function getGreeting() {
   return "Good evening";
 }
 
-function sportLabelFromId(sportId) {
-  return sportOptions.find((sport) => sport.id === sportId)?.label || String(sportId || "").replaceAll("_", " ");
-}
-
-function sportIconFromId(sportId) {
-  if (sportId === "running") return "🏃";
-  if (sportId === "trail_running") return "△";
-  if (sportId === "road_cycling" || sportId === "gravel_cycling") return "🚴";
-  if (sportId === "mountain_biking") return "🚵";
-  if (sportId === "walking") return "🚶";
-  if (sportId === "strength_training") return "🏋";
-  return "✦";
-}
 
 
 export default function TrainingsPage() {
@@ -137,29 +107,32 @@ export default function TrainingsPage() {
       return;
     }
 
-    const { data: userSportsRows, error: userSportsError } = await supabase
+    const { data: preferredRows } = await supabase
       .from("user_sports")
       .select("sport_id")
       .eq("user_id", user.id);
 
-    if (userSportsError) {
-      console.error("Preferred sports load failed", userSportsError);
-    }
-
-    const preferredSportIdsForUser = (userSportsRows || [])
+    const preferredIds = (preferredRows || [])
       .map((row) => row.sport_id)
       .filter(Boolean);
-    setPreferredSports(preferredSportIdsForUser);
+
+    setPreferredSports(preferredIds);
 
     const { data: sessions } = await supabase
       .from("training_sessions")
       .select("*")
       .order("starts_at", { ascending: true, nullsFirst: false })
-      .limit(120);
+      .limit(80);
 
+    const preferredSet = new Set(preferredIds);
     const sessionRows = (sessions || [])
       .filter((session) => isNotOlderThanOneDay(session))
-      .filter((session) => matchesPreferredSports(session, preferredSportIdsForUser));
+      .filter((session) => {
+        if (!preferredSet.size) return true;
+        const sessionSports = Array.isArray(session.sports) ? session.sports : [session.sports].filter(Boolean);
+        return sessionSports.some((sportId) => preferredSet.has(sportId));
+      });
+
     setTrainings(sessionRows);
 
     const ids = sessionRows.map((session) => session.id);
@@ -215,12 +188,9 @@ export default function TrainingsPage() {
   const teamSessions = trainings.filter((training) => training.visibility === "team" || training.visibility === "selected").length;
 
   const matchingSessions = filtered.length;
-  const preferredSportIds = preferredSports.length
-    ? preferredSports.slice(0, 4)
-    : ["running", "road_cycling", "mountain_biking"];
 
   return (
-    <main className="endurance-page training-feed-redesign training-feed-compact-final">
+    <main className="endurance-page training-feed-redesign training-feed-compact-final training-feed-premium-home">
       <AppHeader active="trainings" />
 
       <section className="endurance-shell training-dashboard">
@@ -259,37 +229,17 @@ export default function TrainingsPage() {
             <small>Prepared</small>
           </div>
         </div>
-
-        <div className="preferred-sports-strip">
-          <div className="preferred-title">Your sports</div>
-          <div className="preferred-sports-row">
-            {preferredSportIds.map((sportId) => (
-              <button
-                key={sportId}
-                type="button"
-                onClick={() => setSearch(sportLabelFromId(sportId))}
-                className="preferred-sport-chip"
-              >
-                <span>{sportIconFromId(sportId)}</span>
-                {sportLabelFromId(sportId)}
-                <b>♥</b>
-              </button>
-            ))}
-            <Link href="/profile" className="preferred-sport-chip add">+ Add</Link>
-          </div>
-        </div>
       </section>
 
-      <section className="endurance-shell feed-control-row">
-        <div>
-          <h2>Upcoming sessions</h2>
-          <p>Join your next verified training.</p>
-        </div>
-        <div className="feed-control-actions">
+      <section className="endurance-shell smart-search-row premium-feed-controls">
+        <TrainingFilters value={search} onChange={setSearch} />
+        <div className="premium-tabs-row">
+          <TrainingFeedTabs active={activeTab} onChange={setActiveTab} />
           <select
             value={activeTab}
             onChange={(event) => setActiveTab(event.target.value)}
             className="feed-select-pill"
+            aria-label="Training filter"
           >
             <option value="upcoming">All sports</option>
             <option value="flexible">Flexible</option>
@@ -297,11 +247,6 @@ export default function TrainingsPage() {
             <option value="nearby">Nearby</option>
           </select>
         </div>
-      </section>
-
-      <section className="endurance-shell smart-search-row">
-        <TrainingFilters value={search} onChange={setSearch} />
-        <TrainingFeedTabs active={activeTab} onChange={setActiveTab} />
       </section>
 
       <section className="endurance-shell training-feed-stack visual-feed-stack">
