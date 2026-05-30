@@ -48,6 +48,20 @@ function matchesSearch(training, search) {
   return haystack.includes(search.toLowerCase());
 }
 
+function normalizeSports(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map((item) => String(item));
+  if (!value) return [];
+  if (typeof value === "string") return [value];
+  return [];
+}
+
+function matchesPreferredSports(training, preferredSportIds) {
+  if (!preferredSportIds?.length) return true;
+  const trainingSportIds = normalizeSports(training?.sports);
+  if (!trainingSportIds.length) return false;
+  return trainingSportIds.some((sportId) => preferredSportIds.includes(sportId));
+}
+
 
 function firstNameFromProfile(profile) {
   return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice";
@@ -123,13 +137,29 @@ export default function TrainingsPage() {
       return;
     }
 
+    const { data: userSportsRows, error: userSportsError } = await supabase
+      .from("user_sports")
+      .select("sport_id")
+      .eq("user_id", user.id);
+
+    if (userSportsError) {
+      console.error("Preferred sports load failed", userSportsError);
+    }
+
+    const preferredSportIdsForUser = (userSportsRows || [])
+      .map((row) => row.sport_id)
+      .filter(Boolean);
+    setPreferredSports(preferredSportIdsForUser);
+
     const { data: sessions } = await supabase
       .from("training_sessions")
       .select("*")
       .order("starts_at", { ascending: true, nullsFirst: false })
-      .limit(80);
+      .limit(120);
 
-    const sessionRows = (sessions || []).filter((session) => isNotOlderThanOneDay(session));
+    const sessionRows = (sessions || [])
+      .filter((session) => isNotOlderThanOneDay(session))
+      .filter((session) => matchesPreferredSports(session, preferredSportIdsForUser));
     setTrainings(sessionRows);
 
     const ids = sessionRows.map((session) => session.id);
