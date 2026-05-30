@@ -7,7 +7,7 @@ import { supabase } from "../../../lib/supabase";
 import { subscribeToTrainingRealtime, removeRealtimeChannel } from "../../../lib/realtime";
 import TrainingLiveStatus from "../../../components/realtime/TrainingLiveStatus";
 import PlanningPoll from "../../../components/trainings/PlanningPoll";
-import RouteMiniPreview from "../../../components/routes/RouteMiniPreview";
+import OSMRouteMap from "../../../components/OSMRouteMap";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
 import { createNotification, createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
 import BottomNav from "../../../components/BottomNav";
@@ -85,6 +85,76 @@ function mapsUrl(location, latitude, longitude) {
   }
   if (!location) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
+
+
+function getRoutePointArray(routePoints) {
+  if (!routePoints) return [];
+  if (Array.isArray(routePoints)) return routePoints;
+  if (Array.isArray(routePoints.points)) return routePoints.points;
+  return [];
+}
+
+function normalizeRoutePoint(point) {
+  return {
+    lat: Number(point?.lat ?? point?.latitude),
+    lon: Number(point?.lon ?? point?.lng ?? point?.longitude),
+    ele: point?.ele ?? point?.elevation ?? null,
+  };
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildGpxFromRoute(route) {
+  const points = getRoutePointArray(route?.route_points)
+    .map(normalizeRoutePoint)
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+
+  if (points.length < 2) return "";
+
+  const name = escapeXml(route?.title || "Endurance route");
+  const trkpts = points
+    .map((point) => {
+      const ele = Number.isFinite(Number(point.ele)) ? `
+        <ele>${Number(point.ele).toFixed(1)}</ele>` : "";
+      return `      <trkpt lat="${point.lat}" lon="${point.lon}">${ele}
+      </trkpt>`;
+    })
+    .join("
+");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Endurance" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${name}</name>
+  </metadata>
+  <trk>
+    <name>${name}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>
+`;
+}
+
+function downloadTextFile(filename, text, type = "application/gpx+xml") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function displayName(person) {
@@ -796,6 +866,31 @@ export default function TrainingDetailPage() {
     }
   }
 
+
+  function downloadRouteGpx() {
+    if (!route) return;
+
+    if (route.gpx_file_url) {
+      window.open(route.gpx_file_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const gpx = buildGpxFromRoute(route);
+
+    if (!gpx) {
+      setMessage("No GPX data available for this route.");
+      return;
+    }
+
+    const safeTitle = (route.title || training?.title || "endurance-route")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "endurance-route";
+
+    downloadTextFile(`${safeTitle}.gpx`, gpx);
+    setMessage("GPX file downloaded.");
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
@@ -824,94 +919,29 @@ export default function TrainingDetailPage() {
 
         {!loading && training ? (
           <>
-            <article style={styles.hero}>
-              <div style={styles.badgeRow}>
-                <span style={styles.sportBadge}>{sportLabel}</span>
-                <span style={styles.visibilityBadge}>{training.visibility}</span>
+            <article style={styles.heroCompact}>
+              <div style={styles.detailTopBar}>
+                <div style={styles.badgeRow}>
+                  <span style={styles.sportBadge}>⌘ {sportLabel}</span>
+                  <span style={styles.visibilityBadge}>{training.visibility}</span>
+                </div>
+
+                <div style={styles.topIconActions}>
+                  <button type="button" onClick={shareTraining} style={styles.iconButton} aria-label="Share training">⇧</button>
+                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.iconLink} aria-label="Edit training">•••</Link> : null}
+                </div>
               </div>
 
               <h1 style={styles.title}>{training.title}</h1>
 
               {training.description ? <p style={styles.description}>{training.description}</p> : null}
 
-              <div style={styles.quickGrid}>
-                <div style={styles.quickCard}>
-                  <span>Time</span>
-                  <strong>{formatTime(training)}</strong>
-                </div>
-
-                <div style={styles.quickCard}>
-                  <span>Start</span>
-                  <strong>{training.start_location || "Location not set"}</strong>
-                </div>
-
-                {training.distance_km ? (
-                  <div style={styles.quickCard}>
-                    <span>Distance</span>
-                    <strong>{training.distance_km} km</strong>
-                  </div>
-                ) : null}
-
-                <WeatherForecastCard training={training} />
-
-                <div style={styles.quickCard}>
-                  <span>Joined</span>
-                  <strong>
-                    {participantCount}
-                    {training.max_participants ? ` / ${training.max_participants}` : ""}
-                  </strong>
-                </div>
+              <div style={styles.heroMetaRow}>
+                <span>▣ {formatTime(training)}</span>
+                <span>⌖ {training.start_location || "Location not set"}</span>
               </div>
 
               {message ? <div style={styles.message}>{message}</div> : null}
-
-              <div style={styles.actions}>
-                <button
-                  type="button"
-                  onClick={toggleJoin}
-                  disabled={busy || (!joined && isFull)}
-                  style={joined ? styles.leaveButton : styles.primaryButton}
-                >
-                  {busy ? "..." : joined ? "Leave training" : isFull ? "Training full" : "Join training"}
-                </button>
-
-                {training.start_location ? (
-                  <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
-                    Maps
-                  </a>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={addToCalendar}
-                  disabled={!getTrainingStart(training)}
-                  style={getTrainingStart(training) ? styles.secondaryButton : styles.disabledButton}
-                >
-                  Calendar
-                </button>
-
-                <button type="button" onClick={shareTraining} style={styles.secondaryButton}>
-                  Share
-                </button>
-
-                {canManage ? (
-                  <>
-                    <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>
-                      Edit
-                    </Link>
-
-                    <button type="button" onClick={deleteTraining} disabled={busy} style={styles.dangerButton}>
-                      Delete
-                    </button>
-                  </>
-                ) : null}
-              </div>
-
-              {!getTrainingStart(training) && training.planning_type === "flexible" ? (
-                <div style={styles.infoMessage}>
-                  Calendar export becomes available after the organizer sets a final start time.
-                </div>
-              ) : null}
             </article>
 
             <div style={{ marginBottom: 12 }}>
@@ -1083,30 +1113,185 @@ export default function TrainingDetailPage() {
               </section>
             ) : null}
 
-            <section style={styles.previewGrid}>
-              <article style={styles.previewCard}>
+            {route ? (
+              <section style={styles.routeFeatureCard}>
                 <div style={styles.previewHeader}>
                   <div>
                     <div style={styles.cardKicker}>Route</div>
-                    <h2 style={styles.previewTitle}>{route ? route.title : supportsRoutePreview(training) ? "No route added yet" : "Route not needed"}</h2>
+                    <h2 style={styles.routeTitle}>{route.title || "Training route"}</h2>
                   </div>
-                  {route ? <span style={styles.readyPill}>Ready</span> : null}
+                  <span style={styles.readyPill}>Ready</span>
                 </div>
 
-                {route ? (
+                <div style={styles.osmMapFrame}>
+                  <OSMRouteMap
+                    routePoints={route.route_points}
+                    title={route.title || training.title}
+                    height={260}
+                    compact={false}
+                    interactive={false}
+                    showLegend={false}
+                    showFullscreen={false}
+                    defaultLayer="osm"
+                  />
+                </div>
+
+                <div style={styles.routeFactsBar}>
+                  <span>🥾 {getSportLabel(route.sport_id)}</span>
+                  <span>📏 {route.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km planned` : "Distance not set"}</span>
+                  <span>⛰ {route.elevation_gain_m ? `${route.elevation_gain_m} m+` : "Elevation not set"}</span>
+                </div>
+
+                <div style={styles.routeActions}>
+                  <Link href={`/routes/${route.id}`} style={styles.routeActionButton}>▱ Open route</Link>
+                  <button type="button" onClick={downloadRouteGpx} style={styles.routeActionPrimary}>⇩ Download GPX</button>
+                  <button type="button" onClick={shareTraining} style={styles.routeActionButton}>⇧ Share route</button>
+                </div>
+              </section>
+            ) : supportsRoutePreview(training) ? (
+              <section style={styles.routeFeatureCard}>
+                <div style={styles.cardKicker}>Route</div>
+                <h2 style={styles.routeTitle}>No route added yet</h2>
+                <div style={styles.previewEmpty}>
+                  <strong>Add a route preview for this training.</strong>
+                  <span>Participants can quickly see distance, elevation and the planned course before they join.</span>
+                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.primaryLink}>Add route</Link> : null}
+                </div>
+              </section>
+            ) : null}
+
+            <section style={styles.compactInfoGrid}>
+              <div style={styles.metricCard}>
+                <span>Time</span>
+                <strong>{formatTime(training)}</strong>
+              </div>
+              <div style={styles.metricCard}>
+                <span>Distance</span>
+                <strong>{route?.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km` : "—"}</strong>
+              </div>
+              <div style={styles.metricCard}>
+                <span>Elevation</span>
+                <strong>{route?.elevation_gain_m ? `${route.elevation_gain_m} m+` : "—"}</strong>
+              </div>
+              <div style={styles.metricCard}>
+                <span>Joined</span>
+                <strong>{participantCount}{training.max_participants ? ` / ${training.max_participants}` : ""}</strong>
+              </div>
+            </section>
+
+            <WeatherForecastCard training={training} />
+
+            <section style={styles.card}>
+              <div style={styles.participantsHeader}>
+                <div style={styles.cardKicker}>Participants</div>
+                <span style={styles.participantsCount}>{participantCount} joined</span>
+              </div>
+
+              {participants.length ? (
+                <div style={styles.list}>
+                  {participants.map((participant) => {
+                    const person = participantProfiles[participant.user_id];
+                    return (
+                      <button
+                        key={participant.id}
+                        type="button"
+                        onClick={() => router.push(`/profile/${participant.user_id}`)}
+                        style={styles.personRow}
+                      >
+                        {person?.avatar_url ? (
+                          <img src={person.avatar_url} alt="" style={styles.avatar} />
+                        ) : (
+                          <span style={styles.avatarFallback}>{initials(person)}</span>
+                        )}
+                        <span style={styles.personText}>
+                          <strong>{displayName(person)}</strong>
+                          <span>{person?.location || person?.role || "Training participant"}</span>
+                        </span>
+                        <span style={styles.rowChevron}>›</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={styles.muted}>No participants yet.</p>
+              )}
+            </section>
+
+            {workout ? (
+              <section style={styles.previewCard}>
+                <div style={styles.previewHeader}>
+                  <div>
+                    <div style={styles.cardKicker}>Workout</div>
+                    <h2 style={styles.previewTitle}>{workout.title}</h2>
+                  </div>
+                  <span style={styles.readyPill}>Ready</span>
+                </div>
+                <div style={styles.workoutVisual}>
+                  <span style={styles.workoutIcon}>▦</span>
+                  <strong>{workout.workout_type || "Workout"}</strong>
+                  <span>{workout.level || "Level not set"}</span>
+                </div>
+                <div style={styles.previewFacts}>
+                  <span style={styles.factChip}>{getSportLabel(workout.sport_id)}</span>
+                  <span style={styles.factChip}>{workout.duration_min ? `${workout.duration_min} min` : "Duration not set"}</span>
+                  <span style={styles.factChip}>{getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
+                </div>
+                {workout.description ? <p style={styles.muted}>{workout.description}</p> : null}
+              </section>
+            ) : supportsWorkoutPreview(training) ? (
+              <section style={styles.previewCard}>
+                <div style={styles.cardKicker}>Workout</div>
+                <h2 style={styles.previewTitle}>No workout added yet</h2>
+                <div style={styles.previewEmpty}>
+                  <strong>Add the workout structure.</strong>
+                  <span>Show blocks, duration and level so participants know what to expect.</span>
+                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.primaryLink}>Add workout</Link> : null}
+                </div>
+              </section>
+            ) : null}
+
+            <div style={styles.actionsFooter}>
+              <button
+                type="button"
+                onClick={toggleJoin}
+                disabled={busy || (!joined && isFull)}
+                style={joined ? styles.leaveFooterButton : styles.primaryWideButton}
+              >
+                {busy ? "..." : joined ? "Leave training" : isFull ? "Training full" : "Join training"}
+              </button>
+
+              <div style={styles.actionsCompact}>
+                {training.start_location ? (
+                  <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
+                    Maps
+                  </a>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={addToCalendar}
+                  disabled={!getTrainingStart(training)}
+                  style={getTrainingStart(training) ? styles.secondaryButton : styles.disabledButton}
+                >
+                  Calendar
+                </button>
+
+                {canManage ? (
                   <>
-                    <RouteMiniPreview routePoints={route.route_points} height={170} />
-                    <div style={styles.previewFacts}>
-                      <span style={styles.factChip}>{getSportLabel(route.sport_id)}</span>
-                      <span style={styles.factChip}>{route.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km planned` : "Distance not set"}</span>
-                      <span style={styles.factChip}>{route.elevation_gain_m ? `${route.elevation_gain_m} m+` : "Elevation not set"}</span>
-                    </div>
-                    {route.description ? <p style={styles.muted}>{route.description}</p> : null}
-                    <div style={styles.actionsCompact}>
-                      <Link href={`/routes/${route.id}`} style={styles.secondaryLink}>Open route</Link>
-                      {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>Change route</Link> : null}
-                    </div>
+                    <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>Edit</Link>
+                    <button type="button" onClick={deleteTraining} disabled={busy} style={styles.dangerButton}>Delete</button>
                   </>
+                ) : null}
+              </div>
+
+              {!getTrainingStart(training) && training.planning_type === "flexible" ? (
+                <div style={styles.infoMessage}>
+                  Calendar export becomes available after the organizer sets a final start time.
+                </div>
+              ) : null}
+            </div>
+
+          </>
                 ) : supportsRoutePreview(training) ? (
                   <div style={styles.previewEmpty}>
                     <strong>Add a route preview for this training.</strong>
@@ -1681,5 +1866,172 @@ const styles = {
   toolsGrid: {
     display: "grid",
     gap: 14,
+  },
+
+  heroCompact: {
+    borderRadius: 32,
+    padding: 0,
+    background: "transparent",
+    border: 0,
+    display: "grid",
+    gap: 16,
+  },
+  detailTopBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  topIconActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  iconLink: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    fontSize: 18,
+    fontWeight: 950,
+    textDecoration: "none",
+    display: "grid",
+    placeItems: "center",
+  },
+  heroMetaRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 10,
+    color: "rgba(255,255,255,0.80)",
+    fontSize: 16,
+    fontWeight: 850,
+    lineHeight: 1.35,
+  },
+  routeFeatureCard: {
+    borderRadius: 30,
+    padding: 16,
+    background: glass,
+    border: "1px solid rgba(255,255,255,0.13)",
+    display: "grid",
+    gap: 14,
+    overflow: "hidden",
+  },
+  routeTitle: {
+    margin: "5px 0 0",
+    fontSize: "clamp(26px, 7vw, 42px)",
+    lineHeight: 0.98,
+    letterSpacing: "-0.055em",
+  },
+  osmMapFrame: {
+    borderRadius: 24,
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.10)",
+  },
+  routeFactsBar: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 8,
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 14,
+    fontWeight: 900,
+  },
+  routeActions: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 8,
+  },
+  routeActionButton: {
+    minHeight: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 10px",
+    fontWeight: 950,
+    textDecoration: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    fontSize: 13,
+  },
+  routeActionPrimary: {
+    minHeight: 48,
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 10px",
+    fontWeight: 950,
+    cursor: "pointer",
+    fontSize: 13,
+  },
+  compactInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 8,
+  },
+  metricCard: {
+    borderRadius: 18,
+    padding: 12,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    display: "grid",
+    gap: 8,
+    minHeight: 80,
+  },
+  participantsHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  participantsCount: {
+    color: "rgba(255,255,255,0.60)",
+    fontWeight: 850,
+  },
+  rowChevron: {
+    justifySelf: "end",
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 30,
+    fontWeight: 300,
+  },
+  actionsFooter: {
+    display: "grid",
+    gap: 12,
+  },
+  primaryWideButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 18px",
+    fontWeight: 950,
+    fontSize: 17,
+    cursor: "pointer",
+  },
+  leaveFooterButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    padding: "0 18px",
+    fontWeight: 950,
+    fontSize: 17,
+    cursor: "pointer",
   },
 };
