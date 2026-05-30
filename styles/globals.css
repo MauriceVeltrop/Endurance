@@ -7457,3 +7457,333 @@ main {
     font-size: 10px !important;
   }
 }
+
+/* =====================================================
+   PREMIUM TRAINING HOME PATCH
+   Approved 2026 mobile mockup
+   - removes bulky preferred-sports strip from home
+   - compact single-row metric panel
+   - search + filters directly above cards
+   - calmer premium cards + fixed bottom navigation
+===================================================== */
+
+.training-feed-premium-home .endurance-header {
+  padding-top: 10px !important;
+  padding-bottom: 6px !important;
+}
+
+.training-feed-premium-home .training-dashboard {
+  gap: 18px !important;
+  margin-top: 2px !important;
+}
+
+.training-feed-premium-home .training-dashboard-top {
+  align-items: center !important;
+}
+
+.training-feed-premium-home .training-greeting {
+  font-size: clamp(22px, 5.8vw, 30px) !important;
+  color: #fff !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.055em !important;
+}
+
+.training-feed-premium-home .training-subline {
+  margin-top: 10px !important;
+  font-size: clamp(17px, 4.6vw, 23px) !important;
+  line-height: 1.16 !important;
+  max-width: 270px !important;
+}
+
+.training-feed-premium-home .training-subline strong {
+  font-size: 1.45em !important;
+  line-height: .8 !important;
+}
+
+.training-feed-premium-home .training-create-compact {
+  min-height: 50px !important;
+  padding-inline: 22px !important;
+  border-radius: 999px !important;
+  font-size: 16px !important;
+  box-shadow: 0 12px 34px rgba(230,255,0,.16) !important;
+}
+
+.training-feed-premium-home .training-metric-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+  padding: 10px 0 !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(18,24,30,.78), rgba(7,10,14,.82)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.24) !important;
+}
+
+.training-feed-premium-home .training-metric-tile {
+  min-width: 0 !important;
+  min-height: 74px !important;
+  padding: 8px 6px !important;
+  border: 0 !important;
+  border-right: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: grid !important;
+  grid-template-columns: 30px minmax(0,1fr) !important;
+  grid-template-areas:
+    "icon value"
+    "label label" !important;
+  align-content: center !important;
+  align-items: center !important;
+  gap: 7px 7px !important;
+}
+
+.training-feed-premium-home .training-metric-tile:last-child {
+  border-right: 0 !important;
+}
+
+.training-feed-premium-home .training-metric-tile span {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 15px !important;
+  font-size: 17px !important;
+  background: rgba(230,255,0,.07) !important;
+}
+
+.training-feed-premium-home .training-metric-tile strong {
+  font-size: clamp(24px, 7vw, 34px) !important;
+  line-height: .9 !important;
+}
+
+.training-feed-premium-home .training-metric-tile small {
+  font-size: clamp(10px, 2.7vw, 13px) !important;
+  text-align: center !important;
+  line-height: 1.08 !important;
+  color: rgba(255,255,255,.78) !important;
+}
+
+.training-feed-premium-home .premium-feed-controls {
+  margin-top: 20px !important;
+}
+
+.training-feed-premium-home .premium-feed-controls .feed-filter-card {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.training-feed-premium-home .premium-feed-controls .feed-filter-card > div {
+  display: none !important;
+}
+
+.training-feed-premium-home .premium-feed-controls .feed-search {
+  margin: 0 !important;
+  min-height: 58px !important;
+  border-radius: 999px !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(6,10,14,.72) !important;
+}
+
+.training-feed-premium-home .premium-feed-controls .feed-search input {
+  font-size: clamp(15px, 4.6vw, 20px) !important;
+}
+
+.training-feed-premium-home .premium-tabs-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+
+.training-feed-premium-home .premium-tabs-row .training-tabs {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  gap: 8px !important;
+  overflow-x: auto !important;
+  padding: 0 !important;
+}
+
+.training-feed-premium-home .premium-tabs-row .training-tabs button {
+  min-height: 43px !important;
+  padding: 0 17px !important;
+  border-radius: 999px !important;
+  font-size: 14px !important;
+  white-space: nowrap !important;
+}
+
+.training-feed-premium-home .premium-tabs-row .feed-select-pill {
+  flex: 0 0 auto !important;
+  min-height: 45px !important;
+  padding-inline: 15px !important;
+  max-width: 138px !important;
+}
+
+.training-feed-premium-home .visual-feed-stack {
+  margin-top: 16px !important;
+  gap: 14px !important;
+}
+
+.training-feed-premium-home .compact-training-card {
+  grid-template-columns: minmax(126px, 37%) minmax(0,1fr) !important;
+  min-height: 152px !important;
+  border-radius: 24px !important;
+  background: linear-gradient(90deg, rgba(14,20,27,.94), rgba(6,10,14,.92)) !important;
+  border-color: rgba(230,255,0,.15) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 44px rgba(0,0,0,.26) !important;
+}
+
+.training-feed-premium-home .compact-training-media {
+  min-height: 152px !important;
+  height: 152px !important;
+}
+
+.training-feed-premium-home .compact-training-body {
+  padding: 15px 15px 14px !important;
+  gap: 7px !important;
+}
+
+.training-feed-premium-home .participant-count-pill {
+  border: 0 !important;
+  color: rgba(255,255,255,.78) !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 13px !important;
+}
+
+.training-feed-premium-home .visual-training-title,
+.training-feed-premium-home .compact-training-card .training-card-title {
+  font-size: clamp(20px, 5.2vw, 26px) !important;
+  line-height: 1.04 !important;
+  letter-spacing: -0.06em !important;
+}
+
+.training-feed-premium-home .visual-distance-line {
+  font-size: 15px !important;
+  color: rgba(255,255,255,.76) !important;
+}
+
+.training-feed-premium-home .compact-training-meta {
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+  gap: 7px !important;
+}
+
+.training-feed-premium-home .training-location-link,
+.training-feed-premium-home .compact-training-meta span {
+  white-space: normal !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+.training-feed-premium-home .compact-join-button {
+  min-width: 74px !important;
+  min-height: 42px !important;
+  font-size: 14px !important;
+  border-radius: 999px !important;
+}
+
+.training-feed-premium-home .media-sport-label {
+  left: 11px !important;
+  bottom: 11px !important;
+  padding: 6px 10px !important;
+  font-size: 10px !important;
+}
+
+.training-feed-premium-home .endurance-bottom-nav {
+  grid-template-columns: repeat(5, minmax(0,1fr)) !important;
+}
+
+.training-feed-premium-home .endurance-bottom-nav a {
+  opacity: .74 !important;
+}
+
+.training-feed-premium-home .endurance-bottom-nav a.active {
+  opacity: 1 !important;
+  color: var(--endurance-lime) !important;
+}
+
+@media (max-width: 420px) {
+  .training-feed-premium-home .training-dashboard-top {
+    gap: 12px !important;
+  }
+
+  .training-feed-premium-home .training-create-compact {
+    min-height: 46px !important;
+    padding-inline: 17px !important;
+    font-size: 14px !important;
+  }
+
+  .training-feed-premium-home .training-metric-row {
+    border-radius: 22px !important;
+  }
+
+  .training-feed-premium-home .training-metric-tile {
+    min-height: 72px !important;
+    padding: 8px 4px !important;
+    grid-template-columns: 27px minmax(0,1fr) !important;
+    gap: 6px 4px !important;
+  }
+
+  .training-feed-premium-home .training-metric-tile span {
+    width: 27px !important;
+    height: 27px !important;
+    font-size: 15px !important;
+  }
+
+  .training-feed-premium-home .premium-tabs-row {
+    align-items: flex-start !important;
+  }
+
+  .training-feed-premium-home .premium-tabs-row .feed-select-pill {
+    max-width: 126px !important;
+    font-size: 13px !important;
+  }
+
+  .training-feed-premium-home .compact-training-card {
+    grid-template-columns: minmax(118px, 36%) minmax(0,1fr) !important;
+    min-height: 144px !important;
+  }
+
+  .training-feed-premium-home .compact-training-media {
+    min-height: 144px !important;
+    height: 144px !important;
+  }
+
+  .training-feed-premium-home .compact-training-body {
+    padding: 13px 12px !important;
+  }
+
+  .training-feed-premium-home .visual-training-title,
+  .training-feed-premium-home .compact-training-card .training-card-title {
+    font-size: clamp(18px, 5vw, 22px) !important;
+  }
+
+  .training-feed-premium-home .compact-training-meta {
+    font-size: 11.5px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .training-feed-premium-home .training-create-compact {
+    padding-inline: 13px !important;
+    font-size: 13px !important;
+  }
+
+  .training-feed-premium-home .training-metric-tile small {
+    font-size: 9.5px !important;
+  }
+
+  .training-feed-premium-home .premium-tabs-row {
+    flex-direction: column !important;
+  }
+
+  .training-feed-premium-home .premium-tabs-row .feed-select-pill {
+    align-self: flex-end !important;
+  }
+}
