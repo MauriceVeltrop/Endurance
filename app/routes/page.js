@@ -33,8 +33,20 @@ function matchesTab(route, activeTab) {
   if (activeTab === "all") return true;
   if (activeTab === "my") return route._isOwnRoute;
   if (activeTab === "public") return route.visibility === "public";
+  if (activeTab === "mapped") return Boolean(route.gpx_file_url || route.route_points);
   if (activeTab === "trail") return String(route.sport_id || "").includes("trail");
   return route.sport_id === activeTab;
+}
+
+function firstNameFromProfile(profile) {
+  return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice";
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 export default function RoutesPage() {
@@ -64,7 +76,7 @@ export default function RoutesPage() {
 
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
-        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .select("id,name,first_name,last_name,email,avatar_url,role,onboarding_completed,blocked")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -146,9 +158,9 @@ export default function RoutesPage() {
 
     return [
       { id: "all", label: "All routes" },
+      { id: "mapped", label: "Mapped" },
       { id: "my", label: "My routes" },
-      { id: "public", label: "Public" },
-      { id: "trail", label: "Trail Running" },
+      { id: "trail", label: "Trail" },
       ...sportTabs,
     ];
   }, [preferredSportIds]);
@@ -158,68 +170,50 @@ export default function RoutesPage() {
     .filter((route) => matchesTab(route, activeTab));
 
   return (
-    <main className="endurance-page route-feed-page">
-      <AppHeader active="routes" />
+    <main className="endurance-page route-feed-page training-feed-multisport-hero route-feed-multisport-layout">
+      <section className="training-feed-hero-shell route-hero-shell">
+        <AppHeader active="routes" />
 
-      <section className="endurance-shell training-hero endurance-card route-feed-hero">
-        <div>
-          <p className="eyebrow">Route feed</p>
-          <h1>
-            Find your next
-            <br />
-            route<span>.</span>
-          </h1>
-          <p>
-            Browse saved routes on real map previews, filtered by your preferred sports and ready to become training sessions.
-          </p>
-        </div>
-        <Link href="/routes/new" className="hero-create-button">
-          + Create route
-        </Link>
+        <section className="endurance-shell training-dashboard route-dashboard">
+          <div className="training-dashboard-top">
+            <div>
+              <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)}</p>
+              <p className="training-subline">
+                <strong>{filteredRoutes.length}</strong> route{filteredRoutes.length === 1 ? "" : "s"} ready for your sports
+              </p>
+            </div>
+
+            <Link href="/routes/new" className="training-create-compact">
+              + Create route
+            </Link>
+          </div>
+
+          <div className="training-metric-row route-metric-row">
+            <div className="training-metric-tile">
+              <span>🧭</span>
+              <strong>{loading ? "…" : routes.length}</strong>
+              <small>Routes</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>🗺</span>
+              <strong>{loading ? "…" : mappedCount}</strong>
+              <small>Mapped</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>👤</span>
+              <strong>{loading ? "…" : ownRouteCount}</strong>
+              <small>Your routes</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>⛰</span>
+              <strong>{loading ? "…" : trailRouteCount}</strong>
+              <small>Trail</small>
+            </div>
+          </div>
+        </section>
       </section>
 
-      <section className="endurance-shell metric-grid route-feed-metrics">
-        <div className="metric-card highlight">
-          <span>◇</span>
-          <strong>{loading ? "…" : routes.length}</strong>
-          <div>
-            <b>Routes</b>
-            <p>Available for your sports.</p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <span>🧭</span>
-          <strong>{loading ? "…" : mappedCount}</strong>
-          <div>
-            <b>Mapped</b>
-            <p>GPX or route points.</p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <span>👤</span>
-          <strong>{loading ? "…" : ownRouteCount}</strong>
-          <div>
-            <b>Your routes</b>
-            <p>Created by you.</p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <span>⛰</span>
-          <strong>{loading ? "…" : trailRouteCount}</strong>
-          <div>
-            <b>Trail</b>
-            <p>Off-road focused.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="endurance-shell feed-filter-card endurance-card route-filter-card">
-        <p className="eyebrow">Smart route feed</p>
-        <h2>Your route library</h2>
-
+      <section className="endurance-shell smart-search-row premium-feed-controls route-feed-controls">
         <label className="feed-search">
           <span>⌕</span>
           <input
@@ -229,20 +223,31 @@ export default function RoutesPage() {
           />
         </label>
 
-        <div className="training-tabs route-tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={activeTab === tab.id ? "active" : ""}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <button type="button" className="route-filter-icon" aria-label="Filters">
-            ⟡
-          </button>
+        <div className="premium-tabs-row route-tabs-row">
+          <div className="training-tabs route-tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={activeTab === tab.id ? "active" : ""}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={activeTab}
+            onChange={(event) => setActiveTab(event.target.value)}
+            className="feed-select-pill"
+            aria-label="Route filter"
+          >
+            {tabs.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
