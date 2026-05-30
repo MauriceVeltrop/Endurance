@@ -97,8 +97,8 @@ export default function TrainingCard({ training, participants = [] }) {
       <div className="training-card-body visual-training-body compact-training-body">
         <div className="visual-card-topline">
           <span className="visual-sport-icon">{sportIcon(training)}</span>
-          <span className={limited ? "visual-status limited" : "visual-status"}>
-            {limited ? "Limited" : flexible ? "Flexible" : "Open"}
+          <span className={limited ? "visual-status limited participant-count-pill" : "visual-status participant-count-pill"}>
+            👥 {participants.length}{training.max_participants ? `/${training.max_participants}` : ""}
           </span>
         </div>
 
