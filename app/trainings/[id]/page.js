@@ -127,8 +127,7 @@ function buildGpxFromRoute(route) {
       return `      <trkpt lat="${point.lat}" lon="${point.lon}">${ele}
       </trkpt>`;
     })
-    .join("
-");
+    .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Endurance" xmlns="http://www.topografix.com/GPX/1/1">
