@@ -4,7 +4,6 @@ export default function TrainingFeedTabs({ active = "upcoming", onChange }) {
     ["upcoming", "Upcoming"],
     ["flexible", "Flexible"],
     ["team", "Team"],
-    ["nearby", "Nearby"],
   ];
 
   return (
