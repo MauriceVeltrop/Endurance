@@ -11,6 +11,7 @@ import OSMRouteMap from "../../../components/OSMRouteMap";
 import { downloadTrainingIcs, getTrainingStart } from "../../../lib/trainingCalendar";
 import { createNotification, createNotificationsForUsers, NOTIFICATION_TYPES, trainingUrl } from "../../../lib/notifications";
 import BottomNav from "../../../components/BottomNav";
+import { getTrainingHeroImage } from "../../../lib/sportImages";
 
 const sportLabels = {
   running: "Running",
@@ -412,6 +413,7 @@ export default function TrainingDetailPage() {
   const participantCount = participants.length;
   const isFull = Boolean(training?.max_participants && participantCount >= Number(training.max_participants));
   const canManage = Boolean(user?.id && training?.creator_id === user.id);
+  const heroImage = getTrainingHeroImage(training, primarySport);
 
   useEffect(() => {
     loadTraining();
@@ -891,14 +893,8 @@ export default function TrainingDetailPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <img src="/logo-endurance.png" alt="Endurance" style={styles.logo} />
-
-        <Link href="/trainings" style={styles.backLink}>
-          ← Back to trainings
-        </Link>
-
+    <main style={styles.pageV3}>
+      <section style={styles.shellV3}>
         {loading ? (
           <section style={styles.stateCard}>
             <h1 style={styles.stateTitle}>Loading training...</h1>
@@ -918,34 +914,47 @@ export default function TrainingDetailPage() {
 
         {!loading && training ? (
           <>
-            <article style={styles.heroCompact}>
-              <div style={styles.detailTopBar}>
+            <article
+              style={{
+                ...styles.heroImageCard,
+                backgroundImage: heroImage?.src
+                  ? `linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.50) 42%, rgba(0,0,0,0.92) 100%), url(${heroImage.src})`
+                  : styles.heroImageCard.backgroundImage,
+                backgroundPosition: heroImage?.position || "center center",
+              }}
+            >
+              <div style={styles.heroTopActionsV3}>
+                <Link href="/trainings" style={styles.backLinkV3}>← Back to trainings</Link>
+                <div style={styles.topIconActions}>
+                  <button type="button" onClick={shareTraining} style={styles.iconButtonV3} aria-label="Share training">⇧</button>
+                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.iconLinkV3} aria-label="Edit training">•••</Link> : null}
+                </div>
+              </div>
+
+              <div style={styles.heroContentV3}>
                 <div style={styles.badgeRow}>
-                  <span style={styles.sportBadge}>⌘ {sportLabel}</span>
+                  <span style={styles.sportBadge}>🥾 {sportLabel}</span>
                   <span style={styles.visibilityBadge}>{training.visibility}</span>
                 </div>
 
-                <div style={styles.topIconActions}>
-                  <button type="button" onClick={shareTraining} style={styles.iconButton} aria-label="Share training">⇧</button>
-                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.iconLink} aria-label="Edit training">•••</Link> : null}
+                <h1 style={styles.titleV3}>{training.title}</h1>
+
+                {training.description ? <p style={styles.descriptionV3}>{training.description}</p> : null}
+
+                <div style={styles.heroMetaStackV3}>
+                  <span>▣ {formatTime(training)}</span>
+                  <span>⌖ {training.start_location || "Location not set"}</span>
+                </div>
+
+                <div style={styles.liveRowV3}>
+                  <span>{participantCount} joined</span>
+                  <span style={styles.liveDotV3}>●</span>
+                  <TrainingLiveStatus participants={participants} />
                 </div>
               </div>
-
-              <h1 style={styles.title}>{training.title}</h1>
-
-              {training.description ? <p style={styles.description}>{training.description}</p> : null}
-
-              <div style={styles.heroMetaRow}>
-                <span>▣ {formatTime(training)}</span>
-                <span>⌖ {training.start_location || "Location not set"}</span>
-              </div>
-
-              {message ? <div style={styles.message}>{message}</div> : null}
             </article>
 
-            <div style={{ marginBottom: 12 }}>
-              <TrainingLiveStatus participants={participants} />
-            </div>
+            {message ? <div style={styles.message}>{message}</div> : null}
 
             <PlanningPoll
               training={training}
@@ -954,201 +963,29 @@ export default function TrainingDetailPage() {
               onChanged={loadTraining}
             />
 
-            {false && canManage && sessionAvailabilityRows.length ? (
-              <section style={styles.card}>
-                <div style={styles.cardKicker}>Flexible planning</div>
-                <h2 style={styles.sectionTitle}>Availability overview</h2>
-
-                <div style={styles.availabilityList}>
-                  {buildAvailabilitySummary(
-                    sessionAvailabilityRows,
-                    participantProfiles
-                  ).map((item) => (
-                    <div key={item.id} style={styles.availabilityRow}>
-                      <div style={styles.availabilityTop}>
-                        <strong>{item.name}</strong>
-                        <span style={styles.availabilityTime}>
-                          {item.from} – {item.until}
-                        </span>
-                      </div>
-
-                      {item.note ? (
-                        <p style={styles.availabilityNote}>{item.note}</p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {false && training.planning_type === "flexible" ? (
-              <section style={styles.flexTimeCard}>
-                <div style={styles.cardKicker}>Flexible time frame</div>
-                <h2 style={styles.sectionTitle}>When are you available?</h2>
-                <p style={styles.muted}>
-                  This is specific for this training and separate from your general Availability calendar.
-                </p>
-
-                {availabilityMessage ? <div style={styles.message}>{availabilityMessage}</div> : null}
-
-                <div style={styles.flexGrid}>
-                  <label style={styles.label}>
-                    Available from
-                    <input
-                      type="time"
-                      value={sessionAvailabilityForm.available_from}
-                      onChange={(event) => updateSessionAvailabilityForm("available_from", event.target.value)}
-                      style={styles.input}
-                    />
-                  </label>
-
-                  <label style={styles.label}>
-                    Available until
-                    <input
-                      type="time"
-                      value={sessionAvailabilityForm.available_until}
-                      onChange={(event) => updateSessionAvailabilityForm("available_until", event.target.value)}
-                      style={styles.input}
-                    />
-                  </label>
-
-                  <label style={styles.labelFull}>
-                    Note
-                    <input
-                      value={sessionAvailabilityForm.note}
-                      onChange={(event) => updateSessionAvailabilityForm("note", event.target.value)}
-                      placeholder="Optional, e.g. easy pace only"
-                      style={styles.input}
-                    />
-                  </label>
-                </div>
-
-                <div style={styles.actions}>
-                  <button type="button" onClick={saveSessionAvailability} disabled={availabilityBusy} style={styles.primaryButton}>
-                    {availabilityBusy ? "Saving..." : "Save time frame"}
-                  </button>
-
-                  <button type="button" onClick={clearSessionAvailability} disabled={availabilityBusy} style={styles.secondaryButton}>
-                    Clear
-                  </button>
-                </div>
-
-                {sessionAvailabilityRows.length ? (
-                  <div style={styles.list}>
-                    {sessionAvailabilityRows.map((row) => {
-                      const person = participantProfiles[row.user_id];
-
-                      return (
-                        <button
-                          key={row.id}
-                          type="button"
-                          onClick={() => router.push(`/profile/${row.user_id}`)}
-                          style={styles.personRow}
-                        >
-                          {person?.avatar_url ? (
-                            <img src={person.avatar_url} alt="" style={styles.avatar} />
-                          ) : (
-                            <span style={styles.avatarFallback}>{initials(person)}</span>
-                          )}
-
-                          <span style={styles.personText}>
-                            <strong>{displayName(person)}</strong>
-                            <span>
-                              {row.available_from?.slice(0, 5)} – {row.available_until?.slice(0, 5)}
-                              {row.note ? ` · ${row.note}` : ""}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={styles.emptyState}>
-                    <strong>No time frames shared yet.</strong>
-                    <span>Share a time frame so others know when you are available.</span>
-                  </div>
-                )}
-
-                {canManage ? (
-                  <div style={styles.finalTimeBox}>
-                    <div style={styles.cardKicker}>Organizer final time</div>
-                    <h3 style={styles.smallTitle}>Set the final start time</h3>
-                    <p style={styles.muted}>
-                      Once this is set, calendar export becomes available for everyone.
-                    </p>
-
-                    <div style={styles.flexGrid}>
-                      <label style={styles.label}>
-                        Final date
-                        <input
-                          type="date"
-                          value={finalStartForm.date}
-                          onChange={(event) => updateFinalStartForm("date", event.target.value)}
-                          style={styles.input}
-                        />
-                      </label>
-
-                      <label style={styles.label}>
-                        Final time
-                        <input
-                          type="time"
-                          value={finalStartForm.time}
-                          onChange={(event) => updateFinalStartForm("time", event.target.value)}
-                          style={styles.input}
-                        />
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={saveFinalStartTime}
-                      disabled={busy}
-                      style={styles.primaryButton}
-                    >
-                      {busy ? "Saving..." : "Save final time"}
-                    </button>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-
             {route ? (
-              <section style={styles.routeFeatureCard}>
-                <div style={styles.previewHeader}>
-                  <div>
-                    <div style={styles.cardKicker}>Route</div>
-                    <h2 style={styles.routeTitle}>{route.title || "Training route"}</h2>
-                  </div>
-                  <span style={styles.readyPill}>Ready</span>
-                </div>
-
-                <div style={styles.osmMapFrame}>
+              <section style={styles.routeHeroCardV3}>
+                <div style={styles.mapFrameV3}>
                   <OSMRouteMap
                     routePoints={route.route_points}
                     title={route.title || training.title}
-                    height={260}
+                    height={360}
                     compact={false}
                     interactive={false}
                     showLegend={false}
-                    showFullscreen={false}
+                    showFullscreen={true}
                     defaultLayer="osm"
                   />
                 </div>
 
-                <div style={styles.routeFactsBar}>
-                  <span>🥾 {getSportLabel(route.sport_id)}</span>
-                  <span>📏 {route.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km planned` : "Distance not set"}</span>
-                  <span>⛰ {route.elevation_gain_m ? `${route.elevation_gain_m} m+` : "Elevation not set"}</span>
-                </div>
-
-                <div style={styles.routeActions}>
-                  <Link href={`/routes/${route.id}`} style={styles.routeActionButton}>▱ Open route</Link>
-                  <button type="button" onClick={downloadRouteGpx} style={styles.routeActionPrimary}>⇩ Download GPX</button>
-                  <button type="button" onClick={shareTraining} style={styles.routeActionButton}>⇧ Share route</button>
+                <div style={styles.routeActionsV3}>
+                  <Link href={`/routes/${route.id}`} style={styles.routeActionButtonV3}>↗ Open route</Link>
+                  <button type="button" onClick={downloadRouteGpx} style={styles.routeActionPrimaryV3}>⇩ Download GPX</button>
+                  <button type="button" onClick={shareTraining} style={styles.routeActionButtonV3}>⇧ Share route</button>
                 </div>
               </section>
             ) : supportsRoutePreview(training) ? (
-              <section style={styles.routeFeatureCard}>
+              <section style={styles.routeHeroCardV3}>
                 <div style={styles.cardKicker}>Route</div>
                 <h2 style={styles.routeTitle}>No route added yet</h2>
                 <div style={styles.previewEmpty}>
@@ -1159,35 +996,35 @@ export default function TrainingDetailPage() {
               </section>
             ) : null}
 
-            <section style={styles.compactInfoGrid}>
-              <div style={styles.metricCard}>
-                <span>Time</span>
+            <section style={styles.infoStripV3}>
+              <div style={styles.infoItemV3}>
+                <span>◷ Time</span>
                 <strong>{formatTime(training)}</strong>
               </div>
-              <div style={styles.metricCard}>
-                <span>Distance</span>
+              <div style={styles.infoItemV3}>
+                <span>▥ Distance</span>
                 <strong>{route?.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km` : "—"}</strong>
               </div>
-              <div style={styles.metricCard}>
-                <span>Elevation</span>
+              <div style={styles.infoItemV3}>
+                <span>△ Elevation</span>
                 <strong>{route?.elevation_gain_m ? `${route.elevation_gain_m} m+` : "—"}</strong>
               </div>
-              <div style={styles.metricCard}>
-                <span>Joined</span>
+              <div style={styles.infoItemV3}>
+                <span>♚ Joined</span>
                 <strong>{participantCount}{training.max_participants ? ` / ${training.max_participants}` : ""}</strong>
               </div>
             </section>
 
             <WeatherForecastCard training={training} />
 
-            <section style={styles.card}>
+            <section style={styles.cardV3}>
               <div style={styles.participantsHeader}>
                 <div style={styles.cardKicker}>Participants</div>
-                <span style={styles.participantsCount}>{participantCount} joined</span>
+                <span style={styles.participantsCount}>({participantCount})</span>
               </div>
 
               {participants.length ? (
-                <div style={styles.list}>
+                <div style={styles.listCompactV3}>
                   {participants.map((participant) => {
                     const person = participantProfiles[participant.user_id];
                     return (
@@ -1195,7 +1032,7 @@ export default function TrainingDetailPage() {
                         key={participant.id}
                         type="button"
                         onClick={() => router.push(`/profile/${participant.user_id}`)}
-                        style={styles.personRow}
+                        style={styles.personRowV3}
                       >
                         {person?.avatar_url ? (
                           <img src={person.avatar_url} alt="" style={styles.avatar} />
@@ -1217,7 +1054,7 @@ export default function TrainingDetailPage() {
             </section>
 
             {workout ? (
-              <section style={styles.previewCard}>
+              <section style={styles.cardV3}>
                 <div style={styles.previewHeader}>
                   <div>
                     <div style={styles.cardKicker}>Workout</div>
@@ -1237,32 +1074,15 @@ export default function TrainingDetailPage() {
                 </div>
                 {workout.description ? <p style={styles.muted}>{workout.description}</p> : null}
               </section>
-            ) : supportsWorkoutPreview(training) ? (
-              <section style={styles.previewCard}>
-                <div style={styles.cardKicker}>Workout</div>
-                <h2 style={styles.previewTitle}>No workout added yet</h2>
-                <div style={styles.previewEmpty}>
-                  <strong>Add the workout structure.</strong>
-                  <span>Show blocks, duration and level so participants know what to expect.</span>
-                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.primaryLink}>Add workout</Link> : null}
-                </div>
-              </section>
             ) : null}
 
-            <div style={styles.actionsFooter}>
-              <button
-                type="button"
-                onClick={toggleJoin}
-                disabled={busy || (!joined && isFull)}
-                style={joined ? styles.leaveFooterButton : styles.primaryWideButton}
-              >
-                {busy ? "..." : joined ? "Leave training" : isFull ? "Training full" : "Join training"}
-              </button>
-
-              <div style={styles.actionsCompact}>
+            <section style={styles.cardV3}>
+              <div style={styles.cardKicker}>Training actions</div>
+              <div style={styles.trainingActionsGridV3}>
                 {training.start_location ? (
-                  <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.secondaryLink}>
-                    Maps
+                  <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.trainingActionTileV3}>
+                    <strong>⌖ Maps</strong>
+                    <span>Open in Maps</span>
                   </a>
                 ) : null}
 
@@ -1270,17 +1090,28 @@ export default function TrainingDetailPage() {
                   type="button"
                   onClick={addToCalendar}
                   disabled={!getTrainingStart(training)}
-                  style={getTrainingStart(training) ? styles.secondaryButton : styles.disabledButton}
+                  style={getTrainingStart(training) ? styles.trainingActionTileV3 : styles.trainingActionTileDisabledV3}
                 >
-                  Calendar
+                  <strong>▣ Calendar</strong>
+                  <span>Add to calendar</span>
                 </button>
 
                 {canManage ? (
-                  <>
-                    <Link href={`/trainings/${training.id}/edit`} style={styles.secondaryLink}>Edit</Link>
-                    <button type="button" onClick={deleteTraining} disabled={busy} style={styles.dangerButton}>Delete</button>
-                  </>
+                  <Link href={`/trainings/${training.id}/edit`} style={styles.trainingActionTileV3}>
+                    <strong>✎ Edit</strong>
+                    <span>Edit training</span>
+                  </Link>
                 ) : null}
+
+                <button
+                  type="button"
+                  onClick={toggleJoin}
+                  disabled={busy || (!joined && isFull)}
+                  style={joined ? styles.trainingActionTileDangerV3 : styles.trainingActionTilePrimaryV3}
+                >
+                  <strong>{busy ? "..." : joined ? "↪ Leave" : isFull ? "Full" : "+ Join"}</strong>
+                  <span>{joined ? "Leave training" : isFull ? "Training full" : "Join training"}</span>
+                </button>
               </div>
 
               {!getTrainingStart(training) && training.planning_type === "flexible" ? (
@@ -1288,14 +1119,22 @@ export default function TrainingDetailPage() {
                   Calendar export becomes available after the organizer sets a final start time.
                 </div>
               ) : null}
-            </div>
+            </section>
 
+            {canManage ? (
+              <section style={styles.dangerZoneV3}>
+                <div style={styles.cardKicker}>Danger zone</div>
+                <button type="button" onClick={deleteTraining} disabled={busy} style={styles.deleteWideButtonV3}>
+                  <strong>🗑 Delete training</strong>
+                  <span>This action cannot be undone</span>
+                </button>
+              </section>
+            ) : null}
           </>
         ) : null}
       </section>
-    
       <BottomNav />
-</main>
+    </main>
   );
 }
 
@@ -1940,4 +1779,275 @@ const styles = {
     fontSize: 17,
     cursor: "pointer",
   },
+  pageV3: {
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top right, rgba(228,239,22,0.10), transparent 30%), linear-gradient(180deg, #050806 0%, #020202 68%, #000 100%)",
+    color: "white",
+    padding: "0 14px 92px",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+  shellV3: {
+    width: "min(760px, 100%)",
+    margin: "0 auto",
+    display: "grid",
+    gap: 14,
+  },
+  heroImageCard: {
+    minHeight: "min(560px, 76vh)",
+    margin: "0 -14px 0",
+    padding: "26px 22px 22px",
+    backgroundImage:
+      "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.55) 44%, rgba(0,0,0,0.94) 100%)",
+    backgroundSize: "cover",
+    backgroundPosition: "center center",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    gap: 22,
+  },
+  heroTopActionsV3: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  backLinkV3: {
+    color: "#e4ef16",
+    textDecoration: "none",
+    fontWeight: 950,
+    border: "1px solid rgba(255,255,255,0.16)",
+    borderRadius: 999,
+    padding: "10px 14px",
+    background: "rgba(0,0,0,0.42)",
+    backdropFilter: "blur(14px)",
+  },
+  iconButtonV3: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(0,0,0,0.42)",
+    backdropFilter: "blur(14px)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  iconLinkV3: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(0,0,0,0.42)",
+    backdropFilter: "blur(14px)",
+    color: "white",
+    textDecoration: "none",
+    display: "grid",
+    placeItems: "center",
+    fontWeight: 950,
+  },
+  heroContentV3: {
+    display: "grid",
+    gap: 13,
+  },
+  titleV3: {
+    margin: 0,
+    fontSize: "clamp(42px, 12vw, 76px)",
+    lineHeight: 0.93,
+    letterSpacing: "-0.075em",
+    textShadow: "0 12px 40px rgba(0,0,0,0.65)",
+  },
+  descriptionV3: {
+    margin: 0,
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 17,
+    lineHeight: 1.42,
+    maxWidth: 520,
+  },
+  heroMetaStackV3: {
+    display: "grid",
+    gap: 9,
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 15,
+    fontWeight: 850,
+    lineHeight: 1.35,
+  },
+  liveRowV3: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    color: "rgba(255,255,255,0.78)",
+    fontWeight: 750,
+  },
+  liveDotV3: {
+    color: "#38ff5b",
+    fontSize: 11,
+  },
+  routeHeroCardV3: {
+    borderRadius: 28,
+    padding: 0,
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    overflow: "hidden",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
+  },
+  mapFrameV3: {
+    overflow: "hidden",
+    background: "rgba(0,0,0,0.28)",
+  },
+  routeActionsV3: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+    padding: 12,
+    background: "rgba(0,0,0,0.22)",
+  },
+  routeActionButtonV3: {
+    minHeight: 52,
+    borderRadius: 18,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.045))",
+    color: "white",
+    padding: "0 10px",
+    fontWeight: 950,
+    textDecoration: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    fontSize: 13,
+  },
+  routeActionPrimaryV3: {
+    minHeight: 52,
+    borderRadius: 18,
+    border: 0,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "0 10px",
+    fontWeight: 950,
+    cursor: "pointer",
+    fontSize: 13,
+  },
+  infoStripV3: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    borderRadius: 22,
+    overflow: "hidden",
+    background: "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
+    border: "1px solid rgba(255,255,255,0.10)",
+  },
+  infoItemV3: {
+    minHeight: 88,
+    padding: 12,
+    display: "grid",
+    alignContent: "center",
+    gap: 8,
+    borderRight: "1px solid rgba(255,255,255,0.08)",
+  },
+  cardV3: {
+    borderRadius: 26,
+    padding: 16,
+    background: "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
+    border: "1px solid rgba(255,255,255,0.11)",
+    display: "grid",
+    gap: 14,
+    overflow: "hidden",
+  },
+  listCompactV3: {
+    display: "grid",
+    gap: 8,
+  },
+  personRowV3: {
+    width: "100%",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 22,
+    padding: 12,
+    background: "rgba(255,255,255,0.055)",
+    color: "white",
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr) 22px",
+    alignItems: "center",
+    gap: 10,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  trainingActionsGridV3: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 10,
+  },
+  trainingActionTileV3: {
+    minHeight: 78,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.045)",
+    color: "white",
+    padding: 14,
+    textDecoration: "none",
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  trainingActionTilePrimaryV3: {
+    minHeight: 78,
+    borderRadius: 16,
+    border: "1px solid rgba(228,239,22,0.28)",
+    background: "rgba(228,239,22,0.14)",
+    color: "#e4ef16",
+    padding: 14,
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  trainingActionTileDangerV3: {
+    minHeight: 78,
+    borderRadius: 16,
+    border: "1px solid rgba(255,90,90,0.45)",
+    background: "rgba(120,15,15,0.26)",
+    color: "#ff8d8d",
+    padding: 14,
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  trainingActionTileDisabledV3: {
+    minHeight: 78,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.025)",
+    color: "rgba(255,255,255,0.36)",
+    padding: 14,
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 900,
+  },
+  dangerZoneV3: {
+    borderRadius: 24,
+    padding: 16,
+    background: "rgba(255,50,50,0.045)",
+    border: "1px solid rgba(255,90,90,0.12)",
+    display: "grid",
+    gap: 12,
+  },
+  deleteWideButtonV3: {
+    minHeight: 68,
+    borderRadius: 16,
+    border: "1px solid rgba(255,90,90,0.58)",
+    background: "rgba(120,15,15,0.28)",
+    color: "#ff8d8d",
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+
 };
