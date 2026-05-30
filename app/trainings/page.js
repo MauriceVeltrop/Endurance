@@ -190,7 +190,7 @@ export default function TrainingsPage() {
   const matchingSessions = filtered.length;
 
   return (
-    <main className="endurance-page training-feed-redesign training-feed-compact-final training-feed-premium-home">
+    <main className="endurance-page training-feed-redesign training-feed-compact-final training-feed-premium-home training-feed-multisport-hero-v2">
       <AppHeader active="trainings" />
 
       <section className="endurance-shell training-dashboard">
