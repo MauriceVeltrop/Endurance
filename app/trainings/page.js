@@ -190,10 +190,11 @@ export default function TrainingsPage() {
   const matchingSessions = filtered.length;
 
   return (
-    <main className="endurance-page training-feed-redesign training-feed-compact-final training-feed-premium-home training-feed-multisport-hero-v2">
-      <AppHeader active="trainings" />
+    <main className="endurance-page training-feed-redesign training-feed-compact-final training-feed-premium-home training-feed-multisport-hero">
+      <section className="training-feed-hero-shell">
+        <AppHeader active="trainings" />
 
-      <section className="endurance-shell training-dashboard">
+        <section className="endurance-shell training-dashboard">
         <div className="training-dashboard-top">
           <div>
             <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)}</p>
@@ -229,6 +230,7 @@ export default function TrainingsPage() {
             <small>Prepared</small>
           </div>
         </div>
+        </section>
       </section>
 
       <section className="endurance-shell smart-search-row premium-feed-controls">
