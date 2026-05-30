@@ -8240,3 +8240,24 @@ main {
   color: #05070a !important;
   box-shadow: 0 0 28px rgba(230,255,0,.22) !important;
 }
+
+/* =====================================================
+   FIX: Bottom navigation must stay fixed on trainings feed
+   The multisport hero rule `.training-feed-multisport-hero > *`
+   made direct children position:relative, including BottomNav.
+===================================================== */
+.training-feed-multisport-hero > .endurance-bottom-nav,
+.endurance-bottom-nav {
+  position: fixed !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: max(12px, env(safe-area-inset-bottom)) !important;
+  z-index: 9999 !important;
+  width: auto !important;
+  transform: none !important;
+}
+
+.training-feed-multisport-hero .visual-feed-stack,
+.training-feed-multisport-hero.training-feed-multisport-hero {
+  padding-bottom: max(128px, calc(104px + env(safe-area-inset-bottom))) !important;
+}
