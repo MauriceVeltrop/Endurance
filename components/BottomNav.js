@@ -62,27 +62,19 @@ export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
   }, [externalUnreadCount]);
 
   const allItems = useMemo(() => {
-    const items = [
-      { href: "/trainings", label: "Trainings", icon: "⌁", match: ["/trainings"] },
-      { href: "/routes", label: "Routes", icon: "◇", match: ["/routes"] },
-      { href: "/workouts", label: "Workouts", icon: "✦", match: ["/workouts"] },
+    return [
+      { href: "/trainings", label: "Trainings", icon: "▣", match: ["/trainings"] },
+      { href: "/routes", label: "Routes", icon: "⌖", match: ["/routes"] },
       { href: "/team", label: "Team", icon: "👥", match: ["/team"] },
       { href: "/notifications", label: "Inbox", icon: "✉", match: ["/notifications", "/inbox"] },
+      { href: role === "admin" || role === "moderator" ? "/admin" : "/profile", label: "More", icon: "•••", match: ["/admin", "/profile", "/workouts"] },
     ];
-
-    if (role === "admin" || role === "moderator") {
-      items.push({ href: "/admin", label: "Admin", icon: "⚙", match: ["/admin"] });
-    }
-
-    return items;
   }, [role]);
-
-  const visibleItems = allItems.filter((item) => !itemMatchesPath(item, pathname));
 
   return (
     <nav className="endurance-bottom-nav" aria-label="Primary navigation">
-      {visibleItems.map((item) => (
-        <Link key={item.href} href={item.href}>
+      {allItems.map((item) => (
+        <Link key={item.href} href={item.href} className={itemMatchesPath(item, pathname) ? "active" : ""}>
           <span className="nav-icon">
             {item.icon}
             {item.href === "/notifications" && unreadCount > 0 && (
