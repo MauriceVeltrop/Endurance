@@ -1094,7 +1094,11 @@ export default function TrainingDetailPage() {
                 <div style={styles.routeActionsV3}>
                   <Link href={`/routes/${route.id}`} style={styles.routeActionButtonV3}>↗ Open route</Link>
                   <button type="button" onClick={downloadRouteGpx} style={styles.routeActionPrimaryV3}>⇩ Download GPX</button>
-                  <button type="button" onClick={shareTraining} style={styles.routeActionButtonV3}>⇧ Share route</button>
+                  {canManage ? (
+                    <button type="button" onClick={() => setInvitePanelOpen((open) => !open)} style={styles.routeActionButtonV3}>☉ Invite</button>
+                  ) : (
+                    <button type="button" onClick={shareTraining} style={styles.routeActionButtonV3}>⇧ Share</button>
+                  )}
                 </div>
               </section>
             ) : supportsRoutePreview(training) ? (
@@ -1194,8 +1198,8 @@ export default function TrainingDetailPage() {
               <div style={styles.trainingActionsGridV3}>
                 {training.start_location ? (
                   <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.trainingActionTileV3}>
-                    <strong>⌖ Maps</strong>
-                    <span>Open in Maps</span>
+                    <strong>⌖ Start location</strong>
+                    <span>Open start in Maps</span>
                   </a>
                 ) : null}
 
@@ -1209,16 +1213,6 @@ export default function TrainingDetailPage() {
                   <span>Add to calendar</span>
                 </button>
 
-                {canManage ? (
-                  <button
-                    type="button"
-                    onClick={() => setInvitePanelOpen((open) => !open)}
-                    style={styles.trainingActionTilePrimaryV3}
-                  >
-                    <strong>☉ Invite</strong>
-                    <span>Invite team</span>
-                  </button>
-                ) : null}
 
                 {canManage ? (
                   <Link href={`/trainings/${training.id}/edit`} style={styles.trainingActionTileV3}>
