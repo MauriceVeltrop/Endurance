@@ -8315,3 +8315,79 @@ main {
     width: auto;
   }
 }
+
+/* ===== TEAM PAGE: INCOMING TEAM UP REQUESTS ===== */
+.team-requests-card {
+  display: grid;
+  gap: 16px;
+}
+
+.team-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.team-card-header h2 {
+  margin: 6px 0 0;
+  font-size: clamp(30px, 8vw, 48px);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+  font-weight: 950;
+}
+
+.team-request-count {
+  min-width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(230, 255, 0, 0.14);
+  border: 1px solid rgba(230, 255, 0, 0.28);
+  color: var(--lime, #dfff00);
+  font-weight: 950;
+}
+
+.team-request-result {
+  align-items: center;
+}
+
+.team-request-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+.team-request-actions .primary-action,
+.team-request-actions .secondary-action {
+  min-height: 54px;
+  border-radius: 999px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.team-decline-action {
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.team-accept-action {
+  box-shadow: 0 12px 34px rgba(230, 255, 0, 0.18);
+}
+
+@media (min-width: 720px) {
+  .team-request-result {
+    grid-template-columns: 54px 1fr minmax(220px, auto);
+  }
+
+  .team-request-actions {
+    grid-column: auto;
+    grid-template-columns: auto auto;
+    width: auto;
+  }
+}
