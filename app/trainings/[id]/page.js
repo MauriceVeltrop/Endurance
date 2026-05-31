@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { subscribeToTrainingRealtime, removeRealtimeChannel } from "../../../lib/realtime";
@@ -412,6 +412,7 @@ export default function TrainingDetailPage() {
   const [invitePanelOpen, setInvitePanelOpen] = useState(false);
   const [inviteBusyId, setInviteBusyId] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
+  const invitePanelRef = useRef(null);
 
   const primarySport = getPrimarySport(training);
   const sportLabel = getSportLabel(primarySport);
@@ -676,6 +677,14 @@ export default function TrainingDetailPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openInvitePanel() {
+    if (!canManage) return;
+    setInvitePanelOpen(true);
+    window.setTimeout(() => {
+      invitePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   }
 
   async function invitePartner(partner) {
@@ -1095,10 +1104,8 @@ export default function TrainingDetailPage() {
                   <Link href={`/routes/${route.id}`} style={styles.routeActionButtonV3}>↗ Open route</Link>
                   <button type="button" onClick={downloadRouteGpx} style={styles.routeActionPrimaryV3}>⇩ Download GPX</button>
                   {canManage ? (
-                    <button type="button" onClick={() => setInvitePanelOpen((open) => !open)} style={styles.routeActionButtonV3}>☉ Invite</button>
-                  ) : (
-                    <button type="button" onClick={shareTraining} style={styles.routeActionButtonV3}>⇧ Share</button>
-                  )}
+                    <button type="button" onClick={openInvitePanel} style={styles.routeActionButtonV3}>☉ Invite</button>
+                  ) : null}
                 </div>
               </section>
             ) : supportsRoutePreview(training) ? (
@@ -1112,6 +1119,51 @@ export default function TrainingDetailPage() {
                 </div>
               </section>
             ) : null}
+
+            {canManage && invitePanelOpen ? (
+                <div ref={invitePanelRef} style={styles.invitePanelV3}>
+                  <div>
+                    <strong>Invite training partners</strong>
+                    <p>Invite accepted Team Up partners directly to this training.</p>
+                  </div>
+
+                  {inviteMessage ? <div style={styles.infoMessage}>{inviteMessage}</div> : null}
+
+                  {teamPartners.length ? (
+                    <div style={styles.inviteListV3}>
+                      {teamPartners.map((partner) => {
+                        const invite = trainingInvites.find((row) => row.invitee_id === partner.id);
+                        const alreadyParticipant = participants.some((row) => row.user_id === partner.id);
+                        const disabled = Boolean(invite || alreadyParticipant || inviteBusyId === partner.id);
+
+                        return (
+                          <div key={partner.id} style={styles.inviteRowV3}>
+                            {partner.avatar_url ? (
+                              <img src={partner.avatar_url} alt="" style={styles.avatarSmallV3} />
+                            ) : (
+                              <div style={styles.avatarFallbackV3}>{displayName(partner).slice(0, 1).toUpperCase()}</div>
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              <strong>{displayName(partner)}</strong>
+                              <span>{alreadyParticipant ? "Already joined" : invite ? `Invite ${invite.status}` : partner.location || "Training partner"}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => invitePartner(partner)}
+                              disabled={disabled}
+                              style={disabled ? styles.smallPillDisabledV3 : styles.smallPillPrimaryV3}
+                            >
+                              {inviteBusyId === partner.id ? "..." : alreadyParticipant ? "Joined" : invite ? "Invited" : "Invite"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={styles.infoMessage}>No accepted Team Up partners yet.</div>
+                  )}
+                </div>
+              ) : null}
 
             <section style={styles.infoStripV3}>
               <div style={styles.infoItemV3}>
@@ -1232,50 +1284,7 @@ export default function TrainingDetailPage() {
                 </button>
               </div>
 
-              {canManage && invitePanelOpen ? (
-                <div style={styles.invitePanelV3}>
-                  <div>
-                    <strong>Invite training partners</strong>
-                    <p>Invite accepted Team Up partners directly to this training.</p>
-                  </div>
 
-                  {inviteMessage ? <div style={styles.infoMessage}>{inviteMessage}</div> : null}
-
-                  {teamPartners.length ? (
-                    <div style={styles.inviteListV3}>
-                      {teamPartners.map((partner) => {
-                        const invite = trainingInvites.find((row) => row.invitee_id === partner.id);
-                        const alreadyParticipant = participants.some((row) => row.user_id === partner.id);
-                        const disabled = Boolean(invite || alreadyParticipant || inviteBusyId === partner.id);
-
-                        return (
-                          <div key={partner.id} style={styles.inviteRowV3}>
-                            {partner.avatar_url ? (
-                              <img src={partner.avatar_url} alt="" style={styles.avatarSmallV3} />
-                            ) : (
-                              <div style={styles.avatarFallbackV3}>{displayName(partner).slice(0, 1).toUpperCase()}</div>
-                            )}
-                            <div style={{ minWidth: 0 }}>
-                              <strong>{displayName(partner)}</strong>
-                              <span>{alreadyParticipant ? "Already joined" : invite ? `Invite ${invite.status}` : partner.location || "Training partner"}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => invitePartner(partner)}
-                              disabled={disabled}
-                              style={disabled ? styles.smallPillDisabledV3 : styles.smallPillPrimaryV3}
-                            >
-                              {inviteBusyId === partner.id ? "..." : alreadyParticipant ? "Joined" : invite ? "Invited" : "Invite"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={styles.infoMessage}>No accepted Team Up partners yet.</div>
-                  )}
-                </div>
-              ) : null}
 
               {!getTrainingStart(training) && training.planning_type === "flexible" ? (
                 <div style={styles.infoMessage}>
