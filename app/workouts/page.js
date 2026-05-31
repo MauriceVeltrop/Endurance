@@ -82,7 +82,6 @@ export default function WorkoutsPage() {
           <div style={styles.kicker}>Workouts</div>
           <div style={styles.titleRow}>
             <h1 style={styles.title}>Build the work.</h1>
-            <button onClick={() => router.push("/workouts/new")} style={styles.primaryButton}>+ Workout</button>
           </div>
           <p style={styles.subtitle}>
             Create reusable workout structures. Strength starts with muscle groups, relevant exercises,
@@ -159,7 +158,7 @@ const styles = {
   header: { display: "grid", gap: 10 },
   kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
   kickerSmall: { color: "#e4ef16", fontSize: 11, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  titleRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "end", gap: 12 },
+  titleRow: { display: "grid", gap: 12 },
   title: { margin: 0, fontSize: "clamp(38px, 11vw, 64px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, maxWidth: 680, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
   primaryButton: { minHeight: 46, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 16px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
