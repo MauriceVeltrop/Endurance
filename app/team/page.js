@@ -8,6 +8,10 @@ import { createNotification, NOTIFICATION_TYPES } from "../../lib/notifications"
 import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
 
+function profileDisplayName(profile) {
+  return [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.name || "Someone";
+}
+
 export default function TeamPage() {
   const [partners, setPartners] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -72,28 +76,38 @@ export default function TeamPage() {
     const user = authData?.user;
     if (!user) return;
 
-    const { error } = await supabase.from("training_partners").upsert(
-      {
-        requester_id: user.id,
-        addressee_id: profile.id,
-        status: "pending",
-      },
-      { onConflict: "requester_id,addressee_id" }
-    );
+    const { data: requestRow, error } = await supabase
+      .from("training_partners")
+      .upsert(
+        {
+          requester_id: user.id,
+          addressee_id: profile.id,
+          status: "pending",
+        },
+        { onConflict: "requester_id,addressee_id" }
+      )
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       setMessage(error.message);
       return;
     }
 
+    const { data: senderProfile } = await supabase
+      .from("profiles")
+      .select("name,first_name,last_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
     await createNotification({
       userId: profile.id,
       actorId: user.id,
       type: NOTIFICATION_TYPES.TEAM_REQUEST,
-      title: `${profile.name || "Someone"} sent you a Team Up request`,
-      body: "Open Team to accept or decline.",
-      actionUrl: "/team",
-      metadata: { partner_request_id: null },
+      title: `${profileDisplayName(senderProfile)} sent you a Team Up request`,
+      body: "Accept or decline directly from Inbox.",
+      actionUrl: "/notifications",
+      metadata: { partner_request_id: requestRow?.id || null },
     });
 
     setMessage("Team Up request sent.");
@@ -116,6 +130,13 @@ export default function TeamPage() {
       setMessage(error.message || "Could not update Team Up request.");
       return;
     }
+
+    await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("type", NOTIFICATION_TYPES.TEAM_REQUEST)
+      .eq("actor_id", request.requester_id);
 
     if (nextStatus === "accepted") {
       await createNotification({
