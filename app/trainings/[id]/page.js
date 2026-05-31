@@ -407,6 +407,11 @@ export default function TrainingDetailPage() {
   const [message, setMessage] = useState("");
   const [availabilityMessage, setAvailabilityMessage] = useState("");
   const [errorText, setErrorText] = useState("");
+  const [teamPartners, setTeamPartners] = useState([]);
+  const [trainingInvites, setTrainingInvites] = useState([]);
+  const [invitePanelOpen, setInvitePanelOpen] = useState(false);
+  const [inviteBusyId, setInviteBusyId] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
 
   const primarySport = getPrimarySport(training);
   const sportLabel = getSportLabel(primarySport);
@@ -434,6 +439,7 @@ export default function TrainingDetailPage() {
     setErrorText("");
     setMessage("");
     setAvailabilityMessage("");
+    if (!options.silent) setInviteMessage("");
 
     try {
       const { data: authData } = await supabase.auth.getUser();
@@ -523,6 +529,39 @@ export default function TrainingDetailPage() {
       } else {
         setParticipantProfiles({});
       }
+
+      const { data: partnerRows } = await supabase
+        .from("training_partners")
+        .select("requester_id,addressee_id,status")
+        .eq("status", "accepted")
+        .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
+
+      const partnerIds = [
+        ...new Set(
+          (partnerRows || [])
+            .map((row) => (row.requester_id === currentUser.id ? row.addressee_id : row.requester_id))
+            .filter(Boolean)
+        ),
+      ];
+
+      if (partnerIds.length) {
+        const { data: partnerProfiles } = await supabase
+          .from("profiles")
+          .select("id,name,first_name,last_name,email,avatar_url,location")
+          .in("id", partnerIds)
+          .order("name", { ascending: true });
+
+        setTeamPartners(partnerProfiles || []);
+      } else {
+        setTeamPartners([]);
+      }
+
+      const { data: inviteRows } = await supabase
+        .from("training_invites")
+        .select("id,session_id,invitee_id,status,response_note,created_at")
+        .eq("session_id", trainingRow.id);
+
+      setTrainingInvites(inviteRows || []);
 
       if (trainingRow.planning_type === "flexible") {
         const { data: availabilityRows } = await supabase
@@ -636,6 +675,80 @@ export default function TrainingDetailPage() {
       setMessage(error?.message || "Could not update participation.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function invitePartner(partner) {
+    if (!user?.id || !training?.id || !partner?.id || !canManage) return;
+
+    setInviteBusyId(partner.id);
+    setInviteMessage("");
+
+    try {
+      const { data: existingInvite, error: existingInviteError } = await supabase
+        .from("training_invites")
+        .select("id,status")
+        .eq("session_id", training.id)
+        .eq("invitee_id", partner.id)
+        .maybeSingle();
+
+      if (existingInviteError) throw existingInviteError;
+
+      if (existingInvite?.id) {
+        setInviteMessage(`${displayName(partner)} already has an invite.`);
+        await loadTraining({ silent: true });
+        return;
+      }
+
+      const { error: inviteError } = await supabase
+        .from("training_invites")
+        .insert({
+          session_id: training.id,
+          inviter_id: user.id,
+          invitee_id: partner.id,
+          status: "pending",
+        });
+
+      if (inviteError) throw inviteError;
+
+      if (training.visibility === "selected") {
+        const { data: existingVisibilityMember } = await supabase
+          .from("training_visibility_members")
+          .select("id")
+          .eq("session_id", training.id)
+          .eq("user_id", partner.id)
+          .maybeSingle();
+
+        if (!existingVisibilityMember?.id) {
+          const { error: visibilityError } = await supabase
+            .from("training_visibility_members")
+            .insert({
+              session_id: training.id,
+              user_id: partner.id,
+            });
+
+          if (visibilityError) console.warn("Training visibility member skipped", visibilityError);
+        }
+      }
+
+      await createNotification({
+        userId: partner.id,
+        actorId: user.id,
+        type: NOTIFICATION_TYPES.TRAINING_INVITE,
+        sessionId: training.id,
+        title: "New training invite",
+        body: `${displayName(user)} invited you to ${training.title}.`,
+        actionUrl: trainingUrl(training.id),
+        metadata: { source: "training_detail_invite" },
+      });
+
+      setInviteMessage(`Invite sent to ${displayName(partner)}.`);
+      await loadTraining({ silent: true });
+    } catch (error) {
+      console.error("Invite error", error);
+      setInviteMessage(error?.message || "Could not send invite.");
+    } finally {
+      setInviteBusyId("");
     }
   }
 
@@ -1097,6 +1210,17 @@ export default function TrainingDetailPage() {
                 </button>
 
                 {canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => setInvitePanelOpen((open) => !open)}
+                    style={styles.trainingActionTilePrimaryV3}
+                  >
+                    <strong>☉ Invite</strong>
+                    <span>Invite team</span>
+                  </button>
+                ) : null}
+
+                {canManage ? (
                   <Link href={`/trainings/${training.id}/edit`} style={styles.trainingActionTileV3}>
                     <strong>✎ Edit</strong>
                     <span>Edit training</span>
@@ -1113,6 +1237,51 @@ export default function TrainingDetailPage() {
                   <span>{joined ? "Leave training" : isFull ? "Training full" : "Join training"}</span>
                 </button>
               </div>
+
+              {canManage && invitePanelOpen ? (
+                <div style={styles.invitePanelV3}>
+                  <div>
+                    <strong>Invite training partners</strong>
+                    <p>Invite accepted Team Up partners directly to this training.</p>
+                  </div>
+
+                  {inviteMessage ? <div style={styles.infoMessage}>{inviteMessage}</div> : null}
+
+                  {teamPartners.length ? (
+                    <div style={styles.inviteListV3}>
+                      {teamPartners.map((partner) => {
+                        const invite = trainingInvites.find((row) => row.invitee_id === partner.id);
+                        const alreadyParticipant = participants.some((row) => row.user_id === partner.id);
+                        const disabled = Boolean(invite || alreadyParticipant || inviteBusyId === partner.id);
+
+                        return (
+                          <div key={partner.id} style={styles.inviteRowV3}>
+                            {partner.avatar_url ? (
+                              <img src={partner.avatar_url} alt="" style={styles.avatarSmallV3} />
+                            ) : (
+                              <div style={styles.avatarFallbackV3}>{displayName(partner).slice(0, 1).toUpperCase()}</div>
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              <strong>{displayName(partner)}</strong>
+                              <span>{alreadyParticipant ? "Already joined" : invite ? `Invite ${invite.status}` : partner.location || "Training partner"}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => invitePartner(partner)}
+                              disabled={disabled}
+                              style={disabled ? styles.smallPillDisabledV3 : styles.smallPillPrimaryV3}
+                            >
+                              {inviteBusyId === partner.id ? "..." : alreadyParticipant ? "Joined" : invite ? "Invited" : "Invite"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={styles.infoMessage}>No accepted Team Up partners yet.</div>
+                  )}
+                </div>
+              ) : null}
 
               {!getTrainingStart(training) && training.planning_type === "flexible" ? (
                 <div style={styles.infoMessage}>
@@ -2027,6 +2196,63 @@ const styles = {
     display: "grid",
     placeItems: "center",
     gap: 4,
+    fontWeight: 900,
+  },
+  invitePanelV3: {
+    borderRadius: 20,
+    padding: 14,
+    background: "rgba(255,255,255,0.045)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    display: "grid",
+    gap: 12,
+  },
+  inviteListV3: {
+    display: "grid",
+    gap: 10,
+  },
+  inviteRowV3: {
+    display: "grid",
+    gridTemplateColumns: "42px minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+    borderRadius: 18,
+    background: "rgba(0,0,0,0.22)",
+    border: "1px solid rgba(255,255,255,0.07)",
+  },
+  avatarSmallV3: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    objectFit: "cover",
+    border: "1px solid rgba(228,239,22,0.28)",
+  },
+  avatarFallbackV3: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.12)",
+    border: "1px solid rgba(228,239,22,0.28)",
+    color: "#e4ef16",
+    fontWeight: 950,
+  },
+  smallPillPrimaryV3: {
+    border: "1px solid rgba(228,239,22,0.34)",
+    background: "#e4ef16",
+    color: "#050505",
+    borderRadius: 999,
+    padding: "8px 12px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  smallPillDisabledV3: {
+    border: "1px solid rgba(255,255,255,0.09)",
+    background: "rgba(255,255,255,0.055)",
+    color: "rgba(255,255,255,0.46)",
+    borderRadius: 999,
+    padding: "8px 12px",
     fontWeight: 900,
   },
   dangerZoneV3: {
