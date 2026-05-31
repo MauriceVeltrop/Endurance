@@ -89,7 +89,7 @@ export default function InboxPage() {
         fetchPendingTrainingInvites(user.id),
       ]);
 
-      setNotifications(notificationRows);
+      setNotifications((notificationRows || []).filter((item) => !item.read_at));
       setTrainingInvites(inviteRows);
     } finally {
       if (!options.silent) setLoading(false);
@@ -187,8 +187,6 @@ export default function InboxPage() {
       return;
     }
 
-    await markNotificationRead(notification.id);
-
     if (nextStatus === "accepted") {
       await supabase.from("notifications").insert({
         user_id: request.requester_id,
@@ -199,12 +197,20 @@ export default function InboxPage() {
         action_url: "/team",
         metadata: { partner_request_id: request.id },
       });
-      setMessage("Team Up request accepted.");
-    } else {
-      setMessage("Team Up request declined.");
     }
 
-    await loadInbox({ silent: true });
+    const { error: deleteError } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notification.id)
+      .eq("user_id", profile.id);
+
+    if (deleteError) {
+      await markNotificationRead(notification.id);
+    }
+
+    setNotifications((items) => items.filter((item) => item.id !== notification.id));
+    setMessage(nextStatus === "accepted" ? "Team Up request accepted." : "Team Up request declined.");
   }
 
   async function openTeamFromNotification(notification) {
@@ -354,13 +360,6 @@ export default function InboxPage() {
                         style={styles.secondaryButton}
                       >
                         Decline
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openTeamFromNotification(notification)}
-                        style={styles.linkButton}
-                      >
-                        Open Team →
                       </button>
                     </div>
                   ) : null}
