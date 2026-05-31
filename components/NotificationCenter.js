@@ -48,7 +48,26 @@ export default function NotificationCenter() {
     const [{ data: notificationRows }, { data: inviteRows }] = await Promise.all([
       supabase
         .from("notifications")
-        .select("id,type,title,body,action_url,read_at,created_at,actor_id,session_id,metadata")
+        .select(`
+          id,
+          type,
+          title,
+          body,
+          action_url,
+          read_at,
+          created_at,
+          actor_id,
+          session_id,
+          metadata,
+          actor:actor_id (
+            id,
+            name,
+            first_name,
+            last_name,
+            avatar_url,
+            location
+          )
+        `)
         .eq("user_id", user.id)
         .is("read_at", null)
         .order("created_at", { ascending: false })
@@ -201,7 +220,10 @@ export default function NotificationCenter() {
       {notifications.map((notification) => {
         const isTeamRequest = notification.type === "team_request";
         const actor = notification.actor || {};
-        const actorName = personName(actor);
+        const actorName =
+          notification.actor_id && notification.actor
+            ? personName(actor)
+            : (notification.title || "").replace(" sent you a Team Up request", "").trim() || personName(actor);
 
         return (
           <article key={notification.id} className={`notification-card ${notification.read_at ? "" : "unread"}`}>
@@ -212,7 +234,7 @@ export default function NotificationCenter() {
                 aria-label={`Open profile of ${actorName}`}
               >
                 <span className="participant-avatar notification-avatar">
-                  {actor.avatar_url ? <img src={actor.avatar_url} alt="" /> : initialFor(actor)}
+                  {actor.avatar_url ? <img src={actor.avatar_url} alt="" /> : actorName.slice(0, 1).toUpperCase()}
                 </span>
               </Link>
             ) : (
