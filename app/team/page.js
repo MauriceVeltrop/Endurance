@@ -14,6 +14,7 @@ function profileDisplayName(profile) {
 
 export default function TeamPage() {
   const [partners, setPartners] = useState([]);
+  const [partnerProfiles, setPartnerProfiles] = useState([]);
   const [requests, setRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -28,7 +29,29 @@ export default function TeamPage() {
       .from("training_partners")
       .select("*")
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-      .eq("status", "accepted");
+      .eq("status", "accepted")
+      .order("created_at", { ascending: false });
+
+    const otherPartnerIds = Array.from(
+      new Set(
+        (partnerRows || [])
+          .map((row) => (row.requester_id === user.id ? row.addressee_id : row.requester_id))
+          .filter(Boolean)
+      )
+    );
+
+    let partnerProfileRows = [];
+    if (otherPartnerIds.length > 0) {
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id,name,first_name,last_name,avatar_url,location")
+        .in("id", otherPartnerIds);
+
+      const profileById = new Map((profileRows || []).map((profile) => [profile.id, profile]));
+      partnerProfileRows = otherPartnerIds
+        .map((id) => profileById.get(id))
+        .filter(Boolean);
+    }
 
     const { data: requestRows } = await supabase
       .from("training_partners")
@@ -48,6 +71,7 @@ export default function TeamPage() {
       .order("created_at", { ascending: false });
 
     setPartners(partnerRows || []);
+    setPartnerProfiles(partnerProfileRows);
     setRequests(requestRows || []);
   }
 
@@ -184,6 +208,43 @@ export default function TeamPage() {
       </section>
 
       {message && <section className="endurance-shell"><div className="status-message">{message}</div></section>}
+
+      {partnerProfiles.length > 0 && (
+        <section className="endurance-shell endurance-card team-partners-card">
+          <div className="team-card-header">
+            <div>
+              <p className="eyebrow">Partners</p>
+              <h2>Your team</h2>
+            </div>
+            <span className="team-request-count">{partnerProfiles.length}</span>
+          </div>
+
+          <div className="people-results">
+            {partnerProfiles.map((profile) => {
+              const partnerName = profileDisplayName(profile);
+
+              return (
+                <article key={profile.id} className="people-result team-partner-result">
+                  <Link
+                    href={`/profile/${profile.id}`}
+                    className="people-result-avatar-link"
+                    aria-label={`Open profile of ${partnerName}`}
+                  >
+                    <span className="participant-avatar">
+                      {profile.avatar_url ? <img src={profile.avatar_url} alt="" /> : partnerName.slice(0, 1)}
+                    </span>
+                  </Link>
+
+                  <div className="people-result-info">
+                    <h3>{partnerName}</h3>
+                    <p>{profile.location || "Training partner"}</p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {requests.length > 0 && (
         <section className="endurance-shell endurance-card team-requests-card">
