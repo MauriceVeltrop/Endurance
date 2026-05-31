@@ -142,6 +142,78 @@ export default function InboxPage() {
     await loadInbox({ silent: true });
   }
 
+  async function respondToTeamRequest(notification, nextStatus) {
+    if (!profile?.id || !notification?.id) return;
+
+    setMessage("");
+
+    const partnerRequestId = notification.metadata?.partner_request_id || notification.metadata?.request_id || null;
+
+    let requestQuery = supabase
+      .from("training_partners")
+      .select("id, requester_id, addressee_id, status")
+      .eq("addressee_id", profile.id)
+      .eq("status", "pending")
+      .limit(1);
+
+    if (partnerRequestId) {
+      requestQuery = requestQuery.eq("id", partnerRequestId);
+    } else if (notification.actor_id) {
+      requestQuery = requestQuery.eq("requester_id", notification.actor_id);
+    }
+
+    const { data: request, error: requestError } = await requestQuery.maybeSingle();
+
+    if (requestError) {
+      setMessage(requestError.message || "Could not find Team Up request.");
+      return;
+    }
+
+    if (!request?.id) {
+      await markNotificationRead(notification.id);
+      setMessage("This Team Up request is no longer pending.");
+      await loadInbox({ silent: true });
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("training_partners")
+      .update({ status: nextStatus })
+      .eq("id", request.id)
+      .eq("addressee_id", profile.id);
+
+    if (updateError) {
+      setMessage(updateError.message || "Could not update Team Up request.");
+      return;
+    }
+
+    await markNotificationRead(notification.id);
+
+    if (nextStatus === "accepted") {
+      await supabase.from("notifications").insert({
+        user_id: request.requester_id,
+        actor_id: profile.id,
+        type: "team_request_accepted",
+        title: "Team Up request accepted",
+        body: "You are now training partners on Endurance.",
+        action_url: "/team",
+        metadata: { partner_request_id: request.id },
+      });
+      setMessage("Team Up request accepted.");
+    } else {
+      setMessage("Team Up request declined.");
+    }
+
+    await loadInbox({ silent: true });
+  }
+
+  async function openTeamFromNotification(notification) {
+    if (notification?.id && !notification.read_at) {
+      await markNotificationRead(notification.id);
+    }
+    router.push("/team");
+  }
+
   async function markEverythingRead() {
     if (!profile?.id) return;
 
@@ -233,34 +305,66 @@ export default function InboxPage() {
             {notifications.map((notification) => {
               const unread = !notification.read_at;
 
+              const isTeamRequest = notification.type === "team_request";
+
               return (
-                <button
+                <article
                   key={notification.id}
-                  type="button"
-                  onClick={() => openNotification(notification)}
                   style={{
                     ...styles.notificationCard,
                     ...(unread ? styles.notificationCardUnread : {}),
                   }}
                 >
-                  <div style={styles.notificationTop}>
-                    <div>
-                      <strong style={styles.notificationTitle}>
-                        {notification.title}
-                      </strong>
-                      {notification.body ? (
-                        <p style={styles.notificationBody}>{notification.body}</p>
-                      ) : null}
+                  <button
+                    type="button"
+                    onClick={() => openNotification(notification)}
+                    style={styles.notificationMainButton}
+                  >
+                    <div style={styles.notificationTop}>
+                      <div>
+                        <strong style={styles.notificationTitle}>
+                          {notification.title}
+                        </strong>
+                        {notification.body ? (
+                          <p style={styles.notificationBody}>{notification.body}</p>
+                        ) : null}
+                      </div>
+
+                      {unread ? <span style={styles.unreadDot} /> : null}
                     </div>
 
-                    {unread ? <span style={styles.unreadDot} /> : null}
-                  </div>
+                    <div style={styles.notificationMeta}>
+                      <span>{notification.type}</span>
+                      <span>{formatTime(notification.created_at)}</span>
+                    </div>
+                  </button>
 
-                  <div style={styles.notificationMeta}>
-                    <span>{notification.type}</span>
-                    <span>{formatTime(notification.created_at)}</span>
-                  </div>
-                </button>
+                  {isTeamRequest ? (
+                    <div style={styles.teamRequestActions}>
+                      <button
+                        type="button"
+                        onClick={() => respondToTeamRequest(notification, "accepted")}
+                        style={styles.primaryButton}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => respondToTeamRequest(notification, "rejected")}
+                        style={styles.secondaryButton}
+                      >
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openTeamFromNotification(notification)}
+                        style={styles.linkButton}
+                      >
+                        Open Team →
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
               );
             })}
           </section>
@@ -411,6 +515,21 @@ const styles = {
     flexWrap: "wrap",
     marginTop: 14,
   },
+  teamRequestActions: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  linkButton: {
+    border: 0,
+    background: "transparent",
+    color: "#d7ff3f",
+    borderRadius: 999,
+    padding: "12px 8px",
+    fontWeight: 950,
+  },
   notificationCard: {
     width: "100%",
     textAlign: "left",
@@ -419,6 +538,16 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(255,255,255,0.05)",
     color: "#fff",
+  },
+  notificationMainButton: {
+    width: "100%",
+    display: "block",
+    padding: 0,
+    margin: 0,
+    border: 0,
+    background: "transparent",
+    color: "inherit",
+    textAlign: "left",
   },
   notificationCardUnread: {
     border: "1px solid rgba(215,255,63,0.24)",
