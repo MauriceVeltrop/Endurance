@@ -65,9 +65,10 @@ export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
     return [
       { href: "/trainings", label: "Trainings", icon: "▣", match: ["/trainings"] },
       { href: "/routes", label: "Routes", icon: "⌖", match: ["/routes"] },
+      { href: "/workouts", label: "Workouts", icon: "▤", match: ["/workouts"] },
       { href: "/team", label: "Team", icon: "👥", match: ["/team"] },
       { href: "/notifications", label: "Inbox", icon: "✉", match: ["/notifications", "/inbox"] },
-      { href: role === "admin" || role === "moderator" ? "/admin" : "/profile", label: "More", icon: "•••", match: ["/admin", "/profile", "/workouts"] },
+      { href: role === "admin" || role === "moderator" ? "/admin" : "/profile", label: "More", icon: "•••", match: ["/admin", "/profile"] },
     ];
   }, [role]);
 
