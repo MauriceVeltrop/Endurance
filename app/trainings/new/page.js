@@ -158,6 +158,7 @@ function CreateTrainingPageContent() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
   const [prefilledRoute, setPrefilledRoute] = useState(null);
+  const [prefilledWorkout, setPrefilledWorkout] = useState(null);
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -325,6 +326,7 @@ function CreateTrainingPageContent() {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData?.user;
       const preselectRouteId = searchParams.get("route_id") || searchParams.get("from_route") || searchParams.get("route");
+      const preselectWorkoutId = searchParams.get("workout_id") || searchParams.get("from_workout") || searchParams.get("workout");
 
       if (!user?.id) {
         router.replace("/login");
@@ -369,7 +371,7 @@ function CreateTrainingPageContent() {
       setAllowedSportIds(ids);
 
       const firstSport = sportOptions.find((sport) => ids.includes(sport.id));
-      if (firstSport && !preselectRouteId) {
+      if (firstSport && !preselectRouteId && !preselectWorkoutId) {
         setForm((current) => ({
           ...current,
           sport_id: firstSport.id,
@@ -386,7 +388,7 @@ function CreateTrainingPageContent() {
           .limit(30),
         supabase
           .from("workouts")
-          .select("id,title,sport_id,workout_type,level,duration_min,visibility")
+          .select("id,title,description,sport_id,workout_type,level,duration_min,visibility,structure")
           .eq("creator_id", user.id)
           .order("created_at", { ascending: false })
           .limit(30),
@@ -395,9 +397,35 @@ function CreateTrainingPageContent() {
       setRoutes(routesRows || []);
       setWorkouts(workoutRows || []);
 
-      const routeToPrefill = preselectRouteId
+      let routeToPrefill = preselectRouteId
         ? (routesRows || []).find((route) => route.id === preselectRouteId)
         : null;
+
+      if (preselectRouteId && !routeToPrefill) {
+        const { data: directRoute } = await supabase
+          .from("routes")
+          .select("id,title,description,sport_id,distance_km,elevation_gain_m,visibility,route_points")
+          .eq("id", preselectRouteId)
+          .maybeSingle();
+        routeToPrefill = directRoute || null;
+      }
+
+      let workoutToPrefill = preselectWorkoutId
+        ? (workoutRows || []).find((workout) => workout.id === preselectWorkoutId)
+        : null;
+
+      if (preselectWorkoutId && !workoutToPrefill) {
+        const { data: directWorkout } = await supabase
+          .from("workouts")
+          .select("id,title,description,sport_id,workout_type,level,duration_min,visibility,structure")
+          .eq("id", preselectWorkoutId)
+          .maybeSingle();
+        workoutToPrefill = directWorkout || null;
+      }
+
+      if (workoutToPrefill && !(workoutRows || []).some((workout) => workout.id === workoutToPrefill.id)) {
+        setWorkouts([workoutToPrefill, ...(workoutRows || [])]);
+      }
 
       if (routeToPrefill) {
         const startPoint = normalizeRoutePoints(routeToPrefill.route_points)[0];
@@ -416,6 +444,20 @@ function CreateTrainingPageContent() {
           longitude: startPoint?.lon ? Number(startPoint.lon) : current.longitude,
         }));
         setMessage(`Route attached: ${routeToPrefill.title}`);
+      }
+
+      if (workoutToPrefill) {
+        setPrefilledWorkout(workoutToPrefill);
+        setForm((current) => ({
+          ...current,
+          sport_id: workoutToPrefill.sport_id,
+          title: workoutToPrefill.title || defaultTitle(workoutToPrefill.sport_id),
+          description: workoutToPrefill.description || current.description,
+          workout_id: workoutToPrefill.id,
+          estimated_duration_min: workoutToPrefill.duration_min ? String(workoutToPrefill.duration_min) : current.estimated_duration_min,
+          intensity_label: current.intensity_label || "Moderate",
+        }));
+        setMessage(`Workout attached: ${workoutToPrefill.title}`);
       }
 
 
@@ -1259,14 +1301,39 @@ function CreateTrainingPageContent() {
                 <p style={styles.muted}>Optional for strength, HYROX, CrossFit and bootcamp style sessions.</p>
 
                 {filteredWorkouts.length ? (
-                  <select value={form.workout_id} onChange={(event) => updateForm("workout_id", event.target.value)} style={styles.input}>
-                    <option value="">No workout yet</option>
-                    {filteredWorkouts.map((workout) => (
-                      <option key={workout.id} value={workout.id}>
-                        {workout.title} {workout.duration_min ? `· ${workout.duration_min} min` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select value={form.workout_id} onChange={(event) => {
+                      const workoutId = event.target.value;
+                      const selectedWorkout = filteredWorkouts.find((workout) => workout.id === workoutId);
+                      updateForm("workout_id", workoutId);
+                      setPrefilledWorkout(selectedWorkout || null);
+
+                      if (selectedWorkout) {
+                        setForm((current) => ({
+                          ...current,
+                          workout_id: selectedWorkout.id,
+                          estimated_duration_min: selectedWorkout.duration_min ? String(selectedWorkout.duration_min) : current.estimated_duration_min,
+                        }));
+                      }
+                    }} style={styles.input}>
+                      <option value="">No workout yet</option>
+                      {filteredWorkouts.map((workout) => (
+                        <option key={workout.id} value={workout.id}>
+                          {workout.title} {workout.duration_min ? `· ${workout.duration_min} min` : ""}
+                        </option>
+                      ))}
+                    </select>
+
+                    {prefilledWorkout ? (
+                      <div className="create-route-mini-summary">
+                        <b>{prefilledWorkout.title}</b>
+                        <span>
+                          {prefilledWorkout.workout_type || "Workout"}
+                          {prefilledWorkout.duration_min ? ` · ${prefilledWorkout.duration_min} min` : ""}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} workouts yet. Create the training now and add a workout later.</div>
                 )}
