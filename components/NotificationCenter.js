@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+
+function personName(person) {
+  return [person?.first_name, person?.last_name].filter(Boolean).join(" ") || person?.name || "Endurance member";
+}
+
+function initialFor(person) {
+  return personName(person).slice(0, 1).toUpperCase();
+}
+
 function timeAgo(value) {
   if (!value) return "";
   const diff = Date.now() - new Date(value).getTime();
@@ -189,37 +198,61 @@ export default function NotificationCenter() {
         </article>
       ))}
 
-      {notifications.map((notification) => (
-        <article key={notification.id} className={`notification-card ${notification.read_at ? "" : "unread"}`}>
-          <div className="notification-icon">⌁</div>
-          <div className="notification-content">
-            <p className="eyebrow">{notification.type?.replaceAll("_", " ") || "Activity"}</p>
-            <h3>{notification.title}</h3>
-            {notification.body && <p>{notification.body}</p>}
-            {notification.type === "team_request" ? (
-              <div className="notification-actions">
-                <button type="button" onClick={() => respondTeamRequest(notification, "accepted")} className="primary-action">
-                  Accept
-                </button>
-                <button type="button" onClick={() => respondTeamRequest(notification, "rejected")} className="secondary-action">
-                  Decline
-                </button>
-                <span>{timeAgo(notification.created_at)}</span>
-              </div>
+      {notifications.map((notification) => {
+        const isTeamRequest = notification.type === "team_request";
+        const actor = notification.actor || {};
+        const actorName = personName(actor);
+
+        return (
+          <article key={notification.id} className={`notification-card ${notification.read_at ? "" : "unread"}`}>
+            {isTeamRequest ? (
+              <Link
+                href={`/profile/${notification.actor_id}`}
+                className="notification-avatar-link"
+                aria-label={`Open profile of ${actorName}`}
+              >
+                <span className="participant-avatar notification-avatar">
+                  {actor.avatar_url ? <img src={actor.avatar_url} alt="" /> : initialFor(actor)}
+                </span>
+              </Link>
             ) : (
-              <div className="notification-actions">
-                {notification.action_url && <Link href={notification.action_url} className="primary-action">Open</Link>}
-                {!notification.read_at && (
-                  <button type="button" onClick={() => markRead(notification)} className="secondary-action">
-                    Mark read
-                  </button>
-                )}
-                <span>{timeAgo(notification.created_at)}</span>
-              </div>
+              <div className="notification-icon">⌁</div>
             )}
-          </div>
-        </article>
-      ))}
+
+            <div className="notification-content">
+              <p className="eyebrow">{notification.type?.replaceAll("_", " ") || "Activity"}</p>
+              <h3>{isTeamRequest ? `${actorName} sent you a Team Up request` : notification.title}</h3>
+              {isTeamRequest ? (
+                <p>Accept or decline directly from this message.</p>
+              ) : notification.body ? (
+                <p>{notification.body}</p>
+              ) : null}
+
+              {isTeamRequest ? (
+                <div className="notification-actions">
+                  <button type="button" onClick={() => respondTeamRequest(notification, "accepted")} className="primary-action">
+                    Accept
+                  </button>
+                  <button type="button" onClick={() => respondTeamRequest(notification, "rejected")} className="secondary-action">
+                    Decline
+                  </button>
+                  <span>{timeAgo(notification.created_at)}</span>
+                </div>
+              ) : (
+                <div className="notification-actions">
+                  {notification.action_url && <Link href={notification.action_url} className="primary-action">Open</Link>}
+                  {!notification.read_at && (
+                    <button type="button" onClick={() => markRead(notification)} className="secondary-action">
+                      Mark read
+                    </button>
+                  )}
+                  <span>{timeAgo(notification.created_at)}</span>
+                </div>
+              )}
+            </div>
+          </article>
+        );
+      })}
 
       {!invites.filter((invite) => invite.status === "pending").length && !notifications.length && (
         <div className="endurance-card notification-empty">
