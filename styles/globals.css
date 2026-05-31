@@ -8261,3 +8261,57 @@ main {
 .training-feed-multisport-hero.training-feed-multisport-hero {
   padding-bottom: max(128px, calc(104px + env(safe-area-inset-bottom))) !important;
 }
+
+/* ===== TEAM PAGE: CLEAN CLICKABLE AVATAR RESULT CARDS ===== */
+.people-result {
+  grid-template-columns: 54px 1fr;
+  gap: 12px;
+  padding: 14px;
+}
+
+.people-result-avatar-link {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  display: block;
+  text-decoration: none;
+  align-self: start;
+}
+
+.people-result-avatar-link .participant-avatar {
+  width: 54px;
+  height: 54px;
+  margin-left: 0;
+  border-color: rgba(230, 255, 0, 0.32);
+  box-shadow: 0 0 0 1px rgba(230, 255, 0, 0.10), 0 0 22px rgba(230, 255, 0, 0.10);
+}
+
+.people-result-info {
+  min-width: 0;
+  align-self: center;
+}
+
+.people-result-info h3 {
+  font-size: 21px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.people-team-up-action {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: center;
+  min-height: 56px;
+  border-radius: 999px;
+}
+
+@media (min-width: 720px) {
+  .people-result {
+    grid-template-columns: 54px 1fr minmax(180px, auto);
+  }
+
+  .people-team-up-action {
+    grid-column: auto;
+    width: auto;
+  }
+}
