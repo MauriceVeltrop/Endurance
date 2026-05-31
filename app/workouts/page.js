@@ -1,37 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
+import WorkoutCard from "../../components/workouts/WorkoutCard";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
-import { getMuscleGroupLabel } from "../../lib/strengthWorkoutConfig";
 
-function describeWorkout(workout) {
+function matchesSearch(workout, search) {
+  if (!search) return true;
+
+  const structure = workout?.structure || {};
+  const exercises = Array.isArray(structure.exercises) ? structure.exercises : [];
+  const haystack = [
+    workout.title,
+    workout.description,
+    workout.visibility,
+    workout.sport_id,
+    getSportLabel(workout.sport_id),
+    workout.workout_type,
+    ...(Array.isArray(structure.muscle_groups) ? structure.muscle_groups : []),
+    ...exercises.map((exercise) => exercise.name),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(search.toLowerCase());
+}
+
+function matchesTab(workout, activeTab) {
+  if (activeTab === "all") return true;
+  if (activeTab === "my") return workout._isOwnWorkout;
+  if (activeTab === "public") return workout.visibility === "public";
+  if (activeTab === "strength") return workout.sport_id === "strength_training" || workout.workout_type === "strength";
+  return workout.sport_id === activeTab;
+}
+
+function firstNameFromProfile(profile) {
+  return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice";
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function workoutSummary(workout) {
   const structure = workout?.structure || {};
   const exercises = Array.isArray(structure.exercises) ? structure.exercises : [];
   const setCount = exercises.reduce((sum, exercise) => sum + (Array.isArray(exercise.sets) ? exercise.sets.length : 0), 0);
-  const muscleGroups = Array.isArray(structure.muscle_groups) ? structure.muscle_groups : [];
-
-  return {
-    exerciseCount: exercises.length,
-    setCount,
-    muscleGroups: muscleGroups.map(getMuscleGroupLabel).join(" · "),
-  };
+  return { exerciseCount: exercises.length, setCount };
 }
 
 export default function WorkoutsPage() {
   const router = useRouter();
+
   const [profile, setProfile] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [message, setMessage] = useState("Loading workouts...");
-
-  useEffect(() => {
-    loadWorkouts();
-  }, []);
+  const [preferredSportIds, setPreferredSportIds] = useState([]);
+  const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
   async function loadWorkouts() {
+    setLoading(true);
+    setMessage("");
+
     try {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
@@ -41,20 +82,37 @@ export default function WorkoutsPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
-        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
+        .select("id,name,first_name,last_name,email,avatar_url,role,onboarding_completed,blocked")
         .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) throw profileError;
 
-      if (!profileData?.onboarding_completed) {
+      if (!profileRow?.onboarding_completed) {
         router.replace("/onboarding");
         return;
       }
 
-      setProfile(profileData);
+      if (profileRow?.blocked) {
+        setProfile(profileRow);
+        setWorkouts([]);
+        setMessage("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
+      setProfile(profileRow);
+
+      const { data: sportRows, error: sportError } = await supabase
+        .from("user_sports")
+        .select("sport_id")
+        .eq("user_id", user.id);
+
+      if (sportError) throw sportError;
+
+      const allowedSports = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
+      setPreferredSportIds(allowedSports);
 
       const { data, error } = await supabase
         .from("workouts")
@@ -65,116 +123,175 @@ export default function WorkoutsPage() {
         .limit(80);
 
       if (error) throw error;
-      setWorkouts(data || []);
-      setMessage("");
+
+      const visibleWorkouts =
+        profileRow?.role === "admin" || profileRow?.role === "moderator"
+          ? data || []
+          : (data || []).filter((workout) => allowedSports.includes(workout.sport_id) || workout.creator_id === user.id);
+
+      setWorkouts(
+        visibleWorkouts.map((workout) => ({
+          ...workout,
+          _isOwnWorkout: workout.creator_id === user.id,
+        }))
+      );
+
+      const [{ count: notificationCount }, { count: inviteCount }] = await Promise.all([
+        supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
+        supabase.from("training_invites").select("id", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending"),
+      ]);
+      setUnreadCount((notificationCount || 0) + (inviteCount || 0));
     } catch (error) {
-      console.error(error);
+      console.error("Workouts load error", error);
       setMessage(error?.message || "Could not load workouts.");
+      setWorkouts([]);
+    } finally {
+      setLoading(false);
     }
   }
 
+  useEffect(() => {
+    loadWorkouts();
+  }, []);
+
+  const strengthCount = workouts.filter((workout) => workout.sport_id === "strength_training" || workout.workout_type === "strength").length;
+  const ownWorkoutCount = workouts.filter((workout) => workout._isOwnWorkout).length;
+  const totalExercises = workouts.reduce((sum, workout) => sum + workoutSummary(workout).exerciseCount, 0);
+  const totalSets = workouts.reduce((sum, workout) => sum + workoutSummary(workout).setCount, 0);
+
+  const tabs = useMemo(() => {
+    const sportTabs = preferredSportIds
+      .filter((sportId) => sportId !== "strength_training")
+      .slice(0, 2)
+      .map((sportId) => ({ id: sportId, label: getSportLabel(sportId) }));
+
+    return [
+      { id: "all", label: "All workouts" },
+      { id: "strength", label: "Strength" },
+      { id: "my", label: "My workouts" },
+      { id: "public", label: "Public" },
+      ...sportTabs,
+    ];
+  }, [preferredSportIds]);
+
+  const filteredWorkouts = workouts
+    .filter((workout) => matchesSearch(workout, search))
+    .filter((workout) => matchesTab(workout, activeTab));
+
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+    <main className="endurance-page route-feed-page workout-feed-page training-feed-multisport-hero route-feed-multisport-layout">
+      <section className="training-feed-hero-shell route-hero-shell">
+        <AppHeader active="workouts" />
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Workouts</div>
-          <div style={styles.titleRow}>
-            <h1 style={styles.title}>Build the work.</h1>
+        <section className="endurance-shell training-dashboard route-dashboard">
+          <div className="training-dashboard-top">
+            <div>
+              <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)}</p>
+              <p className="training-subline">
+                <strong>{filteredWorkouts.length}</strong> workout{filteredWorkouts.length === 1 ? "" : "s"} ready for your sports
+              </p>
+            </div>
           </div>
-          <p style={styles.subtitle}>
-            Create reusable workout structures. Strength starts with muscle groups, relevant exercises,
-            and sets with reps and load per set.
-          </p>
-        </header>
 
-        <section style={styles.heroCard}>
-          <div>
-            <div style={styles.kickerSmall}>Strength MVP</div>
-            <h2 style={styles.heroTitle}>Muscle groups → exercises → sets</h2>
-            <p style={styles.heroText}>
-              Start with Chest, Back, Shoulders, Biceps, Triceps, Legs and Core. Endurance only shows
-              relevant strength exercises for the selected muscle groups.
-            </p>
+          <div className="training-metric-row route-metric-row">
+            <div className="training-metric-tile">
+              <span>▦</span>
+              <strong>{loading ? "…" : workouts.length}</strong>
+              <small>Workouts</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>🏋</span>
+              <strong>{loading ? "…" : strengthCount}</strong>
+              <small>Strength</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>▤</span>
+              <strong>{loading ? "…" : totalExercises}</strong>
+              <small>Exercises</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>☰</span>
+              <strong>{loading ? "…" : totalSets}</strong>
+              <small>Sets</small>
+            </div>
           </div>
-          <button onClick={() => router.push("/workouts/new")} style={styles.heroButton}>Create strength workout</button>
         </section>
+      </section>
 
-        {message ? <section style={styles.message}>{message}</section> : null}
+      <section className="endurance-shell smart-search-row premium-feed-controls route-feed-controls">
+        <label className="feed-search">
+          <span>⌕</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search workout, exercise or muscle group..."
+          />
+        </label>
 
-        {!message && !workouts.length ? (
-          <section style={styles.emptyCard}>
-            <h2>No workouts yet.</h2>
-            <p>Create your first reusable strength workout.</p>
-            <button onClick={() => router.push("/workouts/new")} style={styles.primaryButton}>Create first workout</button>
-          </section>
+        <div className="premium-tabs-row route-tabs-row">
+          <div className="training-tabs route-tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={activeTab === tab.id ? "active" : ""}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={activeTab}
+            onChange={(event) => setActiveTab(event.target.value)}
+            className="feed-select-pill"
+            aria-label="Workout filter"
+          >
+            {tabs.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      <section className="endurance-shell workout-discipline-grid">
+        <Link href="/workouts/new" className="workout-discipline-card endurance-card">
+          <span className="sport-badge">Strength</span>
+          <h2>Build strength workout</h2>
+          <p>Muscle groups → relevant exercises → sets with reps and load per set.</p>
+          <b>Create strength workout →</b>
+        </Link>
+      </section>
+
+      <section className="endurance-shell training-feed-stack route-feed-stack">
+        {loading && <div className="endurance-card notification-empty">Loading workouts...</div>}
+
+        {!loading && message ? (
+          <div className="endurance-card notification-empty">
+            <h2>Could not load workouts</h2>
+            <p>{message}</p>
+            <button type="button" className="primary-action" onClick={loadWorkouts}>
+              Try again
+            </button>
+          </div>
         ) : null}
 
-        {workouts.length ? (
-          <section style={styles.grid}>
-            {workouts.map((workout) => {
-              const summary = describeWorkout(workout);
-              return (
-                <article key={workout.id} style={styles.card}>
-                  <div style={styles.cardTop}>
-                    <span style={styles.sportBadge}>{getSportLabel(workout.sport_id)}</span>
-                    <span style={styles.visibilityBadge}>{workout.visibility}</span>
-                  </div>
+        {!loading && !message && filteredWorkouts.map((workout) => <WorkoutCard key={workout.id} workout={workout} />)}
 
-                  <h2 style={styles.cardTitle}>{workout.title}</h2>
-                  {workout.description ? <p style={styles.cardText}>{workout.description}</p> : null}
-
-                  {summary.muscleGroups ? <p style={styles.muscleLine}>{summary.muscleGroups}</p> : null}
-
-                  <div style={styles.facts}>
-                    <span>{workout.workout_type || "Workout"}</span>
-                    <span>{summary.exerciseCount ? `${summary.exerciseCount} exercises` : "No exercises yet"}</span>
-                    <span>{summary.setCount ? `${summary.setCount} sets` : "No sets yet"}</span>
-                    <span>{workout.duration_min ? `${workout.duration_min} min` : "Duration not set"}</span>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
+        {!loading && !message && !filteredWorkouts.length ? (
+          <div className="endurance-card notification-empty">
+            <h2>No workouts found</h2>
+            <p>Create a workout or change your filters.</p>
+            <Link href="/workouts/new" className="primary-action">
+              Create strength workout
+            </Link>
+          </div>
         ) : null}
       </section>
-      <BottomNav />
+
+      <BottomNav unreadCount={unreadCount} />
     </main>
   );
 }
-
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-    color: "white",
-    padding: "18px 16px 132px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  shell: { width: "100%", maxWidth: 960, margin: "0 auto", display: "grid", gap: 18 },
-  header: { display: "grid", gap: 10 },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  kickerSmall: { color: "#e4ef16", fontSize: 11, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  titleRow: { display: "grid", gap: 12 },
-  title: { margin: 0, fontSize: "clamp(38px, 11vw, 64px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
-  subtitle: { margin: 0, maxWidth: 680, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
-  primaryButton: { minHeight: 46, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 16px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
-  heroCard: { borderRadius: 32, padding: 20, background: "linear-gradient(145deg, rgba(228,239,22,0.16), rgba(255,255,255,0.055))", border: "1px solid rgba(228,239,22,0.22)", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 16, alignItems: "center" },
-  heroTitle: { margin: "4px 0 0", fontSize: 28, letterSpacing: "-0.05em", lineHeight: 1 },
-  heroText: { margin: "8px 0 0", color: "rgba(255,255,255,0.70)", lineHeight: 1.5 },
-  heroButton: { minHeight: 46, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 16px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
-  message: { borderRadius: 22, padding: 14, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: "#e4ef16", fontWeight: 850 },
-  emptyCard: { borderRadius: 30, padding: 22, background: glass, border: "1px solid rgba(255,255,255,0.13)" },
-  grid: { display: "grid", gap: 16 },
-  card: { borderRadius: 30, padding: 20, background: glass, border: "1px solid rgba(255,255,255,0.13)", boxShadow: "0 24px 70px rgba(0,0,0,0.30)", display: "grid", gap: 14 },
-  cardTop: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" },
-  sportBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.28)", color: "#e4ef16", fontWeight: 950 },
-  visibilityBadge: { display: "inline-flex", borderRadius: 999, padding: "8px 12px", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.80)", textTransform: "capitalize", fontWeight: 900 },
-  cardTitle: { margin: 0, fontSize: 30, letterSpacing: "-0.055em", lineHeight: 1 },
-  cardText: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 },
-  muscleLine: { margin: 0, color: "#e4ef16", fontWeight: 900, lineHeight: 1.35 },
-  facts: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, color: "rgba(255,255,255,0.68)", fontWeight: 750 },
-};
