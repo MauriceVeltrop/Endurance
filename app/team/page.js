@@ -127,15 +127,20 @@ export default function TeamPage() {
         <div className="people-results">
           {results.map((profile) => (
             <article key={profile.id} className="people-result">
-              <div className="participant-avatar">
-                {profile.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile.name || "U").slice(0, 1)}
-              </div>
-              <div>
+              <Link
+                href={`/profile/${profile.id}`}
+                className="people-result-avatar-link"
+                aria-label={`Open profile of ${profile.name || "Endurance member"}`}
+              >
+                <span className="participant-avatar">
+                  {profile.avatar_url ? <img src={profile.avatar_url} alt="" /> : (profile.name || "U").slice(0, 1)}
+                </span>
+              </Link>
+              <div className="people-result-info">
                 <h3>{profile.name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim()}</h3>
                 <p>{profile.location || "Endurance member"}</p>
               </div>
-              <Link href={`/profile/${profile.id}`} className="secondary-action">Profile</Link>
-              <button type="button" onClick={() => teamUp(profile)} className="primary-action">Team Up</button>
+              <button type="button" onClick={() => teamUp(profile)} className="primary-action people-team-up-action">Team Up</button>
             </article>
           ))}
         </div>
