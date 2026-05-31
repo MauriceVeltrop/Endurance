@@ -30,7 +30,11 @@ function formatTime(value) {
 }
 
 function displayName(user) {
-  return user?.name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Someone";
+  return [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.name || "Someone";
+}
+
+function initialFor(user) {
+  return displayName(user).slice(0, 1).toUpperCase();
 }
 
 export default function InboxPage() {
@@ -310,8 +314,9 @@ export default function InboxPage() {
           <section style={styles.feed}>
             {notifications.map((notification) => {
               const unread = !notification.read_at;
-
               const isTeamRequest = notification.type === "team_request";
+              const actor = notification.actor || {};
+              const actorName = displayName(actor);
 
               return (
                 <article
@@ -321,48 +326,84 @@ export default function InboxPage() {
                     ...(unread ? styles.notificationCardUnread : {}),
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => openNotification(notification)}
-                    style={styles.notificationMainButton}
-                  >
-                    <div style={styles.notificationTop}>
-                      <div>
-                        <strong style={styles.notificationTitle}>
-                          {notification.title}
-                        </strong>
-                        {notification.body ? (
-                          <p style={styles.notificationBody}>{notification.body}</p>
-                        ) : null}
-                      </div>
-
-                      {unread ? <span style={styles.unreadDot} /> : null}
-                    </div>
-
-                    <div style={styles.notificationMeta}>
-                      <span>{notification.type}</span>
-                      <span>{formatTime(notification.created_at)}</span>
-                    </div>
-                  </button>
-
                   {isTeamRequest ? (
-                    <div style={styles.teamRequestActions}>
+                    <div style={styles.teamRequestLayout}>
                       <button
                         type="button"
-                        onClick={() => respondToTeamRequest(notification, "accepted")}
-                        style={styles.primaryButton}
+                        onClick={() => router.push(`/profile/${notification.actor_id}`)}
+                        style={styles.avatarButton}
+                        aria-label={`Open profile of ${actorName}`}
                       >
-                        Accept
+                        {actor.avatar_url ? (
+                          <img src={actor.avatar_url} alt="" style={styles.avatarImage} />
+                        ) : (
+                          <span style={styles.avatarFallback}>{initialFor(actor)}</span>
+                        )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => respondToTeamRequest(notification, "rejected")}
-                        style={styles.secondaryButton}
-                      >
-                        Decline
-                      </button>
+
+                      <div style={styles.teamRequestContent}>
+                        <div style={styles.notificationTop}>
+                          <div>
+                            <p style={styles.kicker}>Team request</p>
+                            <strong style={styles.notificationTitle}>
+                              {actorName} sent you a Team Up request
+                            </strong>
+                            <p style={styles.notificationBody}>
+                              Accept or decline directly from this message.
+                            </p>
+                          </div>
+                          {unread ? <span style={styles.unreadDot} /> : null}
+                        </div>
+
+                        <div style={styles.notificationMeta}>
+                          <span>{formatTime(notification.created_at)}</span>
+                        </div>
+
+                        <div style={styles.teamRequestActions}>
+                          <button
+                            type="button"
+                            onClick={() => respondToTeamRequest(notification, "accepted")}
+                            style={styles.primaryButton}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => respondToTeamRequest(notification, "rejected")}
+                            style={styles.secondaryButton}
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openNotification(notification)}
+                        style={styles.notificationMainButton}
+                      >
+                        <div style={styles.notificationTop}>
+                          <div>
+                            <strong style={styles.notificationTitle}>
+                              {notification.title}
+                            </strong>
+                            {notification.body ? (
+                              <p style={styles.notificationBody}>{notification.body}</p>
+                            ) : null}
+                          </div>
+
+                          {unread ? <span style={styles.unreadDot} /> : null}
+                        </div>
+
+                        <div style={styles.notificationMeta}>
+                          <span>{notification.type}</span>
+                          <span>{formatTime(notification.created_at)}</span>
+                        </div>
+                      </button>
+                    </>
+                  )}
                 </article>
               );
             })}
