@@ -113,37 +113,26 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function formatWeight(value) {
-  if (value === null || value === undefined || value === "") return "open";
+function formatLoad(value) {
+  if (value === "" || value === null || value === undefined) return "open";
   return `${value}kg`;
 }
 
-function setSignature(set) {
-  const reps = set?.reps || "?";
-  return `${reps} @ ${formatWeight(set?.weight_kg)}`;
-}
-
-function compactSetSummary(sets = []) {
+function setSummary(item) {
+  const sets = item.sets || [];
   if (!sets.length) return "No sets";
 
   const groups = [];
   sets.forEach((set) => {
-    const signature = setSignature(set);
-    const last = groups[groups.length - 1];
-    if (last?.signature === signature) {
-      last.count += 1;
-    } else {
-      groups.push({ signature, count: 1 });
-    }
+    const reps = set.reps || "?";
+    const load = formatLoad(set.weight_kg);
+    const key = `${reps} @ ${load}`;
+    const existing = groups.find((group) => group.key === key);
+    if (existing) existing.count += 1;
+    else groups.push({ key, count: 1 });
   });
 
-  return groups
-    .map((group) => (group.count > 1 ? `${group.count}x ${group.signature}` : `1x ${group.signature}`))
-    .join("   ");
-}
-
-function setSummary(item) {
-  return compactSetSummary(item.sets || []);
+  return groups.map((group) => `${group.count}x ${group.key}`).join(" · ");
 }
 
 export default function NewWorkoutPage() {
@@ -163,6 +152,7 @@ export default function NewWorkoutPage() {
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedExercises, setSelectedExercises] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [customForm, setCustomForm] = useState({ name: "", primary_muscle_group: "Chest", equipment: "", notes: "" });
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -309,6 +299,19 @@ export default function NewWorkoutPage() {
       const copy = [...current];
       const [moved] = copy.splice(index, 1);
       copy.splice(target, 0, moved);
+      return copy.map((item, nextIndex) => ({ ...item, position: nextIndex }));
+    });
+  }
+
+  function moveExerciseTo(dragId, targetId) {
+    if (!dragId || !targetId || dragId === targetId) return;
+    setSelectedExercises((current) => {
+      const fromIndex = current.findIndex((item) => item.id === dragId);
+      const toIndex = current.findIndex((item) => item.id === targetId);
+      if (fromIndex < 0 || toIndex < 0) return current;
+      const copy = [...current];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
       return copy.map((item, nextIndex) => ({ ...item, position: nextIndex }));
     });
   }
@@ -637,18 +640,27 @@ export default function NewWorkoutPage() {
                         {selectedExercises.map((item, index) => {
                           const editing = editingId === item.id;
                           return (
-                            <article key={item.id} style={styles.selectedExercise}>
+                            <article
+                              key={item.id}
+                              draggable
+                              onDragStart={() => setDraggingId(item.id)}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={() => { moveExerciseTo(draggingId, item.id); setDraggingId(null); }}
+                              onDragEnd={() => setDraggingId(null)}
+                              style={{ ...styles.selectedExercise, ...(draggingId === item.id ? styles.selectedExerciseDragging : {}) }}
+                            >
                               <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.exerciseSummary}>
                                 <span style={styles.orderBadge}>{index + 1}</span>
                                 <span style={styles.selectedName}>
-                                  <strong style={styles.selectedExerciseTitle}>{item.exercise.name}</strong>
-                                  <small style={styles.selectedExerciseMeta}>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
+                                  <strong>{item.exercise.name}</strong>
+                                  <small>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
+                                  <em style={styles.compactSummary}>{setSummary(item)}</em>
                                 </span>
-                                <span style={styles.compactPlanSummary}>{setSummary(item)}</span>
                               </button>
                               {editing ? (
                                 <div style={styles.editorBox}>
                                   <div style={styles.quickActions}>
+                                    <span style={styles.dragHint}>Drag the card to reorder</span>
                                     <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.iconButton}>↑</button>
                                     <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.iconButton}>↓</button>
                                     <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>Remove</button>
@@ -671,6 +683,12 @@ export default function NewWorkoutPage() {
                         })}
                       </div>
                     )}
+                    <div style={styles.flowActions}>
+                      <button type="button" onClick={() => setMode("library")} style={styles.secondaryFlowButton}>+ Add exercise</button>
+                      <button type="submit" disabled={saving || !selectedExercises.length} style={{ ...styles.submitButton, ...(!selectedExercises.length ? styles.submitButtonDisabled : {}) }}>
+                        {saving ? "Saving..." : "Save workout"}
+                      </button>
+                    </div>
                   </section>
                 ) : (
                   <section style={styles.card}>
@@ -721,14 +739,6 @@ export default function NewWorkoutPage() {
                   </section>
                 )}
 
-                <section style={styles.saveDock}>
-                  <button type="button" onClick={() => setMode(mode === "plan" ? "library" : "plan")} style={styles.secondaryDockButton}>
-                    {mode === "plan" ? `Add exercise` : `Workout (${selectedExercises.length})`}
-                  </button>
-                  <button type="submit" disabled={saving || !selectedExercises.length} style={{ ...styles.submitButton, ...(!selectedExercises.length ? styles.submitButtonDisabled : {}) }}>
-                    {saving ? "Saving..." : "Save workout"}
-                  </button>
-                </section>
               </>
             ) : null}
           </form>
@@ -744,7 +754,7 @@ const darkerGlass = "linear-gradient(145deg, rgba(10,16,20,0.96), rgba(6,8,10,0.
 const accent = "#e4ef16";
 
 const styles = {
-  page: { minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)", color: "white", padding: "18px 16px 170px", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  page: { minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)", color: "white", padding: "16px 14px 118px", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
   shell: { width: "100%", maxWidth: 760, margin: "0 auto", display: "grid", gap: 14 },
   backLink: { width: "fit-content", color: accent, textDecoration: "none", fontWeight: 950, border: "1px solid rgba(228,239,22,0.24)", borderRadius: 999, padding: "10px 14px", background: "rgba(228,239,22,0.08)" },
   header: { display: "grid", gap: 8, marginTop: 4 },
@@ -756,12 +766,12 @@ const styles = {
   stepItemActive: { color: "#101406", background: accent, borderColor: accent },
   message: { borderRadius: 18, padding: 12, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 850 },
   formShell: { display: "grid", gap: 14 },
-  card: { borderRadius: 28, padding: 18, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 14, boxShadow: "0 24px 80px rgba(0,0,0,0.34)", overflow: "hidden" },
+  card: { borderRadius: 26, padding: 14, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 12, boxShadow: "0 24px 80px rgba(0,0,0,0.34)", overflow: "hidden" },
   detailsCard: { borderRadius: 24, padding: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", display: "grid", gap: 12 },
   detailsToggle: { border: 0, background: "transparent", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, textAlign: "left", padding: 4, cursor: "pointer" },
   cardHead: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" },
   cardKicker: { color: accent, fontSize: 11, fontWeight: 950, letterSpacing: "0.18em", textTransform: "uppercase" },
-  cardTitle: { margin: "3px 0 0", fontSize: "clamp(28px, 7vw, 40px)", letterSpacing: "-0.06em", lineHeight: 1 },
+  cardTitle: { margin: "2px 0 0", fontSize: "clamp(26px, 7vw, 38px)", letterSpacing: "-0.06em", lineHeight: 1 },
   sportGrid: { display: "grid", gap: 10 },
   choiceButton: { border: "1px solid rgba(255,255,255,0.12)", background: darkerGlass, color: "white", borderRadius: 22, padding: 16, textAlign: "left", cursor: "pointer", display: "grid", gap: 5 },
   choiceButtonActive: { borderColor: "rgba(228,239,22,0.72)", background: "rgba(228,239,22,0.15)", color: accent },
@@ -789,24 +799,24 @@ const styles = {
   exerciseAvatar: { width: 36, height: 36, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 950 },
   emptyState: { minHeight: 190, border: "1px dashed rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "white", borderRadius: 24, padding: 22, display: "grid", placeItems: "center", gap: 8, textAlign: "center", cursor: "pointer" },
   selectedList: { display: "grid", gap: 7 },
-  selectedExercise: { borderRadius: 16, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: "8px 9px", display: "grid", gap: 6 },
-  exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "28px minmax(0, 1fr)", gap: 8, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
-  orderBadge: { width: 28, height: 28, borderRadius: 10, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950, fontSize: 13, gridRow: "span 2" },
-  selectedName: { display: "grid", gap: 0, minWidth: 0, lineHeight: 1.05 },
-  selectedExerciseTitle: { fontSize: 15, lineHeight: 1.05, letterSpacing: "-0.03em" },
-  selectedExerciseMeta: { color: "rgba(255,255,255,0.70)", fontSize: 12, lineHeight: 1.05 },
-  compactPlanSummary: { gridColumn: "2 / -1", color: accent, fontWeight: 950, fontSize: 13, lineHeight: 1.15, overflowWrap: "anywhere", marginTop: 2 },
+  selectedExercise: { borderRadius: 18, background: darkerGlass, border: "1px solid rgba(255,255,255,0.11)", padding: 9, display: "grid", gap: 8, cursor: "grab" },
+  selectedExerciseDragging: { opacity: 0.45, transform: "scale(0.985)" },
+  exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "34px minmax(0, 1fr)", gap: 9, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
+  orderBadge: { width: 32, height: 32, borderRadius: 12, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950, fontSize: 14 },
+  selectedName: { display: "grid", gap: 1, minWidth: 0 },
+  compactSummary: { color: accent, fontStyle: "normal", fontWeight: 950, fontSize: 16, letterSpacing: "-0.02em", marginTop: 2 },
   editorBox: { display: "grid", gap: 7, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 8 },
-  quickActions: { display: "flex", gap: 6, flexWrap: "wrap" },
+  quickActions: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" },
   iconButton: { minWidth: 38, height: 36, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", fontWeight: 950, cursor: "pointer" },
   removeButton: { height: 36, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer", padding: "0 12px" },
-  setHeader: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
-  setRow: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, alignItems: "center" },
+  setHeader: { display: "grid", gridTemplateColumns: "30px repeat(3, minmax(0, 1fr)) 28px", gap: 5, color: "rgba(255,255,255,0.46)", fontSize: 9, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
+  setRow: { display: "grid", gridTemplateColumns: "30px repeat(3, minmax(0, 1fr)) 28px", gap: 5, alignItems: "center" },
   setInput: { minWidth: 0, width: "100%", minHeight: 32, borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
   removeSet: { width: 30, height: 30, borderRadius: 10, border: 0, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontWeight: 950, cursor: "pointer" },
   addSet: { justifySelf: "start", border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "8px 12px", fontWeight: 950, cursor: "pointer" },
-  saveDock: { position: "static", display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 10, margin: "8px 0 18px", zIndex: 1 },
-  secondaryDockButton: { minHeight: 54, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(9,15,18,0.92)", backdropFilter: "blur(18px)", color: "white", fontWeight: 950, fontSize: 15, cursor: "pointer" },
+  flowActions: { display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 9, marginTop: 4 },
+  secondaryFlowButton: { minHeight: 48, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(9,15,18,0.76)", color: "white", fontWeight: 950, fontSize: 14, cursor: "pointer" },
+  dragHint: { color: "rgba(255,255,255,0.46)", fontSize: 12, fontWeight: 850, marginRight: "auto" },
   submitButton: { minHeight: 54, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer", padding: "0 20px" },
   submitButtonDisabled: { opacity: 0.45, cursor: "not-allowed" },
   smallButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", borderRadius: 999, padding: "9px 12px", fontWeight: 950, cursor: "pointer" },
