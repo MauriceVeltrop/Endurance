@@ -43,8 +43,32 @@ function summarizeWorkout(workout) {
 }
 
 function formatLoad(set) {
-  if (set?.weight_kg === null || set?.weight_kg === undefined || set?.weight_kg === "") return "bodyweight / open";
-  return `${set.weight_kg} kg`;
+  if (set?.weight_kg === null || set?.weight_kg === undefined || set?.weight_kg === "") return "open";
+  return `${set.weight_kg}kg`;
+}
+
+function setSignature(set) {
+  const reps = set?.reps || "?";
+  return `${reps} @ ${formatLoad(set)}`;
+}
+
+function compactSetSummary(sets = []) {
+  if (!sets.length) return "No sets";
+
+  const groups = [];
+  sets.forEach((set) => {
+    const signature = setSignature(set);
+    const last = groups[groups.length - 1];
+    if (last?.signature === signature) {
+      last.count += 1;
+    } else {
+      groups.push({ signature, count: 1 });
+    }
+  });
+
+  return groups
+    .map((group) => (group.count > 1 ? `${group.count}x ${group.signature}` : `1x ${group.signature}`))
+    .join("   ");
 }
 
 function canEditWorkout(workout, profile) {
@@ -313,14 +337,8 @@ export default function WorkoutDetailPage() {
                   <span>{Array.isArray(exercise.sets) ? exercise.sets.length : 0} sets</span>
                 </div>
 
-                <div className="workout-set-list">
-                  {(Array.isArray(exercise.sets) ? exercise.sets : []).map((set, setIndex) => (
-                    <div key={setIndex} className="workout-set-row">
-                      <b>Set {setIndex + 1}</b>
-                      <span>{set?.reps || "—"} reps</span>
-                      <span>{formatLoad(set)}</span>
-                    </div>
-                  ))}
+                <div className="workout-compact-set-summary">
+                  {compactSetSummary(Array.isArray(exercise.sets) ? exercise.sets : [])}
                 </div>
               </article>
             ))}
