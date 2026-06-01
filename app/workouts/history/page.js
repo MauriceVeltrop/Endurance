@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
@@ -59,8 +59,6 @@ function groupSetsByExercise(sets = []) {
 
 export default function WorkoutHistoryPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
   const [profile, setProfile] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [setsBySession, setSetsBySession] = useState({});
@@ -144,12 +142,6 @@ export default function WorkoutHistoryPage() {
     }
   }
 
-  const completedMessage = useMemo(() => {
-    const prs = Number(searchParams?.get("prs") || 0);
-    if (!searchParams?.get("completed")) return "";
-    return prs > 0 ? `Workout saved. ${prs} new PR${prs === 1 ? "" : "s"}.` : "Workout saved.";
-  }, [searchParams]);
-
   return (
     <main className="endurance-page workout-history-page">
       <AppHeader active="workouts" />
@@ -167,7 +159,7 @@ export default function WorkoutHistoryPage() {
         </div>
       </section>
 
-      {completedMessage || message ? <section className="endurance-shell route-detail-message">{completedMessage || message}</section> : null}
+      {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
 
       <section className="endurance-shell workout-premium-secondary-grid">
         <article className="endurance-card workout-compact-card">
