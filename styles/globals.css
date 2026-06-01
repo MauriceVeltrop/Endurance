@@ -9070,3 +9070,66 @@ main {
     padding: 16px;
   }
 }
+
+/* Compact workout exercise-plan summary */
+.workout-detail-page .workout-exercise-list {
+  gap: 9px;
+}
+
+.workout-detail-page .workout-exercise-card {
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.workout-detail-page .workout-exercise-head {
+  margin-bottom: 6px;
+  gap: 8px;
+  align-items: center;
+}
+
+.workout-detail-page .workout-exercise-head h3 {
+  font-size: clamp(18px, 5.2vw, 26px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.workout-detail-page .workout-exercise-head p {
+  display: none;
+}
+
+.workout-detail-page .workout-exercise-head > span {
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--endurance-lime);
+  background: rgba(230, 255, 0, 0.08);
+  border: 1px solid rgba(230, 255, 0, 0.16);
+}
+
+.workout-compact-set-summary {
+  color: var(--endurance-lime);
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 1000;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .workout-detail-page .workout-exercise-panel {
+    padding: 16px;
+  }
+
+  .workout-detail-page .workout-exercise-card {
+    padding: 11px 12px;
+  }
+
+  .workout-detail-page .workout-exercise-head h3 {
+    font-size: 21px;
+  }
+
+  .workout-compact-set-summary {
+    font-size: 14px;
+  }
+}
