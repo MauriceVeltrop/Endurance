@@ -169,25 +169,39 @@ export default function StartWorkoutPage() {
     return Number.isFinite(number) ? number : null;
   }
 
+  function setVolume(set) {
+    const reps = cleanNumber(set.reps);
+    const weight = cleanNumber(set.weight_kg);
+    if (!Number.isFinite(reps) || !Number.isFinite(weight)) return 0;
+    return reps * weight;
+  }
+
   async function completeWorkout() {
     if (!profile?.id || !workout?.id) return;
     setSaving(true);
     setMessage("");
 
     try {
+      const startedAt = new Date(Date.now() - 1000 * 60 * 45).toISOString();
       const completedAt = new Date().toISOString();
+      const completedExerciseSets = exercises.flatMap((exercise) => exercise.sets.filter((set) => set.completed));
+      const totalVolume = completedExerciseSets.reduce((sum, set) => sum + setVolume(set), 0);
+
       const { data: sessionRow, error: sessionError } = await supabase
         .from("workout_sessions")
         .insert({
           workout_id: workout.id,
           user_id: profile.id,
-          started_at: completedAt,
+          started_at: startedAt,
           completed_at: completedAt,
+          duration_seconds: 45 * 60,
           notes: null,
           summary: {
             total_sets: totals.totalSets,
             completed_sets: totals.completedSets,
             completion_percentage: totals.percentage,
+            total_volume_kg: totalVolume,
+            exercise_count: exercises.length,
           },
         })
         .select("id")
@@ -207,15 +221,79 @@ export default function StartWorkoutPage() {
         completed: Boolean(set.completed),
       })));
 
+      let insertedSets = [];
       if (setRows.length) {
-        const { error: setError } = await supabase.from("workout_session_sets").insert(setRows);
+        const { data: insertedRows, error: setError } = await supabase
+          .from("workout_session_sets")
+          .insert(setRows)
+          .select("id,exercise_name,equipment,reps,weight_kg,completed");
         if (setError) throw setError;
+        insertedSets = insertedRows || [];
       }
 
-      router.push(`/workouts/${workout.id}`);
+      const completedSets = insertedSets.filter((row) => row.completed && Number(row.weight_kg) > 0 && Number(row.reps) > 0);
+      const prGroups = new Map();
+      completedSets.forEach((row) => {
+        const key = `${row.exercise_name}__${row.equipment || ""}`;
+        const volume = Number(row.reps || 0) * Number(row.weight_kg || 0);
+        const existing = prGroups.get(key);
+        if (!existing || Number(row.weight_kg) > Number(existing.weight_kg) || volume > existing.volume) {
+          prGroups.set(key, { ...row, volume });
+        }
+      });
+
+      let newPrCount = 0;
+      for (const candidate of prGroups.values()) {
+        const { data: currentPr } = await supabase
+          .from("exercise_prs")
+          .select("id,best_weight_kg,best_reps,best_volume")
+          .eq("user_id", profile.id)
+          .eq("exercise_name", candidate.exercise_name)
+          .eq("equipment", candidate.equipment || "")
+          .maybeSingle();
+
+        const candidateWeight = Number(candidate.weight_kg || 0);
+        const candidateReps = Number(candidate.reps || 0);
+        const candidateVolume = Number(candidate.volume || 0);
+        const currentWeight = Number(currentPr?.best_weight_kg || 0);
+        const currentVolume = Number(currentPr?.best_volume || 0);
+
+        if (!currentPr || candidateWeight > currentWeight || candidateVolume > currentVolume) {
+          newPrCount += 1;
+          if (currentPr?.id) {
+            await supabase
+              .from("exercise_prs")
+              .update({
+                best_weight_kg: candidateWeight,
+                best_reps: candidateReps,
+                best_volume: candidateVolume,
+                session_id: sessionRow.id,
+                set_id: candidate.id,
+                achieved_at: completedAt,
+                updated_at: completedAt,
+              })
+              .eq("id", currentPr.id);
+          } else {
+            await supabase.from("exercise_prs").insert({
+              user_id: profile.id,
+              exercise_name: candidate.exercise_name,
+              equipment: candidate.equipment || "",
+              best_weight_kg: candidateWeight,
+              best_reps: candidateReps,
+              best_volume: candidateVolume,
+              session_id: sessionRow.id,
+              set_id: candidate.id,
+              achieved_at: completedAt,
+              updated_at: completedAt,
+            });
+          }
+        }
+      }
+
+      router.push(`/workouts/history?completed=${sessionRow.id}&prs=${newPrCount}`);
     } catch (error) {
       console.error("Complete workout error", error);
-      setMessage(error?.message || "Could not save workout session. Did you run the workout session SQL migration?");
+      setMessage(error?.message || "Could not save workout session. Did you run the workout history SQL migration?");
     } finally {
       setSaving(false);
     }
