@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
+import { sportOptions } from "../../../lib/sportsConfig";
+import { getSportLabel } from "../../../lib/trainingHelpers";
 import {
   getExerciseById,
   getMuscleGroupLabel,
@@ -13,7 +15,59 @@ import {
   strengthMuscleGroups,
 } from "../../../lib/strengthWorkoutConfig";
 
+const FALLBACK_WORKOUT_SPORTS = sportOptions.filter((sport) => sport.workout).map((sport) => sport.id);
+
+const WORKOUT_SPORT_PROFILES = {
+  strength_training: {
+    focus: "Muscle groups, exercises, sets, reps and load.",
+    title: "Strength workout builder",
+    status: "Available now",
+  },
+  crossfit: {
+    focus: "WODs, AMRAP, EMOM, rounds, movements and time caps.",
+    title: "CrossFit workouts",
+    status: "Coming soon",
+  },
+  hyrox: {
+    focus: "Run blocks, race stations, loads, targets and simulations.",
+    title: "HYROX workouts",
+    status: "Coming soon",
+  },
+  bootcamp: {
+    focus: "Circuits, stations, work/rest blocks and group setup.",
+    title: "Bootcamp workouts",
+    status: "Coming soon",
+  },
+};
+
 const emptySet = (index) => ({ set: index + 1, reps: "", weight_kg: "" });
+
+function workoutProfileFor(sportId) {
+  return (
+    WORKOUT_SPORT_PROFILES[sportId] || {
+      focus: "Sport-specific workout structure.",
+      title: `${getSportLabel(sportId)} workout builder`,
+      status: "Coming soon",
+    }
+  );
+}
+
+function sportIconFor(sportId) {
+  const map = {
+    strength_training: "/training-images/strength.svg",
+    crossfit: "/training-images/crossfit.svg",
+    hyrox: "/training-images/hyrox.svg",
+    bootcamp: "/training-images/bootcamp.svg",
+    running: "/training-images/running.svg",
+    trail_running: "/training-images/trail-running.svg",
+    road_cycling: "/training-images/road-cycling.svg",
+    gravel_cycling: "/training-images/gravel-cycling.svg",
+    mountain_biking: "/training-images/mountain-biking.svg",
+    walking: "/training-images/walking.svg",
+  };
+
+  return map[sportId] || "/training-images/training.svg";
+}
 
 function createExerciseBlock(exercise) {
   return {
@@ -28,7 +82,9 @@ function createExerciseBlock(exercise) {
 export default function NewWorkoutPage() {
   const router = useRouter();
   const [profile, setProfile] = useState(null);
-  const [allowedSportIds, setAllowedSportIds] = useState([]);
+  const [availableSports, setAvailableSports] = useState([]);
+  const [selectedSportId, setSelectedSportId] = useState("");
+  const [currentStep, setCurrentStep] = useState(1);
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -54,7 +110,7 @@ export default function NewWorkoutPage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id,name,email,avatar_url,role,onboarding_completed")
+        .select("id,name,email,avatar_url,role,onboarding_completed,blocked")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -65,24 +121,50 @@ export default function NewWorkoutPage() {
         return;
       }
 
+      if (profileData?.blocked) {
+        setMessage("Your account is blocked. Contact an administrator.");
+        return;
+      }
+
       setProfile(profileData);
 
-      const { data: sportRows, error: sportsError } = await supabase
-        .from("user_sports")
-        .select("sport_id")
-        .eq("user_id", user.id);
+      const [{ data: preferredRows, error: preferredError }, { data: sportRows, error: sportError }] =
+        await Promise.all([
+          supabase.from("user_sports").select("sport_id").eq("user_id", user.id),
+          supabase
+            .from("sports")
+            .select("id,name,category,supports_workouts,sort_order")
+            .eq("supports_workouts", true)
+            .order("sort_order", { ascending: true }),
+        ]);
 
-      if (sportsError) throw sportsError;
-      setAllowedSportIds((sportRows || []).map((row) => row.sport_id).filter(Boolean));
+      if (preferredError) throw preferredError;
+      if (sportError) throw sportError;
+
+      const preferredIds = (preferredRows || []).map((row) => row.sport_id).filter(Boolean);
+      const workoutSports = (sportRows || []).filter(
+        (sport) => preferredIds.includes(sport.id) || FALLBACK_WORKOUT_SPORTS.includes(sport.id)
+      );
+      const allowed = workoutSports.filter((sport) => preferredIds.includes(sport.id));
+
+      setAvailableSports(allowed);
+
+      if (allowed.length) {
+        const first = allowed[0];
+        setSelectedSportId(first.id);
+        setTitle(`${getSportLabel(first.id)} Workout`);
+      }
     } catch (error) {
-      console.error(error);
-      setMessage(error?.message || "Could not prepare workout builder.");
+      console.error("Create workout access error", error);
+      setMessage(error?.message || "Could not load workout creator.");
     } finally {
       setChecking(false);
     }
   }
 
-  const canCreateStrength = allowedSportIds.includes("strength_training");
+  const selectedSport = availableSports.find((sport) => sport.id === selectedSportId);
+  const selectedProfile = workoutProfileFor(selectedSportId);
+  const isStrength = selectedSportId === "strength_training";
 
   const filteredExercises = useMemo(() => {
     if (!selectedGroups.length) return [];
@@ -95,6 +177,15 @@ export default function NewWorkoutPage() {
     () => new Set(selectedExercises.map((exercise) => exercise.exercise_id)),
     [selectedExercises]
   );
+
+  function chooseSport(sportId) {
+    setSelectedSportId(sportId);
+    setTitle(`${getSportLabel(sportId)} Workout`);
+    setDescription("");
+    setSelectedGroups([]);
+    setSelectedExercises([]);
+    setCurrentStep(2);
+  }
 
   function toggleGroup(groupId) {
     setSelectedGroups((current) => {
@@ -168,8 +259,14 @@ export default function NewWorkoutPage() {
       return;
     }
 
-    if (!canCreateStrength) {
-      setMessage("Add Strength Training to your preferred sports before creating strength workouts.");
+    if (!selectedSportId) {
+      setMessage("Choose a workout sport first.");
+      setCurrentStep(1);
+      return;
+    }
+
+    if (!isStrength) {
+      setMessage(`${getSportLabel(selectedSportId)} workout builder is coming soon.`);
       return;
     }
 
@@ -192,24 +289,28 @@ export default function NewWorkoutPage() {
       setSaving(true);
       const normalizedExercises = selectedExercises.map(normalizeExercise);
 
-      const { error } = await supabase.from("workouts").insert({
-        creator_id: profile.id,
-        sport_id: "strength_training",
-        title: title.trim(),
-        description: description.trim() || null,
-        workout_type: "strength",
-        level: null,
-        duration_min: null,
-        structure: {
-          type: "strength",
-          muscle_groups: selectedGroups,
-          exercises: normalizedExercises,
-        },
-        visibility,
-      });
+      const { data, error } = await supabase
+        .from("workouts")
+        .insert({
+          creator_id: profile.id,
+          sport_id: selectedSportId,
+          title: title.trim(),
+          description: description.trim() || null,
+          workout_type: "strength",
+          level: null,
+          duration_min: null,
+          structure: {
+            type: "strength",
+            muscle_groups: selectedGroups,
+            exercises: normalizedExercises,
+          },
+          visibility,
+        })
+        .select("id")
+        .single();
 
       if (error) throw error;
-      router.push("/workouts");
+      router.push(data?.id ? `/workouts/${data.id}` : "/workouts");
     } catch (error) {
       console.error(error);
       setMessage(error?.message || "Could not save workout.");
@@ -222,266 +323,265 @@ export default function NewWorkoutPage() {
   const setCount = selectedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <AppHeader profile={profile} compact />
+    <main className="endurance-page create-route-v2-page create-workout-page route-step-page">
+      <AppHeader active="workouts" />
 
-        <Link href="/workouts" style={styles.backLink}>← Back to workouts</Link>
+      <section className="endurance-shell training-hero endurance-card create-route-v2-hero route-step-hero">
+        <div>
+          <p className="eyebrow">Create workout</p>
+          <h1>
+            Build a workout
+            <br />
+            for your sport<span>.</span>
+          </h1>
+          <p>Choose a preferred sport first, then build the workout structure for that sport.</p>
+        </div>
+      </section>
 
-        <header style={styles.header}>
-          <div style={styles.kicker}>Strength workout builder</div>
-          <h1 style={styles.title}>Build by muscle group.</h1>
-          <p style={styles.subtitle}>
-            Choose the muscle groups first. Endurance then shows only relevant strength exercises,
-            with sets, reps and weight per set.
-          </p>
-        </header>
+      <section className="endurance-shell route-stepper workout-stepper">
+        {[1, 2].map((step) => (
+          <button
+            key={step}
+            type="button"
+            className={currentStep === step ? "active" : ""}
+            onClick={() => {
+              if (step === 1) setCurrentStep(1);
+              if (step === 2 && selectedSportId) setCurrentStep(2);
+            }}
+          >
+            <span>{step}</span>
+            {step === 1 ? "Sport" : "Workout"}
+          </button>
+        ))}
+      </section>
 
-        {message ? <section style={styles.message}>{message}</section> : null}
+      {message ? <section className="endurance-shell create-route-v2-message">{message}</section> : null}
 
-        {checking ? (
-          <section style={styles.card}>Checking profile...</section>
-        ) : !canCreateStrength ? (
-          <section style={styles.emptyCard}>
-            <h2 style={styles.emptyTitle}>Strength is not in your preferred sports yet.</h2>
-            <p style={styles.emptyText}>
-              Add Strength Training to your preferred sports before creating strength workouts.
-            </p>
-            <button type="button" onClick={() => router.push("/profile/edit")} style={styles.primaryButton}>
-              Edit preferred sports
-            </button>
-          </section>
-        ) : (
-          <form onSubmit={saveWorkout} style={styles.form}>
-            <section style={styles.card}>
-              <div style={styles.formGrid}>
-                <label style={styles.field}>
-                  <span>Workout title</span>
-                  <input value={title} onChange={(event) => setTitle(event.target.value)} style={styles.input} />
-                </label>
+      {checking ? (
+        <section className="endurance-shell endurance-card notification-empty">Loading workout creator...</section>
+      ) : null}
 
-                <label style={styles.field}>
-                  <span>Visibility</span>
-                  <select value={visibility} onChange={(event) => setVisibility(event.target.value)} style={styles.input}>
-                    <option value="public">Public</option>
-                    <option value="team">Team</option>
-                    <option value="private">Private</option>
-                    <option value="selected">Selected people</option>
-                    <option value="group">Group</option>
-                  </select>
-                </label>
+      {!checking && !availableSports.length ? (
+        <section className="endurance-shell endurance-card notification-empty">
+          <h2>No workout sports available</h2>
+          <p>Add a workout-relevant sport to your preferred sports first.</p>
+          <Link href="/onboarding" className="primary-action">Update preferred sports</Link>
+        </section>
+      ) : null}
 
-                <label style={styles.fieldFull}>
-                  <span>Description</span>
-                  <textarea
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    placeholder="Optional notes for this workout"
-                    style={styles.textarea}
-                  />
-                </label>
-              </div>
-            </section>
-
-            <section style={styles.card}>
-              <div style={styles.sectionTop}>
+      {!checking && availableSports.length ? (
+        <>
+          {currentStep === 1 ? (
+            <section className="endurance-shell create-route-v2-section route-step-section">
+              <div className="route-builder-step compact">
+                <span>1</span>
                 <div>
-                  <div style={styles.kickerSmall}>Step 1</div>
-                  <h2 style={styles.sectionTitle}>Choose muscle groups</h2>
+                  <p className="eyebrow">Sport first</p>
+                  <h2>Choose workout sport</h2>
                 </div>
-                <span style={styles.counterBadge}>{selectedGroups.length} selected</span>
               </div>
 
-              <div style={styles.groupGrid}>
-                {strengthMuscleGroups.map((group) => {
-                  const active = selectedGroups.includes(group.id);
+              <div className="create-route-sport-grid compact sport-button-list workout-sport-list">
+                {availableSports.map((sport) => {
+                  const profileForSport = workoutProfileFor(sport.id);
                   return (
                     <button
-                      key={group.id}
+                      key={sport.id}
                       type="button"
-                      onClick={() => toggleGroup(group.id)}
-                      style={{ ...styles.groupButton, ...(active ? styles.groupButtonActive : {}) }}
+                      className={selectedSportId === sport.id ? "route-sport-button active" : "route-sport-button"}
+                      onClick={() => chooseSport(sport.id)}
                     >
-                      {group.label}
+                      <span className="route-sport-icon" aria-hidden="true">
+                        <img src={sportIconFor(sport.id)} alt="" />
+                      </span>
+                      <span className="route-sport-copy">
+                        <strong>{getSportLabel(sport.id)}</strong>
+                        <small>{profileForSport.focus}</small>
+                      </span>
+                      <span className="route-sport-arrow" aria-hidden="true">›</span>
                     </button>
                   );
                 })}
               </div>
             </section>
+          ) : null}
 
-            <section style={styles.card}>
-              <div style={styles.sectionTop}>
+          {currentStep === 2 && selectedSport ? (
+            <section className="endurance-shell create-route-v2-section route-step-section workout-builder-section">
+              <div className="route-builder-step compact">
+                <span>2</span>
                 <div>
-                  <div style={styles.kickerSmall}>Step 2</div>
-                  <h2 style={styles.sectionTitle}>Add relevant exercises</h2>
+                  <p className="eyebrow">{selectedProfile.title}</p>
+                  <h2>{isStrength ? "Build strength workout" : "Workout builder"}</h2>
                 </div>
-                <span style={styles.counterBadge}>{filteredExercises.length} available</span>
               </div>
 
-              {!selectedGroups.length ? (
-                <p style={styles.mutedText}>Select one or more muscle groups to show matching exercises.</p>
-              ) : (
-                <div style={styles.exerciseGrid}>
-                  {filteredExercises.map((exercise) => {
-                    const added = selectedExerciseIds.has(exercise.id);
-                    return (
-                      <button
-                        key={exercise.id}
-                        type="button"
-                        onClick={() => addExercise(exercise.id)}
-                        disabled={added}
-                        style={{ ...styles.exerciseButton, ...(added ? styles.exerciseButtonAdded : {}) }}
-                      >
-                        <strong>{added ? "✓ " : "+ "}{exercise.name}</strong>
-                        <span>{exercise.muscleGroups.map(getMuscleGroupLabel).join(" · ")}</span>
-                      </button>
-                    );
-                  })}
+              <div className="route-method-premium-head workout-selected-head">
+                <div className="route-method-selected-sport">
+                  <span className="route-sport-icon" aria-hidden="true">
+                    <img src={sportIconFor(selectedSport.id)} alt="" />
+                  </span>
+                  <div>
+                    <strong>{getSportLabel(selectedSport.id)}</strong>
+                    <small>{selectedProfile.focus}</small>
+                  </div>
                 </div>
-              )}
-            </section>
-
-            <section style={styles.card}>
-              <div style={styles.sectionTop}>
-                <div>
-                  <div style={styles.kickerSmall}>Step 3</div>
-                  <h2 style={styles.sectionTitle}>Sets, reps and load</h2>
-                </div>
-                <span style={styles.counterBadge}>{exerciseCount} exercises · {setCount} sets</span>
+                <button type="button" onClick={() => setCurrentStep(1)}>Change sport</button>
               </div>
 
-              {!selectedExercises.length ? (
-                <p style={styles.mutedText}>Added exercises will appear here.</p>
+              {!isStrength ? (
+                <div className="endurance-card notification-empty workout-coming-soon-card">
+                  <h2>{selectedProfile.status}</h2>
+                  <p>{getSportLabel(selectedSport.id)} workouts will get their own sport-specific builder later.</p>
+                  <button type="button" className="primary-action" onClick={() => setCurrentStep(1)}>
+                    Choose another sport
+                  </button>
+                </div>
               ) : (
-                <div style={styles.selectedStack}>
-                  {selectedExercises.map((exercise) => (
-                    <article key={exercise.id} style={styles.exerciseCard}>
-                      <div style={styles.exerciseCardTop}>
-                        <div>
-                          <h3 style={styles.exerciseTitle}>{exercise.name}</h3>
-                          <p style={styles.exerciseMeta}>{exercise.muscle_groups.map(getMuscleGroupLabel).join(" · ")}</p>
-                        </div>
-                        <button type="button" onClick={() => removeExercise(exercise.id)} style={styles.removeButton}>Remove</button>
-                      </div>
+                <form onSubmit={saveWorkout} className="strength-builder-form compact-strength-builder">
+                  <section className="endurance-card strength-builder-card compact">
+                    <div className="strength-builder-fields">
+                      <label>
+                        <span>Workout name</span>
+                        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Strength Workout" />
+                      </label>
+                      <label>
+                        <span>Visibility</span>
+                        <select value={visibility} onChange={(event) => setVisibility(event.target.value)}>
+                          <option value="public">Public</option>
+                          <option value="team">Team</option>
+                          <option value="private">Private</option>
+                        </select>
+                      </label>
+                      <label className="full">
+                        <span>Description</span>
+                        <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional notes for this workout." />
+                      </label>
+                    </div>
+                  </section>
 
-                      <div style={styles.setHeader}>
-                        <span>Set</span>
-                        <span>Reps</span>
-                        <span>Weight kg</span>
-                        <span></span>
+                  <section className="endurance-card strength-builder-card compact">
+                    <div className="section-heading-row">
+                      <div>
+                        <p className="eyebrow">Step 1</p>
+                        <h3>Choose muscle groups</h3>
                       </div>
-
-                      {exercise.sets.map((set, setIndex) => (
-                        <div key={`${exercise.id}-${setIndex}`} style={styles.setRow}>
-                          <strong style={styles.setNumber}>{setIndex + 1}</strong>
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={set.reps}
-                            onChange={(event) => updateSet(exercise.id, setIndex, "reps", event.target.value)}
-                            style={styles.setInput}
-                            placeholder="8"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            inputMode="decimal"
-                            value={set.weight_kg}
-                            onChange={(event) => updateSet(exercise.id, setIndex, "weight_kg", event.target.value)}
-                            style={styles.setInput}
-                            placeholder="80"
-                          />
-                          <button type="button" onClick={() => removeSet(exercise.id, setIndex)} style={styles.tinyButton}>×</button>
-                        </div>
+                      <small>{selectedGroups.length} selected</small>
+                    </div>
+                    <div className="strength-chip-grid">
+                      {strengthMuscleGroups.map((group) => (
+                        <button
+                          key={group.id}
+                          type="button"
+                          className={selectedGroups.includes(group.id) ? "active" : ""}
+                          onClick={() => toggleGroup(group.id)}
+                        >
+                          {group.label}
+                        </button>
                       ))}
+                    </div>
+                  </section>
 
-                      <button type="button" onClick={() => addSet(exercise.id)} style={styles.addSetButton}>+ Add set</button>
-                    </article>
-                  ))}
-                </div>
+                  <section className="endurance-card strength-builder-card compact">
+                    <div className="section-heading-row">
+                      <div>
+                        <p className="eyebrow">Step 2</p>
+                        <h3>Add exercises</h3>
+                      </div>
+                      <small>{filteredExercises.length} available</small>
+                    </div>
+                    {!selectedGroups.length ? (
+                      <p className="muted-copy">Choose at least one muscle group first.</p>
+                    ) : (
+                      <div className="strength-exercise-grid">
+                        {filteredExercises.map((exercise) => {
+                          const added = selectedExerciseIds.has(exercise.id);
+                          return (
+                            <button
+                              key={exercise.id}
+                              type="button"
+                              disabled={added}
+                              className={added ? "added" : ""}
+                              onClick={() => addExercise(exercise.id)}
+                            >
+                              <strong>{added ? "✓ " : "+ "}{exercise.name}</strong>
+                              <span>{exercise.muscleGroups.map(getMuscleGroupLabel).join(" · ")}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="endurance-card strength-builder-card compact">
+                    <div className="section-heading-row">
+                      <div>
+                        <p className="eyebrow">Step 3</p>
+                        <h3>Sets, reps and load</h3>
+                      </div>
+                      <small>{exerciseCount} exercises · {setCount} sets</small>
+                    </div>
+
+                    {!selectedExercises.length ? (
+                      <p className="muted-copy">Added exercises will appear here.</p>
+                    ) : (
+                      <div className="strength-selected-stack compact">
+                        {selectedExercises.map((exercise) => (
+                          <article key={exercise.id} className="strength-selected-exercise">
+                            <div className="strength-selected-top">
+                              <div>
+                                <h4>{exercise.name}</h4>
+                                <p>{exercise.muscle_groups.map(getMuscleGroupLabel).join(" · ")}</p>
+                              </div>
+                              <button type="button" onClick={() => removeExercise(exercise.id)}>Remove</button>
+                            </div>
+
+                            <div className="strength-set-table">
+                              <div className="set-table-head">
+                                <span>Set</span><span>Reps</span><span>Kg</span><span></span>
+                              </div>
+                              {exercise.sets.map((set, setIndex) => (
+                                <div key={`${exercise.id}-${setIndex}`} className="set-table-row">
+                                  <strong>{setIndex + 1}</strong>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    inputMode="numeric"
+                                    value={set.reps}
+                                    onChange={(event) => updateSet(exercise.id, setIndex, "reps", event.target.value)}
+                                    placeholder="8"
+                                  />
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    inputMode="decimal"
+                                    value={set.weight_kg}
+                                    onChange={(event) => updateSet(exercise.id, setIndex, "weight_kg", event.target.value)}
+                                    placeholder="80"
+                                  />
+                                  <button type="button" onClick={() => removeSet(exercise.id, setIndex)}>×</button>
+                                </div>
+                              ))}
+                            </div>
+                            <button type="button" className="add-set-pill" onClick={() => addSet(exercise.id)}>+ Add set</button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <button type="submit" disabled={saving} className="primary-action workout-save-action">
+                    {saving ? "Saving..." : "Save strength workout"}
+                  </button>
+                </form>
               )}
             </section>
+          ) : null}
+        </>
+      ) : null}
 
-            <button type="submit" disabled={saving} style={styles.submitButton}>
-              {saving ? "Saving..." : "Save strength workout"}
-            </button>
-          </form>
-        )}
-      </section>
       <BottomNav />
     </main>
   );
 }
-
-const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
-    color: "white",
-    padding: "18px 16px 132px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  shell: { width: "100%", maxWidth: 980, margin: "0 auto", display: "grid", gap: 18 },
-  backLink: {
-    width: "fit-content",
-    color: "#e4ef16",
-    textDecoration: "none",
-    fontWeight: 950,
-    border: "1px solid rgba(228,239,22,0.24)",
-    borderRadius: 999,
-    padding: "10px 14px",
-    background: "rgba(228,239,22,0.08)",
-  },
-  header: { display: "grid", gap: 8 },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  kickerSmall: { color: "#e4ef16", fontSize: 11, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  title: { margin: 0, fontSize: "clamp(38px, 10vw, 66px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
-  subtitle: { margin: 0, maxWidth: 720, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
-  message: {
-    borderRadius: 22,
-    padding: 14,
-    background: "rgba(228,239,22,0.10)",
-    border: "1px solid rgba(228,239,22,0.18)",
-    color: "#e4ef16",
-    fontWeight: 850,
-  },
-  form: { display: "grid", gap: 16 },
-  card: { borderRadius: 32, padding: 20, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 16 },
-  emptyCard: { borderRadius: 32, padding: 22, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 12 },
-  emptyTitle: { margin: 0, fontSize: 26, letterSpacing: "-0.04em" },
-  emptyText: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.5 },
-  primaryButton: { minHeight: 46, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", padding: "0 16px", fontWeight: 950, cursor: "pointer", justifySelf: "start" },
-  formGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 },
-  field: { display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
-  fieldFull: { gridColumn: "1 / -1", display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
-  input: { width: "100%", minHeight: 48, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
-  textarea: { width: "100%", minHeight: 88, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: 12, boxSizing: "border-box", outline: "none", fontSize: 15, resize: "vertical" },
-  sectionTop: { display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 },
-  sectionTitle: { margin: "3px 0 0", fontSize: 26, lineHeight: 1, letterSpacing: "-0.05em" },
-  counterBadge: { borderRadius: 999, padding: "8px 11px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.78)", fontWeight: 900, whiteSpace: "nowrap", fontSize: 12 },
-  groupGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 10 },
-  groupButton: { minHeight: 50, borderRadius: 18, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(255,255,255,0.07)", color: "white", fontWeight: 950, cursor: "pointer" },
-  groupButtonActive: { background: "rgba(228,239,22,0.16)", border: "1px solid rgba(228,239,22,0.45)", color: "#e4ef16" },
-  exerciseGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 },
-  exerciseButton: { minHeight: 76, borderRadius: 20, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", padding: 12, display: "grid", gap: 5, textAlign: "left", cursor: "pointer" },
-  exerciseButtonAdded: { opacity: 0.62, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.24)", cursor: "default" },
-  mutedText: { margin: 0, color: "rgba(255,255,255,0.62)", lineHeight: 1.5 },
-  selectedStack: { display: "grid", gap: 14 },
-  exerciseCard: { borderRadius: 24, padding: 14, background: "rgba(0,0,0,0.22)", border: "1px solid rgba(255,255,255,0.10)", display: "grid", gap: 12 },
-  exerciseCardTop: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" },
-  exerciseTitle: { margin: 0, fontSize: 21, letterSpacing: "-0.04em" },
-  exerciseMeta: { margin: "5px 0 0", color: "rgba(255,255,255,0.58)", fontWeight: 750, fontSize: 13 },
-  removeButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", borderRadius: 999, padding: "9px 11px", fontWeight: 900, cursor: "pointer" },
-  setHeader: { display: "grid", gridTemplateColumns: "48px 1fr 1fr 40px", gap: 8, color: "rgba(255,255,255,0.52)", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" },
-  setRow: { display: "grid", gridTemplateColumns: "48px 1fr 1fr 40px", gap: 8, alignItems: "center" },
-  setNumber: { width: 36, height: 36, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.12)", color: "#e4ef16" },
-  setInput: { width: "100%", minHeight: 42, borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.24)", color: "white", padding: "0 10px", boxSizing: "border-box", fontSize: 15, outline: "none" },
-  tinyButton: { width: 36, height: 36, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "white", fontWeight: 950, cursor: "pointer" },
-  addSetButton: { minHeight: 42, borderRadius: 999, border: "1px solid rgba(228,239,22,0.26)", background: "rgba(228,239,22,0.08)", color: "#e4ef16", fontWeight: 950, cursor: "pointer", justifySelf: "start", padding: "0 14px" },
-  submitButton: { minHeight: 56, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer" },
-};
