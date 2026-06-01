@@ -273,43 +273,23 @@ export default function WorkoutDetailPage() {
         ) : null}
       </section>
 
-      <section className="endurance-shell route-detail-grid workout-detail-grid">
-        <article className="route-detail-panel endurance-card">
-          <div className="route-section-title">
-            <div>
-              <p className="eyebrow">Muscle groups</p>
-              <h2>Training focus</h2>
-            </div>
-          </div>
+      <section className="endurance-shell workout-focus-strip endurance-card">
+        <div>
+          <p className="eyebrow">Muscle groups</p>
+          <h2>Training focus</h2>
+        </div>
 
-          <div className="workout-muscle-tags">
-            {summary.muscleGroups.length ? (
-              summary.muscleGroups.map((group) => <span key={group}>{getMuscleGroupLabel(group)}</span>)
-            ) : (
-              <p className="route-detail-muted">No muscle groups saved.</p>
-            )}
-          </div>
-        </article>
-
-        <article className="route-detail-panel endurance-card">
-          <div className="route-section-title">
-            <div>
-              <p className="eyebrow">Metadata</p>
-              <h2>Workout type</h2>
-            </div>
-          </div>
-
-          <div className="route-metadata-list">
-            <span><b>Sport</b><small>{sportLabel}</small></span>
-            <span><b>Type</b><small>{workout.workout_type || "Workout"}</small></span>
-            <span><b>Visibility</b><small>{workout.visibility}</small></span>
-            <span><b>Updated</b><small>{formatDate(workout.updated_at || workout.created_at)}</small></span>
-          </div>
-        </article>
+        <div className="workout-muscle-tags compact">
+          {summary.muscleGroups.length ? (
+            summary.muscleGroups.map((group) => <span key={group}>{getMuscleGroupLabel(group)}</span>)
+          ) : (
+            <p className="route-detail-muted">No muscle groups saved.</p>
+          )}
+        </div>
       </section>
 
       <section className="endurance-shell workout-exercise-panel endurance-card">
-        <div className="route-section-title">
+        <div className="route-section-title workout-section-title-compact">
           <div>
             <p className="eyebrow">Exercise plan</p>
             <h2>Sets, reps & load</h2>
