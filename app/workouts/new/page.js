@@ -113,11 +113,35 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function formatSetPart(set) {
+  const reps = set?.reps || "?";
+  const weight = set?.weight_kg;
+  if (weight !== "" && weight !== null && weight !== undefined) return `${reps} @ ${weight}kg`;
+  return `${reps} bodyweight`;
+}
+
 function setSummary(item) {
-  const firstSet = item.sets?.[0] || {};
-  const reps = firstSet.reps || "?";
-  const weight = firstSet.weight_kg ? ` @ ${firstSet.weight_kg}kg` : "";
-  return `${item.sets.length} × ${reps}${weight}`;
+  const sets = item.sets || [];
+  if (!sets.length) return "No sets";
+
+  const grouped = [];
+  sets.forEach((set) => {
+    const key = formatSetPart(set);
+    const last = grouped[grouped.length - 1];
+    if (last?.key === key) {
+      last.count += 1;
+    } else {
+      grouped.push({ key, count: 1 });
+    }
+  });
+
+  return grouped
+    .map((group) => `${group.count}x ${group.key}`)
+    .join(" · ");
+}
+
+function totalSets(items) {
+  return items.reduce((sum, item) => sum + (item.sets?.length || 0), 0);
 }
 
 export default function NewWorkoutPage() {
@@ -607,43 +631,55 @@ export default function NewWorkoutPage() {
                         <span>Choose a muscle group, pick an exercise and fill in sets, reps and load.</span>
                       </button>
                     ) : (
-                      <div style={styles.selectedList}>
+                      <>
+                        <div style={styles.planStats}>
+                          <span style={styles.planStat}>{selectedExercises.length} exercises</span>
+                          <span style={styles.planStat}>{totalSets(selectedExercises)} sets</span>
+                        </div>
+
+                        <div style={styles.selectedList}>
                         {selectedExercises.map((item, index) => {
                           const editing = editingId === item.id;
                           return (
                             <article key={item.id} style={styles.selectedExercise}>
-                              <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.exerciseSummary}>
-                                <span style={styles.orderBadge}>{index + 1}</span>
-                                <span style={styles.selectedName}>
-                                  <strong>{item.exercise.name}</strong>
-                                  <small>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
-                                </span>
-                                <b>{setSummary(item)}</b>
-                              </button>
+                              <div style={styles.compactExerciseTop}>
+                                <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.dragButton} aria-label="Move exercise up">↑</button>
+                                <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.compactExerciseMain}>
+                                  <span style={styles.exerciseIndex}>{index + 1}</span>
+                                  <span style={styles.compactExerciseText}>
+                                    <strong>{item.exercise.name}</strong>
+                                    <small>{setSummary(item)}</small>
+                                  </span>
+                                </button>
+                                <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.dragButton} aria-label="Move exercise down">↓</button>
+                              </div>
+                              <div style={styles.exerciseMetaLine}>
+                                <span>{item.exercise.primary_muscle_group}</span>
+                                {item.exercise.equipment ? <span>{item.exercise.equipment}</span> : null}
+                                <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.inlineEdit}>{editing ? "Close" : "Edit sets"}</button>
+                              </div>
                               {editing ? (
                                 <div style={styles.editorBox}>
-                                  <div style={styles.quickActions}>
-                                    <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.iconButton}>↑</button>
-                                    <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.iconButton}>↓</button>
-                                    <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>Remove</button>
-                                  </div>
-                                  <div style={styles.setHeader}><span>Set</span><span>Reps</span><span>Kg</span><span>Rest</span><span /></div>
+                                  <div style={styles.setHeader}><span>Set</span><span>Reps</span><span>Kg</span><span /></div>
                                   {item.sets.map((set) => (
                                     <div key={set.id} style={styles.setRow}>
                                       <b>{set.set_number}</b>
                                       <input value={set.reps} onChange={(event) => updateSet(item.id, set.id, "reps", event.target.value)} style={styles.setInput} inputMode="numeric" />
                                       <input value={set.weight_kg} onChange={(event) => updateSet(item.id, set.id, "weight_kg", event.target.value)} style={styles.setInput} inputMode="decimal" />
-                                      <input value={set.rest_seconds} onChange={(event) => updateSet(item.id, set.id, "rest_seconds", event.target.value)} style={styles.setInput} inputMode="numeric" />
                                       <button type="button" onClick={() => removeSet(item.id, set.id)} style={styles.removeSet}>×</button>
                                     </div>
                                   ))}
-                                  <button type="button" onClick={() => addSet(item.id)} style={styles.addSet}>+ Set</button>
+                                  <div style={styles.quickActions}>
+                                    <button type="button" onClick={() => addSet(item.id)} style={styles.addSet}>+ Set</button>
+                                    <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>Remove</button>
+                                  </div>
                                 </div>
                               ) : null}
                             </article>
                           );
                         })}
-                      </div>
+                        </div>
+                      </>
                     )}
                   </section>
                 ) : (
@@ -762,20 +798,29 @@ const styles = {
   exercisePick: { border: "1px solid rgba(255,255,255,0.09)", background: "rgba(0,0,0,0.22)", color: "white", borderRadius: 18, padding: 10, textAlign: "left", display: "grid", gridTemplateColumns: "38px minmax(0, 1fr) 38px", gap: 10, alignItems: "center", cursor: "pointer" },
   exerciseAvatar: { width: 36, height: 36, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 950 },
   emptyState: { minHeight: 190, border: "1px dashed rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "white", borderRadius: 24, padding: 22, display: "grid", placeItems: "center", gap: 8, textAlign: "center", cursor: "pointer" },
-  selectedList: { display: "grid", gap: 10 },
-  selectedExercise: { borderRadius: 22, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: 10, display: "grid", gap: 10 },
+  planStats: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: -4 },
+  planStat: { borderRadius: 999, padding: "7px 10px", background: "rgba(228,239,22,0.10)", color: accent, border: "1px solid rgba(228,239,22,0.18)", fontWeight: 950, fontSize: 12 },
+  selectedList: { display: "grid", gap: 8 },
+  selectedExercise: { borderRadius: 18, background: "linear-gradient(145deg, rgba(0,0,0,0.42), rgba(255,255,255,0.035))", border: "1px solid rgba(255,255,255,0.10)", padding: 10, display: "grid", gap: 7 },
+  compactExerciseTop: { display: "grid", gridTemplateColumns: "32px minmax(0, 1fr) 32px", gap: 7, alignItems: "center" },
+  compactExerciseMain: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "26px minmax(0, 1fr)", gap: 9, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer", minWidth: 0 },
+  exerciseIndex: { width: 24, height: 24, borderRadius: 9, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950, fontSize: 12 },
+  compactExerciseText: { display: "grid", gap: 2, minWidth: 0 },
+  exerciseMetaLine: { display: "flex", alignItems: "center", gap: 7, color: "rgba(255,255,255,0.52)", fontSize: 12, fontWeight: 850, paddingLeft: 74 },
+  inlineEdit: { marginLeft: "auto", border: 0, background: "transparent", color: accent, fontWeight: 950, cursor: "pointer", padding: 0 },
+  dragButton: { width: 32, height: 32, borderRadius: 11, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.72)", fontWeight: 950, cursor: "pointer" },
   exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "38px minmax(0, 1fr) auto", gap: 10, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
   orderBadge: { width: 36, height: 36, borderRadius: 13, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950 },
   selectedName: { display: "grid", gap: 1, minWidth: 0 },
-  editorBox: { display: "grid", gap: 9, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 },
+  editorBox: { display: "grid", gap: 8, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 8 },
   quickActions: { display: "flex", gap: 7, flexWrap: "wrap" },
   iconButton: { minWidth: 38, height: 36, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", fontWeight: 950, cursor: "pointer" },
-  removeButton: { height: 36, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer", padding: "0 12px" },
-  setHeader: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
-  setRow: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, alignItems: "center" },
-  setInput: { minWidth: 0, width: "100%", minHeight: 36, borderRadius: 11, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
+  removeButton: { height: 34, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer", padding: "0 12px" },
+  setHeader: { display: "grid", gridTemplateColumns: "34px minmax(0, 1fr) minmax(0, 1fr) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
+  setRow: { display: "grid", gridTemplateColumns: "34px minmax(0, 1fr) minmax(0, 1fr) 30px", gap: 6, alignItems: "center" },
+  setInput: { minWidth: 0, width: "100%", minHeight: 34, borderRadius: 11, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
   removeSet: { width: 30, height: 30, borderRadius: 10, border: 0, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontWeight: 950, cursor: "pointer" },
-  addSet: { justifySelf: "start", border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "8px 12px", fontWeight: 950, cursor: "pointer" },
+  addSet: { justifySelf: "start", height: 34, border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "0 12px", fontWeight: 950, cursor: "pointer" },
   saveDock: { position: "fixed", left: 16, right: 16, bottom: 96, maxWidth: 760, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 10, zIndex: 30, pointerEvents: "auto" },
   secondaryDockButton: { minHeight: 54, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(9,15,18,0.92)", backdropFilter: "blur(18px)", color: "white", fontWeight: 950, fontSize: 15, cursor: "pointer" },
   submitButton: { minHeight: 54, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer", padding: "0 20px" },
