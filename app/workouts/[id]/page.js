@@ -383,6 +383,9 @@ export default function WorkoutDetailPage() {
         <Link href={`/workouts/${workout.id}/start`} className="workout-action-primary">
           Start workout
         </Link>
+        <Link href="/workouts/history" className="workout-action-secondary">
+          History
+        </Link>
         <button type="button" className="workout-action-secondary" onClick={createTrainingFromWorkout}>
           Use in training
         </button>
