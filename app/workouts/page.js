@@ -191,6 +191,9 @@ export default function WorkoutsPage() {
                 <strong>{filteredWorkouts.length}</strong> workout{filteredWorkouts.length === 1 ? "" : "s"} ready for your sports
               </p>
             </div>
+            <Link href="/workouts/new" className="primary-action route-create-hero-btn workout-create-hero-btn">
+              + Create workout
+            </Link>
           </div>
 
           <div className="training-metric-row route-metric-row">
@@ -256,15 +259,6 @@ export default function WorkoutsPage() {
         </div>
       </section>
 
-      <section className="endurance-shell workout-discipline-grid">
-        <Link href="/workouts/new" className="workout-discipline-card endurance-card">
-          <span className="sport-badge">Strength</span>
-          <h2>Build strength workout</h2>
-          <p>Muscle groups → relevant exercises → sets with reps and load per set.</p>
-          <b>Create strength workout →</b>
-        </Link>
-      </section>
-
       <section className="endurance-shell training-feed-stack route-feed-stack">
         {loading && <div className="endurance-card notification-empty">Loading workouts...</div>}
 
@@ -285,7 +279,7 @@ export default function WorkoutsPage() {
             <h2>No workouts found</h2>
             <p>Create a workout or change your filters.</p>
             <Link href="/workouts/new" className="primary-action">
-              Create strength workout
+              Create workout
             </Link>
           </div>
         ) : null}
