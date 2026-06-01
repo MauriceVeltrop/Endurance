@@ -76,6 +76,36 @@ function canEditWorkout(workout, profile) {
   return workout.creator_id === profile.id || profile.role === "admin" || profile.role === "moderator";
 }
 
+function getExerciseMuscleText(exercise) {
+  const groups = Array.isArray(exercise?.muscle_groups) && exercise.muscle_groups.length
+    ? exercise.muscle_groups
+    : exercise?.primary_muscle_group
+      ? [exercise.primary_muscle_group]
+      : [];
+
+  return groups.map(getMuscleGroupLabel).join(" · ") || "Strength";
+}
+
+function getExerciseMeta(exercise) {
+  const parts = [getExerciseMuscleText(exercise), exercise?.equipment].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function estimateTotalLoad(exercises) {
+  const total = exercises.reduce((sum, exercise) => {
+    const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
+    return sum + sets.reduce((setSum, set) => {
+      const reps = Number(set?.reps);
+      const weight = Number(set?.weight_kg);
+      if (!Number.isFinite(reps) || !Number.isFinite(weight)) return setSum;
+      return setSum + reps * weight;
+    }, 0);
+  }, 0);
+
+  if (!total) return "—";
+  return total >= 1000 ? `${Math.round(total / 100) / 10}k kg` : `${Math.round(total)} kg`;
+}
+
 export default function WorkoutDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -209,6 +239,67 @@ export default function WorkoutDetailPage() {
     setMessage("Workout link copied.");
   }
 
+  async function duplicateWorkout() {
+    if (!workout || !profile) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("workouts")
+        .insert({
+          creator_id: profile.id,
+          sport_id: workout.sport_id,
+          title: `${workout.title} copy`,
+          description: workout.description || "",
+          workout_type: workout.workout_type || "strength",
+          level: workout.level,
+          duration_min: workout.duration_min,
+          structure: workout.structure || {},
+          visibility: "private",
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      router.push(`/workouts/${data.id}/edit`);
+    } catch (error) {
+      console.error("Duplicate workout failed", error);
+      setMessage(error?.message || "Could not duplicate workout.");
+    }
+  }
+
+  async function deleteWorkout() {
+    if (!workout || !editable) return;
+    const confirmed = window.confirm(`Delete ${workout.title}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await supabase.from("training_sessions").update({ workout_id: null }).eq("workout_id", workout.id);
+
+      try {
+        const { data: exerciseRows } = await supabase
+          .from("workout_exercises")
+          .select("id")
+          .eq("workout_id", workout.id);
+
+        const exerciseIds = (exerciseRows || []).map((row) => row.id);
+        if (exerciseIds.length) {
+          await supabase.from("workout_exercise_sets").delete().in("workout_exercise_id", exerciseIds);
+        }
+        await supabase.from("workout_exercises").delete().eq("workout_id", workout.id);
+      } catch (normalizedError) {
+        console.warn("Normalized workout cleanup skipped", normalizedError);
+      }
+
+      const { error } = await supabase.from("workouts").delete().eq("id", workout.id);
+      if (error) throw error;
+
+      router.push("/workouts");
+    } catch (error) {
+      console.error("Delete workout failed", error);
+      setMessage(error?.message || "Could not delete workout.");
+    }
+  }
+
   if (loading) {
     return (
       <main className="endurance-page route-detail-page workout-detail-page">
@@ -234,26 +325,29 @@ export default function WorkoutDetailPage() {
   }
 
   return (
-    <main className="endurance-page route-detail-page workout-detail-page">
+    <main className="endurance-page route-detail-page workout-detail-page workout-detail-premium">
       <AppHeader active="workouts" />
 
-      <section className="endurance-shell route-detail-hero workout-detail-hero endurance-card">
-        <div className="route-detail-hero-copy">
-          <div className="route-detail-badges">
-            <span className="sport-badge">{sportLabel}</span>
-            <span className="status-badge">{workout.visibility}</span>
-            <span className="status-badge">{workout.workout_type || "Workout"}</span>
+      <section className="endurance-shell workout-premium-hero endurance-card">
+        <div className="workout-premium-hero-main">
+          <div className="workout-premium-kicker">
+            <span>{sportLabel}</span>
+            <span>{workout.visibility}</span>
+            <span>{workout.level || "All levels"}</span>
           </div>
 
           <h1>{workout.title}</h1>
 
-          <p>
-            {workout.description ||
-              "A reusable Endurance workout. Inspect the exercises and plan a training session with this workout."}
-          </p>
+          {summary.muscleGroupText ? (
+            <p className="workout-premium-focus">{summary.muscleGroupText}</p>
+          ) : null}
 
-          <div className="route-detail-creator">
-            <span className="route-detail-avatar">
+          {workout.description ? (
+            <p className="workout-premium-description">{workout.description}</p>
+          ) : null}
+
+          <div className="workout-premium-author">
+            <span className="workout-premium-avatar">
               {creator?.avatar_url ? <img src={creator.avatar_url} alt="" /> : displayName(creator).slice(0, 1)}
             </span>
             <span>
@@ -263,7 +357,7 @@ export default function WorkoutDetailPage() {
           </div>
         </div>
 
-        <div className="route-detail-hero-stats">
+        <div className="workout-premium-stat-grid">
           <div>
             <span>Exercises</span>
             <strong>{summary.exerciseCount}</strong>
@@ -273,72 +367,53 @@ export default function WorkoutDetailPage() {
             <strong>{summary.setCount}</strong>
           </div>
           <div>
-            <span>Muscles</span>
-            <strong>{summary.muscleGroups.length || "—"}</strong>
+            <span>Volume</span>
+            <strong>{estimateTotalLoad(summary.exercises)}</strong>
           </div>
           <div>
             <span>Duration</span>
-            <strong>{workout.duration_min ? `${workout.duration_min} min` : "—"}</strong>
+            <strong>{workout.duration_min ? `${workout.duration_min}m` : "—"}</strong>
           </div>
         </div>
       </section>
 
       {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
 
-      <section className="endurance-shell route-detail-action-bar">
-        <button type="button" className="route-detail-primary" onClick={createTrainingFromWorkout}>
-          Plan training with this workout
+      <section className="endurance-shell workout-premium-actions">
+        <button type="button" className="workout-action-primary" onClick={createTrainingFromWorkout}>
+          Use in training
         </button>
-        <button type="button" className="route-detail-secondary" onClick={shareWorkout}>Share</button>
         {editable ? (
-          <Link href={`/workouts/${workout.id}/edit`} className="route-detail-secondary">
+          <Link href={`/workouts/${workout.id}/edit`} className="workout-action-secondary">
             Edit
           </Link>
         ) : null}
+        <button type="button" className="workout-action-secondary" onClick={duplicateWorkout}>
+          Duplicate
+        </button>
+        <button type="button" className="workout-action-secondary" onClick={shareWorkout}>
+          Share
+        </button>
       </section>
 
-      <section className="endurance-shell workout-focus-strip endurance-card">
-        <div>
-          <p className="eyebrow">Muscle groups</p>
-          <h2>Training focus</h2>
-        </div>
-
-        <div className="workout-muscle-tags compact">
-          {summary.muscleGroups.length ? (
-            summary.muscleGroups.map((group) => <span key={group}>{getMuscleGroupLabel(group)}</span>)
-          ) : (
-            <p className="route-detail-muted">No muscle groups saved.</p>
-          )}
-        </div>
-      </section>
-
-      <section className="endurance-shell workout-exercise-panel endurance-card">
-        <div className="route-section-title workout-section-title-compact">
+      <section className="endurance-shell workout-plan-card endurance-card">
+        <div className="workout-plan-header">
           <div>
             <p className="eyebrow">Exercise plan</p>
-            <h2>Sets, reps & load</h2>
+            <h2>Workout structure</h2>
           </div>
           <span>{summary.setCount} sets</span>
         </div>
 
         {summary.exercises.length ? (
-          <div className="workout-exercise-list">
+          <div className="workout-plan-list">
             {summary.exercises.map((exercise, exerciseIndex) => (
-              <article key={`${exercise.exercise_id || exercise.name}-${exerciseIndex}`} className="workout-exercise-card">
-                <div className="workout-exercise-head">
-                  <div>
-                    <h3>{exercise.name || "Exercise"}</h3>
-                    <p>
-                      {(Array.isArray(exercise.muscle_groups) ? exercise.muscle_groups : [])
-                        .map(getMuscleGroupLabel)
-                        .join(" · ") || "Strength"}
-                    </p>
-                  </div>
-                  <span>{Array.isArray(exercise.sets) ? exercise.sets.length : 0} sets</span>
-                </div>
-
-                <div className="workout-compact-set-summary">
-                  {compactSetSummary(Array.isArray(exercise.sets) ? exercise.sets : [])}
+              <article key={`${exercise.exercise_id || exercise.name}-${exerciseIndex}`} className="workout-plan-row">
+                <span className="workout-plan-index">{exerciseIndex + 1}</span>
+                <div className="workout-plan-copy">
+                  <h3>{exercise.name || "Exercise"}</h3>
+                  <p>{compactSetSummary(Array.isArray(exercise.sets) ? exercise.sets : [])}</p>
+                  <small>{getExerciseMeta(exercise)}</small>
                 </div>
               </article>
             ))}
@@ -348,28 +423,51 @@ export default function WorkoutDetailPage() {
         )}
       </section>
 
-      <section className="endurance-shell route-linked-trainings endurance-card">
-        <div className="route-section-title">
-          <div>
-            <p className="eyebrow">Training usage</p>
-            <h2>Sessions with this workout</h2>
+      <section className="endurance-shell workout-premium-secondary-grid">
+        <article className="endurance-card workout-compact-card">
+          <div className="workout-plan-header mini">
+            <div>
+              <p className="eyebrow">Focus</p>
+              <h2>Muscle groups</h2>
+            </div>
           </div>
-        </div>
+          <div className="workout-muscle-tags compact">
+            {summary.muscleGroups.length ? (
+              summary.muscleGroups.map((group) => <span key={group}>{getMuscleGroupLabel(group)}</span>)
+            ) : (
+              <p className="route-detail-muted">No muscle groups saved.</p>
+            )}
+          </div>
+        </article>
 
-        {linkedTrainings.length ? (
-          <div className="route-linked-list">
-            {linkedTrainings.map((training) => (
-              <Link href={`/trainings/${training.id}`} key={training.id}>
-                <strong>{training.title}</strong>
-                <span>{formatDate(training.final_starts_at || training.starts_at) || training.planning_type}</span>
-              </Link>
-            ))}
+        <article className="endurance-card workout-compact-card">
+          <div className="workout-plan-header mini">
+            <div>
+              <p className="eyebrow">Training usage</p>
+              <h2>Linked sessions</h2>
+            </div>
           </div>
-        ) : (
-          <p className="route-detail-muted">No training session uses this workout yet. Start one now and invite your team.</p>
-        )}
+
+          {linkedTrainings.length ? (
+            <div className="route-linked-list compact">
+              {linkedTrainings.map((training) => (
+                <Link href={`/trainings/${training.id}`} key={training.id}>
+                  <strong>{training.title}</strong>
+                  <span>{formatDate(training.final_starts_at || training.starts_at) || training.planning_type}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="route-detail-muted">No training session uses this workout yet.</p>
+          )}
+        </article>
       </section>
 
+      {editable ? (
+        <section className="endurance-shell workout-danger-zone">
+          <button type="button" onClick={deleteWorkout}>Delete workout</button>
+        </section>
+      ) : null}
       <BottomNav unreadCount={unreadCount} />
     </main>
   );
