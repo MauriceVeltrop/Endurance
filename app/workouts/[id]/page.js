@@ -380,7 +380,10 @@ export default function WorkoutDetailPage() {
       {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
 
       <section className="endurance-shell workout-premium-actions">
-        <button type="button" className="workout-action-primary" onClick={createTrainingFromWorkout}>
+        <Link href={`/workouts/${workout.id}/start`} className="workout-action-primary">
+          Start workout
+        </Link>
+        <button type="button" className="workout-action-secondary" onClick={createTrainingFromWorkout}>
           Use in training
         </button>
         {editable ? (
