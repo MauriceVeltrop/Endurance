@@ -641,8 +641,8 @@ export default function NewWorkoutPage() {
                               <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.exerciseSummary}>
                                 <span style={styles.orderBadge}>{index + 1}</span>
                                 <span style={styles.selectedName}>
-                                  <strong>{item.exercise.name}</strong>
-                                  <small>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
+                                  <strong style={styles.selectedExerciseTitle}>{item.exercise.name}</strong>
+                                  <small style={styles.selectedExerciseMeta}>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
                                 </span>
                                 <span style={styles.compactPlanSummary}>{setSummary(item)}</span>
                               </button>
@@ -788,22 +788,24 @@ const styles = {
   exercisePick: { border: "1px solid rgba(255,255,255,0.09)", background: "rgba(0,0,0,0.22)", color: "white", borderRadius: 18, padding: 10, textAlign: "left", display: "grid", gridTemplateColumns: "38px minmax(0, 1fr) 38px", gap: 10, alignItems: "center", cursor: "pointer" },
   exerciseAvatar: { width: 36, height: 36, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 950 },
   emptyState: { minHeight: 190, border: "1px dashed rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "white", borderRadius: 24, padding: 22, display: "grid", placeItems: "center", gap: 8, textAlign: "center", cursor: "pointer" },
-  selectedList: { display: "grid", gap: 10 },
-  selectedExercise: { borderRadius: 18, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: 10, display: "grid", gap: 8 },
-  exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "32px minmax(0, 1fr)", gap: 10, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
-  orderBadge: { width: 32, height: 32, borderRadius: 12, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950, gridRow: "span 2" },
-  selectedName: { display: "grid", gap: 1, minWidth: 0 },
-  compactPlanSummary: { gridColumn: "2 / -1", color: accent, fontWeight: 950, fontSize: 14, lineHeight: 1.35, overflowWrap: "anywhere" },
-  editorBox: { display: "grid", gap: 9, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 },
-  quickActions: { display: "flex", gap: 7, flexWrap: "wrap" },
+  selectedList: { display: "grid", gap: 7 },
+  selectedExercise: { borderRadius: 16, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: "8px 9px", display: "grid", gap: 6 },
+  exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "28px minmax(0, 1fr)", gap: 8, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
+  orderBadge: { width: 28, height: 28, borderRadius: 10, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950, fontSize: 13, gridRow: "span 2" },
+  selectedName: { display: "grid", gap: 0, minWidth: 0, lineHeight: 1.05 },
+  selectedExerciseTitle: { fontSize: 15, lineHeight: 1.05, letterSpacing: "-0.03em" },
+  selectedExerciseMeta: { color: "rgba(255,255,255,0.70)", fontSize: 12, lineHeight: 1.05 },
+  compactPlanSummary: { gridColumn: "2 / -1", color: accent, fontWeight: 950, fontSize: 13, lineHeight: 1.15, overflowWrap: "anywhere", marginTop: 2 },
+  editorBox: { display: "grid", gap: 7, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 8 },
+  quickActions: { display: "flex", gap: 6, flexWrap: "wrap" },
   iconButton: { minWidth: 38, height: 36, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", fontWeight: 950, cursor: "pointer" },
   removeButton: { height: 36, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer", padding: "0 12px" },
   setHeader: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
   setRow: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, alignItems: "center" },
-  setInput: { minWidth: 0, width: "100%", minHeight: 36, borderRadius: 11, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
+  setInput: { minWidth: 0, width: "100%", minHeight: 32, borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
   removeSet: { width: 30, height: 30, borderRadius: 10, border: 0, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontWeight: 950, cursor: "pointer" },
   addSet: { justifySelf: "start", border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "8px 12px", fontWeight: 950, cursor: "pointer" },
-  saveDock: { position: "fixed", left: 16, right: 16, bottom: 96, maxWidth: 760, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 10, zIndex: 30, pointerEvents: "auto" },
+  saveDock: { position: "static", display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 10, margin: "8px 0 18px", zIndex: 1 },
   secondaryDockButton: { minHeight: 54, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(9,15,18,0.92)", backdropFilter: "blur(18px)", color: "white", fontWeight: 950, fontSize: 15, cursor: "pointer" },
   submitButton: { minHeight: 54, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer", padding: "0 20px" },
   submitButtonDisabled: { opacity: 0.45, cursor: "not-allowed" },
