@@ -9490,3 +9490,125 @@ main {
     font-size: 13px;
   }
 }
+
+/* Workout history & progress */
+.workout-history-page .workout-premium-hero {
+  margin-top: 12px;
+}
+
+.workout-pr-list,
+.workout-history-list,
+.workout-history-exercises {
+  display: grid;
+  gap: 8px;
+}
+
+.workout-pr-row,
+.workout-history-exercises a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  color: #f6ffe8;
+  text-decoration: none;
+}
+
+.workout-pr-row span,
+.workout-history-exercises a {
+  min-width: 0;
+}
+
+.workout-pr-row strong,
+.workout-history-exercises strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workout-pr-row small,
+.workout-history-exercises span {
+  display: block;
+  color: rgba(246, 255, 232, 0.64);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workout-pr-row b {
+  flex: 0 0 auto;
+  color: #d7ff42;
+  font-size: 13px;
+}
+
+.workout-history-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 20px;
+  padding: 12px;
+}
+
+.workout-history-card.compact {
+  padding: 10px;
+}
+
+.workout-history-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.workout-history-top strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.workout-history-top small {
+  display: block;
+  margin-top: 3px;
+  color: rgba(246, 255, 232, 0.58);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workout-history-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workout-history-metrics span {
+  border: 1px solid rgba(202, 255, 77, 0.16);
+  background: rgba(202, 255, 77, 0.08);
+  color: #d7ff42;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.exercise-history-page .workout-history-metrics span {
+  max-width: 100%;
+  color: #f6ffe8;
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.1);
+}
+
+@media (max-width: 520px) {
+  .workout-history-top {
+    display: grid;
+    gap: 8px;
+  }
+
+  .workout-history-metrics {
+    justify-content: flex-start;
+  }
+}
