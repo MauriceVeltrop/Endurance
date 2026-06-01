@@ -8622,3 +8622,170 @@ main {
     gap: 4px;
   }
 }
+
+/* ===== WORKOUT DETAIL COMPACT PATCH ===== */
+.workout-detail-page .route-detail-hero {
+  padding: 24px;
+  border-radius: 30px;
+}
+
+.workout-detail-page .route-detail-hero h1 {
+  font-size: clamp(42px, 12vw, 68px);
+  letter-spacing: -0.085em;
+  margin-bottom: 12px;
+}
+
+.workout-detail-page .route-detail-hero p {
+  font-size: 18px;
+  line-height: 1.35;
+  margin-bottom: 18px;
+}
+
+.workout-detail-page .route-detail-creator {
+  margin-top: 4px;
+}
+
+.workout-detail-page .route-detail-hero-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.workout-detail-page .route-detail-hero-stats div {
+  min-height: auto;
+  padding: 12px 10px;
+  border-radius: 18px;
+}
+
+.workout-detail-page .route-detail-hero-stats span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.workout-detail-page .route-detail-hero-stats strong {
+  font-size: 24px;
+}
+
+.workout-detail-page .route-detail-action-bar {
+  margin-top: 12px;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.workout-detail-page .route-detail-primary,
+.workout-detail-page .route-detail-secondary {
+  min-height: 50px;
+  padding: 0 18px;
+  font-size: 15px;
+  border-radius: 999px;
+}
+
+.workout-focus-strip {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 26px;
+  display: grid;
+  gap: 12px;
+}
+
+.workout-focus-strip h2 {
+  margin: 2px 0 0;
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.workout-muscle-tags.compact {
+  gap: 8px;
+}
+
+.workout-muscle-tags.compact span {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.workout-exercise-panel {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 26px;
+}
+
+.workout-section-title-compact {
+  margin-bottom: 12px;
+}
+
+.workout-section-title-compact h2 {
+  font-size: 28px;
+  line-height: 0.98;
+}
+
+.workout-exercise-list {
+  gap: 10px;
+}
+
+.workout-exercise-card {
+  border-radius: 22px;
+  padding: 14px;
+}
+
+.workout-exercise-head {
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.workout-exercise-head h3 {
+  font-size: 26px;
+  letter-spacing: -0.06em;
+}
+
+.workout-exercise-head p {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.workout-set-list {
+  gap: 7px;
+}
+
+.workout-set-row {
+  grid-template-columns: 64px 1fr 1fr;
+  padding: 10px 12px;
+  border-radius: 14px;
+  min-height: 46px;
+  font-size: 15px;
+}
+
+.workout-set-row span:last-child {
+  text-align: right;
+}
+
+.workout-detail-page .route-linked-trainings {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 26px;
+}
+
+@media (max-width: 420px) {
+  .workout-detail-page .route-detail-hero {
+    padding: 20px;
+    border-radius: 28px;
+  }
+
+  .workout-detail-page .route-detail-hero h1 {
+    font-size: clamp(38px, 13vw, 52px);
+  }
+
+  .workout-detail-page .route-detail-hero p {
+    font-size: 16px;
+  }
+
+  .workout-detail-page .route-detail-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workout-set-row {
+    grid-template-columns: 58px 1fr 1fr;
+    gap: 8px;
+  }
+}
