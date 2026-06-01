@@ -75,6 +75,7 @@ const starterExercises = [
   name: item[0],
   primary_muscle_group: item[1],
   equipment: item[2],
+  image_url: "",
 }));
 
 function makeLocalId(prefix = "item") {
@@ -106,8 +107,17 @@ function firstName(profile) {
   return profile?.first_name || profile?.name?.split(" ")?.[0] || "My";
 }
 
-function exerciseKey(exercise) {
-  return `${exercise.source}-${exercise.id}`;
+function cleanNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function setSummary(item) {
+  const firstSet = item.sets?.[0] || {};
+  const reps = firstSet.reps || "?";
+  const weight = firstSet.weight_kg ? ` @ ${firstSet.weight_kg}kg` : "";
+  return `${item.sets.length} × ${reps}${weight}`;
 }
 
 export default function NewWorkoutPage() {
@@ -121,14 +131,15 @@ export default function NewWorkoutPage() {
   const [message, setMessage] = useState("");
   const [step, setStep] = useState("sport");
   const [method, setMethod] = useState("");
-  const [activePanel, setActivePanel] = useState("library");
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [mode, setMode] = useState("plan");
   const [query, setQuery] = useState("");
-  const [selectedGroups, setSelectedGroups] = useState(["Chest", "Back"]);
-  const [selectedEquipment, setSelectedEquipment] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState("Chest");
+  const [selectedEquipment, setSelectedEquipment] = useState("");
   const [selectedExercises, setSelectedExercises] = useState([]);
+  const [editingId, setEditingId] = useState(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [customForm, setCustomForm] = useState({ name: "", primary_muscle_group: "Chest", equipment: "", notes: "" });
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [form, setForm] = useState({
     sport_id: "",
     title: "",
@@ -214,7 +225,7 @@ export default function NewWorkoutPage() {
   const exerciseCatalog = useMemo(() => {
     const map = new Map();
     [...starterExercises, ...globalExercises, ...customExercises].forEach((exercise) => {
-      const key = exerciseKey(exercise);
+      const key = `${exercise.source}-${exercise.id}`;
       if (!map.has(key)) map.set(key, exercise);
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -223,14 +234,12 @@ export default function NewWorkoutPage() {
   const filteredExercises = useMemo(() => {
     const search = query.trim().toLowerCase();
     return exerciseCatalog.filter((exercise) => {
-      const groupOk = selectedGroups.length === 0 || selectedGroups.includes(exercise.primary_muscle_group);
-      const equipmentOk = selectedEquipment.length === 0 || selectedEquipment.includes(exercise.equipment);
+      const groupOk = !selectedGroup || exercise.primary_muscle_group === selectedGroup;
+      const equipmentOk = !selectedEquipment || exercise.equipment === selectedEquipment;
       const searchOk = !search || exercise.name.toLowerCase().includes(search);
       return groupOk && equipmentOk && searchOk;
     });
-  }, [exerciseCatalog, query, selectedGroups, selectedEquipment]);
-
-  const selectedKeys = useMemo(() => new Set(selectedExercises.map((item) => exerciseKey(item.exercise))), [selectedExercises]);
+  }, [exerciseCatalog, query, selectedGroup, selectedEquipment]);
 
   function updateForm(key, value) {
     setForm((current) => {
@@ -242,36 +251,27 @@ export default function NewWorkoutPage() {
     });
   }
 
-  function toggleGroup(group) {
-    setSelectedGroups((current) =>
-      current.includes(group) ? current.filter((item) => item !== group) : [...current, group]
-    );
-  }
-
-  function toggleEquipment(equipment) {
-    setSelectedEquipment((current) =>
-      current.includes(equipment) ? current.filter((item) => item !== equipment) : [...current, equipment]
-    );
-  }
-
   function addExercise(exercise) {
-    if (selectedKeys.has(exerciseKey(exercise))) return;
-    setSelectedExercises((current) => [
-      ...current,
-      {
-        id: makeLocalId("exercise"),
-        exercise,
-        position: current.length,
-        notes: "",
-        collapsed: true,
-        sets: defaultSets(),
-      },
-    ]);
-    setMessage(`${exercise.name} added.`);
+    const alreadyAdded = selectedExercises.some((item) => item.exercise.source === exercise.source && item.exercise.id === exercise.id);
+    if (alreadyAdded) {
+      setMode("plan");
+      return;
+    }
+    const localItem = {
+      id: makeLocalId("exercise"),
+      exercise,
+      position: selectedExercises.length,
+      notes: "",
+      sets: defaultSets(),
+    };
+    setSelectedExercises((current) => [...current, localItem]);
+    setEditingId(localItem.id);
+    setMode("plan");
   }
 
   function removeExercise(localId) {
     setSelectedExercises((current) => current.filter((item) => item.id !== localId).map((item, index) => ({ ...item, position: index })));
+    if (editingId === localId) setEditingId(null);
   }
 
   function moveExercise(localId, direction) {
@@ -287,10 +287,6 @@ export default function NewWorkoutPage() {
     });
   }
 
-  function toggleExerciseOpen(localId) {
-    setSelectedExercises((current) => current.map((item) => item.id === localId ? { ...item, collapsed: !item.collapsed } : item));
-  }
-
   function updateSet(exerciseId, setId, key, value) {
     setSelectedExercises((current) =>
       current.map((item) => {
@@ -300,12 +296,6 @@ export default function NewWorkoutPage() {
           sets: item.sets.map((set) => (set.id === setId ? { ...set, [key]: value } : set)),
         };
       })
-    );
-  }
-
-  function updateAllSets(exerciseId, key, value) {
-    setSelectedExercises((current) =>
-      current.map((item) => item.id === exerciseId ? { ...item, sets: item.sets.map((set) => ({ ...set, [key]: value })) } : item)
     );
   }
 
@@ -334,12 +324,10 @@ export default function NewWorkoutPage() {
   function removeSet(exerciseId, setId) {
     setSelectedExercises((current) =>
       current.map((item) => {
-        if (item.id !== exerciseId) return item;
+        if (item.id !== exerciseId || item.sets.length <= 1) return item;
         return {
           ...item,
-          sets: item.sets
-            .filter((set) => set.id !== setId)
-            .map((set, index) => ({ ...set, set_number: index + 1 })),
+          sets: item.sets.filter((set) => set.id !== setId).map((set, index) => ({ ...set, set_number: index + 1 })),
         };
       })
     );
@@ -380,24 +368,19 @@ export default function NewWorkoutPage() {
     } finally {
       setCustomForm({ name: "", primary_muscle_group: customForm.primary_muscle_group, equipment: "", notes: "" });
       setCustomOpen(false);
-      setActivePanel("plan");
     }
   }
 
   function runWizard() {
-    const groups = selectedGroups.length ? selectedGroups : ["Chest", "Back", "Legs", "Core"];
+    const groups = [selectedGroup || "Chest", "Back", "Legs", "Core"].filter((value, index, list) => list.indexOf(value) === index);
     const suggestions = [];
     groups.forEach((group) => {
-      const candidates = exerciseCatalog.filter((exercise) => {
-        const groupOk = exercise.primary_muscle_group === group;
-        const equipmentOk = selectedEquipment.length === 0 || selectedEquipment.includes(exercise.equipment);
-        return groupOk && equipmentOk;
-      });
+      const candidates = exerciseCatalog.filter((exercise) => exercise.primary_muscle_group === group);
       suggestions.push(...candidates.slice(0, group === "Core" ? 1 : 2));
     });
     const deduped = [];
     suggestions.forEach((exercise) => {
-      if (!deduped.some((item) => exerciseKey(item) === exerciseKey(exercise))) deduped.push(exercise);
+      if (!deduped.some((item) => item.source === exercise.source && item.id === exercise.id)) deduped.push(exercise);
     });
     setSelectedExercises(
       deduped.slice(0, 8).map((exercise, index) => ({
@@ -405,26 +388,18 @@ export default function NewWorkoutPage() {
         exercise,
         position: index,
         notes: "",
-        collapsed: true,
         sets: defaultSets(),
       }))
     );
     setMethod("wizard");
+    setMode("plan");
     setStep("build");
-    setActivePanel("plan");
-    setDetailsOpen(false);
   }
 
   function startManual() {
     setMethod("manual");
+    setMode("plan");
     setStep("build");
-    setActivePanel("library");
-  }
-
-  function cleanNumber(value) {
-    if (value === "" || value === null || value === undefined) return null;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
   }
 
   async function saveWorkout(event) {
@@ -468,8 +443,7 @@ export default function NewWorkoutPage() {
           structure: {
             builder_version: 2,
             method,
-            muscle_groups: selectedGroups,
-            equipment: selectedEquipment,
+            muscle_groups: Array.from(new Set(selectedExercises.map((item) => item.exercise.primary_muscle_group))),
             exercises: normalizedExercises,
           },
         })
@@ -532,7 +506,7 @@ export default function NewWorkoutPage() {
         <header style={styles.header}>
           <div style={styles.kicker}>Workout Builder</div>
           <h1 style={styles.title}>Build your workout.</h1>
-          <p style={styles.subtitle}>A compact mobile-first builder for strength sessions, custom exercises and ordered workout schemas.</p>
+          <p style={styles.subtitle}>Compact, mobile-first and focused on the workout you are creating.</p>
         </header>
 
         <section style={styles.stepBar}>
@@ -551,12 +525,8 @@ export default function NewWorkoutPage() {
           <form onSubmit={saveWorkout} style={styles.formShell}>
             {step === "sport" ? (
               <section style={styles.card}>
-                <div style={styles.cardHead}>
-                  <div>
-                    <div style={styles.cardKicker}>Step 1</div>
-                    <h2 style={styles.cardTitle}>Choose workout sport</h2>
-                  </div>
-                </div>
+                <div style={styles.cardKicker}>Step 1</div>
+                <h2 style={styles.cardTitle}>Choose sport</h2>
                 <div style={styles.sportGrid}>
                   {workoutSportIds.map((id) => {
                     const allowed = availableWorkoutSports.includes(id);
@@ -567,14 +537,10 @@ export default function NewWorkoutPage() {
                         type="button"
                         disabled={!allowed}
                         onClick={() => updateForm("sport_id", id)}
-                        style={{
-                          ...styles.choiceButton,
-                          ...(active ? styles.choiceButtonActive : {}),
-                          ...(!allowed ? styles.choiceButtonDisabled : {}),
-                        }}
+                        style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}), ...(!allowed ? styles.choiceButtonDisabled : {}) }}
                       >
                         <strong>{getSportLabel(id)}</strong>
-                        <span>{allowed ? "Available from preferred sports" : "Add to preferred sports first"}</span>
+                        <span>{allowed ? "Preferred sport" : "Add to preferred sports first"}</span>
                       </button>
                     );
                   })}
@@ -588,51 +554,32 @@ export default function NewWorkoutPage() {
                 <div style={styles.cardHead}>
                   <div>
                     <div style={styles.cardKicker}>Step 2</div>
-                    <h2 style={styles.cardTitle}>Choose builder method</h2>
+                    <h2 style={styles.cardTitle}>How do you want to build?</h2>
                   </div>
                   <button type="button" onClick={() => setStep("sport")} style={styles.smallButton}>Back</button>
                 </div>
-                <div style={styles.methodGrid}>
-                  <button type="button" onClick={startManual} style={styles.methodCard}>
-                    <span style={styles.methodIcon}>✍️</span>
-                    <strong>Manual builder</strong>
-                    <p>Pick muscle groups, add exercises and tune every set yourself.</p>
-                  </button>
-                  <button type="button" onClick={runWizard} style={styles.methodCard}>
-                    <span style={styles.methodIcon}>⚡</span>
-                    <strong>Workout Wizard</strong>
-                    <p>Select groups and equipment; Endurance creates a clean first schema.</p>
-                  </button>
-                </div>
-                <BuilderFilters
-                  selectedGroups={selectedGroups}
-                  selectedEquipment={selectedEquipment}
-                  toggleGroup={toggleGroup}
-                  toggleEquipment={toggleEquipment}
-                />
+                <button type="button" onClick={startManual} style={styles.methodCard}>
+                  <span style={styles.methodIcon}>✍️</span>
+                  <span><strong>Manual builder</strong><small>Choose exercises yourself.</small></span>
+                </button>
+                <button type="button" onClick={runWizard} style={styles.methodCard}>
+                  <span style={styles.methodIcon}>⚡</span>
+                  <span><strong>Workout Wizard</strong><small>Let Endurance create a first proposal.</small></span>
+                </button>
               </section>
             ) : null}
 
             {step === "build" ? (
               <>
-                <section style={styles.summaryCard}>
-                  <div>
-                    <div style={styles.cardKicker}>Workout</div>
-                    <h2 style={styles.summaryTitle}>{form.title || "Untitled workout"}</h2>
-                    <p style={styles.summaryMeta}>{getSportLabel(form.sport_id)} · {method === "wizard" ? "Wizard" : "Manual"} · {selectedExercises.length} exercises</p>
-                  </div>
-                  <button type="button" onClick={() => setDetailsOpen((open) => !open)} style={styles.smallButton}>{detailsOpen ? "Hide details" : "Edit details"}</button>
-                </section>
-
-                {detailsOpen ? (
-                  <section style={styles.card}>
-                    <div style={styles.cardHead}>
-                      <div>
-                        <div style={styles.cardKicker}>Details</div>
-                        <h2 style={styles.cardTitle}>Workout settings</h2>
-                      </div>
-                      <button type="button" onClick={() => setStep("method")} style={styles.smallButton}>Method</button>
-                    </div>
+                <section style={styles.detailsCard}>
+                  <button type="button" style={styles.detailsToggle} onClick={() => setDetailsOpen((value) => !value)}>
+                    <span>
+                      <b>{form.title || "Untitled workout"}</b>
+                      <small>{getSportLabel(form.sport_id)} · {form.visibility}</small>
+                    </span>
+                    <strong>{detailsOpen ? "−" : "+"}</strong>
+                  </button>
+                  {detailsOpen ? (
                     <div style={styles.fieldsGrid}>
                       <label style={styles.fieldFull}><span>Title</span><input value={form.title} onChange={(event) => updateForm("title", event.target.value)} style={styles.input} /></label>
                       <label style={styles.field}><span>Level</span><select value={form.level} onChange={(event) => updateForm("level", event.target.value)} style={styles.input}><option value="beginner">Beginner</option><option value="all levels">All levels</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label>
@@ -641,100 +588,46 @@ export default function NewWorkoutPage() {
                       <label style={styles.field}><span>Type</span><input value={form.workout_type} onChange={(event) => updateForm("workout_type", event.target.value)} style={styles.input} /></label>
                       <label style={styles.fieldFull}><span>Description</span><textarea value={form.description} onChange={(event) => updateForm("description", event.target.value)} style={styles.textarea} /></label>
                     </div>
-                  </section>
-                ) : null}
-
-                <section style={styles.panelSwitch}>
-                  <button type="button" onClick={() => setActivePanel("library")} style={{ ...styles.panelTab, ...(activePanel === "library" ? styles.panelTabActive : {}) }}>Library</button>
-                  <button type="button" onClick={() => setActivePanel("plan")} style={{ ...styles.panelTab, ...(activePanel === "plan" ? styles.panelTabActive : {}) }}>Selected ({selectedExercises.length})</button>
+                  ) : null}
                 </section>
 
-                {activePanel === "library" ? (
+                {mode === "plan" ? (
                   <section style={styles.card}>
-                    <div style={styles.cardHeadCompact}>
+                    <div style={styles.cardHead}>
                       <div>
-                        <div style={styles.cardKicker}>Exercise library</div>
-                        <h3 style={styles.miniTitle}>{filteredExercises.length} exercises</h3>
+                        <div style={styles.cardKicker}>My workout</div>
+                        <h2 style={styles.cardTitle}>{selectedExercises.length} exercises</h2>
                       </div>
-                      <button type="button" onClick={() => setCustomOpen((value) => !value)} style={styles.addCustomButton}>+ Custom</button>
-                    </div>
-
-                    <BuilderFilters
-                      selectedGroups={selectedGroups}
-                      selectedEquipment={selectedEquipment}
-                      toggleGroup={toggleGroup}
-                      toggleEquipment={toggleEquipment}
-                      compact
-                    />
-
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercise..." style={styles.searchInput} />
-
-                    {customOpen ? (
-                      <section style={styles.customBox}>
-                        <div style={styles.cardKicker}>Custom exercise</div>
-                        <input value={customForm.name} onChange={(event) => setCustomForm((current) => ({ ...current, name: event.target.value }))} placeholder="Exercise name" style={styles.input} />
-                        <select value={customForm.primary_muscle_group} onChange={(event) => setCustomForm((current) => ({ ...current, primary_muscle_group: event.target.value }))} style={styles.input}>{muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
-                        <input value={customForm.equipment} onChange={(event) => setCustomForm((current) => ({ ...current, equipment: event.target.value }))} placeholder="Equipment optional" style={styles.input} />
-                        <button type="button" onClick={addCustomExercise} style={styles.submitMini}>Save and add</button>
-                      </section>
-                    ) : null}
-
-                    <div style={styles.exerciseList}>
-                      {filteredExercises.slice(0, 90).map((exercise) => {
-                        const added = selectedKeys.has(exerciseKey(exercise));
-                        return (
-                          <button key={exerciseKey(exercise)} type="button" onClick={() => addExercise(exercise)} style={{ ...styles.exercisePick, ...(added ? styles.exercisePickAdded : {}) }}>
-                            <span style={styles.exerciseAvatar}>{exercise.source === "custom" ? "★" : exercise.primary_muscle_group.slice(0, 1)}</span>
-                            <span style={styles.exerciseText}>
-                              <strong>{exercise.name}</strong>
-                              <small>{exercise.primary_muscle_group}{exercise.equipment ? ` · ${exercise.equipment}` : ""}</small>
-                            </span>
-                            <b style={styles.addSymbol}>{added ? "✓" : "+"}</b>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ) : (
-                  <section style={styles.card}>
-                    <div style={styles.cardHeadCompact}>
-                      <div>
-                        <div style={styles.cardKicker}>Selected exercises</div>
-                        <h3 style={styles.miniTitle}>{selectedExercises.length} exercises</h3>
-                      </div>
-                      <button type="button" onClick={() => setActivePanel("library")} style={styles.smallButton}>+ Add</button>
+                      <button type="button" onClick={() => setMode("library")} style={styles.addButton}>+ Add</button>
                     </div>
 
                     {!selectedExercises.length ? (
-                      <div style={styles.emptyPlan}>No exercises yet. Open the library and add your first exercise.</div>
+                      <button type="button" onClick={() => setMode("library")} style={styles.emptyState}>
+                        <strong>Start with your first exercise</strong>
+                        <span>Choose a muscle group, pick an exercise and fill in sets, reps and load.</span>
+                      </button>
                     ) : (
                       <div style={styles.selectedList}>
                         {selectedExercises.map((item, index) => {
-                          const firstSet = item.sets[0] || { reps: "", weight_kg: "", rest_seconds: "" };
+                          const editing = editingId === item.id;
                           return (
                             <article key={item.id} style={styles.selectedExercise}>
-                              <div style={styles.selectedTop}>
-                                <button type="button" onClick={() => toggleExerciseOpen(item.id)} style={styles.orderBadge}>{index + 1}</button>
-                                <button type="button" onClick={() => toggleExerciseOpen(item.id)} style={styles.selectedNameButton}>
+                              <button type="button" onClick={() => setEditingId(editing ? null : item.id)} style={styles.exerciseSummary}>
+                                <span style={styles.orderBadge}>{index + 1}</span>
+                                <span style={styles.selectedName}>
                                   <strong>{item.exercise.name}</strong>
-                                  <small>{item.sets.length} sets · {firstSet.reps || "-"} reps{firstSet.weight_kg ? ` · ${firstSet.weight_kg} kg` : ""}</small>
-                                </button>
-                                <div style={styles.reorderButtons}>
-                                  <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.iconButton}>↑</button>
-                                  <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.iconButton}>↓</button>
-                                  <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>×</button>
-                                </div>
-                              </div>
-
-                              {item.collapsed ? (
-                                <div style={styles.quickSetRow}>
-                                  <label><span>Sets</span><input value={item.sets.length} readOnly style={styles.quickInput} /></label>
-                                  <label><span>Reps</span><input value={firstSet.reps} onChange={(event) => updateAllSets(item.id, "reps", event.target.value)} style={styles.quickInput} inputMode="numeric" /></label>
-                                  <label><span>Kg</span><input value={firstSet.weight_kg} onChange={(event) => updateAllSets(item.id, "weight_kg", event.target.value)} style={styles.quickInput} inputMode="decimal" /></label>
-                                </div>
-                              ) : (
-                                <>
-                                  <div style={styles.setHeader}><span>Set</span><span>Reps</span><span>Kg</span><span>Rest</span><span></span></div>
+                                  <small>{item.exercise.primary_muscle_group}{item.exercise.equipment ? ` · ${item.exercise.equipment}` : ""}</small>
+                                </span>
+                                <b>{setSummary(item)}</b>
+                              </button>
+                              {editing ? (
+                                <div style={styles.editorBox}>
+                                  <div style={styles.quickActions}>
+                                    <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.iconButton}>↑</button>
+                                    <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.iconButton}>↓</button>
+                                    <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>Remove</button>
+                                  </div>
+                                  <div style={styles.setHeader}><span>Set</span><span>Reps</span><span>Kg</span><span>Rest</span><span /></div>
                                   {item.sets.map((set) => (
                                     <div key={set.id} style={styles.setRow}>
                                       <b>{set.set_number}</b>
@@ -745,118 +638,148 @@ export default function NewWorkoutPage() {
                                     </div>
                                   ))}
                                   <button type="button" onClick={() => addSet(item.id)} style={styles.addSet}>+ Set</button>
-                                </>
-                              )}
+                                </div>
+                              ) : null}
                             </article>
                           );
                         })}
                       </div>
                     )}
                   </section>
+                ) : (
+                  <section style={styles.card}>
+                    <div style={styles.cardHead}>
+                      <div>
+                        <div style={styles.cardKicker}>Add exercise</div>
+                        <h2 style={styles.cardTitle}>{selectedGroup}</h2>
+                      </div>
+                      <button type="button" onClick={() => setMode("plan")} style={styles.smallButton}>Done</button>
+                    </div>
+
+                    <div style={styles.groupGrid}>
+                      {muscleGroups.map((group) => (
+                        <button key={group} type="button" onClick={() => { setSelectedGroup(group); setSelectedEquipment(""); }} style={{ ...styles.groupButton, ...(selectedGroup === group ? styles.groupButtonActive : {}) }}>{group}</button>
+                      ))}
+                    </div>
+
+                    <div style={styles.filterLine}>
+                      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercise..." style={styles.searchInput} />
+                      <button type="button" onClick={() => setCustomOpen((value) => !value)} style={styles.customButton}>+ Custom</button>
+                    </div>
+
+                    <div style={styles.equipmentRow}>
+                      <button type="button" onClick={() => setSelectedEquipment("")} style={{ ...styles.equipmentChip, ...(!selectedEquipment ? styles.equipmentChipActive : {}) }}>All</button>
+                      {equipmentOptions.map((equipment) => (
+                        <button key={equipment} type="button" onClick={() => setSelectedEquipment(equipment)} style={{ ...styles.equipmentChip, ...(selectedEquipment === equipment ? styles.equipmentChipActive : {}) }}>{equipment}</button>
+                      ))}
+                    </div>
+
+                    {customOpen ? (
+                      <section style={styles.customBox}>
+                        <input value={customForm.name} onChange={(event) => setCustomForm((current) => ({ ...current, name: event.target.value }))} placeholder="Exercise name" style={styles.input} />
+                        <select value={customForm.primary_muscle_group} onChange={(event) => setCustomForm((current) => ({ ...current, primary_muscle_group: event.target.value }))} style={styles.input}>{muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
+                        <input value={customForm.equipment} onChange={(event) => setCustomForm((current) => ({ ...current, equipment: event.target.value }))} placeholder="Equipment optional" style={styles.input} />
+                        <button type="button" onClick={addCustomExercise} style={styles.submitMini}>Add custom exercise</button>
+                      </section>
+                    ) : null}
+
+                    <div style={styles.exerciseList}>
+                      {filteredExercises.slice(0, 80).map((exercise) => (
+                        <button key={`${exercise.source}-${exercise.id}`} type="button" onClick={() => addExercise(exercise)} style={styles.exercisePick}>
+                          <span style={styles.exerciseAvatar}>{exercise.source === "custom" ? "★" : exercise.primary_muscle_group.slice(0, 1)}</span>
+                          <span><strong>{exercise.name}</strong><small>{exercise.primary_muscle_group}{exercise.equipment ? ` · ${exercise.equipment}` : ""}</small></span>
+                          <b>+</b>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 )}
 
                 <section style={styles.saveDock}>
-                  <button type="button" onClick={() => setActivePanel(activePanel === "library" ? "plan" : "library")} style={styles.secondaryDockButton}>
-                    {activePanel === "library" ? `Selected (${selectedExercises.length})` : "Library"}
+                  <button type="button" onClick={() => setMode(mode === "plan" ? "library" : "plan")} style={styles.secondaryDockButton}>
+                    {mode === "plan" ? `Add exercise` : `Workout (${selectedExercises.length})`}
                   </button>
-                  <button type="submit" disabled={saving || !selectedExercises.length} style={{ ...styles.submitButton, ...(selectedExercises.length ? {} : styles.submitButtonDisabled) }}>{saving ? "Saving..." : "Save workout"}</button>
+                  <button type="submit" disabled={saving || !selectedExercises.length} style={{ ...styles.submitButton, ...(!selectedExercises.length ? styles.submitButtonDisabled : {}) }}>
+                    {saving ? "Saving..." : "Save workout"}
+                  </button>
                 </section>
               </>
             ) : null}
           </form>
         )}
       </section>
-      <BottomNav />
+      <BottomNav active="workouts" />
     </main>
   );
 }
 
-function BuilderFilters({ selectedGroups, selectedEquipment, toggleGroup, toggleEquipment, compact = false }) {
-  return (
-    <div style={compact ? styles.filtersCompact : styles.filters}>
-      <div style={styles.filterLabel}>Muscle groups</div>
-      <div style={styles.chipRow}>{muscleGroups.map((group) => <button key={group} type="button" onClick={() => toggleGroup(group)} style={{ ...styles.chip, ...(selectedGroups.includes(group) ? styles.chipActive : {}) }}>{group}</button>)}</div>
-      <div style={styles.filterLabel}>Equipment</div>
-      <div style={styles.chipRow}>{equipmentOptions.map((equipment) => <button key={equipment} type="button" onClick={() => toggleEquipment(equipment)} style={{ ...styles.chipSmall, ...(selectedEquipment.includes(equipment) ? styles.chipActive : {}) }}>{equipment}</button>)}</div>
-    </div>
-  );
-}
-
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
-const darkerGlass = "linear-gradient(145deg, rgba(10,16,20,0.96), rgba(6,8,10,0.88))";
+const darkerGlass = "linear-gradient(145deg, rgba(10,16,20,0.96), rgba(6,8,10,0.90))";
+const accent = "#e4ef16";
+
 const styles = {
-  page: { minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)", color: "white", padding: "18px 16px 164px", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
-  shell: { width: "100%", maxWidth: 720, margin: "0 auto", display: "grid", gap: 16 },
-  backLink: { width: "fit-content", color: "#e4ef16", textDecoration: "none", fontWeight: 950, border: "1px solid rgba(228,239,22,0.24)", borderRadius: 999, padding: "10px 14px", background: "rgba(228,239,22,0.08)" },
-  header: { display: "grid", gap: 8 },
-  kicker: { color: "#e4ef16", fontSize: 13, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase" },
-  title: { margin: 0, fontSize: "clamp(36px, 10vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
-  subtitle: { margin: 0, maxWidth: 680, color: "rgba(255,255,255,0.68)", lineHeight: 1.5, fontWeight: 700 },
-  stepBar: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 },
-  stepItem: { borderRadius: 999, padding: "10px 8px", border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.62)", fontWeight: 950, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13 },
-  stepItemActive: { color: "#101406", background: "#e4ef16", borderColor: "#e4ef16" },
-  message: { borderRadius: 22, padding: 14, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: "#e4ef16", fontWeight: 850 },
+  page: { minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)", color: "white", padding: "18px 16px 170px", fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  shell: { width: "100%", maxWidth: 760, margin: "0 auto", display: "grid", gap: 14 },
+  backLink: { width: "fit-content", color: accent, textDecoration: "none", fontWeight: 950, border: "1px solid rgba(228,239,22,0.24)", borderRadius: 999, padding: "10px 14px", background: "rgba(228,239,22,0.08)" },
+  header: { display: "grid", gap: 8, marginTop: 4 },
+  kicker: { color: accent, fontSize: 12, fontWeight: 950, letterSpacing: "0.16em", textTransform: "uppercase" },
+  title: { margin: 0, fontSize: "clamp(38px, 10vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
+  subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45, fontWeight: 760 },
+  stepBar: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 2 },
+  stepItem: { borderRadius: 999, padding: "10px 8px", border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.58)", fontWeight: 950, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13 },
+  stepItemActive: { color: "#101406", background: accent, borderColor: accent },
+  message: { borderRadius: 18, padding: 12, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 850 },
   formShell: { display: "grid", gap: 14 },
-  card: { borderRadius: 30, padding: 18, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 16, boxShadow: "0 24px 80px rgba(0,0,0,0.34)", overflow: "hidden" },
-  summaryCard: { borderRadius: 28, padding: 16, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  summaryTitle: { margin: "3px 0", fontSize: 25, letterSpacing: "-0.05em", lineHeight: 1.02 },
-  summaryMeta: { margin: 0, color: "rgba(255,255,255,0.58)", fontWeight: 800 },
-  cardHead: { display: "flex", justifyContent: "space-between", gap: 14, alignItems: "start" },
-  cardHeadCompact: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" },
-  cardKicker: { color: "#e4ef16", fontSize: 12, fontWeight: 950, letterSpacing: "0.18em", textTransform: "uppercase" },
-  cardTitle: { margin: "4px 0 0", fontSize: "clamp(28px, 7vw, 40px)", letterSpacing: "-0.06em", lineHeight: 1 },
-  miniTitle: { margin: "2px 0 0", fontSize: 24, letterSpacing: "-0.045em", lineHeight: 1 },
-  sportGrid: { display: "grid", gridTemplateColumns: "1fr", gap: 10 },
-  choiceButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.065)", color: "white", borderRadius: 24, padding: 18, textAlign: "left", cursor: "pointer", display: "grid", gap: 6 },
-  choiceButtonActive: { borderColor: "rgba(228,239,22,0.72)", background: "rgba(228,239,22,0.15)", color: "#e4ef16" },
+  card: { borderRadius: 28, padding: 18, background: glass, border: "1px solid rgba(255,255,255,0.13)", display: "grid", gap: 14, boxShadow: "0 24px 80px rgba(0,0,0,0.34)", overflow: "hidden" },
+  detailsCard: { borderRadius: 24, padding: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", display: "grid", gap: 12 },
+  detailsToggle: { border: 0, background: "transparent", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, textAlign: "left", padding: 4, cursor: "pointer" },
+  cardHead: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" },
+  cardKicker: { color: accent, fontSize: 11, fontWeight: 950, letterSpacing: "0.18em", textTransform: "uppercase" },
+  cardTitle: { margin: "3px 0 0", fontSize: "clamp(28px, 7vw, 40px)", letterSpacing: "-0.06em", lineHeight: 1 },
+  sportGrid: { display: "grid", gap: 10 },
+  choiceButton: { border: "1px solid rgba(255,255,255,0.12)", background: darkerGlass, color: "white", borderRadius: 22, padding: 16, textAlign: "left", cursor: "pointer", display: "grid", gap: 5 },
+  choiceButtonActive: { borderColor: "rgba(228,239,22,0.72)", background: "rgba(228,239,22,0.15)", color: accent },
   choiceButtonDisabled: { opacity: 0.38, cursor: "not-allowed" },
-  methodGrid: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
-  methodCard: { border: "1px solid rgba(255,255,255,0.13)", background: darkerGlass, color: "white", borderRadius: 28, padding: 18, textAlign: "left", cursor: "pointer", display: "grid", gap: 9 },
-  methodIcon: { width: 48, height: 48, borderRadius: 18, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.20)", fontSize: 22 },
-  filters: { display: "grid", gap: 9 },
-  filtersCompact: { display: "grid", gap: 8 },
-  filterLabel: { color: "rgba(255,255,255,0.45)", fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.12em" },
-  chipRow: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" },
-  chip: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.78)", borderRadius: 999, padding: "10px 13px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
-  chipSmall: { border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.68)", borderRadius: 999, padding: "8px 11px", fontWeight: 900, cursor: "pointer", whiteSpace: "nowrap", fontSize: 12 },
-  chipActive: { background: "#e4ef16", color: "#101406", borderColor: "#e4ef16" },
-  panelSwitch: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 5, borderRadius: 999, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)" },
-  panelTab: { minHeight: 46, borderRadius: 999, border: 0, background: "transparent", color: "rgba(255,255,255,0.62)", fontWeight: 950, cursor: "pointer" },
-  panelTabActive: { background: "#e4ef16", color: "#101406" },
-  fieldsGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
-  field: { display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
-  fieldFull: { gridColumn: "1 / -1", display: "grid", gap: 7, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 13 },
-  input: { width: "100%", minHeight: 48, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
-  textarea: { width: "100%", minHeight: 84, borderRadius: 16, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: 12, boxSizing: "border-box", outline: "none", fontSize: 15, resize: "vertical" },
-  searchInput: { width: "100%", minHeight: 50, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.28)", color: "white", padding: "0 15px", boxSizing: "border-box", outline: "none", fontSize: 16 },
+  methodCard: { border: "1px solid rgba(255,255,255,0.13)", background: darkerGlass, color: "white", borderRadius: 24, padding: 16, textAlign: "left", cursor: "pointer", display: "grid", gridTemplateColumns: "48px 1fr", gap: 12, alignItems: "center" },
+  methodIcon: { width: 46, height: 46, borderRadius: 18, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.12)", border: "1px solid rgba(228,239,22,0.20)", fontSize: 21 },
+  fieldsGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 },
+  field: { display: "grid", gap: 6, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 12 },
+  fieldFull: { gridColumn: "1 / -1", display: "grid", gap: 6, color: "rgba(255,255,255,0.72)", fontWeight: 850, fontSize: 12 },
+  input: { width: "100%", minHeight: 46, borderRadius: 15, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: "0 12px", boxSizing: "border-box", outline: "none", fontSize: 15 },
+  textarea: { width: "100%", minHeight: 76, borderRadius: 15, border: "1px solid rgba(255,255,255,0.13)", background: "rgba(0,0,0,0.24)", color: "white", padding: 12, boxSizing: "border-box", outline: "none", fontSize: 15, resize: "vertical" },
+  groupGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 },
+  groupButton: { minHeight: 46, borderRadius: 18, border: "1px solid rgba(255,255,255,0.11)", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.76)", fontWeight: 950, cursor: "pointer" },
+  groupButtonActive: { background: accent, color: "#101406", borderColor: accent },
+  filterLine: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8 },
+  searchInput: { width: "100%", minHeight: 46, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.28)", color: "white", padding: "0 14px", boxSizing: "border-box", outline: "none", fontSize: 15 },
+  customButton: { border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.12)", color: accent, borderRadius: 999, padding: "0 13px", fontWeight: 950, cursor: "pointer" },
+  equipmentRow: { display: "flex", gap: 7, overflowX: "auto", paddingBottom: 2 },
+  equipmentChip: { border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.68)", borderRadius: 999, padding: "8px 11px", fontWeight: 900, cursor: "pointer", whiteSpace: "nowrap", fontSize: 12 },
+  equipmentChipActive: { background: accent, color: "#101406", borderColor: accent },
+  customBox: { display: "grid", gap: 8, padding: 12, borderRadius: 20, background: "rgba(0,0,0,0.24)", border: "1px solid rgba(228,239,22,0.18)" },
+  submitMini: { minHeight: 44, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, cursor: "pointer" },
   exerciseList: { display: "grid", gap: 8 },
-  exercisePick: { border: "1px solid rgba(255,255,255,0.09)", background: "rgba(0,0,0,0.22)", color: "white", borderRadius: 20, padding: 12, textAlign: "left", display: "grid", gridTemplateColumns: "40px minmax(0, 1fr) 34px", gap: 11, alignItems: "center", cursor: "pointer" },
-  exercisePickAdded: { borderColor: "rgba(228,239,22,0.38)", background: "rgba(228,239,22,0.08)" },
-  exerciseAvatar: { width: 38, height: 38, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: "#e4ef16", fontWeight: 950 },
-  exerciseText: { minWidth: 0, display: "grid", gap: 3 },
-  addSymbol: { width: 32, height: 32, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.08)" },
-  addCustomButton: { border: "1px solid rgba(228,239,22,0.28)", background: "rgba(228,239,22,0.12)", color: "#e4ef16", borderRadius: 999, padding: "9px 11px", fontWeight: 950, cursor: "pointer" },
-  customBox: { display: "grid", gap: 8, padding: 12, borderRadius: 22, background: "rgba(0,0,0,0.24)", border: "1px solid rgba(228,239,22,0.18)" },
-  submitMini: { minHeight: 44, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", fontWeight: 950, cursor: "pointer" },
-  emptyPlan: { border: "1px dashed rgba(255,255,255,0.16)", borderRadius: 24, minHeight: 180, display: "grid", placeItems: "center", color: "rgba(255,255,255,0.56)", fontWeight: 850, textAlign: "center", padding: 18 },
-  selectedList: { display: "grid", gap: 12 },
-  selectedExercise: { borderRadius: 24, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: 12, display: "grid", gap: 10 },
-  selectedTop: { display: "grid", gridTemplateColumns: "42px minmax(0, 1fr) auto", alignItems: "center", gap: 10 },
-  orderBadge: { width: 38, height: 38, borderRadius: 14, border: 0, display: "grid", placeItems: "center", background: "#e4ef16", color: "#101406", fontWeight: 950, cursor: "pointer" },
-  selectedNameButton: { border: 0, background: "transparent", color: "white", textAlign: "left", display: "grid", gap: 2, minWidth: 0, cursor: "pointer", padding: 0 },
-  reorderButtons: { display: "flex", gap: 5 },
-  iconButton: { width: 32, height: 32, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", fontWeight: 950, cursor: "pointer" },
-  removeButton: { width: 32, height: 32, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer" },
-  quickSetRow: { display: "grid", gridTemplateColumns: "0.75fr 1fr 1fr", gap: 8 },
-  quickInput: { width: "100%", minHeight: 42, borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 9px", boxSizing: "border-box", outline: "none", fontWeight: 900 },
-  setHeader: { display: "grid", gridTemplateColumns: "36px repeat(3, minmax(0, 1fr)) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
-  setRow: { display: "grid", gridTemplateColumns: "36px repeat(3, minmax(0, 1fr)) 30px", gap: 6, alignItems: "center" },
-  setInput: { minWidth: 0, width: "100%", minHeight: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 8px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
+  exercisePick: { border: "1px solid rgba(255,255,255,0.09)", background: "rgba(0,0,0,0.22)", color: "white", borderRadius: 18, padding: 10, textAlign: "left", display: "grid", gridTemplateColumns: "38px minmax(0, 1fr) 38px", gap: 10, alignItems: "center", cursor: "pointer" },
+  exerciseAvatar: { width: 36, height: 36, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 950 },
+  emptyState: { minHeight: 190, border: "1px dashed rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", color: "white", borderRadius: 24, padding: 22, display: "grid", placeItems: "center", gap: 8, textAlign: "center", cursor: "pointer" },
+  selectedList: { display: "grid", gap: 10 },
+  selectedExercise: { borderRadius: 22, background: darkerGlass, border: "1px solid rgba(255,255,255,0.12)", padding: 10, display: "grid", gap: 10 },
+  exerciseSummary: { border: 0, background: "transparent", color: "white", display: "grid", gridTemplateColumns: "38px minmax(0, 1fr) auto", gap: 10, alignItems: "center", textAlign: "left", padding: 0, cursor: "pointer" },
+  orderBadge: { width: 36, height: 36, borderRadius: 13, display: "grid", placeItems: "center", background: accent, color: "#101406", fontWeight: 950 },
+  selectedName: { display: "grid", gap: 1, minWidth: 0 },
+  editorBox: { display: "grid", gap: 9, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 },
+  quickActions: { display: "flex", gap: 7, flexWrap: "wrap" },
+  iconButton: { minWidth: 38, height: 36, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", fontWeight: 950, cursor: "pointer" },
+  removeButton: { height: 36, borderRadius: 12, border: "1px solid rgba(255,90,90,0.26)", background: "rgba(255,60,60,0.14)", color: "#ff9b9b", fontWeight: 950, cursor: "pointer", padding: "0 12px" },
+  setHeader: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, color: "rgba(255,255,255,0.46)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.08em" },
+  setRow: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 30px", gap: 6, alignItems: "center" },
+  setInput: { minWidth: 0, width: "100%", minHeight: 36, borderRadius: 11, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.26)", color: "white", padding: "0 7px", boxSizing: "border-box", outline: "none", fontWeight: 850 },
   removeSet: { width: 30, height: 30, borderRadius: 10, border: 0, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontWeight: 950, cursor: "pointer" },
-  addSet: { justifySelf: "start", border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: "#e4ef16", borderRadius: 999, padding: "8px 12px", fontWeight: 950, cursor: "pointer" },
-  saveDock: { position: "fixed", left: 16, right: 16, bottom: 84, maxWidth: 720, margin: "0 auto", display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 8, pointerEvents: "none", zIndex: 30 },
-  secondaryDockButton: { minHeight: 52, borderRadius: 999, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(13,18,21,0.96)", color: "white", fontWeight: 950, fontSize: 15, cursor: "pointer", padding: "0 14px", pointerEvents: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.45)" },
-  submitButton: { minHeight: 52, borderRadius: 999, border: 0, background: "#e4ef16", color: "#101406", fontWeight: 950, fontSize: 15, cursor: "pointer", padding: "0 16px", pointerEvents: "auto", boxShadow: "0 20px 60px rgba(228,239,22,0.16)" },
-  submitButtonDisabled: { opacity: 0.42, cursor: "not-allowed" },
-  smallButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", borderRadius: 999, padding: "9px 12px", fontWeight: 950, cursor: "pointer", whiteSpace: "nowrap" },
+  addSet: { justifySelf: "start", border: "1px solid rgba(228,239,22,0.22)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "8px 12px", fontWeight: 950, cursor: "pointer" },
+  saveDock: { position: "fixed", left: 16, right: 16, bottom: 96, maxWidth: 760, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)", gap: 10, zIndex: 30, pointerEvents: "auto" },
+  secondaryDockButton: { minHeight: 54, borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(9,15,18,0.92)", backdropFilter: "blur(18px)", color: "white", fontWeight: 950, fontSize: 15, cursor: "pointer" },
+  submitButton: { minHeight: 54, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer", padding: "0 20px" },
+  submitButtonDisabled: { opacity: 0.45, cursor: "not-allowed" },
+  smallButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", borderRadius: 999, padding: "9px 12px", fontWeight: 950, cursor: "pointer" },
+  addButton: { border: 0, background: accent, color: "#101406", borderRadius: 999, padding: "10px 14px", fontWeight: 950, cursor: "pointer" },
 };
