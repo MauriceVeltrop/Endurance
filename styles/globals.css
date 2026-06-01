@@ -8789,3 +8789,284 @@ main {
     gap: 8px;
   }
 }
+
+/* Workouts sport-first creator */
+.workout-create-hero-btn {
+  white-space: nowrap;
+  align-self: center;
+}
+
+.create-workout-page .workout-stepper {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workout-sport-list .route-sport-button small {
+  line-height: 1.25;
+}
+
+.workout-builder-section {
+  display: grid;
+  gap: 18px;
+}
+
+.workout-selected-head {
+  margin-bottom: 0;
+}
+
+.strength-builder-form {
+  display: grid;
+  gap: 14px;
+}
+
+.strength-builder-card.compact {
+  padding: 18px;
+  border-radius: 28px;
+}
+
+.strength-builder-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(120px, 0.8fr);
+  gap: 12px;
+}
+
+.strength-builder-fields label {
+  display: grid;
+  gap: 7px;
+  color: rgba(255,255,255,0.66);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.strength-builder-fields label.full {
+  grid-column: 1 / -1;
+}
+
+.strength-builder-fields input,
+.strength-builder-fields select,
+.strength-builder-fields textarea,
+.set-table-row input {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.24);
+  color: #fff;
+  border-radius: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.strength-builder-fields input,
+.strength-builder-fields select {
+  min-height: 48px;
+  padding: 0 13px;
+}
+
+.strength-builder-fields textarea {
+  min-height: 76px;
+  padding: 12px 13px;
+  resize: vertical;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-heading-row h3 {
+  margin: 4px 0 0;
+  font-size: clamp(25px, 7vw, 36px);
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+
+.section-heading-row small {
+  color: #e4ef16;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.strength-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.strength-chip-grid button,
+.strength-exercise-grid button,
+.add-set-pill {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.07);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.strength-chip-grid button {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0 16px;
+}
+
+.strength-chip-grid button.active {
+  background: rgba(228,239,22,.16);
+  border-color: rgba(228,239,22,.46);
+  color: #e4ef16;
+}
+
+.strength-exercise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.strength-exercise-grid button {
+  min-height: 72px;
+  border-radius: 20px;
+  padding: 12px;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+}
+
+.strength-exercise-grid button span,
+.muted-copy,
+.strength-selected-top p {
+  color: rgba(255,255,255,.58);
+  font-weight: 800;
+}
+
+.strength-exercise-grid button.added {
+  opacity: .6;
+  background: rgba(228,239,22,.1);
+  border-color: rgba(228,239,22,.24);
+  cursor: default;
+}
+
+.strength-selected-stack.compact {
+  display: grid;
+  gap: 12px;
+}
+
+.strength-selected-exercise {
+  border: 1px solid rgba(255,255,255,.11);
+  background: rgba(0,0,0,.22);
+  border-radius: 24px;
+  padding: 13px;
+  display: grid;
+  gap: 12px;
+}
+
+.strength-selected-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.strength-selected-top h4 {
+  margin: 0;
+  font-size: 23px;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.strength-selected-top p {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+.strength-selected-top button,
+.set-table-row button {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.07);
+  color: #fff;
+  border-radius: 999px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.strength-selected-top button {
+  padding: 9px 11px;
+}
+
+.strength-set-table {
+  display: grid;
+  gap: 8px;
+}
+
+.set-table-head,
+.set-table-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.set-table-head {
+  color: rgba(255,255,255,.5);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.set-table-row strong {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(228,239,22,.12);
+  color: #e4ef16;
+}
+
+.set-table-row input {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.set-table-row button {
+  width: 34px;
+  height: 34px;
+}
+
+.add-set-pill {
+  justify-self: start;
+  min-height: 38px;
+  border-radius: 999px;
+  color: #e4ef16;
+  border-color: rgba(228,239,22,.28);
+  background: rgba(228,239,22,.08);
+  padding: 0 13px;
+}
+
+.workout-save-action {
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.workout-coming-soon-card {
+  margin-top: 0;
+}
+
+@media (max-width: 680px) {
+  .workout-create-hero-btn {
+    width: fit-content;
+    min-height: 54px;
+    margin-top: 18px;
+  }
+  .strength-builder-fields {
+    grid-template-columns: 1fr;
+  }
+  .section-heading-row {
+    align-items: flex-start;
+  }
+  .strength-builder-card.compact {
+    padding: 16px;
+  }
+}
