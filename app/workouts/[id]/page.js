@@ -291,9 +291,9 @@ export default function WorkoutDetailPage() {
         </button>
         <button type="button" className="route-detail-secondary" onClick={shareWorkout}>Share</button>
         {editable ? (
-          <button type="button" className="route-detail-secondary" disabled title="Workout editing comes next">
-            Edit soon
-          </button>
+          <Link href={`/workouts/${workout.id}/edit`} className="route-detail-secondary">
+            Edit
+          </Link>
         ) : null}
       </section>
 
