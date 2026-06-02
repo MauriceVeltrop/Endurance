@@ -1,44 +1,23 @@
-// app/routes/page.js
 
-// Replace metric calculations:
+REMOVE COMPLETE BLOCK:
 
-const totalDistanceKm = routes.reduce(
-  (sum, route) => sum + Number(route.distance_km || 0),
-  0
-);
+Routes
+Mapped
+Your Routes
+Trail
 
-const totalElevationM = routes.reduce(
-  (sum, route) => sum + Number(route.elevation_gain_m || 0),
-  0
-);
+Delete the entire metrics/statistics card below the hero.
 
-// Replace the metric tiles block with:
+NEW ORDER:
 
-<div className="training-metric-row route-metric-row">
-  <div className="training-metric-tile">
-    <span>🧭</span>
-    <strong>{loading ? "…" : routes.length}</strong>
-    <small>Routes</small>
-  </div>
-
-  <div className="training-metric-tile">
-    <span>👤</span>
-    <strong>{loading ? "…" : ownRouteCount}</strong>
-    <small>My routes</small>
-  </div>
-
-  <div className="training-metric-tile">
-    <span>📏</span>
-    <strong>{loading ? "…" : Math.round(totalDistanceKm)}</strong>
-    <small>Km mapped</small>
-  </div>
-
-  <div className="training-metric-tile">
-    <span>⛰</span>
-    <strong>{loading ? "…" : Math.round(totalElevationM)}</strong>
-    <small>Elevation</small>
-  </div>
-</div>
-
-// Remove the filter dropdown below the chips.
-// Keep only the chip row.
+Hero
+↓
+Search
+↓
+Filter buttons:
+- All Routes
+- My Routes
+- Run & Walk
+- Cycling
+↓
+Route cards
