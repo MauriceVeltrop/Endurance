@@ -29,13 +29,18 @@ function matchesSearch(route, search) {
   return haystack.includes(search.toLowerCase());
 }
 
+const RUN_WALK_ROUTE_SPORTS = new Set(["running", "trail_running", "walking"]);
+const CYCLING_ROUTE_SPORTS = new Set(["road_cycling", "gravel_cycling", "mountain_biking"]);
+
 function matchesTab(route, activeTab) {
+  const sportId = String(route.sport_id || "");
+
   if (activeTab === "all") return true;
   if (activeTab === "my") return route._isOwnRoute;
-  if (activeTab === "public") return route.visibility === "public";
-  if (activeTab === "mapped") return Boolean(route.gpx_file_url || route.route_points);
-  if (activeTab === "trail") return String(route.sport_id || "").includes("trail");
-  return route.sport_id === activeTab;
+  if (activeTab === "run_walk") return RUN_WALK_ROUTE_SPORTS.has(sportId);
+  if (activeTab === "cycling") return CYCLING_ROUTE_SPORTS.has(sportId);
+
+  return true;
 }
 
 function firstNameFromProfile(profile) {
@@ -146,23 +151,19 @@ export default function RoutesPage() {
     loadRoutes();
   }, []);
 
+  const mappedCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
   const ownRouteCount = routes.filter((route) => route._isOwnRoute).length;
-  const totalDistanceKm = routes.reduce((sum, route) => sum + Number(route.distance_km || 0), 0);
-  const totalElevationM = routes.reduce((sum, route) => sum + Number(route.elevation_gain_m || 0), 0);
+  const trailRouteCount = routes.filter((route) => String(route.sport_id || "").includes("trail")).length;
 
-  const tabs = useMemo(() => {
-    const sportTabs = preferredSportIds.slice(0, 2).map((sportId) => ({
-      id: sportId,
-      label: getSportLabel(sportId),
-    }));
-
-    return [
+  const tabs = useMemo(
+    () => [
       { id: "all", label: "All routes" },
       { id: "my", label: "My routes" },
-      { id: "trail", label: "Trail" },
-      ...sportTabs,
-    ];
-  }, [preferredSportIds]);
+      { id: "run_walk", label: "Run & Walk" },
+      { id: "cycling", label: "Cycling" },
+    ],
+    []
+  );
 
   const filteredRoutes = routes
     .filter((route) => matchesSearch(route, search))
@@ -194,19 +195,19 @@ export default function RoutesPage() {
               <small>Routes</small>
             </div>
             <div className="training-metric-tile">
+              <span>🗺</span>
+              <strong>{loading ? "…" : mappedCount}</strong>
+              <small>Mapped</small>
+            </div>
+            <div className="training-metric-tile">
               <span>👤</span>
               <strong>{loading ? "…" : ownRouteCount}</strong>
-              <small>My routes</small>
+              <small>Your routes</small>
             </div>
             <div className="training-metric-tile">
-              <span>↗</span>
-              <strong>{loading ? "…" : Math.round(totalDistanceKm)}</strong>
-              <small>Km mapped</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>△</span>
-              <strong>{loading ? "…" : Math.round(totalElevationM)}</strong>
-              <small>Elevation</small>
+              <span>⛰</span>
+              <strong>{loading ? "…" : trailRouteCount}</strong>
+              <small>Trail</small>
             </div>
           </div>
         </section>
