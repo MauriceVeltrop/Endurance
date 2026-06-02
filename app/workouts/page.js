@@ -179,8 +179,8 @@ export default function WorkoutsPage() {
     .filter((workout) => matchesTab(workout, activeTab));
 
   return (
-    <main className="endurance-page route-feed-page workout-feed-page training-feed-multisport-hero route-feed-multisport-layout">
-      <section className="training-feed-hero-shell route-hero-shell">
+    <main className="endurance-page workout-feed-page training-feed-multisport-hero">
+      <section className="training-feed-hero-shell workout-hero-shell">
         <AppHeader active="workouts" />
 
         <section className="endurance-shell training-dashboard route-dashboard">
