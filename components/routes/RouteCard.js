@@ -6,20 +6,12 @@ import OSMRouteMap from "../OSMRouteMap";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { getElevationStats } from "../../lib/routePreview";
 
-function formatNumber(value, digits = 1) {
-  const number = Number(value || 0);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  return number.toFixed(digits).replace(/\.0$/, "");
-}
-
 function distanceText(route) {
-  const distance = formatNumber(route?.distance_km, 1);
-  return distance ? `${distance} km` : "Distance not set";
+  return route?.distance_km ? `${Number(route.distance_km).toFixed(1).replace(".0", "")} km` : "Distance not set";
 }
 
 function elevationGainText(route) {
-  const elevation = formatNumber(route?.elevation_gain_m, 0);
-  return elevation ? `+${elevation} m` : "Elevation not set";
+  return route?.elevation_gain_m ? `+${Math.round(Number(route.elevation_gain_m))} m` : "Elevation not set";
 }
 
 function routeArea(route) {
@@ -42,44 +34,44 @@ export default function RouteCard({ route }) {
   const elevationStats = getElevationStats(route.route_points);
   const elevationRange = elevationStats.available
     ? `${elevationStats.min}–${elevationStats.max} m elevation`
-    : null;
+    : "No elevation profile";
 
   return (
-    <Link href={href} className="route-feed-card-premium" aria-label={`Open ${route.title || "route"}`}>
-      <div className="route-feed-map" aria-hidden="true">
+    <article className="route-osm-card">
+      <Link href={href} className="route-osm-card-map" aria-label={`Open ${route.title || "route"} on OpenStreetMap`}>
         <OSMRouteMap
           routePoints={route.route_points}
           title={route.title}
           compact
           interactive={false}
           showLegend={false}
-          height={190}
+          height={230}
+          defaultLayer="osm"
         />
-        <span className="route-feed-map-dot" />
-      </div>
+      </Link>
 
-      <div className="route-feed-content">
-        <div className="route-feed-top">
+      <Link href={href} className="route-osm-card-body" aria-label={`Open ${route.title || "route"}`}>
+        <div className="route-osm-card-topline">
           <div className="route-feed-badges">
             <span className="sport-badge">{sportLabel}</span>
             <span className="status-badge">{route.visibility}</span>
           </div>
-          <span className="route-feed-more">→</span>
+          <span className="route-osm-arrow">→</span>
         </div>
 
-        <span className="route-feed-title">
-          {route.title || "Running Route"}
-        </span>
+        <h2 className="route-osm-title">{route.title || "Running Route"}</h2>
 
-        <div className="route-feed-stats">
+        <div className="route-osm-meta-row">
           <span>{distanceText(route)}</span>
           <i />
           <span>{elevationGainText(route)}</span>
         </div>
 
-        {elevationRange ? <span className="route-feed-elevation">{elevationRange}</span> : null}
-        <span className="route-feed-place">⌖ {routeArea(route)}</span>
-      </div>
-    </Link>
+        <div className="route-osm-submeta">
+          <span>{elevationRange}</span>
+          <span>⌖ {routeArea(route)}</span>
+        </div>
+      </Link>
+    </article>
   );
 }
