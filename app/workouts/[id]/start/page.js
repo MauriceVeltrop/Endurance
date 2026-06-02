@@ -234,11 +234,12 @@ export default function StartWorkoutPage() {
       const completedSets = insertedSets.filter((row) => row.completed && Number(row.weight_kg) > 0 && Number(row.reps) > 0);
       const prGroups = new Map();
       completedSets.forEach((row) => {
-        const key = `${row.exercise_name}__${row.equipment || ""}`;
+        const normalizedEquipment = row.equipment || "Strength";
+        const key = `${row.exercise_name}__${normalizedEquipment}`;
         const volume = Number(row.reps || 0) * Number(row.weight_kg || 0);
         const existing = prGroups.get(key);
         if (!existing || Number(row.weight_kg) > Number(existing.weight_kg) || volume > existing.volume) {
-          prGroups.set(key, { ...row, volume });
+          prGroups.set(key, { ...row, equipment: normalizedEquipment, volume });
         }
       });
 
@@ -249,7 +250,7 @@ export default function StartWorkoutPage() {
           .select("id,best_weight_kg,best_reps,best_volume")
           .eq("user_id", profile.id)
           .eq("exercise_name", candidate.exercise_name)
-          .eq("equipment", candidate.equipment || "")
+          .eq("equipment", candidate.equipment || "Strength")
           .maybeSingle();
 
         const candidateWeight = Number(candidate.weight_kg || 0);
@@ -261,7 +262,7 @@ export default function StartWorkoutPage() {
         if (!currentPr || candidateWeight > currentWeight || candidateVolume > currentVolume) {
           newPrCount += 1;
           if (currentPr?.id) {
-            await supabase
+            const { error: prUpdateError } = await supabase
               .from("exercise_prs")
               .update({
                 best_weight_kg: candidateWeight,
@@ -273,11 +274,12 @@ export default function StartWorkoutPage() {
                 updated_at: completedAt,
               })
               .eq("id", currentPr.id);
+            if (prUpdateError) throw prUpdateError;
           } else {
-            await supabase.from("exercise_prs").insert({
+            const { error: prInsertError } = await supabase.from("exercise_prs").insert({
               user_id: profile.id,
               exercise_name: candidate.exercise_name,
-              equipment: candidate.equipment || "",
+              equipment: candidate.equipment || "Strength",
               best_weight_kg: candidateWeight,
               best_reps: candidateReps,
               best_volume: candidateVolume,
@@ -286,6 +288,7 @@ export default function StartWorkoutPage() {
               achieved_at: completedAt,
               updated_at: completedAt,
             });
+            if (prInsertError) throw prInsertError;
           }
         }
       }
