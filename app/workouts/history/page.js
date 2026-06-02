@@ -47,6 +47,35 @@ function compactSetSummary(sets = []) {
   return groups.map((group) => `${group.count}x ${group.signature}`).join("   ");
 }
 
+
+function deriveBestLiftsFromSets(setsBySession = {}) {
+  const best = new Map();
+  Object.values(setsBySession).flat().forEach((set) => {
+    const weight = Number(set?.weight_kg || 0);
+    const reps = Number(set?.reps || 0);
+    if (!set?.completed || !weight || !reps) return;
+
+    const exerciseName = set.exercise_name || "Exercise";
+    const equipment = set.equipment || "Strength";
+    const key = `${exerciseName.toLowerCase()}__${equipment.toLowerCase()}`;
+    const volume = weight * reps;
+    const current = best.get(key);
+
+    if (!current || weight > Number(current.best_weight_kg || 0) || (weight === Number(current.best_weight_kg || 0) && volume > Number(current.best_volume || 0))) {
+      best.set(key, {
+        id: key,
+        exercise_name: exerciseName,
+        equipment,
+        best_weight_kg: weight,
+        best_reps: reps,
+        best_volume: volume,
+      });
+    }
+  });
+
+  return Array.from(best.values()).sort((a, b) => Number(b.best_weight_kg || 0) - Number(a.best_weight_kg || 0));
+}
+
 function groupSetsByExercise(sets = []) {
   const map = new Map();
   sets.filter((set) => set.completed).forEach((set) => {
@@ -130,9 +159,11 @@ export default function WorkoutHistoryPage() {
         }, {});
       }
 
+      const derivedPrs = deriveBestLiftsFromSets(grouped);
+
       setSessions(sessionRows || []);
       setSetsBySession(grouped);
-      setPrs(prRows || []);
+      setPrs((prRows && prRows.length ? prRows : derivedPrs));
       setUnreadCount((notificationCount || 0) + (inviteCount || 0));
     } catch (error) {
       console.error("Workout history error", error);
