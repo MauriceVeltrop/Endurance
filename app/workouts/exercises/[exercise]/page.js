@@ -88,7 +88,7 @@ export default function ExerciseHistoryPage() {
       const [{ data: sessionRows, error: historyError }, { data: prRow }, { count: notificationCount }, { count: inviteCount }] = await Promise.all([
         supabase
           .from("workout_sessions")
-          .select("id,workout_id,user_id,completed_at,created_at,summary,workouts(id,title),workout_session_sets(id,exercise_name,equipment,reps,weight_kg,completed,set_number,exercise_position,is_pr)")
+          .select("id,workout_id,user_id,completed_at,created_at,summary,workouts(id,title),workout_session_sets(id,exercise_name,equipment,reps,weight_kg,completed,set_number,exercise_position)")
           .eq("user_id", user.id)
           .order("completed_at", { ascending: false, nullsFirst: false })
           .limit(50),
