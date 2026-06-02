@@ -72,10 +72,14 @@ export default function BottomNav({ unreadCount: externalUnreadCount = null }) {
     ];
   }, [role]);
 
+  const visibleItems = useMemo(() => {
+    return allItems.filter((item) => !itemMatchesPath(item, pathname));
+  }, [allItems, pathname]);
+
   return (
     <nav className="endurance-bottom-nav" aria-label="Primary navigation">
-      {allItems.map((item) => (
-        <Link key={item.href} href={item.href} className={itemMatchesPath(item, pathname) ? "active" : ""}>
+      {visibleItems.map((item) => (
+        <Link key={item.href} href={item.href} className="">
           <span className="nav-icon">
             {item.icon}
             {item.href === "/notifications" && unreadCount > 0 && (
