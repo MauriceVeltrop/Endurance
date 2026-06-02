@@ -9645,9 +9645,10 @@ main {
    2026-06 route hero upgrade
    Uses a dedicated trail/map hero instead of generic training hero.
 ===================================================== */
-.route-feed-multisport-layout.route-hero-shell {
+.route-feed-multisport-layout .training-feed-hero-shell.route-hero-shell {
   background-image:
-    linear-gradient(180deg, rgba(0,0,0,.30) 0%, rgba(0,0,0,.20) 30%, rgba(0,0,0,.65) 75%, rgba(0,0,0,.95) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.42) 0%, rgba(0,0,0,.24) 28%, rgba(0,0,0,.68) 72%, rgba(5,7,10,.98) 100%),
+    linear-gradient(90deg, rgba(3,6,8,.72) 0%, rgba(3,6,8,.20) 46%, rgba(3,6,8,.50) 100%),
     url('/training-images/routes-hero-mobile.png') !important;
   background-size: cover !important;
   background-position: center top !important;
@@ -9655,7 +9656,7 @@ main {
 }
 
 @media (max-width: 720px) {
-  .route-feed-multisport-layout .route-hero-shell {
-    background-position: 44% top !important;
+  .route-feed-multisport-layout .training-feed-hero-shell.route-hero-shell {
+    background-position: center top !important;
   }
 }
