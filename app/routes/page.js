@@ -146,9 +146,9 @@ export default function RoutesPage() {
     loadRoutes();
   }, []);
 
-  const mappedCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
   const ownRouteCount = routes.filter((route) => route._isOwnRoute).length;
-  const trailRouteCount = routes.filter((route) => String(route.sport_id || "").includes("trail")).length;
+  const totalDistanceKm = routes.reduce((sum, route) => sum + Number(route.distance_km || 0), 0);
+  const totalElevationM = routes.reduce((sum, route) => sum + Number(route.elevation_gain_m || 0), 0);
 
   const tabs = useMemo(() => {
     const sportTabs = preferredSportIds.slice(0, 2).map((sportId) => ({
@@ -158,7 +158,6 @@ export default function RoutesPage() {
 
     return [
       { id: "all", label: "All routes" },
-      { id: "mapped", label: "Mapped" },
       { id: "my", label: "My routes" },
       { id: "trail", label: "Trail" },
       ...sportTabs,
@@ -195,19 +194,19 @@ export default function RoutesPage() {
               <small>Routes</small>
             </div>
             <div className="training-metric-tile">
-              <span>🗺</span>
-              <strong>{loading ? "…" : mappedCount}</strong>
-              <small>Mapped</small>
-            </div>
-            <div className="training-metric-tile">
               <span>👤</span>
               <strong>{loading ? "…" : ownRouteCount}</strong>
-              <small>Your routes</small>
+              <small>My routes</small>
             </div>
             <div className="training-metric-tile">
-              <span>⛰</span>
-              <strong>{loading ? "…" : trailRouteCount}</strong>
-              <small>Trail</small>
+              <span>↗</span>
+              <strong>{loading ? "…" : Math.round(totalDistanceKm)}</strong>
+              <small>Km mapped</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>△</span>
+              <strong>{loading ? "…" : Math.round(totalElevationM)}</strong>
+              <small>Elevation</small>
             </div>
           </div>
         </section>
@@ -236,18 +235,6 @@ export default function RoutesPage() {
               </button>
             ))}
           </div>
-          <select
-            value={activeTab}
-            onChange={(event) => setActiveTab(event.target.value)}
-            className="feed-select-pill"
-            aria-label="Route filter"
-          >
-            {tabs.map((tab) => (
-              <option key={tab.id} value={tab.id}>
-                {tab.label}
-              </option>
-            ))}
-          </select>
         </div>
       </section>
 
