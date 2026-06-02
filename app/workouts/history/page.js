@@ -118,7 +118,7 @@ export default function WorkoutHistoryPage() {
       if (ids.length) {
         const { data: setRows, error: setsError } = await supabase
           .from("workout_session_sets")
-          .select("id,session_id,exercise_position,set_number,exercise_name,equipment,reps,weight_kg,completed,is_pr")
+          .select("id,session_id,exercise_position,set_number,exercise_name,equipment,reps,weight_kg,completed")
           .in("session_id", ids)
           .order("exercise_position")
           .order("set_number");
