@@ -1,0 +1,31 @@
+
+/* routes hero improvements */
+
+.route-hero-shell::before{
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0,0,0,.25) 0%,
+      rgba(0,0,0,.55) 100%
+    );
+}
+
+.training-greeting{
+  max-width: 320px;
+}
+
+.training-subline{
+  max-width: 320px;
+}
+
+.route-metric-row{
+  backdrop-filter: blur(18px);
+}
+
+.route-card{
+  border-radius: 28px;
+}
+
+.route-card .route-meta{
+  opacity:.85;
+}
