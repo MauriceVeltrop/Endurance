@@ -9660,3 +9660,177 @@ main {
     background-position: center top !important;
   }
 }
+
+
+/* =====================================================
+   ROUTES PAGE COMPACT PREMIUM LAYOUT
+   2026-06-02: reduce hero height, cleaner KPI row, single filter system
+===================================================== */
+
+.route-feed-page.route-feed-multisport-layout {
+  --feed-hero-height: 430px;
+}
+
+.route-feed-multisport-layout .training-feed-hero-shell.route-hero-shell {
+  min-height: var(--feed-hero-height) !important;
+  padding-bottom: 8px !important;
+  background-position: center 34% !important;
+}
+
+.route-feed-multisport-layout .training-feed-hero-shell.route-hero-shell::after {
+  background:
+    radial-gradient(circle at 78% 22%, rgba(230,255,0,.06), transparent 22%),
+    linear-gradient(180deg, rgba(0,0,0,.06) 0%, rgba(5,7,10,.28) 58%, #05070a 100%) !important;
+}
+
+.route-feed-multisport-layout .endurance-header {
+  padding-top: 12px !important;
+  padding-bottom: 4px !important;
+}
+
+.route-feed-multisport-layout .route-dashboard {
+  gap: 14px !important;
+  margin-top: 18px !important;
+}
+
+.route-feed-multisport-layout .training-dashboard-top {
+  align-items: end !important;
+  gap: 12px !important;
+}
+
+.route-feed-multisport-layout .training-greeting {
+  max-width: 305px !important;
+  font-size: clamp(34px, 9.5vw, 52px) !important;
+  line-height: .92 !important;
+}
+
+.route-feed-multisport-layout .training-subline {
+  max-width: 310px !important;
+  margin-top: 12px !important;
+  font-size: clamp(29px, 8vw, 42px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 1000 !important;
+}
+
+.route-feed-multisport-layout .training-create-compact {
+  min-height: 58px !important;
+  padding-inline: 24px !important;
+  font-size: clamp(15px, 4.2vw, 20px) !important;
+}
+
+.route-feed-multisport-layout .route-metric-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+  padding: 8px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 30px !important;
+  background: rgba(10,16,20,.72) !important;
+  backdrop-filter: blur(18px) !important;
+  box-shadow: 0 18px 60px rgba(0,0,0,.28) !important;
+}
+
+.route-feed-multisport-layout .route-metric-row .training-metric-tile {
+  min-width: 0 !important;
+  border: 0 !important;
+  border-right: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 10px 7px !important;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label" !important;
+  justify-items: center !important;
+  text-align: center !important;
+  gap: 5px !important;
+}
+
+.route-feed-multisport-layout .route-metric-row .training-metric-tile:last-child {
+  border-right: 0 !important;
+}
+
+.route-feed-multisport-layout .route-metric-row .training-metric-tile span {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 999px !important;
+  font-size: 17px !important;
+}
+
+.route-feed-multisport-layout .route-metric-row .training-metric-tile strong {
+  font-size: clamp(25px, 7.8vw, 38px) !important;
+  line-height: .85 !important;
+}
+
+.route-feed-multisport-layout .route-metric-row .training-metric-tile small {
+  font-size: clamp(10px, 2.8vw, 13px) !important;
+  line-height: 1.05 !important;
+  color: rgba(255,255,255,.78) !important;
+}
+
+.route-feed-multisport-layout .route-feed-controls {
+  margin-top: 16px !important;
+}
+
+.route-feed-multisport-layout .premium-tabs-row {
+  margin-top: 14px !important;
+  display: block !important;
+}
+
+.route-feed-multisport-layout .route-tabs {
+  display: flex !important;
+  gap: 10px !important;
+  overflow-x: auto !important;
+  padding: 0 0 10px !important;
+  scrollbar-width: none;
+}
+
+.route-feed-multisport-layout .route-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.route-feed-multisport-layout .route-tabs button {
+  flex: 0 0 auto !important;
+  min-height: 52px !important;
+  padding-inline: 24px !important;
+  border-radius: 999px !important;
+}
+
+.route-feed-multisport-layout .premium-tabs-row .feed-select-pill {
+  display: none !important;
+}
+
+.route-feed-multisport-layout .route-feed-stack {
+  margin-top: 10px !important;
+}
+
+@media (max-width: 430px) {
+  .route-feed-page.route-feed-multisport-layout {
+    --feed-hero-height: 405px;
+  }
+
+  .route-feed-multisport-layout .training-greeting {
+    font-size: clamp(30px, 8.6vw, 43px) !important;
+    max-width: 275px !important;
+  }
+
+  .route-feed-multisport-layout .training-subline {
+    font-size: clamp(25px, 7.4vw, 36px) !important;
+    max-width: 275px !important;
+  }
+
+  .route-feed-multisport-layout .training-create-compact {
+    min-height: 52px !important;
+    padding-inline: 18px !important;
+    font-size: 15px !important;
+  }
+
+  .route-feed-multisport-layout .route-metric-row {
+    border-radius: 25px !important;
+  }
+}
