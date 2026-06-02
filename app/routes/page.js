@@ -151,10 +151,6 @@ export default function RoutesPage() {
     loadRoutes();
   }, []);
 
-  const mappedCount = routes.filter((route) => route.gpx_file_url || route.route_points).length;
-  const ownRouteCount = routes.filter((route) => route._isOwnRoute).length;
-  const trailRouteCount = routes.filter((route) => String(route.sport_id || "").includes("trail")).length;
-
   const tabs = useMemo(
     () => [
       { id: "all", label: "All routes" },
@@ -186,29 +182,6 @@ export default function RoutesPage() {
             <Link href="/routes/new" className="training-create-compact">
               + Create route
             </Link>
-          </div>
-
-          <div className="training-metric-row route-metric-row">
-            <div className="training-metric-tile">
-              <span>🧭</span>
-              <strong>{loading ? "…" : routes.length}</strong>
-              <small>Routes</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>🗺</span>
-              <strong>{loading ? "…" : mappedCount}</strong>
-              <small>Mapped</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>👤</span>
-              <strong>{loading ? "…" : ownRouteCount}</strong>
-              <small>Your routes</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>⛰</span>
-              <strong>{loading ? "…" : trailRouteCount}</strong>
-              <small>Trail</small>
-            </div>
           </div>
         </section>
       </section>
