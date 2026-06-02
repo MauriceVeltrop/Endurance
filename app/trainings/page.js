@@ -8,9 +8,9 @@ import { supabase } from "../../lib/supabase";
 import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
 import TrainingCard from "../../components/trainings/TrainingCard";
-import TrainingFeedTabs from "../../components/trainings/TrainingFeedTabs";
 import TrainingFilters from "../../components/trainings/TrainingFilters";
 import FlexibleSessionCard from "../../components/trainings/FlexibleSessionCard";
+import { getSportLabel } from "../../lib/trainingHelpers";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function getTrainingReferenceTime(training) {
@@ -59,11 +59,27 @@ function getGreeting() {
 
 
 
+
+function FilterChip({ active, disabled = false, children, onClick }) {
+  return (
+    <button
+      type="button"
+      className={active ? "active" : ""}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function TrainingsPage() {
   const router = useRouter();
   const [trainings, setTrainings] = useState([]);
   const [participantsBySession, setParticipantsBySession] = useState({});
-  const [activeTab, setActiveTab] = useState("upcoming");
+  const [ownershipFilter, setOwnershipFilter] = useState("all");
+  const [sportFilter, setSportFilter] = useState("all");
+  const [planningFilter, setPlanningFilter] = useState("upcoming");
   const [search, setSearch] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [profile, setProfile] = useState(null);
@@ -167,12 +183,24 @@ export default function TrainingsPage() {
 
   const now = Date.now();
 
+  const currentUserId = profile?.id;
+
   const filtered = trainings
     .filter((training) => matchesSearch(training, search))
     .filter((training) => {
-      if (activeTab === "flexible") return training.planning_type === "flexible";
-      if (activeTab === "team") return training.visibility === "team" || training.visibility === "selected";
-      if (activeTab === "nearby") return Boolean(training.start_location);
+      if (ownershipFilter === "my") return training.creator_id === currentUserId;
+      if (ownershipFilter === "team") return training.visibility === "team" || training.visibility === "selected";
+      if (ownershipFilter === "groups") return Boolean(training.group_id);
+      return true;
+    })
+    .filter((training) => {
+      if (sportFilter === "all") return true;
+      const sessionSports = Array.isArray(training.sports) ? training.sports : [training.sports].filter(Boolean);
+      return sessionSports.includes(sportFilter);
+    })
+    .filter((training) => {
+      if (planningFilter === "flexible") return training.planning_type === "flexible";
+      if (planningFilter === "upcoming") return training.planning_type !== "flexible" || Boolean(training.final_starts_at);
       return true;
     });
 
@@ -210,28 +238,53 @@ export default function TrainingsPage() {
         </section>
       </section>
 
-      <section className="endurance-shell smart-search-row premium-feed-controls">
+      <section className="endurance-shell smart-search-row premium-feed-controls training-filter-system">
         <TrainingFilters value={search} onChange={setSearch} />
-        <div className="premium-tabs-row">
-          <TrainingFeedTabs active={activeTab} onChange={setActiveTab} />
-          <select
-            value={activeTab}
-            onChange={(event) => setActiveTab(event.target.value)}
-            className="feed-select-pill"
-            aria-label="Training filter"
-          >
-            <option value="upcoming">All sports</option>
-            <option value="flexible">Flexible</option>
-            <option value="team">Team</option>
-            <option value="nearby">Nearby</option>
-          </select>
+
+        <div className="training-filter-group" aria-label="Training ownership filters">
+          <FilterChip active={ownershipFilter === "all"} onClick={() => setOwnershipFilter("all")}>
+            All
+          </FilterChip>
+          <FilterChip active={ownershipFilter === "my"} onClick={() => setOwnershipFilter("my")}>
+            My
+          </FilterChip>
+          <FilterChip active={ownershipFilter === "team"} onClick={() => setOwnershipFilter("team")}>
+            Team
+          </FilterChip>
+          <FilterChip active={ownershipFilter === "groups"} onClick={() => setOwnershipFilter("groups")}>
+            Groups
+          </FilterChip>
+        </div>
+
+        <div className="training-filter-group sport-filter-group" aria-label="Preferred sport filters">
+          <FilterChip active={sportFilter === "all"} onClick={() => setSportFilter("all")}>
+            All Sports
+          </FilterChip>
+          {preferredSports.map((sportId) => (
+            <FilterChip
+              key={sportId}
+              active={sportFilter === sportId}
+              onClick={() => setSportFilter(sportId)}
+            >
+              {getSportLabel(sportId)}
+            </FilterChip>
+          ))}
+        </div>
+
+        <div className="training-filter-group compact-filter-group" aria-label="Planning filters">
+          <FilterChip active={planningFilter === "upcoming"} onClick={() => setPlanningFilter("upcoming")}>
+            Upcoming
+          </FilterChip>
+          <FilterChip active={planningFilter === "flexible"} onClick={() => setPlanningFilter("flexible")}>
+            Flexible
+          </FilterChip>
         </div>
       </section>
 
       <section className="endurance-shell training-feed-stack visual-feed-stack">
         {loading && <div className="endurance-card notification-empty">Loading training feed...</div>}
 
-        {!loading && needsDecision && activeTab !== "nearby" && (
+        {!loading && needsDecision && planningFilter !== "flexible" && (
           <FlexibleSessionCard
             training={needsDecision}
             participants={participantsBySession[needsDecision.id] || []}
