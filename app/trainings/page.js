@@ -207,29 +207,6 @@ export default function TrainingsPage() {
             + Create training
           </Link>
         </div>
-
-        <div className="training-metric-row">
-          <div className="training-metric-tile">
-            <span>⚡</span>
-            <strong>{needsDecision ? 1 : 0}</strong>
-            <small>Need planning</small>
-          </div>
-          <div className="training-metric-tile">
-            <span>⏱</span>
-            <strong>{startingSoon}</strong>
-            <small>Starting soon</small>
-          </div>
-          <div className="training-metric-tile">
-            <span>👥</span>
-            <strong>{teamSessions}</strong>
-            <small>Team sessions</small>
-          </div>
-          <div className="training-metric-tile">
-            <span>🧭</span>
-            <strong>{prepared}</strong>
-            <small>Prepared</small>
-          </div>
-        </div>
         </section>
       </section>
 
