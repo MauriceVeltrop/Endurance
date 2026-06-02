@@ -1,0 +1,12 @@
+
+/* Remove unused route metrics spacing */
+
+.route-metric-row,
+.training-metric-row {
+  display: none !important;
+}
+
+/* Pull search section upward */
+.routes-search-section {
+  margin-top: 12px;
+}
