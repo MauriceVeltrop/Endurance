@@ -9686,196 +9686,153 @@ main {
   display: none !important;
 }
 
-
-/* =====================================================
-   ROUTES PAGE COMPACT 9/10 UPGRADE
-   - removes low-value metrics row from markup
-   - shortens the hero so routes appear sooner
-   - makes route cards cleaner and fully tappable
-===================================================== */
-
-.route-feed-multisport-layout {
-  --feed-hero-height: 430px;
+/* ===== ROUTE CARDS ON OPENSTREETMAP ===== */
+.route-osm-card {
+  position: relative;
+  display: grid;
+  gap: 0;
+  border-radius: 32px;
+  border: 1px solid rgba(230,255,0,0.16);
+  background:
+    radial-gradient(circle at 82% 12%, rgba(230,255,0,0.09), transparent 34%),
+    linear-gradient(180deg, rgba(24,31,32,0.92), rgba(7,11,14,0.94));
+  box-shadow: 0 26px 80px rgba(0,0,0,0.30);
+  overflow: hidden;
 }
 
-.route-feed-multisport-layout .training-feed-hero-shell.route-hero-shell {
-  min-height: var(--feed-hero-height) !important;
-  padding-bottom: 0 !important;
-  background-image:
-    linear-gradient(180deg, rgba(0,0,0,.42) 0%, rgba(0,0,0,.28) 34%, rgba(0,0,0,.70) 82%, rgba(5,7,10,.98) 100%),
-    linear-gradient(90deg, rgba(3,6,8,.78) 0%, rgba(3,6,8,.22) 48%, rgba(3,6,8,.42) 100%),
-    url('/training-images/routes-hero-mobile.png') !important;
-  background-position: center 38% !important;
+.route-osm-card-map {
+  position: relative;
+  display: block;
+  height: 230px;
+  min-height: 230px;
+  overflow: hidden;
+  background: #071008;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-decoration: none;
 }
 
-.route-feed-multisport-layout .training-dashboard.route-dashboard {
-  margin-top: 70px !important;
-  gap: 0 !important;
+.route-osm-card-map .leaflet-container {
+  background: #071008;
 }
 
-.route-feed-multisport-layout .training-dashboard-top {
-  align-items: center !important;
+.route-osm-card-map::after {
+  content: "OSM";
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 5;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(230,255,0,0.22);
+  background: rgba(4,7,8,0.72);
+  color: rgba(230,255,0,0.94);
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(10px);
 }
 
-.route-feed-multisport-layout .training-greeting {
-  font-size: clamp(28px, 7.5vw, 40px) !important;
-  max-width: 300px !important;
+.route-osm-card-body {
+  display: grid;
+  gap: 11px;
+  padding: 18px 20px 22px;
+  color: white;
+  text-decoration: none;
 }
 
-.route-feed-multisport-layout .training-subline {
-  font-size: clamp(22px, 6.1vw, 32px) !important;
-  max-width: 295px !important;
+.route-osm-card-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.route-feed-multisport-layout .training-create-compact {
-  min-height: 54px !important;
-  padding-inline: clamp(18px, 4.7vw, 26px) !important;
-  font-size: clamp(14px, 3.8vw, 19px) !important;
+.route-osm-arrow {
+  width: 43px;
+  height: 43px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(255,255,255,0.08);
+  color: var(--endurance-lime);
+  font-size: 22px;
+  font-weight: 1000;
+  flex: 0 0 auto;
 }
 
-.route-feed-multisport-layout .training-metric-row,
-.route-feed-multisport-layout .route-metric-row {
-  display: none !important;
+.route-osm-title {
+  margin: 0;
+  color: white;
+  font-size: clamp(34px, 9vw, 52px);
+  line-height: 0.94;
+  font-weight: 1000;
+  letter-spacing: -0.075em;
+  overflow-wrap: anywhere;
 }
 
-.route-feed-controls {
-  margin-top: 14px !important;
+.route-osm-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: rgba(255,255,255,0.76);
+  font-size: 20px;
+  font-weight: 1000;
 }
 
-.route-feed-controls .feed-search {
-  margin-top: 0 !important;
-  min-height: 62px !important;
+.route-osm-meta-row i {
+  width: 1px;
+  height: 20px;
+  background: rgba(255,255,255,0.16);
+  display: inline-block;
 }
 
-.route-feed-controls .premium-tabs-row {
-  margin-top: 14px !important;
+.route-osm-submeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 16px;
+  color: rgba(255,255,255,0.58);
+  font-size: 15px;
+  font-weight: 900;
 }
 
-.route-feed-controls .route-tabs {
-  gap: 10px !important;
-  padding: 0 0 4px !important;
-}
-
-.route-feed-controls .route-tabs button {
-  min-height: 50px !important;
-  padding: 0 20px !important;
-  font-size: 15px !important;
-}
-
-.route-feed-stack {
-  margin-top: 14px !important;
-  gap: 14px !important;
-}
-
-.route-feed-card-premium {
-  text-decoration: none !important;
-  color: inherit !important;
-  grid-template-columns: 168px minmax(0, 1fr) !important;
-  min-height: 206px !important;
-  padding: 16px !important;
-  border-radius: 32px !important;
-  transition: transform .18s ease, border-color .18s ease, background .18s ease;
-}
-
-.route-feed-card-premium:active {
-  transform: scale(.985);
-}
-
-.route-feed-map {
-  min-height: 190px !important;
-  height: 190px !important;
-  border-radius: 25px !important;
-}
-
-.route-feed-content {
-  gap: 10px !important;
-  align-content: center !important;
-}
-
-.route-feed-title {
-  font-size: clamp(28px, 7.2vw, 38px) !important;
-}
-
-.route-feed-stats {
-  font-size: 16px !important;
-  color: rgba(255,255,255,.74) !important;
-}
-
-.route-feed-elevation,
-.route-feed-place {
-  color: rgba(255,255,255,.56) !important;
-  font-size: 14px !important;
-}
-
-.route-feed-more {
-  display: inline-grid !important;
-  place-items: center !important;
-  width: 34px !important;
-  height: 34px !important;
-  border-radius: 999px !important;
-  background: rgba(255,255,255,.07) !important;
-  color: var(--endurance-lime) !important;
-  letter-spacing: 0 !important;
-  transform: none !important;
-}
-
-.route-feed-actions,
-.route-feed-open {
-  display: none !important;
+/* Hide the old route-card layout if older markup remains cached during deploy. */
+.route-feed-card-premium .route-feed-actions,
+.route-feed-card-premium .route-feed-open {
+  display: none;
 }
 
 @media (max-width: 520px) {
-  .route-feed-multisport-layout {
-    --feed-hero-height: 455px;
+  .route-osm-card {
+    border-radius: 30px;
   }
 
-  .route-feed-multisport-layout .training-dashboard.route-dashboard {
-    margin-top: 76px !important;
+  .route-osm-card-map {
+    height: 210px;
+    min-height: 210px;
   }
 
-  .route-feed-card-premium {
-    grid-template-columns: 1fr !important;
-    gap: 14px !important;
-    min-height: 0 !important;
-    padding: 14px !important;
+  .route-osm-card-body {
+    padding: 17px 18px 20px;
+    gap: 10px;
   }
 
-  .route-feed-map {
-    min-height: 210px !important;
-    height: 210px !important;
-    border-radius: 26px !important;
+  .route-osm-title {
+    font-size: clamp(34px, 12vw, 47px);
   }
 
-  .route-feed-content {
-    padding: 0 4px 4px !important;
-    align-content: start !important;
-  }
-
-  .route-feed-top {
-    align-items: center !important;
-  }
-
-  .route-feed-title {
-    font-size: clamp(34px, 9.5vw, 44px) !important;
-    max-width: 92% !important;
+  .route-osm-meta-row {
+    font-size: 19px;
   }
 }
 
-@media (max-width: 390px) {
-  .route-feed-multisport-layout {
-    --feed-hero-height: 440px;
+@media (max-width: 380px) {
+  .route-osm-card-map {
+    height: 190px;
+    min-height: 190px;
   }
 
-  .route-feed-multisport-layout .training-dashboard.route-dashboard {
-    margin-top: 68px !important;
-  }
-
-  .route-feed-multisport-layout .training-dashboard-top {
-    gap: 10px !important;
-  }
-
-  .route-feed-multisport-layout .training-create-compact {
-    min-height: 50px !important;
-    padding-inline: 16px !important;
+  .route-osm-title {
+    font-size: 34px;
   }
 }
