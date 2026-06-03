@@ -1,0 +1,8 @@
+
+Replace filter layout with:
+
+Row 1: All | My | Team | Groups
+Row 2: Sport dropdown (preferred sports only) + Upcoming | Flexible
+
+Reduce chip height from ~56px to ~42px.
+Reduce vertical spacing between search and filters.
