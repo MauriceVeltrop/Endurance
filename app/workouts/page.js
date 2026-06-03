@@ -31,12 +31,17 @@ function matchesSearch(workout, search) {
   return haystack.includes(search.toLowerCase());
 }
 
-function matchesTab(workout, activeTab) {
-  if (activeTab === "all") return true;
-  if (activeTab === "my") return workout._isOwnWorkout;
-  if (activeTab === "public") return workout.visibility === "public";
-  if (activeTab === "strength") return workout.sport_id === "strength_training" || workout.workout_type === "strength";
-  return workout.sport_id === activeTab;
+const workoutSportIds = ["strength_training", "hyrox", "crossfit", "bootcamp"];
+
+function matchesFilters(workout, ownershipFilter, sportFilter, visibilityFilter) {
+  if (ownershipFilter === "my" && !workout._isOwnWorkout) return false;
+  if (ownershipFilter === "team" && (workout._isOwnWorkout || workout.visibility !== "team")) return false;
+  if (ownershipFilter === "groups" && workout.visibility !== "group") return false;
+
+  if (sportFilter !== "all" && workout.sport_id !== sportFilter) return false;
+  if (visibilityFilter !== "all" && workout.visibility !== visibilityFilter) return false;
+
+  return true;
 }
 
 function firstNameFromProfile(profile) {
@@ -63,7 +68,9 @@ export default function WorkoutsPage() {
   const [profile, setProfile] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [preferredSportIds, setPreferredSportIds] = useState([]);
-  const [activeTab, setActiveTab] = useState("all");
+  const [ownershipFilter, setOwnershipFilter] = useState("all");
+  const [sportFilter, setSportFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -154,29 +161,42 @@ export default function WorkoutsPage() {
     loadWorkouts();
   }, []);
 
-  const strengthCount = workouts.filter((workout) => workout.sport_id === "strength_training" || workout.workout_type === "strength").length;
-  const ownWorkoutCount = workouts.filter((workout) => workout._isOwnWorkout).length;
   const totalExercises = workouts.reduce((sum, workout) => sum + workoutSummary(workout).exerciseCount, 0);
   const totalSets = workouts.reduce((sum, workout) => sum + workoutSummary(workout).setCount, 0);
+  const muscleGroupCount = new Set(
+    workouts.flatMap((workout) => {
+      const groups = workout?.structure?.muscle_groups;
+      return Array.isArray(groups) ? groups.filter(Boolean) : [];
+    })
+  ).size;
 
-  const tabs = useMemo(() => {
-    const sportTabs = preferredSportIds
-      .filter((sportId) => sportId !== "strength_training")
-      .slice(0, 2)
-      .map((sportId) => ({ id: sportId, label: getSportLabel(sportId) }));
+  const ownershipTabs = [
+    { id: "all", label: "All" },
+    { id: "my", label: "My" },
+    { id: "team", label: "Team" },
+    { id: "groups", label: "Groups" },
+  ];
+
+  const sportTabs = useMemo(() => {
+    const preferredWorkoutSports = preferredSportIds.filter((sportId) => workoutSportIds.includes(sportId));
+    const fallbackSports = preferredWorkoutSports.length ? preferredWorkoutSports : ["strength_training", "hyrox", "crossfit", "bootcamp"];
 
     return [
-      { id: "all", label: "All workouts" },
-      { id: "strength", label: "Strength" },
-      { id: "my", label: "My workouts" },
-      { id: "public", label: "Public" },
-      ...sportTabs,
+      { id: "all", label: "All types" },
+      ...fallbackSports.map((sportId) => ({ id: sportId, label: getSportLabel(sportId) })),
     ];
   }, [preferredSportIds]);
 
+  const visibilityTabs = [
+    { id: "all", label: "All visibility" },
+    { id: "public", label: "Public" },
+    { id: "team", label: "Team" },
+    { id: "private", label: "Private" },
+  ];
+
   const filteredWorkouts = workouts
     .filter((workout) => matchesSearch(workout, search))
-    .filter((workout) => matchesTab(workout, activeTab));
+    .filter((workout) => matchesFilters(workout, ownershipFilter, sportFilter, visibilityFilter));
 
   return (
     <main className="endurance-page workout-feed-page training-feed-multisport-hero">
@@ -203,11 +223,6 @@ export default function WorkoutsPage() {
               <small>Workouts</small>
             </div>
             <div className="training-metric-tile">
-              <span>🏋</span>
-              <strong>{loading ? "…" : strengthCount}</strong>
-              <small>Strength</small>
-            </div>
-            <div className="training-metric-tile">
               <span>▤</span>
               <strong>{loading ? "…" : totalExercises}</strong>
               <small>Exercises</small>
@@ -216,6 +231,11 @@ export default function WorkoutsPage() {
               <span>☰</span>
               <strong>{loading ? "…" : totalSets}</strong>
               <small>Sets</small>
+            </div>
+            <div className="training-metric-tile">
+              <span>💪</span>
+              <strong>{loading ? "…" : muscleGroupCount}</strong>
+              <small>Groups</small>
             </div>
           </div>
         </section>
@@ -231,31 +251,45 @@ export default function WorkoutsPage() {
           />
         </label>
 
-        <div className="premium-tabs-row route-tabs-row">
-          <div className="training-tabs route-tabs">
-            {tabs.map((tab) => (
+        <div className="workout-filter-stack">
+          <div className="training-tabs route-tabs workout-filter-row" aria-label="Workout ownership filter">
+            {ownershipTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                className={activeTab === tab.id ? "active" : ""}
-                onClick={() => setActiveTab(tab.id)}
+                className={ownershipFilter === tab.id ? "active" : ""}
+                onClick={() => setOwnershipFilter(tab.id)}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-          <select
-            value={activeTab}
-            onChange={(event) => setActiveTab(event.target.value)}
-            className="feed-select-pill"
-            aria-label="Workout filter"
-          >
-            {tabs.map((tab) => (
-              <option key={tab.id} value={tab.id}>
+
+          <div className="training-tabs route-tabs workout-filter-row" aria-label="Workout type filter">
+            {sportTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={sportFilter === tab.id ? "active" : ""}
+                onClick={() => setSportFilter(tab.id)}
+              >
                 {tab.label}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
+
+          <div className="training-tabs route-tabs workout-filter-row workout-filter-row-secondary" aria-label="Workout visibility filter">
+            {visibilityTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={visibilityFilter === tab.id ? "active" : ""}
+                onClick={() => setVisibilityFilter(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
