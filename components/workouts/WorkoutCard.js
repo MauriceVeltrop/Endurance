@@ -12,14 +12,28 @@ function summarizeWorkout(workout) {
     0
   );
   const muscleGroups = Array.isArray(structure.muscle_groups) ? structure.muscle_groups : [];
+  const muscleLabels = muscleGroups.map(getMuscleGroupLabel).filter(Boolean);
+  const previewExercises = exercises
+    .slice(0, 3)
+    .map((exercise) => exercise.name)
+    .filter(Boolean);
 
   return {
     exercises,
     exerciseCount: exercises.length,
     setCount,
-    muscleGroups: muscleGroups.map(getMuscleGroupLabel).join(" · "),
-    previewExercises: exercises.slice(0, 4).map((exercise) => exercise.name).filter(Boolean).join(" · "),
+    muscleLabels,
+    previewExercises,
+    moreCount: Math.max(0, exercises.length - previewExercises.length),
   };
+}
+
+function getWorkoutImageClass(workout) {
+  const sportId = workout?.sport_id || "strength_training";
+  if (sportId === "hyrox") return "hyrox";
+  if (sportId === "crossfit") return "crossfit";
+  if (sportId === "bootcamp") return "bootcamp";
+  return "strength";
 }
 
 export default function WorkoutCard({ workout }) {
@@ -27,43 +41,53 @@ export default function WorkoutCard({ workout }) {
 
   const href = `/workouts/${workout.id}`;
   const summary = summarizeWorkout(workout);
+  const title = workout.title || "Strength Workout";
 
   return (
-    <article className="workout-feed-card route-feed-card-premium">
-      <Link href={href} className="workout-feed-icon" aria-label={workout.title || "Open workout"}>
-        <span>▦</span>
-        <b>{summary.exerciseCount || 0}</b>
-        <small>Exercises</small>
+    <article className="workout-card-v2">
+      <Link href={href} className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-label={title}>
+        <span>{getSportLabel(workout.sport_id)}</span>
       </Link>
 
-      <div className="route-feed-content">
-        <div className="route-feed-top">
-          <div className="route-feed-badges">
-            <span className="sport-badge">{getSportLabel(workout.sport_id)}</span>
-            <span className="status-badge">{workout.visibility}</span>
-          </div>
-          <span className="route-feed-more">•••</span>
+      <div className="workout-card-v2-body">
+        <div className="workout-card-v2-topline">
+          <span className="sport-badge">{getSportLabel(workout.sport_id)}</span>
+          <span className="status-badge">{workout.visibility || "team"}</span>
         </div>
 
-        <Link href={href} className="route-feed-title">
-          {workout.title || "Strength Workout"}
+        <Link href={href} className="workout-card-v2-title">
+          {title}
         </Link>
 
-        <div className="route-feed-stats">
-          <span>▤ {summary.exerciseCount ? `${summary.exerciseCount} exercises` : "No exercises"}</span>
+        <div className="workout-card-v2-meta">
+          <span>{summary.exerciseCount || 0} exercises</span>
           <i />
-          <span>☰ {summary.setCount ? `${summary.setCount} sets` : "No sets"}</span>
+          <span>{summary.setCount || 0} sets</span>
         </div>
 
-        <span className="route-feed-elevation">
-          {summary.muscleGroups || "Muscle groups not set"}
-        </span>
-        <span className="route-feed-place">
-          {summary.previewExercises || workout.description || "Reusable workout structure"}
-        </span>
+        {summary.muscleLabels.length ? (
+          <div className="workout-card-v2-muscles">
+            {summary.muscleLabels.slice(0, 4).map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        ) : null}
 
-        <div className="route-feed-actions">
-          <Link href={href} className="route-feed-open">
+        <div className="workout-card-v2-exercises">
+          {summary.previewExercises.length ? (
+            <>
+              {summary.previewExercises.map((name) => (
+                <span key={name}>{name}</span>
+              ))}
+              {summary.moreCount ? <b>+{summary.moreCount} more exercises</b> : null}
+            </>
+          ) : (
+            <span>{workout.description || "Reusable workout structure"}</span>
+          )}
+        </div>
+
+        <div className="workout-card-v2-footer">
+          <Link href={href} className="workout-card-v2-open">
             Open workout <span>→</span>
           </Link>
         </div>
