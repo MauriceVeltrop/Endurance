@@ -557,19 +557,17 @@ export default function NewWorkoutPage() {
                 <div style={styles.cardKicker}>Step 1</div>
                 <h2 style={styles.cardTitle}>Choose sport</h2>
                 <div style={styles.sportGrid}>
-                  {workoutSportIds.map((id) => {
-                    const allowed = availableWorkoutSports.includes(id);
+                  {availableWorkoutSports.map((id) => {
                     const active = form.sport_id === id;
                     return (
                       <button
                         key={id}
                         type="button"
-                        disabled={!allowed}
                         onClick={() => updateForm("sport_id", id)}
-                        style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}), ...(!allowed ? styles.choiceButtonDisabled : {}) }}
+                        style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}) }}
                       >
                         <strong>{getSportLabel(id)}</strong>
-                        <span>{allowed ? "Preferred sport" : "Add to preferred sports first"}</span>
+                        <span>Preferred sport</span>
                       </button>
                     );
                   })}
