@@ -220,8 +220,8 @@ export default function WorkoutsPage() {
           />
         </label>
 
-        <div className="workout-filter-stack">
-          <div className="training-tabs route-tabs workout-filter-row" aria-label="Workout ownership filter">
+        <div className="workout-filter-stack workout-filter-stack-single">
+          <div className="training-tabs route-tabs workout-filter-row workout-filter-row-single" aria-label="Workout filters">
             {ownershipTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -232,18 +232,18 @@ export default function WorkoutsPage() {
                 {tab.label}
               </button>
             ))}
-          </div>
 
-          <label className="workout-type-select" aria-label="Workout type filter">
-            <span>Type</span>
-            <select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>
-              {sportTabs.map((tab) => (
-                <option key={tab.id} value={tab.id}>
-                  {tab.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <label className="workout-type-select" aria-label="Workout type filter">
+              <span>Type</span>
+              <select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>
+                {sportTabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </section>
 
