@@ -33,6 +33,14 @@ function matchesSearch(workout, search) {
 
 const workoutSportIds = ["strength_training", "hyrox", "crossfit", "bootcamp"];
 
+function getWorkoutTypeLabel(sportId) {
+  if (sportId === "strength_training") return "Strength";
+  if (sportId === "hyrox") return "HYROX";
+  if (sportId === "crossfit") return "CrossFit";
+  if (sportId === "bootcamp") return "Bootcamp";
+  return getSportLabel(sportId);
+}
+
 function matchesFilters(workout, ownershipFilter, sportFilter) {
   if (ownershipFilter === "my" && !workout._isOwnWorkout) return false;
   if (ownershipFilter === "team" && (workout._isOwnWorkout || workout.visibility !== "team")) return false;
@@ -173,7 +181,7 @@ export default function WorkoutsPage() {
 
     return [
       { id: "all", label: "All types" },
-      ...fallbackSports.map((sportId) => ({ id: sportId, label: getSportLabel(sportId) })),
+      ...fallbackSports.map((sportId) => ({ id: sportId, label: getWorkoutTypeLabel(sportId) })),
     ];
   }, [preferredSportIds]);
 
@@ -192,7 +200,7 @@ export default function WorkoutsPage() {
             <div>
               <p className="training-greeting">{getGreeting()}, {firstNameFromProfile(profile)}</p>
               <p className="training-subline">
-                <strong>{filteredWorkouts.length}</strong> workout{filteredWorkouts.length === 1 ? "" : "s"} ready for your sports
+                <strong>{filteredWorkouts.length}</strong> workout{filteredWorkouts.length === 1 ? "" : "s"} in your library
               </p>
             </div>
             <Link href="/workouts/new" className="primary-action route-create-hero-btn workout-create-hero-btn">
@@ -226,18 +234,16 @@ export default function WorkoutsPage() {
             ))}
           </div>
 
-          <div className="training-tabs route-tabs workout-filter-row" aria-label="Workout type filter">
-            {sportTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={sportFilter === tab.id ? "active" : ""}
-                onClick={() => setSportFilter(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <label className="workout-type-select" aria-label="Workout type filter">
+            <span>Type</span>
+            <select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>
+              {sportTabs.map((tab) => (
+                <option key={tab.id} value={tab.id}>
+                  {tab.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 
