@@ -33,13 +33,12 @@ function matchesSearch(workout, search) {
 
 const workoutSportIds = ["strength_training", "hyrox", "crossfit", "bootcamp"];
 
-function matchesFilters(workout, ownershipFilter, sportFilter, visibilityFilter) {
+function matchesFilters(workout, ownershipFilter, sportFilter) {
   if (ownershipFilter === "my" && !workout._isOwnWorkout) return false;
   if (ownershipFilter === "team" && (workout._isOwnWorkout || workout.visibility !== "team")) return false;
   if (ownershipFilter === "groups" && workout.visibility !== "group") return false;
 
   if (sportFilter !== "all" && workout.sport_id !== sportFilter) return false;
-  if (visibilityFilter !== "all" && workout.visibility !== visibilityFilter) return false;
 
   return true;
 }
@@ -70,7 +69,6 @@ export default function WorkoutsPage() {
   const [preferredSportIds, setPreferredSportIds] = useState([]);
   const [ownershipFilter, setOwnershipFilter] = useState("all");
   const [sportFilter, setSportFilter] = useState("all");
-  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -161,14 +159,6 @@ export default function WorkoutsPage() {
     loadWorkouts();
   }, []);
 
-  const totalExercises = workouts.reduce((sum, workout) => sum + workoutSummary(workout).exerciseCount, 0);
-  const totalSets = workouts.reduce((sum, workout) => sum + workoutSummary(workout).setCount, 0);
-  const muscleGroupCount = new Set(
-    workouts.flatMap((workout) => {
-      const groups = workout?.structure?.muscle_groups;
-      return Array.isArray(groups) ? groups.filter(Boolean) : [];
-    })
-  ).size;
 
   const ownershipTabs = [
     { id: "all", label: "All" },
@@ -187,16 +177,10 @@ export default function WorkoutsPage() {
     ];
   }, [preferredSportIds]);
 
-  const visibilityTabs = [
-    { id: "all", label: "All visibility" },
-    { id: "public", label: "Public" },
-    { id: "team", label: "Team" },
-    { id: "private", label: "Private" },
-  ];
 
   const filteredWorkouts = workouts
     .filter((workout) => matchesSearch(workout, search))
-    .filter((workout) => matchesFilters(workout, ownershipFilter, sportFilter, visibilityFilter));
+    .filter((workout) => matchesFilters(workout, ownershipFilter, sportFilter));
 
   return (
     <main className="endurance-page workout-feed-page training-feed-multisport-hero">
@@ -214,29 +198,6 @@ export default function WorkoutsPage() {
             <Link href="/workouts/new" className="primary-action route-create-hero-btn workout-create-hero-btn">
               + Create workout
             </Link>
-          </div>
-
-          <div className="training-metric-row route-metric-row">
-            <div className="training-metric-tile">
-              <span>▦</span>
-              <strong>{loading ? "…" : workouts.length}</strong>
-              <small>Workouts</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>▤</span>
-              <strong>{loading ? "…" : totalExercises}</strong>
-              <small>Exercises</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>☰</span>
-              <strong>{loading ? "…" : totalSets}</strong>
-              <small>Sets</small>
-            </div>
-            <div className="training-metric-tile">
-              <span>💪</span>
-              <strong>{loading ? "…" : muscleGroupCount}</strong>
-              <small>Groups</small>
-            </div>
           </div>
         </section>
       </section>
@@ -272,19 +233,6 @@ export default function WorkoutsPage() {
                 type="button"
                 className={sportFilter === tab.id ? "active" : ""}
                 onClick={() => setSportFilter(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="training-tabs route-tabs workout-filter-row workout-filter-row-secondary" aria-label="Workout visibility filter">
-            {visibilityTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={visibilityFilter === tab.id ? "active" : ""}
-                onClick={() => setVisibilityFilter(tab.id)}
               >
                 {tab.label}
               </button>
