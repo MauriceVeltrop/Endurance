@@ -34,14 +34,12 @@ export default function WorkoutCard({ workout }) {
 
   const href = `/workouts/${workout.id}`;
   const summary = summarizeWorkout(workout);
-  const title = workout.title || "Strength Workout";
+  const title = workout.title || "Workout";
   const sportLabel = getSportLabel(workout.sport_id);
 
   return (
     <Link href={href} className="workout-card-v2 workout-card-clickable" aria-label={`Open ${title}`}>
-      <div className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-hidden="true">
-        <span>{sportLabel}</span>
-      </div>
+      <div className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-hidden="true" />
 
       <div className="workout-card-v2-body">
         <div className="workout-card-v2-topline">
@@ -65,7 +63,7 @@ export default function WorkoutCard({ workout }) {
 
         {summary.muscleLabels.length ? (
           <div className="workout-card-v2-muscles">
-            {summary.muscleLabels.slice(0, 4).map((label) => (
+            {summary.muscleLabels.slice(0, 3).map((label) => (
               <span key={label}>{label}</span>
             ))}
           </div>
