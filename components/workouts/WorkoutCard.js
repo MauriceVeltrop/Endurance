@@ -13,18 +13,11 @@ function summarizeWorkout(workout) {
   );
   const muscleGroups = Array.isArray(structure.muscle_groups) ? structure.muscle_groups : [];
   const muscleLabels = muscleGroups.map(getMuscleGroupLabel).filter(Boolean);
-  const previewExercises = exercises
-    .slice(0, 3)
-    .map((exercise) => exercise.name)
-    .filter(Boolean);
 
   return {
-    exercises,
     exerciseCount: exercises.length,
     setCount,
     muscleLabels,
-    previewExercises,
-    moreCount: Math.max(0, exercises.length - previewExercises.length),
   };
 }
 
@@ -42,27 +35,32 @@ export default function WorkoutCard({ workout }) {
   const href = `/workouts/${workout.id}`;
   const summary = summarizeWorkout(workout);
   const title = workout.title || "Strength Workout";
+  const sportLabel = getSportLabel(workout.sport_id);
 
   return (
-    <article className="workout-card-v2">
-      <Link href={href} className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-label={title}>
-        <span>{getSportLabel(workout.sport_id)}</span>
-      </Link>
+    <Link href={href} className="workout-card-v2 workout-card-clickable" aria-label={`Open ${title}`}>
+      <div className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-hidden="true">
+        <span>{sportLabel}</span>
+      </div>
 
       <div className="workout-card-v2-body">
         <div className="workout-card-v2-topline">
-          <span className="sport-badge">{getSportLabel(workout.sport_id)}</span>
+          <span className="sport-badge">{sportLabel}</span>
           <span className="status-badge">{workout.visibility || "team"}</span>
         </div>
 
-        <Link href={href} className="workout-card-v2-title">
-          {title}
-        </Link>
+        <h2 className="workout-card-v2-title">{title}</h2>
 
         <div className="workout-card-v2-meta">
           <span>{summary.exerciseCount || 0} exercises</span>
           <i />
           <span>{summary.setCount || 0} sets</span>
+          {summary.muscleLabels.length ? (
+            <>
+              <i />
+              <span>{summary.muscleLabels.length} groups</span>
+            </>
+          ) : null}
         </div>
 
         {summary.muscleLabels.length ? (
@@ -72,26 +70,9 @@ export default function WorkoutCard({ workout }) {
             ))}
           </div>
         ) : null}
-
-        <div className="workout-card-v2-exercises">
-          {summary.previewExercises.length ? (
-            <>
-              {summary.previewExercises.map((name) => (
-                <span key={name}>{name}</span>
-              ))}
-              {summary.moreCount ? <b>+{summary.moreCount} more exercises</b> : null}
-            </>
-          ) : (
-            <span>{workout.description || "Reusable workout structure"}</span>
-          )}
-        </div>
-
-        <div className="workout-card-v2-footer">
-          <Link href={href} className="workout-card-v2-open">
-            Open workout <span>→</span>
-          </Link>
-        </div>
       </div>
-    </article>
+
+      <span className="workout-card-v2-arrow" aria-hidden="true">→</span>
+    </Link>
   );
 }
