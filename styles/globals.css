@@ -10849,3 +10849,118 @@ main {
     font-size: 12px;
   }
 }
+
+
+/* =====================================================
+   WORKOUTS PAGE - TYPE SELECT + CLEANER CARDS
+   2026-06: compact filters, stronger thumbnail, less duplicate data
+===================================================== */
+.workout-feed-page .training-subline {
+  max-width: 250px !important;
+}
+
+.workout-feed-page .workout-filter-stack {
+  gap: 7px !important;
+}
+
+.workout-feed-page .workout-filter-row button {
+  min-height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  border-radius: 16px !important;
+}
+
+.workout-type-select {
+  width: max-content;
+  max-width: min(100%, 260px);
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 0 12px 0 14px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.13);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.workout-type-select span {
+  color: var(--endurance-lime);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.workout-type-select select {
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 1000;
+  min-width: 110px;
+  padding: 0 14px 0 0;
+}
+
+.workout-type-select::after {
+  content: "⌄";
+  color: rgba(255,255,255,.75);
+  margin-left: -18px;
+  pointer-events: none;
+  font-weight: 900;
+}
+
+.workout-card-v2.workout-card-clickable {
+  grid-template-columns: 118px minmax(0, 1fr) 18px !important;
+  min-height: 128px !important;
+  gap: 12px !important;
+}
+
+.workout-card-clickable .workout-card-v2-hero {
+  min-height: 116px !important;
+}
+
+.workout-card-clickable .status-badge {
+  opacity: .72 !important;
+  transform: scale(.92);
+  transform-origin: left center;
+}
+
+.workout-card-clickable .sport-badge {
+  font-size: 10.5px !important;
+  padding: 5px 8px !important;
+}
+
+.workout-card-clickable .workout-card-v2-title {
+  font-size: clamp(23px, 6.4vw, 31px) !important;
+  line-height: .98 !important;
+}
+
+.workout-card-clickable .workout-card-v2-meta {
+  font-size: 12px !important;
+  gap: 6px !important;
+}
+
+.workout-card-v2-arrow {
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 12px !important;
+  opacity: .85;
+}
+
+@media (max-width: 430px) {
+  .workout-card-v2.workout-card-clickable {
+    grid-template-columns: 112px minmax(0, 1fr) 18px !important;
+    min-height: 124px !important;
+  }
+
+  .workout-card-clickable .workout-card-v2-hero {
+    min-height: 112px !important;
+  }
+
+  .workout-card-clickable .workout-card-v2-title {
+    font-size: 27px !important;
+  }
+}
