@@ -239,6 +239,29 @@ function supportsWorkoutPreview(training) {
   return sports.some((sport) => workoutSportIds.has(sport));
 }
 
+function formatDurationMinutes(value) {
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "—";
+  return `${Math.round(minutes)} min`;
+}
+
+function getWorkoutDisplayLabel(training, workout) {
+  if (workout?.sport_id) return getSportLabel(workout.sport_id);
+  const primary = getPrimarySport(training);
+  return getSportLabel(primary);
+}
+
+function getWorkoutIntensityLabel(training, workout) {
+  if (training?.intensity_label) return training.intensity_label;
+  if (workout?.level) return workout.level;
+  if (training?.heart_rate_zone) return training.heart_rate_zone;
+  return "—";
+}
+
+function getWorkoutDurationLabel(training, workout) {
+  return formatDurationMinutes(workout?.duration_min || training?.estimated_duration_min);
+}
+
 function getWorkoutBlockCount(workout) {
   const exercises = workout?.structure?.exercises;
   if (Array.isArray(exercises)) return exercises.length;
@@ -420,6 +443,8 @@ export default function TrainingDetailPage() {
   const isFull = Boolean(training?.max_participants && participantCount >= Number(training.max_participants));
   const canManage = Boolean(user?.id && training?.creator_id === user.id);
   const heroImage = getTrainingHeroImage(training, primarySport);
+  const isWorkoutBasedTraining = supportsWorkoutPreview(training);
+  const isRouteBasedTraining = supportsRoutePreview(training) && !isWorkoutBasedTraining;
 
   useEffect(() => {
     loadTraining();
@@ -1108,7 +1133,7 @@ export default function TrainingDetailPage() {
                   ) : null}
                 </div>
               </section>
-            ) : supportsRoutePreview(training) ? (
+            ) : isRouteBasedTraining ? (
               <section style={styles.routeHeroCardV3}>
                 <div style={styles.cardKicker}>Route</div>
                 <h2 style={styles.routeTitle}>No route added yet</h2>
@@ -1170,14 +1195,31 @@ export default function TrainingDetailPage() {
                 <span>◷ Time</span>
                 <strong>{formatTime(training)}</strong>
               </div>
-              <div style={styles.infoItemV3}>
-                <span>▥ Distance</span>
-                <strong>{route?.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km` : "—"}</strong>
-              </div>
-              <div style={styles.infoItemV3}>
-                <span>△ Elevation</span>
-                <strong>{route?.elevation_gain_m ? `${route.elevation_gain_m} m+` : "—"}</strong>
-              </div>
+
+              {isWorkoutBasedTraining ? (
+                <>
+                  <div style={styles.infoItemV3}>
+                    <span>▦ Workout</span>
+                    <strong>{getWorkoutDisplayLabel(training, workout)}</strong>
+                  </div>
+                  <div style={styles.infoItemV3}>
+                    <span>◉ Intensity</span>
+                    <strong>{getWorkoutIntensityLabel(training, workout)}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={styles.infoItemV3}>
+                    <span>▥ Distance</span>
+                    <strong>{route?.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km` : "—"}</strong>
+                  </div>
+                  <div style={styles.infoItemV3}>
+                    <span>△ Elevation</span>
+                    <strong>{route?.elevation_gain_m ? `${route.elevation_gain_m} m+` : "—"}</strong>
+                  </div>
+                </>
+              )}
+
               <div style={styles.infoItemV3}>
                 <span>♚ Joined</span>
                 <strong>{participantCount}{training.max_participants ? ` / ${training.max_participants}` : ""}</strong>
