@@ -10964,3 +10964,62 @@ main {
     font-size: 27px !important;
   }
 }
+
+/* =====================================================
+   WORKOUTS PAGE - SINGLE LINE COMPACT FILTER BAR
+   2026-06: All / My / Team / Groups / Type in one row
+===================================================== */
+.workout-feed-page .workout-filter-stack-single {
+  display: block !important;
+  margin-top: 8px !important;
+}
+
+.workout-feed-page .workout-filter-row-single {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 7px !important;
+  overflow-x: auto !important;
+  padding: 0 0 4px !important;
+  scrollbar-width: none !important;
+}
+
+.workout-feed-page .workout-filter-row-single::-webkit-scrollbar {
+  display: none !important;
+}
+
+.workout-feed-page .workout-filter-row-single button {
+  flex: 0 0 auto !important;
+  min-height: 30px !important;
+  padding: 0 11px !important;
+  border-radius: 15px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.workout-feed-page .workout-filter-row-single .workout-type-select {
+  flex: 0 0 auto !important;
+  min-height: 30px !important;
+  max-width: 154px !important;
+  padding: 0 10px 0 11px !important;
+  gap: 7px !important;
+  border-radius: 15px !important;
+  margin: 0 !important;
+}
+
+.workout-feed-page .workout-filter-row-single .workout-type-select span {
+  font-size: 9px !important;
+  letter-spacing: .07em !important;
+}
+
+.workout-feed-page .workout-filter-row-single .workout-type-select select {
+  min-width: 74px !important;
+  max-width: 96px !important;
+  font-size: 11px !important;
+  padding-right: 12px !important;
+}
+
+.workout-feed-page .workout-filter-row-single .workout-type-select::after {
+  margin-left: -15px !important;
+  font-size: 12px !important;
+}
