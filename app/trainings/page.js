@@ -181,8 +181,6 @@ export default function TrainingsPage() {
     load();
   }, []);
 
-  const now = Date.now();
-
   const currentUserId = profile?.id;
 
   const filtered = trainings
@@ -205,16 +203,6 @@ export default function TrainingsPage() {
     });
 
   const needsDecision = trainings.find((training) => training.planning_type === "flexible" && !training.final_starts_at);
-  const startingSoon = trainings.filter((training) => {
-    const value = training.final_starts_at || training.starts_at;
-    if (!value) return false;
-    const time = new Date(value).getTime();
-    return time >= now && time <= now + 72 * 60 * 60 * 1000;
-  }).length;
-
-  const prepared = trainings.filter((training) => training.route_id || training.workout_id).length;
-  const teamSessions = trainings.filter((training) => training.visibility === "team" || training.visibility === "selected").length;
-
   const matchingSessions = filtered.length;
 
   return (
@@ -256,28 +244,27 @@ export default function TrainingsPage() {
           </FilterChip>
         </div>
 
-        <div className="training-filter-group sport-filter-group" aria-label="Preferred sport filters">
-          <FilterChip active={sportFilter === "all"} onClick={() => setSportFilter("all")}>
-            All Sports
-          </FilterChip>
-          {preferredSports.map((sportId) => (
-            <FilterChip
-              key={sportId}
-              active={sportFilter === sportId}
-              onClick={() => setSportFilter(sportId)}
-            >
-              {getSportLabel(sportId)}
-            </FilterChip>
-          ))}
-        </div>
+        <div className="training-filter-secondary-row">
+          <label className="training-sport-select" aria-label="Preferred sport filter">
+            <span>Sport</span>
+            <select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>
+              <option value="all">All Sports</option>
+              {preferredSports.map((sportId) => (
+                <option key={sportId} value={sportId}>
+                  {getSportLabel(sportId)}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div className="training-filter-group compact-filter-group" aria-label="Planning filters">
-          <FilterChip active={planningFilter === "upcoming"} onClick={() => setPlanningFilter("upcoming")}>
-            Upcoming
-          </FilterChip>
-          <FilterChip active={planningFilter === "flexible"} onClick={() => setPlanningFilter("flexible")}>
-            Flexible
-          </FilterChip>
+          <div className="training-filter-group compact-filter-group" aria-label="Planning filters">
+            <FilterChip active={planningFilter === "upcoming"} onClick={() => setPlanningFilter("upcoming")}>
+              Upcoming
+            </FilterChip>
+            <FilterChip active={planningFilter === "flexible"} onClick={() => setPlanningFilter("flexible")}>
+              Flexible
+            </FilterChip>
+          </div>
         </div>
       </section>
 
