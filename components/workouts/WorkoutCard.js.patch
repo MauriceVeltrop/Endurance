@@ -1,0 +1,9 @@
+
+Workout card redesign:
+
+- Left panel width reduced.
+- Show workout thumbnail/icon instead of giant exercise counter.
+- Muscle groups as badges.
+- First 3 exercises only.
+- '+N more' if additional exercises exist.
+- Exercise count and set count in compact metadata row.
