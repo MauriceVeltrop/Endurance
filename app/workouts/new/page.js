@@ -154,6 +154,11 @@ export default function NewWorkoutPage() {
   const [editingId, setEditingId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [customOpen, setCustomOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState("muscles");
+  const [wizardMuscleGroups, setWizardMuscleGroups] = useState(["Chest"]);
+  const [wizardGoal, setWizardGoal] = useState("hypertrophy");
+  const [wizardDuration, setWizardDuration] = useState("60");
+  const [wizardEquipment, setWizardEquipment] = useState([]);
   const [customForm, setCustomForm] = useState({ name: "", primary_muscle_group: "Chest", equipment: "", notes: "" });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [form, setForm] = useState({
@@ -426,29 +431,142 @@ export default function NewWorkoutPage() {
     }
   }
 
-  function runWizard() {
-    const groups = [selectedGroup || "Chest", "Back", "Legs", "Core"].filter((value, index, list) => list.indexOf(value) === index);
+
+  function toggleWizardMuscleGroup(group) {
+    setWizardMuscleGroups((current) =>
+      current.includes(group)
+        ? current.filter((item) => item !== group)
+        : [...current, group]
+    );
+  }
+
+  function toggleWizardEquipment(equipment) {
+    setWizardEquipment((current) =>
+      current.includes(equipment)
+        ? current.filter((item) => item !== equipment)
+        : [...current, equipment]
+    );
+  }
+
+  function getWizardPrescription(group, index) {
+    const goal = wizardGoal;
+    if (goal === "strength") {
+      return {
+        reps: index === 0 ? "5" : "6",
+        weight_kg: "",
+        rest_seconds: "150",
+      };
+    }
+    if (goal === "endurance") {
+      return {
+        reps: "15",
+        weight_kg: "",
+        rest_seconds: "45",
+      };
+    }
+    if (goal === "general") {
+      return {
+        reps: "12",
+        weight_kg: "",
+        rest_seconds: "75",
+      };
+    }
+    return {
+      reps: index === 0 ? "8" : "10",
+      weight_kg: "",
+      rest_seconds: "90",
+    };
+  }
+
+  function makeWizardSets(group, exerciseIndex) {
+    const prescription = getWizardPrescription(group, exerciseIndex);
+    const setTotal = wizardGoal === "strength" ? 4 : 3;
+    return Array.from({ length: setTotal }).map((_, index) => ({
+      id: makeLocalId("set"),
+      set_number: index + 1,
+      reps: prescription.reps,
+      weight_kg: prescription.weight_kg,
+      rest_seconds: prescription.rest_seconds,
+    }));
+  }
+
+  function generateWizardWorkout() {
+    const groups = wizardMuscleGroups.length ? wizardMuscleGroups : ["Chest"];
+    const duration = Number(wizardDuration || 60);
+    const maxExercises = duration <= 30 ? 4 : duration <= 45 ? 5 : duration <= 60 ? 7 : duration <= 75 ? 8 : 10;
+    const perGroupTarget = Math.max(1, Math.ceil(maxExercises / groups.length));
+    const selectedEquipment = wizardEquipment.length ? wizardEquipment : equipmentOptions;
+
     const suggestions = [];
+
     groups.forEach((group) => {
-      const candidates = exerciseCatalog.filter((exercise) => exercise.primary_muscle_group === group);
-      suggestions.push(...candidates.slice(0, group === "Core" ? 1 : 2));
+      const candidates = exerciseCatalog.filter((exercise) => {
+        const groupOk = exercise.primary_muscle_group === group;
+        const equipmentOk = !exercise.equipment || selectedEquipment.includes(exercise.equipment);
+        return groupOk && equipmentOk;
+      });
+
+      suggestions.push(...candidates.slice(0, perGroupTarget));
     });
+
     const deduped = [];
     suggestions.forEach((exercise) => {
-      if (!deduped.some((item) => item.source === exercise.source && item.id === exercise.id)) deduped.push(exercise);
+      if (!deduped.some((item) => item.source === exercise.source && item.id === exercise.id)) {
+        deduped.push(exercise);
+      }
     });
+
     setSelectedExercises(
-      deduped.slice(0, 8).map((exercise, index) => ({
+      deduped.slice(0, maxExercises).map((exercise, index) => ({
         id: makeLocalId("exercise"),
         exercise,
         position: index,
         notes: "",
-        sets: defaultSets(),
+        sets: makeWizardSets(exercise.primary_muscle_group, index),
       }))
     );
+
     setMethod("wizard");
     setMode("plan");
     setStep("build");
+  }
+
+  function replaceExercise(localExerciseId) {
+    setSelectedExercises((currentList) => {
+      const currentItem = currentList.find((item) => item.id === localExerciseId);
+      if (!currentItem?.exercise) return currentList;
+
+      const selectedEquipment = wizardEquipment.length ? wizardEquipment : equipmentOptions;
+      const alternatives = exerciseCatalog.filter((exercise) => {
+        const sameGroup = exercise.primary_muscle_group === currentItem.exercise.primary_muscle_group;
+        const notSame = `${exercise.source}-${exercise.id}` !== `${currentItem.exercise.source}-${currentItem.exercise.id}`;
+        const notAlreadySelected = !currentList.some(
+          (selected) => `${selected.exercise.source}-${selected.exercise.id}` === `${exercise.source}-${exercise.id}`
+        );
+        const equipmentOk = !exercise.equipment || selectedEquipment.includes(exercise.equipment);
+        return sameGroup && notSame && notAlreadySelected && equipmentOk;
+      });
+
+      if (!alternatives.length) return currentList;
+
+      const replacement = alternatives[0];
+
+      return currentList.map((item) =>
+        item.id === localExerciseId
+          ? {
+              ...item,
+              exercise: replacement,
+              notes: item.notes || "",
+            }
+          : item
+      );
+    });
+  }
+
+  function runWizard() {
+    setMethod("wizard");
+    setWizardStep("muscles");
+    setStep("wizard");
   }
 
   function startManual() {
@@ -550,7 +668,7 @@ export default function NewWorkoutPage() {
     }
   }
 
-  const stepIndex = hasMultipleWorkoutSports ? (step === "sport" ? 1 : step === "method" ? 2 : 3) : (step === "build" ? 2 : 1);
+  const stepIndex = hasMultipleWorkoutSports ? (step === "sport" ? 1 : step === "method" || step === "wizard" ? 2 : 3) : (step === "build" ? 2 : 1);
 
   return (
     <main style={styles.page}>
@@ -631,6 +749,124 @@ export default function NewWorkoutPage() {
               </section>
             ) : null}
 
+            {hasWorkoutSports && step === "wizard" ? (
+              <section style={styles.card}>
+                <div style={styles.cardHead}>
+                  <div>
+                    <div style={styles.cardKicker}>Wizard</div>
+                    <h2 style={styles.cardTitle}>
+                      {wizardStep === "muscles" ? "Choose muscle groups" : wizardStep === "goal" ? "Choose goal" : wizardStep === "duration" ? "Choose duration" : "Choose equipment"}
+                    </h2>
+                  </div>
+                  <button type="button" onClick={() => setStep("method")} style={styles.smallButton}>Back</button>
+                </div>
+
+                {wizardStep === "muscles" ? (
+                  <>
+                    <div style={styles.sportGrid}>
+                      {muscleGroups.map((group) => {
+                        const active = wizardMuscleGroups.includes(group);
+                        return (
+                          <button
+                            key={group}
+                            type="button"
+                            onClick={() => toggleWizardMuscleGroup(group)}
+                            style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}) }}
+                          >
+                            <strong>{group}</strong>
+                            <span>{active ? "Selected" : "Tap to add"}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!wizardMuscleGroups.length}
+                      onClick={() => setWizardStep("goal")}
+                      style={styles.submitButton}
+                    >
+                      Continue
+                    </button>
+                  </>
+                ) : null}
+
+                {wizardStep === "goal" ? (
+                  <>
+                    <div style={styles.sportGrid}>
+                      {[
+                        ["strength", "Strength", "Heavy sets, lower reps"],
+                        ["hypertrophy", "Hypertrophy", "Muscle growth focus"],
+                        ["endurance", "Endurance", "Higher reps, shorter rest"],
+                        ["general", "General Fitness", "Balanced workout"],
+                      ].map(([value, label, description]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setWizardGoal(value)}
+                          style={{ ...styles.choiceButton, ...(wizardGoal === value ? styles.choiceButtonActive : {}) }}
+                        >
+                          <strong>{label}</strong>
+                          <span>{description}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div style={styles.inlineActions}>
+                      <button type="button" onClick={() => setWizardStep("muscles")} style={styles.smallButton}>Back</button>
+                      <button type="button" onClick={() => setWizardStep("duration")} style={styles.submitButton}>Continue</button>
+                    </div>
+                  </>
+                ) : null}
+
+                {wizardStep === "duration" ? (
+                  <>
+                    <div style={styles.sportGrid}>
+                      {["30", "45", "60", "75", "90"].map((minutes) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          onClick={() => setWizardDuration(minutes)}
+                          style={{ ...styles.choiceButton, ...(wizardDuration === minutes ? styles.choiceButtonActive : {}) }}
+                        >
+                          <strong>{minutes} min</strong>
+                          <span>Estimated workout time</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div style={styles.inlineActions}>
+                      <button type="button" onClick={() => setWizardStep("goal")} style={styles.smallButton}>Back</button>
+                      <button type="button" onClick={() => setWizardStep("equipment")} style={styles.submitButton}>Continue</button>
+                    </div>
+                  </>
+                ) : null}
+
+                {wizardStep === "equipment" ? (
+                  <>
+                    <div style={styles.sportGrid}>
+                      {equipmentOptions.map((equipment) => {
+                        const active = wizardEquipment.includes(equipment);
+                        return (
+                          <button
+                            key={equipment}
+                            type="button"
+                            onClick={() => toggleWizardEquipment(equipment)}
+                            style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}) }}
+                          >
+                            <strong>{equipment}</strong>
+                            <span>{active ? "Selected" : "Available"}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p style={styles.mutedText}>Leave equipment empty to allow all available exercises.</p>
+                    <div style={styles.inlineActions}>
+                      <button type="button" onClick={() => setWizardStep("duration")} style={styles.smallButton}>Back</button>
+                      <button type="button" onClick={generateWizardWorkout} style={styles.submitButton}>Generate workout</button>
+                    </div>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+
             {hasWorkoutSports && step === "build" ? (
               <>
                 <section style={styles.detailsCard}>
@@ -690,12 +926,18 @@ export default function NewWorkoutPage() {
                                   <em style={styles.compactSummary}>{setSummary(item)}</em>
                                 </span>
                               </button>
+                              {method === "wizard" && !editing ? (
+                                <button type="button" onClick={() => replaceExercise(item.id)} style={styles.alternativeButton}>↻ Alternative</button>
+                              ) : null}
                               {editing ? (
                                 <div style={styles.editorBox}>
                                   <div style={styles.quickActions}>
                                     <span style={styles.dragHint}>Drag the card to reorder</span>
                                     <button type="button" onClick={() => moveExercise(item.id, -1)} style={styles.iconButton}>↑</button>
                                     <button type="button" onClick={() => moveExercise(item.id, 1)} style={styles.iconButton}>↓</button>
+                                    {method === "wizard" ? (
+                                      <button type="button" onClick={() => replaceExercise(item.id)} style={styles.iconButton}>↻ Alternative</button>
+                                    ) : null}
                                     <button type="button" onClick={() => removeExercise(item.id)} style={styles.removeButton}>Remove</button>
                                   </div>
                                   <div style={styles.setHeader}><span>Set</span><span>Reps</span><span>Kg</span><span>Rest</span><span /></div>
@@ -794,7 +1036,7 @@ const styles = {
   kicker: { color: accent, fontSize: 12, fontWeight: 950, letterSpacing: "0.16em", textTransform: "uppercase" },
   title: { margin: 0, fontSize: "clamp(38px, 10vw, 58px)", lineHeight: 0.96, letterSpacing: "-0.065em" },
   subtitle: { margin: 0, color: "rgba(255,255,255,0.68)", lineHeight: 1.45, fontWeight: 760 },
-  stepBar: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 2 },
+  stepBar: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))", gap: 8, marginTop: 2 },
   stepItem: { borderRadius: 999, padding: "10px 8px", border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.055)", color: "rgba(255,255,255,0.58)", fontWeight: 950, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13 },
   stepItemActive: { color: "#101406", background: accent, borderColor: accent },
   message: { borderRadius: 18, padding: 12, background: "rgba(228,239,22,0.10)", border: "1px solid rgba(228,239,22,0.18)", color: accent, fontWeight: 850 },
@@ -853,5 +1095,8 @@ const styles = {
   submitButton: { minHeight: 54, borderRadius: 999, border: 0, background: accent, color: "#101406", fontWeight: 950, fontSize: 16, cursor: "pointer", padding: "0 20px" },
   submitButtonDisabled: { opacity: 0.45, cursor: "not-allowed" },
   smallButton: { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.08)", color: "white", borderRadius: 999, padding: "9px 12px", fontWeight: 950, cursor: "pointer" },
-  addButton: { border: 0, background: accent, color: "#101406", borderRadius: 999, padding: "10px 14px", fontWeight: 950, cursor: "pointer" },
+  inlineActions: { display: "grid", gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1.2fr)", gap: 8, alignItems: "center" },
+  mutedText: { margin: 0, color: "rgba(255,255,255,0.62)", lineHeight: 1.45, fontWeight: 750 },
+  alternativeButton: { justifySelf: "start", marginLeft: 43, border: "1px solid rgba(228,239,22,0.26)", background: "rgba(228,239,22,0.10)", color: accent, borderRadius: 999, padding: "7px 10px", fontWeight: 950, cursor: "pointer", fontSize: 12 },
+    addButton: { border: 0, background: accent, color: "#101406", borderRadius: 999, padding: "10px 14px", fontWeight: 950, cursor: "pointer" },
 };
