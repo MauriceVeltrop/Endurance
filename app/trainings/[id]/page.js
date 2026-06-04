@@ -80,12 +80,22 @@ function formatEffort(training) {
   return training.intensity_label || "Not set";
 }
 
+function isGenericCurrentLocation(value) {
+  return /^(current location|huidige locatie|my location|near me)$/i.test(String(value || "").trim());
+}
+
 function mapsUrl(location, latitude, longitude) {
+  const cleanLocation = String(location || "").trim();
+
+  if (cleanLocation && !isGenericCurrentLocation(cleanLocation)) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanLocation)}`;
+  }
+
   if (Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
     return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
   }
-  if (!location) return "";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+
+  return "";
 }
 
 
