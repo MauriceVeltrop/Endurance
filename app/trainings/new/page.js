@@ -794,7 +794,7 @@ function CreateTrainingPageContent() {
 
       if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
         if (/^(current location|huidige locatie|my location|near me)$/i.test(form.start_location.trim())) {
-          setMessage("Use the current location button first, so coordinates can be saved for weather and maps.");
+          setMessage("Use the current location button first, so coordinates can be saved for weather.");
           return;
         }
 
