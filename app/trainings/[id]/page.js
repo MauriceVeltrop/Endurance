@@ -1278,10 +1278,17 @@ export default function TrainingDetailPage() {
                   <strong>{workout.workout_type || "Workout"}</strong>
                   <span>{workout.level || "Level not set"}</span>
                 </div>
-                <div style={styles.previewFacts}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                  <div style={styles.previewFacts}>
                   <span style={styles.factChip}>{getSportLabel(workout.sport_id)}</span>
                   <span style={styles.factChip}>{workout.duration_min ? `${workout.duration_min} min` : "Duration not set"}</span>
                   <span style={styles.factChip}>{getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
+                </div>
+                  {workout?.id ? (
+                    <Link href={`/workouts/${workout.id}`} style={styles.primaryButtonSmall}>
+                      Open workout
+                    </Link>
+                  ) : null}
                 </div>
                 {workout.description ? <p style={styles.muted}>{workout.description}</p> : null}
               </section>
@@ -1462,6 +1469,18 @@ const styles = {
     display: "flex",
     flexWrap: "wrap",
     gap: 10,
+  },
+  primaryButtonSmall:{
+    display:"inline-flex",
+    alignItems:"center",
+    justifyContent:"center",
+    padding:"10px 14px",
+    borderRadius:12,
+    background:"#dfff00",
+    color:"#000",
+    textDecoration:"none",
+    fontWeight:700,
+    whiteSpace:"nowrap",
   },
   primaryButton: {
     minHeight: 48,
