@@ -159,7 +159,7 @@ function CreateTrainingPageContent() {
   const [locationMessage, setLocationMessage] = useState("");
   const [prefilledRoute, setPrefilledRoute] = useState(null);
   const [prefilledWorkout, setPrefilledWorkout] = useState(null);
-  const [activeStep, setActiveStep] = useState("basics");
+  const [activeStep, setActiveStep] = useState("sport");
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -200,6 +200,7 @@ function CreateTrainingPageContent() {
     if (visibleSports.length === 1 && !form.sport_id) {
       updateForm("sport_id", visibleSports[0].id);
       setActiveStep("basics");
+      return;
     }
 
     if (visibleSports.length > 1 && !form.sport_id) {
@@ -386,13 +387,20 @@ function CreateTrainingPageContent() {
       const ids = (sportsRows || []).map((row) => row.sport_id).filter(Boolean);
       setAllowedSportIds(ids);
 
-      const firstSport = sportOptions.find((sport) => ids.includes(sport.id));
-      if (firstSport && !preselectRouteId && !preselectWorkoutId) {
+      const visibleCreateSports = sportOptions.filter((sport) => ids.includes(sport.id));
+      const firstSport = visibleCreateSports[0];
+
+      if (firstSport && visibleCreateSports.length === 1 && !preselectRouteId && !preselectWorkoutId) {
         setForm((current) => ({
           ...current,
           sport_id: firstSport.id,
           title: defaultTitle(firstSport.id),
         }));
+        setActiveStep("basics");
+      }
+
+      if (visibleCreateSports.length > 1 && !preselectRouteId && !preselectWorkoutId) {
+        setActiveStep("sport");
       }
 
       const [{ data: routesRows }, { data: workoutRows }] = await Promise.all([
