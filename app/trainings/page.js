@@ -256,15 +256,6 @@ export default function TrainingsPage() {
               ))}
             </select>
           </label>
-
-          <div className="training-filter-group compact-filter-group" aria-label="Planning filters">
-            <FilterChip active={planningFilter === "upcoming"} onClick={() => setPlanningFilter("upcoming")}>
-              Upcoming
-            </FilterChip>
-            <FilterChip active={planningFilter === "flexible"} onClick={() => setPlanningFilter("flexible")}>
-              Flexible
-            </FilterChip>
-          </div>
         </div>
       </section>
 
