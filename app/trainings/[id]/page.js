@@ -382,7 +382,7 @@ function WeatherForecastCard({ training }) {
       </>
     );
   } else {
-    body = <span style={styles.weatherMuted}>Forecast unavailable. Save this training with current-location coordinates.</span>;
+    body = <span style={styles.weatherMuted}>Forecast temporarily unavailable. Trying KNMI first, then global fallback.</span>;
   }
 
   return (
@@ -1241,8 +1241,8 @@ export default function TrainingDetailPage() {
                       <strong>{getWorkoutDisplayLabel(training, workout)}</strong>
                       <span>{getWorkoutDurationLabel(training, workout) !== "—" ? getWorkoutDurationLabel(training, workout) : "Duration not set"} · {getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
                       {workout.description ? <span>{workout.description}</span> : null}
+                      <span style={styles.openPillV3}>Open workout →</span>
                     </div>
-                    <span style={styles.openPillV3}>Open workout →</span>
                   </div>
                 </section>
               </Link>
@@ -2308,6 +2308,85 @@ const styles = {
     borderRadius: 999,
     padding: "8px 12px",
     fontWeight: 900,
+  },
+  workoutCardLinkV3: {
+    color: "white",
+    textDecoration: "none",
+    display: "block",
+  },
+  workoutCardLinkV3Visited: {
+    color: "white",
+    textDecoration: "none",
+  },
+  workoutCompactCardV3: {
+    borderRadius: 26,
+    padding: 16,
+    background: "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
+    border: "1px solid rgba(255,255,255,0.11)",
+    display: "grid",
+    gap: 14,
+    overflow: "hidden",
+    cursor: "pointer",
+    color: "white",
+    textDecoration: "none",
+  },
+  workoutCompactBodyV3: {
+    display: "grid",
+    gridTemplateColumns: "48px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+  workoutIconSmallV3: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(228,239,22,0.14)",
+    border: "1px solid rgba(228,239,22,0.24)",
+    color: "#e4ef16",
+    fontSize: 24,
+    fontWeight: 950,
+  },
+  workoutCompactTextV3: {
+    display: "grid",
+    gap: 4,
+    minWidth: 0,
+    color: "rgba(255,255,255,0.72)",
+    fontWeight: 800,
+    textDecoration: "none",
+  },
+  openPillV3: {
+    justifySelf: "start",
+    borderRadius: 999,
+    background: "#e4ef16",
+    color: "#101406",
+    padding: "9px 12px",
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+    textDecoration: "none",
+    marginTop: 6,
+  },
+  leaveZoneV3: {
+    borderRadius: 24,
+    padding: 16,
+    background: "rgba(255,90,90,0.045)",
+    border: "1px solid rgba(255,90,90,0.14)",
+    display: "grid",
+    gap: 12,
+  },
+  leaveWideButtonV3: {
+    minHeight: 62,
+    borderRadius: 16,
+    border: "1px solid rgba(255,90,90,0.45)",
+    background: "rgba(120,15,15,0.24)",
+    color: "#ff9a9a",
+    display: "grid",
+    placeItems: "center",
+    gap: 4,
+    fontWeight: 950,
+    cursor: "pointer",
   },
   dangerZoneV3: {
     borderRadius: 24,
