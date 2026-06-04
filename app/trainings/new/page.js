@@ -54,7 +54,8 @@ function addDaysString(dateString, days) {
 }
 
 function defaultTitle(sportId) {
-  return `${getSportLabel(sportId)} Training`;
+  const label = getSportLabel(sportId);
+  return /training$/i.test(label) ? label : `${label} Training`;
 }
 
 function displayName(person) {
