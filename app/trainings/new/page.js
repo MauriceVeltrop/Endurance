@@ -1195,7 +1195,6 @@ function CreateTrainingPageContent() {
                   </div>
                 </div>
               )}
-            </section>
 
               <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
