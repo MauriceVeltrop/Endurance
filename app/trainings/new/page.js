@@ -159,6 +159,7 @@ function CreateTrainingPageContent() {
   const [locationMessage, setLocationMessage] = useState("");
   const [prefilledRoute, setPrefilledRoute] = useState(null);
   const [prefilledWorkout, setPrefilledWorkout] = useState(null);
+  const [activeStep, setActiveStep] = useState("basics");
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -190,6 +191,21 @@ function CreateTrainingPageContent() {
   const visibleSports = useMemo(() => {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
+
+  const showSportStep = visibleSports.length > 1;
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (visibleSports.length === 1 && !form.sport_id) {
+      updateForm("sport_id", visibleSports[0].id);
+      setActiveStep("basics");
+    }
+
+    if (visibleSports.length > 1 && !form.sport_id) {
+      setActiveStep("sport");
+    }
+  }, [loading, visibleSports, form.sport_id]);
 
   const filteredRoutes = useMemo(() => {
     return routes.filter((route) => route.sport_id === form.sport_id);
@@ -904,11 +920,37 @@ function CreateTrainingPageContent() {
   }
 
   const progressItems = [
-    form.sport_id ? "Sport" : null,
-    form.title.trim() ? "Name" : null,
+    form.sport_id ? getSportLabel(form.sport_id) : null,
     form.planning_type === "fixed" ? "Fixed time" : `${normalizedTimeOptions().length} windows`,
     form.visibility === "selected" ? `${selectedInviteIds.length} invites` : form.visibility,
   ].filter(Boolean);
+
+  const createSteps = [
+    showSportStep ? { id: "sport", label: "Sport" } : null,
+    { id: "basics", label: "Basics" },
+    { id: "time", label: "Time" },
+    { id: "details", label: "Details" },
+    selectedSport?.routes ? { id: "route", label: "Route" } : null,
+    selectedSport?.workouts ? { id: "workout", label: "Workout" } : null,
+    { id: "visibility", label: "Visibility" },
+    { id: "invites", label: "Invites" },
+    { id: "photo", label: "Photo" },
+  ].filter(Boolean);
+
+  const activeStepIndex = Math.max(0, createSteps.findIndex((step) => step.id === activeStep));
+  const activeStepNumber = activeStepIndex + 1;
+  const activeStepDef = createSteps[activeStepIndex] || createSteps[0];
+  const nextStepDef = createSteps[activeStepIndex + 1] || null;
+  const previousStepDef = createSteps[activeStepIndex - 1] || null;
+  const partnerOptions = partners.filter((partner) => partner.id !== profile?.id);
+
+  function goToNextStep() {
+    if (nextStepDef) setActiveStep(nextStepDef.id);
+  }
+
+  function goToPreviousStep() {
+    if (previousStepDef) setActiveStep(previousStepDef.id);
+  }
 
   return (
     <main style={styles.page}>
@@ -920,18 +962,22 @@ function CreateTrainingPageContent() {
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
             <p style={styles.subtitle}>
-              Sport first, then time, route or workout, visibility and invites. Flexible windows now support multiple days and multiple time blocks per day.
+              Build the essentials step by step. Only the active section stays open, so the form stays fast on mobile.
             </p>
           </div>
 
-          <div style={styles.progressCard}>
-            <span style={styles.progressKicker}>Setup</span>
-            <strong>{progressItems.length}/4 ready</strong>
-            <div style={styles.progressChips}>
-              {progressItems.map((item) => (
-                <span key={item} style={styles.progressChip}>{item}</span>
-              ))}
-            </div>
+          <div style={styles.stepRail}>
+            {createSteps.map((step, index) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setActiveStep(step.id)}
+                style={activeStep === step.id ? styles.stepRailItemActive : styles.stepRailItem}
+              >
+                <span>{index + 1}</span>
+                {step.label}
+              </button>
+            ))}
           </div>
         </header>
 
@@ -949,15 +995,16 @@ function CreateTrainingPageContent() {
           </section>
         ) : (
           <form onSubmit={createTraining} style={styles.form}>
+            {showSportStep && activeStep === "sport" ? (
             <section style={styles.cardHot}>
-              <div style={styles.cardKicker}>Step 1</div>
+              <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Choose sport</h2>
               <div style={styles.sportGrid}>
                 {visibleSports.map((sport) => (
                   <button
                     key={sport.id}
                     type="button"
-                    onClick={() => updateForm("sport_id", sport.id)}
+                    onClick={() => { updateForm("sport_id", sport.id); setActiveStep("basics"); }}
                     style={form.sport_id === sport.id ? styles.sportButtonActive : styles.sportButton}
                   >
                     {getSportLabel(sport.id)}
@@ -965,11 +1012,13 @@ function CreateTrainingPageContent() {
                 ))}
               </div>
             </section>
+            ) : null}
 
+            {activeStep === "basics" ? (
             <section style={styles.card}>
               <div style={styles.sectionHeader}>
                 <div>
-                  <div style={styles.cardKicker}>Step 2</div>
+                  <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                   <h2 style={styles.cardTitle}>Basics</h2>
                 </div>
                 <button type="button" onClick={() => updateForm("title", defaultTitle(form.sport_id))} style={styles.tinyButton}>
@@ -1018,41 +1067,18 @@ function CreateTrainingPageContent() {
                 />
               </label>
 
-              <section style={styles.photoSection}>
-                <div>
-                  <div style={styles.photoTitle}>Training photo</div>
-                  <p style={styles.photoText}>
-                    Optional, but recommended. Crop and zoom a hero image for this training.
-                  </p>
-                </div>
-
-                <label style={styles.photoDrop}>
-                  {trainingPhotoPreview ? (
-                    <img src={trainingPhotoPreview} alt="Training preview" style={styles.photoPreview} />
-                  ) : (
-                    <span style={styles.photoPlaceholder}>Add training photo</span>
-                  )}
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
-                    style={styles.hiddenFileInput}
-                  />
-                </label>
-
-                {trainingPhotoPreview ? (
-                  <button type="button" onClick={removeTrainingPhoto} style={styles.tinyButton}>
-                    Remove photo
-                  </button>
-                ) : null}
-              </section>
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+              </div>
             </section>
+            ) : null}
 
+            {activeStep === "time" ? (
             <section style={styles.card}>
               <div style={styles.sectionHeader}>
                 <div>
-                  <div style={styles.cardKicker}>Step 3</div>
+                  <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                   <h2 style={styles.cardTitle}>Time</h2>
                 </div>
               </div>
@@ -1171,8 +1197,16 @@ function CreateTrainingPageContent() {
               )}
             </section>
 
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+              </div>
+            </section>
+            ) : null}
+
+            {activeStep === "details" ? (
             <section style={styles.card}>
-              <div style={styles.cardKicker}>Step 4</div>
+              <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Training details</h2>
 
               <div style={styles.compactGrid}>
@@ -1242,11 +1276,17 @@ function CreateTrainingPageContent() {
                   </select>
                 </label>
               ) : null}
-            </section>
 
-            {selectedSport?.routes ? (
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+              </div>
+            </section>
+            ) : null}
+
+            {selectedSport?.routes && activeStep === "route" ? (
               <section style={styles.card}>
-                <div style={styles.cardKicker}>Route</div>
+                <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                 <h2 style={styles.cardTitle}>Attached route</h2>
                 <p style={styles.muted}>
                   Pick one of your saved routes or use the route that opened this training form.
@@ -1291,12 +1331,16 @@ function CreateTrainingPageContent() {
                 ) : (
                   <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} routes yet. Create the training now and add a route later.</div>
                 )}
+                <div style={styles.stepActions}>
+                  {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                </div>
               </section>
             ) : null}
 
-            {selectedSport?.workouts ? (
+            {selectedSport?.workouts && activeStep === "workout" ? (
               <section style={styles.card}>
-                <div style={styles.cardKicker}>Workout</div>
+                <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                 <h2 style={styles.cardTitle}>Attach workout</h2>
                 <p style={styles.muted}>Optional for strength, HYROX, CrossFit and bootcamp style sessions.</p>
 
@@ -1337,11 +1381,16 @@ function CreateTrainingPageContent() {
                 ) : (
                   <div style={styles.softBox}>No saved {getSportLabel(form.sport_id)} workouts yet. Create the training now and add a workout later.</div>
                 )}
+                <div style={styles.stepActions}>
+                  {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                </div>
               </section>
             ) : null}
 
+            {activeStep === "visibility" ? (
             <section style={styles.card}>
-              <div style={styles.cardKicker}>Step 5</div>
+              <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Visibility</h2>
 
               <div style={styles.visibilityGrid}>
@@ -1362,21 +1411,28 @@ function CreateTrainingPageContent() {
                 Max participants
                 <input type="number" min="0" value={form.max_participants} onChange={(event) => updateForm("max_participants", event.target.value)} placeholder="Optional" style={styles.input} />
               </label>
-            </section>
 
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+              </div>
+            </section>
+            ) : null}
+
+            {activeStep === "invites" ? (
             <section style={styles.card}>
               <div style={styles.sectionHeader}>
                 <div>
-                  <div style={styles.cardKicker}>Step 6</div>
+                  <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                   <h2 style={styles.cardTitle}>Invite people</h2>
                 </div>
                 {selectedInviteIds.length ? <span style={styles.countBadge}>{selectedInviteIds.length} selected</span> : null}
               </div>
               <p style={styles.muted}>Selected people receive an invite in their Inbox. For selected visibility, invitees are also added to the visibility list.</p>
 
-              {partners.length ? (
+              {partnerOptions.length ? (
                 <div style={styles.partnerList}>
-                  {partners.map((partner) => {
+                  {partnerOptions.map((partner) => {
                     const selected = selectedInviteIds.includes(partner.id);
                     return (
                       <button key={partner.id} type="button" onClick={() => toggleInvite(partner.id)} style={selected ? styles.partnerActive : styles.partnerButton}>
@@ -1392,16 +1448,58 @@ function CreateTrainingPageContent() {
               ) : (
                 <p style={styles.muted}>No Team Up partners yet. You can invite people later.</p>
               )}
-            </section>
 
-            <section style={styles.submitBar}>
-              <button type="button" onClick={() => router.push("/trainings")} style={styles.secondaryButton}>
-                Cancel
-              </button>
-              <button type="submit" disabled={saving} style={styles.primaryButton}>
-                {saving ? "Creating..." : "Create training"}
-              </button>
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+              </div>
             </section>
+            ) : null}
+
+            {activeStep === "photo" ? (
+            <section style={styles.card}>
+              <div style={styles.sectionHeader}>
+                <div>
+                  <div style={styles.cardKicker}>Step {activeStepNumber}</div>
+                  <h2 style={styles.cardTitle}>Training photo</h2>
+                </div>
+                <span style={styles.countBadge}>Optional</span>
+              </div>
+              <p style={styles.muted}>Add a hero image later or crop and zoom one now.</p>
+
+              <section style={styles.photoSection}>
+                <label style={styles.photoDrop}>
+                  {trainingPhotoPreview ? (
+                    <img src={trainingPhotoPreview} alt="Training preview" style={styles.photoPreview} />
+                  ) : (
+                    <span style={styles.photoPlaceholder}>Add training photo</span>
+                  )}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
+                    style={styles.hiddenFileInput}
+                  />
+                </label>
+
+                {trainingPhotoPreview ? (
+                  <button type="button" onClick={removeTrainingPhoto} style={styles.tinyButton}>
+                    Remove photo
+                  </button>
+                ) : null}
+              </section>
+
+              <div style={styles.stepActions}>
+                {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
+                <button type="submit" disabled={saving} style={styles.primaryButton}>
+                  {saving ? "Creating..." : "Create training"}
+                </button>
+              </div>
+            </section>
+            ) : null}
+
+
           </form>
         )}
       </section>
@@ -1428,7 +1526,7 @@ const styles = {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 14px 56px",
+    padding: "18px 14px 140px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     overflowX: "hidden",
   },
@@ -1455,7 +1553,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "clamp(42px, 11vw, 74px)",
+    fontSize: "clamp(36px, 9vw, 58px)",
     lineHeight: 0.92,
     letterSpacing: "-0.075em",
   },
@@ -1489,6 +1587,45 @@ const styles = {
     color: "rgba(255,255,255,0.78)",
     fontSize: 12,
     fontWeight: 850,
+  },
+  stepRail: {
+    display: "flex",
+    gap: 7,
+    overflowX: "auto",
+    paddingBottom: 2,
+  },
+  stepRailItem: {
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.07)",
+    color: "rgba(255,255,255,0.72)",
+    borderRadius: 999,
+    padding: "9px 12px",
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+  },
+  stepRailItemActive: {
+    border: "1px solid rgba(228,239,22,0.30)",
+    background: "#e4ef16",
+    color: "#101406",
+    borderRadius: 999,
+    padding: "9px 12px",
+    fontWeight: 950,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+  },
+  stepActions: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1.2fr)",
+    gap: 10,
+    alignItems: "center",
+    marginTop: 2,
   },
   message: {
     borderRadius: 20,
@@ -1740,28 +1877,28 @@ const styles = {
     color: "rgba(255,255,255,0.68)",
     lineHeight: 1.45,
   },
-  visibilityGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, minWidth: 0 },
+  visibilityGrid: { display: "flex", flexWrap: "wrap", gap: 8, minWidth: 0 },
   visibilityButton: {
-    minHeight: 76,
-    borderRadius: 22,
+    minHeight: 42,
+    borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.055)",
     color: "white",
-    padding: 12,
+    padding: "8px 12px",
     display: "grid",
-    gap: 4,
+    gap: 2,
     textAlign: "left",
     cursor: "pointer",
   },
   visibilityActive: {
-    minHeight: 76,
-    borderRadius: 22,
+    minHeight: 42,
+    borderRadius: 999,
     border: "1px solid rgba(228,239,22,0.30)",
     background: "rgba(228,239,22,0.13)",
     color: "white",
-    padding: 12,
+    padding: "8px 12px",
     display: "grid",
-    gap: 4,
+    gap: 2,
     textAlign: "left",
     cursor: "pointer",
   },
