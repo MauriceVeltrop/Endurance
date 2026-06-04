@@ -1186,42 +1186,6 @@ export default function TrainingDetailPage() {
                 </div>
               ) : null}
 
-            <section style={styles.infoStripV3}>
-              <div style={styles.infoItemV3}>
-                <span>◷ Time</span>
-                <strong>{formatTime(training)}</strong>
-              </div>
-
-              {isWorkoutBasedTraining ? (
-                <>
-                  <div style={styles.infoItemV3}>
-                    <span>⌖ Location</span>
-                    <strong>{training.start_location || "Not set"}</strong>
-                  </div>
-                  <div style={styles.infoItemV3}>
-                    <span>◉ Intensity</span>
-                    <strong>{getWorkoutIntensityLabel(training, workout)}</strong>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={styles.infoItemV3}>
-                    <span>▥ Distance</span>
-                    <strong>{route?.distance_km ? `${route.distance_km} km` : training.distance_km ? `${training.distance_km} km` : "—"}</strong>
-                  </div>
-                  <div style={styles.infoItemV3}>
-                    <span>△ Elevation</span>
-                    <strong>{route?.elevation_gain_m ? `${route.elevation_gain_m} m+` : "—"}</strong>
-                  </div>
-                </>
-              )}
-
-              <div style={styles.infoItemV3}>
-                <span>♚ Joined</span>
-                <strong>{participantCount}{training.max_participants ? ` / ${training.max_participants}` : ""}</strong>
-              </div>
-            </section>
-
             <WeatherForecastCard training={training} />
 
             {workout ? (
