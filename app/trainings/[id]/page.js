@@ -1222,7 +1222,7 @@ export default function TrainingDetailPage() {
               </div>
             </section>
 
-            {weather ? <WeatherForecastCard training={training} /> : null}
+            <WeatherForecastCard training={training} />
 
             {workout ? (
               <Link href={`/workouts/${workout.id}`} style={styles.workoutCardLinkV3}>
