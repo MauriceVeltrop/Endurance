@@ -91,7 +91,7 @@ export default function TrainingCard({ training, participants = [] }) {
         ) : (
           <div className="training-card-fallback visual-route-fallback">ENDURANCE</div>
         )}
-        <span className="media-sport-label">{sportLabel(training)}</span>
+        
       </Link>
 
       <div className="training-card-body visual-training-body compact-training-body">
@@ -127,7 +127,7 @@ export default function TrainingCard({ training, participants = [] }) {
 
         <div className="visual-card-bottom compact-card-bottom">
           <TrainingParticipants participants={participants} maxParticipants={training.max_participants} />
-          <Link href={href} className="primary-action visual-join-button compact-join-button">
+          <Link href={href} className="primary-action visual-join-button compact-join-button compacter">
             {flexible ? "Respond" : "Join"}
           </Link>
         </div>
