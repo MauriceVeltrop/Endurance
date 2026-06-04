@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
@@ -137,7 +137,6 @@ function setSummary(item) {
 
 export default function NewWorkoutPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [profile, setProfile] = useState(null);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [globalExercises, setGlobalExercises] = useState([]);
@@ -206,8 +205,9 @@ export default function NewWorkoutPage() {
       setAllowedSportIds(allowed);
 
       const workoutAccessSports = allowed.filter((id) => workoutSportIds.includes(id));
-      const requestedSport = searchParams.get("sport");
-      const requestedMode = searchParams.get("mode");
+      const params = new URLSearchParams(window.location.search);
+      const requestedSport = params.get("sport");
+      const requestedMode = params.get("mode");
       const firstWorkoutSport = workoutAccessSports.includes(requestedSport) ? requestedSport : workoutAccessSports[0];
 
       if (firstWorkoutSport) {
@@ -666,12 +666,13 @@ export default function NewWorkoutPage() {
         console.warn("Normalized workout tables not available; JSON structure was saved.", normalizedError);
       }
 
-      const returnTo = searchParams.get("returnTo");
+      const queryParams = new URLSearchParams(window.location.search);
+      const returnTo = queryParams.get("returnTo");
 
       if (returnTo) {
         const params = new URLSearchParams({
           workout_id: workout.id,
-          step: searchParams.get("step") || "workout",
+          step: queryParams.get("step") || "workout",
         });
 
         router.push(`${returnTo}?${params.toString()}`);
