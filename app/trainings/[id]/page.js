@@ -1090,9 +1090,9 @@ export default function TrainingDetailPage() {
                 </div>
 
                 <div style={styles.liveRowV3}>
-                  <span>{participantCount} joined</span>
+                  <span>{participantCount} {participantCount === 1 ? "participant" : "participants"}</span>
                   <span style={styles.liveDotV3}>●</span>
-                  <TrainingLiveStatus participants={participants} />
+                  <span>Live</span>
                 </div>
               </div>
             </article>
@@ -1195,8 +1195,8 @@ export default function TrainingDetailPage() {
               {isWorkoutBasedTraining ? (
                 <>
                   <div style={styles.infoItemV3}>
-                    <span>▦ Workout</span>
-                    <strong>{getWorkoutDisplayLabel(training, workout)}</strong>
+                    <span>⌖ Location</span>
+                    <strong>{training.start_location || "Not set"}</strong>
                   </div>
                   <div style={styles.infoItemV3}>
                     <span>◉ Intensity</span>
@@ -1227,22 +1227,21 @@ export default function TrainingDetailPage() {
             {workout ? (
               <Link href={`/workouts/${workout.id}`} style={styles.workoutCardLinkV3}>
                 <section style={styles.workoutCompactCardV3}>
-                  <div style={styles.previewHeader}>
-                    <div>
+                  <div style={styles.workoutProHeaderV3}>
+                    <div style={{ minWidth: 0 }}>
                       <div style={styles.cardKicker}>Workout</div>
-                      <h2 style={styles.previewTitle}>{workout.title}</h2>
+                      <h2 style={styles.workoutTitleV3}>{workout.title}</h2>
                     </div>
                     <span style={styles.readyPill}>Ready</span>
                   </div>
 
-                  <div style={styles.workoutCompactBodyV3}>
+                  <div style={styles.workoutProRowV3}>
                     <span style={styles.workoutIconSmallV3}>▦</span>
                     <div style={styles.workoutCompactTextV3}>
                       <strong>{getWorkoutDisplayLabel(training, workout)}</strong>
                       <span>{getWorkoutDurationLabel(training, workout) !== "—" ? getWorkoutDurationLabel(training, workout) : "Duration not set"} · {getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
-                      {workout.description ? <span>{workout.description}</span> : null}
-                      <span style={styles.openPillV3}>Open workout →</span>
                     </div>
+                    <span style={styles.openPillV3}>Open →</span>
                   </div>
                 </section>
               </Link>
@@ -1288,8 +1287,8 @@ export default function TrainingDetailPage() {
               <div style={styles.trainingActionsGridV3}>
                 {training.start_location ? (
                   <a href={mapsUrl(training.start_location, training.latitude, training.longitude)} target="_blank" rel="noreferrer" style={styles.trainingActionTileV3}>
-                    <strong>⌖ Start location</strong>
-                    <span>Open start in Maps</span>
+                    <strong>⌖ Maps</strong>
+                    <span>Open location</span>
                   </a>
                 ) : null}
 
@@ -1300,14 +1299,14 @@ export default function TrainingDetailPage() {
                   style={getTrainingStart(training) ? styles.trainingActionTileV3 : styles.trainingActionTileDisabledV3}
                 >
                   <strong>▣ Calendar</strong>
-                  <span>Add to calendar</span>
+                  <span>Add event</span>
                 </button>
 
 
                 {canManage ? (
                   <Link href={`/trainings/${training.id}/edit`} style={styles.trainingActionTileV3}>
                     <strong>✎ Edit</strong>
-                    <span>Edit training</span>
+                    <span>Training settings</span>
                   </Link>
                 ) : null}
 
@@ -1322,12 +1321,12 @@ export default function TrainingDetailPage() {
               ) : null}
             </section>
 
-            {joined ? (
+            {joined && !canManage ? (
               <section style={styles.leaveZoneV3}>
                 <div style={styles.cardKicker}>Leave training</div>
                 <button type="button" onClick={toggleJoin} disabled={busy} style={styles.leaveWideButtonV3}>
                   <strong>{busy ? "..." : "↪ Leave training"}</strong>
-                  <span>You will be removed from the participant list.</span>
+                  <span>Remove yourself from this session.</span>
                 </button>
               </section>
             ) : null}
@@ -1357,14 +1356,14 @@ const styles = {
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
     color: "white",
-    padding: "18px 16px 60px",
+    padding: "18px 16px 132px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   shell: {
     width: "min(920px, 100%)",
     margin: "0 auto",
     display: "grid",
-    gap: 18,
+    gap: 14,
   },
   logo: {
     width: "min(280px, 72vw)",
@@ -1672,7 +1671,7 @@ const styles = {
 
   weatherCard: {
     overflow: "hidden",
-    minHeight: 150,
+    minHeight: 122,
     background:
       "radial-gradient(circle at top right, rgba(228,239,22,0.13), transparent 36%), rgba(255,255,255,0.06)",
   },
@@ -1700,11 +1699,11 @@ const styles = {
     gap: 10,
   },
   weatherIcon: {
-    fontSize: 36,
+    fontSize: 32,
     lineHeight: 1,
   },
   weatherTemperature: {
-    fontSize: 42,
+    fontSize: 38,
     lineHeight: 0.9,
     letterSpacing: "-0.06em",
     fontWeight: 950,
@@ -2017,7 +2016,7 @@ const styles = {
     gap: 14,
   },
   heroImageCard: {
-    minHeight: "min(430px, 58vh)",
+    minHeight: "min(390px, 54vh)",
     margin: "0 -14px 0",
     padding: "22px 22px 20px",
     backgroundImage:
@@ -2076,7 +2075,7 @@ const styles = {
   },
   titleV3: {
     margin: 0,
-    fontSize: "clamp(34px, 9.5vw, 58px)",
+    fontSize: "clamp(32px, 8.8vw, 52px)",
     lineHeight: 0.93,
     letterSpacing: "-0.075em",
     textShadow: "0 12px 40px rgba(0,0,0,0.65)",
@@ -2169,8 +2168,8 @@ const styles = {
     borderRight: "1px solid rgba(255,255,255,0.08)",
   },
   cardV3: {
-    borderRadius: 26,
-    padding: 16,
+    borderRadius: 24,
+    padding: 14,
     background: "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
     border: "1px solid rgba(255,255,255,0.11)",
     display: "grid",
@@ -2184,8 +2183,8 @@ const styles = {
   personRowV3: {
     width: "100%",
     border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: 22,
-    padding: 12,
+    borderRadius: 18,
+    padding: 10,
     background: "rgba(255,255,255,0.055)",
     color: "white",
     display: "grid",
@@ -2201,16 +2200,16 @@ const styles = {
     gap: 10,
   },
   trainingActionTileV3: {
-    minHeight: 78,
+    minHeight: 64,
     borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.045)",
     color: "white",
-    padding: 14,
+    padding: 12,
     textDecoration: "none",
     display: "grid",
     placeItems: "center",
-    gap: 4,
+    gap: 3,
     fontWeight: 900,
     cursor: "pointer",
   },
@@ -2241,16 +2240,17 @@ const styles = {
     cursor: "pointer",
   },
   trainingActionTileDisabledV3: {
-    minHeight: 78,
+    minHeight: 64,
     borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.08)",
     background: "rgba(255,255,255,0.025)",
-    color: "rgba(255,255,255,0.36)",
-    padding: 14,
+    color: "rgba(255,255,255,0.42)",
+    padding: 12,
     display: "grid",
     placeItems: "center",
-    gap: 4,
+    gap: 3,
     fontWeight: 900,
+    cursor: "not-allowed",
   },
   invitePanelV3: {
     borderRadius: 20,
@@ -2310,7 +2310,7 @@ const styles = {
     fontWeight: 900,
   },
   workoutCardLinkV3: {
-    color: "white",
+    color: "inherit",
     textDecoration: "none",
     display: "block",
   },
@@ -2319,16 +2319,36 @@ const styles = {
     textDecoration: "none",
   },
   workoutCompactCardV3: {
-    borderRadius: 26,
-    padding: 16,
+    borderRadius: 24,
+    padding: 14,
     background: "linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.035))",
     border: "1px solid rgba(255,255,255,0.11)",
     display: "grid",
-    gap: 14,
+    gap: 12,
     overflow: "hidden",
     cursor: "pointer",
     color: "white",
     textDecoration: "none",
+  },
+  workoutProHeaderV3: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "start",
+    gap: 12,
+  },
+  workoutTitleV3: {
+    margin: 0,
+    fontSize: "clamp(26px, 7vw, 38px)",
+    lineHeight: 0.98,
+    letterSpacing: "-0.06em",
+    color: "white",
+  },
+  workoutProRowV3: {
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
   },
   workoutCompactBodyV3: {
     display: "grid",
@@ -2338,15 +2358,15 @@ const styles = {
     minWidth: 0,
   },
   workoutIconSmallV3: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
     display: "grid",
     placeItems: "center",
     background: "rgba(228,239,22,0.14)",
     border: "1px solid rgba(228,239,22,0.24)",
     color: "#e4ef16",
-    fontSize: 24,
+    fontSize: 23,
     fontWeight: 950,
   },
   workoutCompactTextV3: {
@@ -2358,7 +2378,6 @@ const styles = {
     textDecoration: "none",
   },
   openPillV3: {
-    justifySelf: "start",
     borderRadius: 999,
     background: "#e4ef16",
     color: "#101406",
@@ -2366,45 +2385,44 @@ const styles = {
     fontWeight: 950,
     whiteSpace: "nowrap",
     textDecoration: "none",
-    marginTop: 6,
   },
   leaveZoneV3: {
-    borderRadius: 24,
-    padding: 16,
-    background: "rgba(255,90,90,0.045)",
-    border: "1px solid rgba(255,90,90,0.14)",
+    borderRadius: 22,
+    padding: 13,
+    background: "rgba(255,90,90,0.04)",
+    border: "1px solid rgba(255,90,90,0.13)",
     display: "grid",
-    gap: 12,
+    gap: 9,
   },
   leaveWideButtonV3: {
-    minHeight: 62,
-    borderRadius: 16,
-    border: "1px solid rgba(255,90,90,0.45)",
-    background: "rgba(120,15,15,0.24)",
+    minHeight: 54,
+    borderRadius: 15,
+    border: "1px solid rgba(255,90,90,0.42)",
+    background: "rgba(120,15,15,0.22)",
     color: "#ff9a9a",
     display: "grid",
     placeItems: "center",
-    gap: 4,
+    gap: 2,
     fontWeight: 950,
     cursor: "pointer",
   },
   dangerZoneV3: {
-    borderRadius: 24,
-    padding: 16,
-    background: "rgba(255,50,50,0.045)",
+    borderRadius: 22,
+    padding: 13,
+    background: "rgba(255,50,50,0.04)",
     border: "1px solid rgba(255,90,90,0.12)",
     display: "grid",
-    gap: 12,
+    gap: 9,
   },
   deleteWideButtonV3: {
-    minHeight: 68,
-    borderRadius: 16,
-    border: "1px solid rgba(255,90,90,0.58)",
-    background: "rgba(120,15,15,0.28)",
+    minHeight: 54,
+    borderRadius: 15,
+    border: "1px solid rgba(255,90,90,0.50)",
+    background: "rgba(120,15,15,0.25)",
     color: "#ff8d8d",
     display: "grid",
     placeItems: "center",
-    gap: 4,
+    gap: 2,
     fontWeight: 950,
     cursor: "pointer",
   },
