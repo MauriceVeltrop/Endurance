@@ -344,6 +344,7 @@ function CreateTrainingPageContent() {
       const user = userData?.user;
       const preselectRouteId = searchParams.get("route_id") || searchParams.get("from_route") || searchParams.get("route");
       const preselectWorkoutId = searchParams.get("workout_id") || searchParams.get("from_workout") || searchParams.get("workout");
+      const returnStep = searchParams.get("step");
 
       if (!user?.id) {
         router.replace("/login");
@@ -369,6 +370,21 @@ function CreateTrainingPageContent() {
       }
 
       setProfile(profileRow);
+
+      try {
+        const savedDraft = window.sessionStorage.getItem("endurance_create_training_draft");
+        if (savedDraft) {
+          const parsedDraft = JSON.parse(savedDraft);
+          if (parsedDraft?.form) setForm((current) => ({ ...current, ...parsedDraft.form }));
+          if (Array.isArray(parsedDraft?.timeOptions) && parsedDraft.timeOptions.length) setTimeOptions(parsedDraft.timeOptions);
+          if (Array.isArray(parsedDraft?.selectedInviteIds)) setSelectedInviteIds(parsedDraft.selectedInviteIds);
+          if (parsedDraft?.activeStep) setActiveStep(parsedDraft.activeStep);
+          window.sessionStorage.removeItem("endurance_create_training_draft");
+        }
+      } catch (draftError) {
+        console.warn("Could not restore create training draft", draftError);
+      }
+
       useCurrentLocation({ silent: true });
 
       const ownPrivacy = await fetchPrivacySettings(user.id);
@@ -702,6 +718,53 @@ function CreateTrainingPageContent() {
     setTrainingPhotoFile(null);
     setTrainingPhotoPreview("");
     setTrainingCropFile(null);
+  }
+
+  function saveCreateTrainingDraft(nextStep = activeStep) {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.sessionStorage.setItem(
+        "endurance_create_training_draft",
+        JSON.stringify({
+          form,
+          timeOptions,
+          selectedInviteIds,
+          activeStep: nextStep,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (draftError) {
+      console.warn("Could not save create training draft", draftError);
+    }
+  }
+
+  function goCreateRoute(mode = "draw") {
+    saveCreateTrainingDraft("route");
+
+    const params = new URLSearchParams({
+      returnTo: "/trainings/new",
+      step: "route",
+    });
+
+    if (form.sport_id) params.set("sport", form.sport_id);
+    if (mode) params.set("method", mode);
+
+    router.push(`/routes/new?${params.toString()}`);
+  }
+
+  function goCreateWorkout(mode = "manual") {
+    saveCreateTrainingDraft("workout");
+
+    const params = new URLSearchParams({
+      returnTo: "/trainings/new",
+      step: "workout",
+    });
+
+    if (form.sport_id) params.set("sport", form.sport_id);
+    if (mode === "wizard") params.set("mode", "wizard");
+
+    router.push(`/workouts/new?${params.toString()}`);
   }
 
   async function createTraining(event) {
@@ -1300,9 +1363,9 @@ function CreateTrainingPageContent() {
                 </p>
 
                 <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12,marginBottom:12}}>
-                  <button type="button" style={styles.secondaryButton}>+ Create route</button>
-                  <button type="button" style={styles.secondaryButton}>✏️ Draw route</button>
-                  <button type="button" style={styles.secondaryButton}>Upload GPX</button>
+                  <button type="button" onClick={() => goCreateRoute("wizard")} style={styles.secondaryButton}>+ Create route</button>
+                  <button type="button" onClick={() => goCreateRoute("draw")} style={styles.secondaryButton}>✏️ Draw route</button>
+                  <button type="button" onClick={() => goCreateRoute("upload")} style={styles.secondaryButton}>Upload GPX</button>
                 </div>
 
                 {filteredRoutes.length ? (
@@ -1358,8 +1421,8 @@ function CreateTrainingPageContent() {
                 <p style={styles.muted}>Optional for strength, HYROX, CrossFit and bootcamp style sessions.</p>
 
                 <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12,marginBottom:12}}>
-                  <button type="button" style={styles.secondaryButton}>+ Create with Builder</button>
-                  <button type="button" style={styles.secondaryButton}>✨ Create with Wizard</button>
+                  <button type="button" onClick={() => goCreateWorkout("manual")} style={styles.secondaryButton}>+ Create with Builder</button>
+                  <button type="button" onClick={() => goCreateWorkout("wizard")} style={styles.secondaryButton}>✨ Create with Wizard</button>
                 </div>
 
                 {filteredWorkouts.length ? (
