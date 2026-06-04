@@ -1299,13 +1299,13 @@ function CreateTrainingPageContent() {
                   Pick one of your saved routes or use the route that opened this training form.
                 </p>
 
-                {filteredRoutes.length ? (<>
                 <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12,marginBottom:12}}>
                   <button type="button" style={styles.secondaryButton}>+ Create route</button>
                   <button type="button" style={styles.secondaryButton}>✏️ Draw route</button>
                   <button type="button" style={styles.secondaryButton}>Upload GPX</button>
                 </div>
 
+                {filteredRoutes.length ? (
                   <>
                     <select value={form.route_id} onChange={(event) => {
                       const routeId = event.target.value;
@@ -1357,12 +1357,12 @@ function CreateTrainingPageContent() {
                 <h2 style={styles.cardTitle}>Attach workout</h2>
                 <p style={styles.muted}>Optional for strength, HYROX, CrossFit and bootcamp style sessions.</p>
 
-                {filteredWorkouts.length ? (<>
                 <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:12,marginBottom:12}}>
                   <button type="button" style={styles.secondaryButton}>+ Create with Builder</button>
                   <button type="button" style={styles.secondaryButton}>✨ Create with Wizard</button>
                 </div>
 
+                {filteredWorkouts.length ? (
                   <>
                     <select value={form.workout_id} onChange={(event) => {
                       const workoutId = event.target.value;
