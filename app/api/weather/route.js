@@ -68,6 +68,19 @@ function looksLikeCurrentLocation(location) {
   return /^(current location|huidige locatie|my location|near me)$/i.test(String(location || "").trim());
 }
 
+function simplifyLocationQuery(location) {
+  const query = String(location || "").trim();
+  if (!query) return "";
+
+  const parts = query.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts.slice(1).join(", ");
+
+  return query
+    .replace(/^\s*\d+[a-zA-Z]?\s+/, "")
+    .replace(/\s+\d+[a-zA-Z]?\s*$/, "")
+    .trim();
+}
+
 async function geocodeWithNominatim(location) {
   const query = String(location || "").trim();
   if (!query || looksLikeCurrentLocation(query)) return null;
@@ -149,7 +162,14 @@ async function resolveLocation({ location, latitude, longitude }) {
     return null;
   }
 
-  return (await geocodeWithNominatim(location)) || (await geocodeWithOpenMeteo(location));
+  const simplifiedLocation = simplifyLocationQuery(location);
+
+  return (
+    (await geocodeWithNominatim(location)) ||
+    (simplifiedLocation && simplifiedLocation !== location ? await geocodeWithNominatim(simplifiedLocation) : null) ||
+    (await geocodeWithOpenMeteo(location)) ||
+    (simplifiedLocation && simplifiedLocation !== location ? await geocodeWithOpenMeteo(simplifiedLocation) : null)
+  );
 }
 
 async function fetchOpenMeteo({ endpoint, latitude, longitude, targetDate }) {
@@ -170,12 +190,16 @@ async function fetchOpenMeteo({ endpoint, latitude, longitude, targetDate }) {
 
   if (!response.ok) return null;
 
-  return response.json();
+  try {
+    return await response.json();
+  } catch (_) {
+    return null;
+  }
 }
 
 async function loadForecast({ latitude, longitude, targetDate }) {
   const preferKnmi = isEurope(latitude, longitude);
-  const attempts = preferKnmi ? ["knmi", "forecast"] : ["forecast"];
+  const attempts = preferKnmi ? ["knmi", "forecast", "gfs"] : ["forecast", "gfs"];
 
   for (const endpoint of attempts) {
     const data = await fetchOpenMeteo({ endpoint, latitude, longitude, targetDate });
