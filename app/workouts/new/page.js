@@ -563,7 +563,7 @@ export default function NewWorkoutPage() {
                       <button
                         key={id}
                         type="button"
-                        onClick={() => updateForm("sport_id", id)}
+                        onClick={() => { updateForm("sport_id", id); setStep("method"); }}
                         style={{ ...styles.choiceButton, ...(active ? styles.choiceButtonActive : {}) }}
                       >
                         <strong>{getSportLabel(id)}</strong>
@@ -572,7 +572,7 @@ export default function NewWorkoutPage() {
                     );
                   })}
                 </div>
-                <button type="button" disabled={!form.sport_id} onClick={() => setStep("method")} style={styles.submitButton}>Continue</button>
+                
               </section>
             ) : null}
 
