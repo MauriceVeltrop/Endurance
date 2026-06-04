@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
@@ -282,7 +282,6 @@ function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
 
 export default function NewRoutePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [profile, setProfile] = useState(null);
   const [availableSports, setAvailableSports] = useState([]);
@@ -321,8 +320,9 @@ export default function NewRoutePage() {
   }, []);
 
   useEffect(() => {
-    const requestedSport = searchParams.get("sport");
-    const requestedMethod = searchParams.get("method");
+    const params = new URLSearchParams(window.location.search);
+    const requestedSport = params.get("sport");
+    const requestedMethod = params.get("method");
 
     if (requestedSport) {
       setForm((current) => ({
@@ -337,7 +337,7 @@ export default function NewRoutePage() {
         method: requestedMethod,
       }));
     }
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
@@ -658,12 +658,13 @@ export default function NewRoutePage() {
         // Ignore browser storage cleanup failures.
       }
 
-      const returnTo = searchParams.get("returnTo");
+      const queryParams = new URLSearchParams(window.location.search);
+      const returnTo = queryParams.get("returnTo");
 
       if (returnTo && data?.id) {
         const params = new URLSearchParams({
           route_id: data.id,
-          step: searchParams.get("step") || "route",
+          step: queryParams.get("step") || "route",
         });
 
         router.push(`${returnTo}?${params.toString()}`);
