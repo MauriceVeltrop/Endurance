@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import { supabase } from "../../../lib/supabase";
@@ -137,6 +137,7 @@ function setSummary(item) {
 
 export default function NewWorkoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState(null);
   const [allowedSportIds, setAllowedSportIds] = useState([]);
   const [globalExercises, setGlobalExercises] = useState([]);
@@ -205,7 +206,9 @@ export default function NewWorkoutPage() {
       setAllowedSportIds(allowed);
 
       const workoutAccessSports = allowed.filter((id) => workoutSportIds.includes(id));
-      const firstWorkoutSport = workoutAccessSports[0];
+      const requestedSport = searchParams.get("sport");
+      const requestedMode = searchParams.get("mode");
+      const firstWorkoutSport = workoutAccessSports.includes(requestedSport) ? requestedSport : workoutAccessSports[0];
 
       if (firstWorkoutSport) {
         setForm((current) => ({
@@ -215,7 +218,11 @@ export default function NewWorkoutPage() {
         }));
       }
 
-      if (workoutAccessSports.length === 1) {
+      if (requestedMode === "wizard") {
+        setMethod("wizard");
+        setWizardStep("muscles");
+        setStep("wizard");
+      } else if (workoutAccessSports.length === 1) {
         setStep("method");
       } else {
         setStep("sport");
@@ -659,7 +666,18 @@ export default function NewWorkoutPage() {
         console.warn("Normalized workout tables not available; JSON structure was saved.", normalizedError);
       }
 
-      router.push("/workouts");
+      const returnTo = searchParams.get("returnTo");
+
+      if (returnTo) {
+        const params = new URLSearchParams({
+          workout_id: workout.id,
+          step: searchParams.get("step") || "workout",
+        });
+
+        router.push(`${returnTo}?${params.toString()}`);
+      } else {
+        router.push("/workouts");
+      }
     } catch (error) {
       console.error(error);
       setMessage(error?.message || "Could not save workout.");
