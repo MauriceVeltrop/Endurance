@@ -1072,10 +1072,6 @@ export default function TrainingDetailPage() {
             >
               <div style={styles.heroTopActionsV3}>
                 <Link href="/trainings" style={styles.backLinkV3}>← Back to trainings</Link>
-                <div style={styles.topIconActions}>
-                  <button type="button" onClick={shareTraining} style={styles.iconButtonV3} aria-label="Share training">⇧</button>
-                  {canManage ? <Link href={`/trainings/${training.id}/edit`} style={styles.iconLinkV3} aria-label="Edit training">•••</Link> : null}
-                </div>
               </div>
 
               <div style={styles.heroContentV3}>
@@ -1226,7 +1222,31 @@ export default function TrainingDetailPage() {
               </div>
             </section>
 
-            <WeatherForecastCard training={training} />
+            {weather ? <WeatherForecastCard training={training} /> : null}
+
+            {workout ? (
+              <Link href={`/workouts/${workout.id}`} style={styles.workoutCardLinkV3}>
+                <section style={styles.workoutCompactCardV3}>
+                  <div style={styles.previewHeader}>
+                    <div>
+                      <div style={styles.cardKicker}>Workout</div>
+                      <h2 style={styles.previewTitle}>{workout.title}</h2>
+                    </div>
+                    <span style={styles.readyPill}>Ready</span>
+                  </div>
+
+                  <div style={styles.workoutCompactBodyV3}>
+                    <span style={styles.workoutIconSmallV3}>▦</span>
+                    <div style={styles.workoutCompactTextV3}>
+                      <strong>{getWorkoutDisplayLabel(training, workout)}</strong>
+                      <span>{getWorkoutDurationLabel(training, workout) !== "—" ? getWorkoutDurationLabel(training, workout) : "Duration not set"} · {getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
+                      {workout.description ? <span>{workout.description}</span> : null}
+                    </div>
+                    <span style={styles.openPillV3}>Open workout →</span>
+                  </div>
+                </section>
+              </Link>
+            ) : null}
 
             <section style={styles.cardV3}>
               <div style={styles.participantsHeader}>
@@ -1252,7 +1272,6 @@ export default function TrainingDetailPage() {
                         )}
                         <span style={styles.personText}>
                           <strong>{displayName(person)}</strong>
-                          <span>{person?.location || person?.role || "Training participant"}</span>
                         </span>
                         <span style={styles.rowChevron}>›</span>
                       </button>
@@ -1263,36 +1282,6 @@ export default function TrainingDetailPage() {
                 <p style={styles.muted}>No participants yet.</p>
               )}
             </section>
-
-            {workout ? (
-              <section style={styles.cardV3}>
-                <div style={styles.previewHeader}>
-                  <div>
-                    <div style={styles.cardKicker}>Workout</div>
-                    <h2 style={styles.previewTitle}>{workout.title}</h2>
-                  </div>
-                  <span style={styles.readyPill}>Ready</span>
-                </div>
-                <div style={styles.workoutVisual}>
-                  <span style={styles.workoutIcon}>▦</span>
-                  <strong>{workout.workout_type || "Workout"}</strong>
-                  <span>{workout.level || "Level not set"}</span>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-                  <div style={styles.previewFacts}>
-                  <span style={styles.factChip}>{getSportLabel(workout.sport_id)}</span>
-                  <span style={styles.factChip}>{workout.duration_min ? `${workout.duration_min} min` : "Duration not set"}</span>
-                  <span style={styles.factChip}>{getWorkoutBlockCount(workout) ? `${getWorkoutBlockCount(workout)} blocks` : "Structure not set"}</span>
-                </div>
-                  {workout?.id ? (
-                    <Link href={`/workouts/${workout.id}`} style={styles.primaryButtonSmall}>
-                      Open workout
-                    </Link>
-                  ) : null}
-                </div>
-                {workout.description ? <p style={styles.muted}>{workout.description}</p> : null}
-              </section>
-            ) : null}
 
             <section style={styles.cardV3}>
               <div style={styles.cardKicker}>Training actions</div>
@@ -1322,15 +1311,6 @@ export default function TrainingDetailPage() {
                   </Link>
                 ) : null}
 
-                <button
-                  type="button"
-                  onClick={toggleJoin}
-                  disabled={busy || (!joined && isFull)}
-                  style={joined ? styles.trainingActionTileDangerV3 : styles.trainingActionTilePrimaryV3}
-                >
-                  <strong>{busy ? "..." : joined ? "↪ Leave" : isFull ? "Full" : "+ Join"}</strong>
-                  <span>{joined ? "Leave training" : isFull ? "Training full" : "Join training"}</span>
-                </button>
               </div>
 
 
@@ -1341,6 +1321,16 @@ export default function TrainingDetailPage() {
                 </div>
               ) : null}
             </section>
+
+            {joined ? (
+              <section style={styles.leaveZoneV3}>
+                <div style={styles.cardKicker}>Leave training</div>
+                <button type="button" onClick={toggleJoin} disabled={busy} style={styles.leaveWideButtonV3}>
+                  <strong>{busy ? "..." : "↪ Leave training"}</strong>
+                  <span>You will be removed from the participant list.</span>
+                </button>
+              </section>
+            ) : null}
 
             {canManage ? (
               <section style={styles.dangerZoneV3}>
@@ -1789,8 +1779,8 @@ const styles = {
     fontWeight: 850,
   },
   previewEmpty: {
-    minHeight: 170,
-    borderRadius: 24,
+    minHeight: 92,
+    borderRadius: 20,
     padding: 16,
     background: "rgba(255,255,255,0.045)",
     border: "1px dashed rgba(255,255,255,0.14)",
@@ -1818,8 +1808,8 @@ const styles = {
     gap: 8,
   },
   workoutVisual: {
-    minHeight: 170,
-    borderRadius: 24,
+    minHeight: 92,
+    borderRadius: 20,
     background: "radial-gradient(circle at 70% 22%, rgba(228,239,22,0.16), transparent 36%), linear-gradient(145deg,#111611,#060706)",
     border: "1px solid rgba(255,255,255,0.10)",
     display: "grid",
@@ -2027,9 +2017,9 @@ const styles = {
     gap: 14,
   },
   heroImageCard: {
-    minHeight: "min(560px, 76vh)",
+    minHeight: "min(430px, 58vh)",
     margin: "0 -14px 0",
-    padding: "26px 22px 22px",
+    padding: "22px 22px 20px",
     backgroundImage:
       "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.55) 44%, rgba(0,0,0,0.94) 100%)",
     backgroundSize: "cover",
@@ -2037,7 +2027,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "space-between",
-    gap: 22,
+    gap: 16,
   },
   heroTopActionsV3: {
     display: "flex",
@@ -2086,7 +2076,7 @@ const styles = {
   },
   titleV3: {
     margin: 0,
-    fontSize: "clamp(42px, 12vw, 76px)",
+    fontSize: "clamp(34px, 9.5vw, 58px)",
     lineHeight: 0.93,
     letterSpacing: "-0.075em",
     textShadow: "0 12px 40px rgba(0,0,0,0.65)",
@@ -2207,7 +2197,7 @@ const styles = {
   },
   trainingActionsGridV3: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
     gap: 10,
   },
   trainingActionTileV3: {
