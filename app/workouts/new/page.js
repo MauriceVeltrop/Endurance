@@ -198,13 +198,22 @@ export default function NewWorkoutPage() {
       if (sportsError) throw sportsError;
       const allowed = (sportsRows || []).map((row) => row.sport_id).filter(Boolean);
       setAllowedSportIds(allowed);
-      const firstWorkoutSport = allowed.find((id) => workoutSportIds.includes(id));
+
+      const workoutAccessSports = allowed.filter((id) => workoutSportIds.includes(id));
+      const firstWorkoutSport = workoutAccessSports[0];
+
       if (firstWorkoutSport) {
         setForm((current) => ({
           ...current,
           sport_id: firstWorkoutSport,
-          title: `${firstName(profileRow)} ${getSportLabel(firstWorkoutSport)} Workout`,
+          title: current.title || `${firstName(profileRow)} ${getSportLabel(firstWorkoutSport)} Workout`,
         }));
+      }
+
+      if (workoutAccessSports.length === 1) {
+        setStep("method");
+      } else {
+        setStep("sport");
       }
 
       const { data: globalRows, error: globalError } = await supabase
@@ -266,6 +275,23 @@ export default function NewWorkoutPage() {
       return next;
     });
   }
+
+  const hasWorkoutSports = availableWorkoutSports.length > 0;
+  const hasMultipleWorkoutSports = availableWorkoutSports.length > 1;
+  const builderSteps = hasMultipleWorkoutSports ? ["Sport", "Method", "Build"] : ["Method", "Build"];
+
+  useEffect(() => {
+    if (checking) return;
+    if (availableWorkoutSports.length === 1) {
+      const onlySport = availableWorkoutSports[0];
+      setForm((current) => ({
+        ...current,
+        sport_id: current.sport_id || onlySport,
+        title: current.title || `${firstName(profile)} ${getSportLabel(onlySport)} Workout`,
+      }));
+      if (step === "sport") setStep("method");
+    }
+  }, [checking, availableWorkoutSports, profile, step]);
 
   function addExercise(exercise) {
     const alreadyAdded = selectedExercises.some((item) => item.exercise.source === exercise.source && item.exercise.id === exercise.id);
@@ -524,7 +550,7 @@ export default function NewWorkoutPage() {
     }
   }
 
-  const stepIndex = step === "sport" ? 1 : step === "method" ? 2 : 3;
+  const stepIndex = hasMultipleWorkoutSports ? (step === "sport" ? 1 : step === "method" ? 2 : 3) : (step === "build" ? 2 : 1);
 
   return (
     <main style={styles.page}>
@@ -539,7 +565,7 @@ export default function NewWorkoutPage() {
         </header>
 
         <section style={styles.stepBar}>
-          {["Sport", "Method", "Build"].map((label, index) => (
+          {builderSteps.map((label, index) => (
             <div key={label} style={{ ...styles.stepItem, ...(stepIndex === index + 1 ? styles.stepItemActive : {}) }}>
               <span>{index + 1}</span>{label}
             </div>
@@ -552,7 +578,16 @@ export default function NewWorkoutPage() {
           <section style={styles.card}>Checking profile...</section>
         ) : (
           <form onSubmit={saveWorkout} style={styles.formShell}>
-            {step === "sport" ? (
+            {!hasWorkoutSports ? (
+              <section style={styles.card}>
+                <div style={styles.cardKicker}>Preferred Sports</div>
+                <h2 style={styles.cardTitle}>No workout sports selected</h2>
+                <p style={styles.mutedText}>Add Strength Training, HYROX, CrossFit or Bootcamp to your preferred sports to create workouts.</p>
+                <Link href="/profile" style={styles.submitButton}>Manage preferred sports</Link>
+              </section>
+            ) : null}
+
+            {step === "sport" && hasMultipleWorkoutSports ? (
               <section style={styles.card}>
                 <div style={styles.cardKicker}>Step 1</div>
                 <h2 style={styles.cardTitle}>Choose sport</h2>
@@ -576,14 +611,14 @@ export default function NewWorkoutPage() {
               </section>
             ) : null}
 
-            {step === "method" ? (
+            {hasWorkoutSports && step === "method" ? (
               <section style={styles.card}>
                 <div style={styles.cardHead}>
                   <div>
-                    <div style={styles.cardKicker}>Step 2</div>
+                    <div style={styles.cardKicker}>Step {hasMultipleWorkoutSports ? "2" : "1"}</div>
                     <h2 style={styles.cardTitle}>How do you want to build?</h2>
                   </div>
-                  <button type="button" onClick={() => setStep("sport")} style={styles.smallButton}>Back</button>
+                  {hasMultipleWorkoutSports ? <button type="button" onClick={() => setStep("sport")} style={styles.smallButton}>Back</button> : null}
                 </div>
                 <button type="button" onClick={startManual} style={styles.methodCard}>
                   <span style={styles.methodIcon}>✍️</span>
@@ -596,7 +631,7 @@ export default function NewWorkoutPage() {
               </section>
             ) : null}
 
-            {step === "build" ? (
+            {hasWorkoutSports && step === "build" ? (
               <>
                 <section style={styles.detailsCard}>
                   <button type="button" style={styles.detailsToggle} onClick={() => setDetailsOpen((value) => !value)}>
