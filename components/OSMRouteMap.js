@@ -249,6 +249,7 @@ export default function OSMRouteMap({
     () => (fullscreen && editable && editablePoints.length >= 2 ? editablePoints : points),
     [fullscreen, editable, editablePoints, points]
   );
+  const mapIsInteractive = fullscreen || interactive;
 
   useEffect(() => {
     setEditablePoints(points.map(clonePoint));
@@ -305,15 +306,15 @@ export default function OSMRouteMap({
 
         if (!mapRef.current) {
           mapRef.current = L.map(containerRef.current, {
-            zoomControl: interactive && !compact,
+            zoomControl: mapIsInteractive && !compact,
             attributionControl: !compact,
             scrollWheelZoom: false,
-            doubleClickZoom: interactive,
-            dragging: interactive,
-            tap: interactive,
-            touchZoom: interactive,
-            boxZoom: interactive,
-            keyboard: interactive,
+            doubleClickZoom: mapIsInteractive,
+            dragging: mapIsInteractive,
+            tap: mapIsInteractive,
+            touchZoom: mapIsInteractive,
+            boxZoom: mapIsInteractive,
+            keyboard: mapIsInteractive,
           });
         }
 
@@ -484,7 +485,7 @@ export default function OSMRouteMap({
         resizeObserverRef.current = null;
       }
     };
-  }, [mapPoints, title, compact, interactive, fullscreen, layerKey, editable, editControlPoints, routePoints]);
+  }, [mapPoints, title, compact, mapIsInteractive, fullscreen, layerKey, editable, editControlPoints, routePoints]);
 
   useEffect(() => {
     return () => {
@@ -503,7 +504,7 @@ export default function OSMRouteMap({
     tileLayerRef.current = null;
     routeLayerRef.current = null;
     editLayerRef.current = null;
-  }, [fullscreen]);
+  }, [fullscreen, interactive]);
 
   async function rerouteEditedControlPoints(nextControlPoints) {
     const control = (Array.isArray(nextControlPoints) ? nextControlPoints : []).map(clonePoint);
@@ -618,7 +619,7 @@ export default function OSMRouteMap({
         }}
       />
 
-      {showLayerControl && !compact ? (
+      {showLayerControl && fullscreen && !compact ? (
         <div style={fullscreen ? styles.layerControlFullscreen : styles.layerControl}>
           {Object.entries(TILE_LAYERS).map(([key, layer]) => (
             <button
