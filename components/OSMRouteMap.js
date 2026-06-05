@@ -155,6 +155,24 @@ function compactRoutingPoints(points) {
   return result;
 }
 
+function getSavedControlPoints(routePoints, fallbackPoints) {
+  const candidates = [
+    routePoints?.control_points,
+    routePoints?.waypoints,
+    routePoints?.controlPoints,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeRoutePoints(candidate);
+    if (normalized.length >= 2) return normalized.map(clonePoint);
+  }
+
+  const safeFallback = (Array.isArray(fallbackPoints) ? fallbackPoints : []).map(clonePoint);
+  if (safeFallback.length < 2) return [];
+
+  return editableHandleIndexes(safeFallback).map((index) => safeFallback[index]).filter(Boolean);
+}
+
 function loadLeaflet() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Window unavailable"));
@@ -220,6 +238,7 @@ export default function OSMRouteMap({
   const [layerKey, setLayerKey] = useState(defaultLayer);
   const [mounted, setMounted] = useState(false);
   const [editablePoints, setEditablePoints] = useState([]);
+  const [editControlPoints, setEditControlPoints] = useState([]);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [routingStatus, setRoutingStatus] = useState("idle");
@@ -233,9 +252,11 @@ export default function OSMRouteMap({
 
   useEffect(() => {
     setEditablePoints(points.map(clonePoint));
+    setEditControlPoints(getSavedControlPoints(routePoints, points));
     setHasUnsavedEdit(false);
+    setRoutingStatus("idle");
     setSaveMessage("");
-  }, [points]);
+  }, [points, routePoints]);
 
   useEffect(() => {
     setRouteMetrics(calculateMapMetrics(mapPoints));
@@ -382,32 +403,34 @@ export default function OSMRouteMap({
             iconAnchor: [11, 11],
           });
 
-          editableHandleIndexes(mapPoints).forEach((pointIndex) => {
-            const point = mapPoints[pointIndex];
+          const handles = editControlPoints.length >= 2 ? editControlPoints : getSavedControlPoints(routePoints, mapPoints);
+
+          handles.forEach((point, pointIndex) => {
             const marker = L.marker([point.lat, point.lon], {
               icon: handleIcon,
               draggable: true,
               autoPan: true,
               title: "Drag route point",
+              zIndexOffset: 1000,
             });
 
             marker.on("dragend", (event) => {
               const nextLatLng = event.target.getLatLng();
-              const base = editablePoints.length >= 2 ? editablePoints : mapPoints;
-              const next = base.map(clonePoint);
+              const base = handles.map(clonePoint);
+              const nextControl = base.map(clonePoint);
 
-              if (!next[pointIndex]) return;
+              if (!nextControl[pointIndex]) return;
 
-              next[pointIndex] = {
-                ...next[pointIndex],
+              nextControl[pointIndex] = {
+                ...nextControl[pointIndex],
                 lat: Number(nextLatLng.lat.toFixed(6)),
                 lon: Number(nextLatLng.lng.toFixed(6)),
               };
 
-              setEditablePoints(next);
+              setEditControlPoints(nextControl);
               setHasUnsavedEdit(true);
               setSaveMessage("Route changed. Rerouting...");
-              rerouteEditedPoints(next);
+              rerouteEditedControlPoints(nextControl);
             });
 
             marker.addTo(editGroup);
@@ -461,7 +484,7 @@ export default function OSMRouteMap({
         resizeObserverRef.current = null;
       }
     };
-  }, [mapPoints, title, compact, interactive, fullscreen, layerKey, editable]);
+  }, [mapPoints, title, compact, interactive, fullscreen, layerKey, editable, editControlPoints, routePoints]);
 
   useEffect(() => {
     return () => {
@@ -482,9 +505,9 @@ export default function OSMRouteMap({
     editLayerRef.current = null;
   }, [fullscreen]);
 
-  async function rerouteEditedPoints(nextPoints) {
-    const control = compactRoutingPoints(nextPoints);
-    if (control.length < 2) return nextPoints;
+  async function rerouteEditedControlPoints(nextControlPoints) {
+    const control = (Array.isArray(nextControlPoints) ? nextControlPoints : []).map(clonePoint);
+    if (control.length < 2) return nextControlPoints;
 
     const map = mapRef.current;
     if (map) {
@@ -537,7 +560,7 @@ export default function OSMRouteMap({
       console.error("Fullscreen reroute failed", error);
       setRoutingStatus("error");
       setHasUnsavedEdit(true);
-      setSaveMessage(error?.message || "Could not reroute. Save keeps the adjusted line.");
+      setSaveMessage(error?.message || "Could not reroute. Save keeps the adjusted control points.");
       return nextPoints;
     }
   }
@@ -547,7 +570,7 @@ export default function OSMRouteMap({
 
     try {
       setSaveMessage("Saving route...");
-      await onSaveRoutePoints(editablePoints);
+      await onSaveRoutePoints(editablePoints, editControlPoints);
       setHasUnsavedEdit(false);
       setRoutingStatus("done");
       setSaveMessage("Route saved.");
@@ -560,6 +583,7 @@ export default function OSMRouteMap({
     preserveViewRef.current = false;
     pendingViewRef.current = null;
     setEditablePoints(points.map(clonePoint));
+    setEditControlPoints(getSavedControlPoints(routePoints, points));
     setRouteMetrics(calculateMapMetrics(points));
     setHasUnsavedEdit(false);
     setRoutingStatus("idle");
@@ -640,7 +664,7 @@ export default function OSMRouteMap({
       {fullscreen && editable ? (
         <div style={styles.editToolbarFullscreen}>
           <strong>Edit route</strong>
-          <span>{hasUnsavedEdit ? saveMessage || "Drag the yellow points to adjust the route." : "Drag the yellow points to adjust the route."}</span>
+          <span>{hasUnsavedEdit ? saveMessage || "Drag the yellow control points to adjust the route." : "Drag the yellow control points to adjust the route."}</span>
           <div style={styles.editMetricsRow}>
             <b>{formatDistanceKm(routeMetrics.distanceKm)}</b>
             <small>distance</small>
