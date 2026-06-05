@@ -273,7 +273,7 @@ export default function RouteDetailPage() {
     downloadTextFile(`${safeName}.gpx`, routePointsToGpx(route));
   }
 
-  async function saveRoutePointChanges(nextPoints) {
+  async function saveRoutePointChanges(nextPoints, nextControlPoints = null) {
     if (!route || !editable) return;
 
     try {
@@ -281,11 +281,18 @@ export default function RouteDetailPage() {
       setMessage("");
 
       const safePoints = getRoutePoints(nextPoints);
+      const safeControlPoints = getRoutePoints(nextControlPoints).length >= 2
+        ? getRoutePoints(nextControlPoints)
+        : getRoutePoints(route.route_points?.control_points || route.route_points?.waypoints);
+
       const nextRoutePoints = {
         ...(route.route_points && typeof route.route_points === "object" && !Array.isArray(route.route_points) ? route.route_points : {}),
         source: route.route_points?.source || "editable-osm-map",
         points: safePoints,
+        waypoints: safeControlPoints,
+        control_points: safeControlPoints,
         point_count: safePoints.length,
+        control_point_count: safeControlPoints.length,
         edited_at: new Date().toISOString(),
       };
 
