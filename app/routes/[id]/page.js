@@ -119,6 +119,25 @@ function downloadTextFile(filename, text, type = "application/gpx+xml") {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
+function makeDistanceSyncedRouteTitle(route, distanceKm) {
+  const distance = Number(distanceKm || 0);
+  if (!Number.isFinite(distance) || distance <= 0) return route?.title || "";
+
+  const distanceText = `${distance.toFixed(1).replace(".0", "")} km`;
+  const currentTitle = String(route?.title || "").trim();
+  const sportLabel = getSportLabel(route?.sport_id);
+
+  if (/\d+(?:[.,]\d+)?\s*km/i.test(currentTitle)) {
+    return currentTitle.replace(/\d+(?:[.,]\d+)?\s*km/i, distanceText);
+  }
+
+  const locationPart = currentTitle
+    .replace(new RegExp(`\\s*-?\\s*${sportLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "")
+    .trim();
+
+  return `${locationPart || routeArea(route)} - ${distanceText} - ${sportLabel}`;
+}
+
 export default function RouteDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -272,9 +291,11 @@ export default function RouteDetailPage() {
 
       const metrics = calculateRouteMetrics(safePoints);
 
+      const nextDistanceKm = metrics.distance_km || route.distance_km || null;
       const payload = {
+        title: makeDistanceSyncedRouteTitle(route, nextDistanceKm),
         route_points: nextRoutePoints,
-        distance_km: metrics.distance_km || route.distance_km || null,
+        distance_km: nextDistanceKm,
         elevation_gain_m: metrics.elevation_gain_m || route.elevation_gain_m || 0,
         updated_at: new Date().toISOString(),
       };
@@ -400,6 +421,7 @@ export default function RouteDetailPage() {
           showFullscreen
           showLayerControl
           defaultLayer="osm"
+          sportId={route.sport_id}
           editable={editable}
           saving={busy}
           onSaveRoutePoints={saveRoutePointChanges}
