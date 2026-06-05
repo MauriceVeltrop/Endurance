@@ -31,6 +31,44 @@ function combineDateTime(date, time) {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
+function minutesBetweenTimes(startTime, endTime) {
+  if (!startTime || !endTime) return "";
+  const [startHours, startMinutes] = String(startTime).split(":").map(Number);
+  const [endHours, endMinutes] = String(endTime).split(":").map(Number);
+
+  if (![startHours, startMinutes, endHours, endMinutes].every(Number.isFinite)) return "";
+
+  const startTotal = startHours * 60 + startMinutes;
+  let endTotal = endHours * 60 + endMinutes;
+
+  if (endTotal <= startTotal) endTotal += 24 * 60;
+
+  return String(endTotal - startTotal);
+}
+
+function endTimeFromStartAndDuration(startTime, durationMinutes) {
+  if (!startTime || !durationMinutes) return "";
+  const [hours, minutes] = String(startTime).split(":").map(Number);
+  const duration = Number(durationMinutes);
+
+  if (![hours, minutes, duration].every(Number.isFinite) || duration <= 0) return "";
+
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  date.setMinutes(date.getMinutes() + duration);
+
+  return date.toTimeString().slice(0, 5);
+}
+
+function primarySportId(training) {
+  const sports = training?.sports;
+  return Array.isArray(sports) ? sports[0] : sports || "";
+}
+
+function isNoDistanceEndTimeSport(sportId) {
+  return ["strength_training", "hyrox", "crossfit", "bootcamp"].includes(String(sportId || "").toLowerCase());
+}
+
 export default function EditTrainingPage() {
   const params = useParams();
   const router = useRouter();
@@ -44,6 +82,7 @@ export default function EditTrainingPage() {
     start_location: "",
     date: "",
     time: "",
+    end_time: "",
     distance_km: "",
     intensity_label: "",
     visibility: "public",
@@ -60,6 +99,9 @@ export default function EditTrainingPage() {
   const canSave = useMemo(() => {
     return Boolean(user?.id && training?.creator_id === user.id && form.title.trim());
   }, [user?.id, training?.creator_id, form.title]);
+
+  const sportId = primarySportId(training);
+  const useEndTimeInsteadOfDistance = isNoDistanceEndTimeSport(sportId);
 
   useEffect(() => {
     loadTraining();
@@ -98,6 +140,8 @@ export default function EditTrainingPage() {
       }
 
       const start = data.final_starts_at || data.starts_at;
+      const startTime = toTimeInput(start);
+      const isEndTimeSport = isNoDistanceEndTimeSport(primarySportId(data));
 
       setTraining(data);
       setForm({
@@ -105,7 +149,8 @@ export default function EditTrainingPage() {
         description: data.description || "",
         start_location: data.start_location || "",
         date: toDateInput(start),
-        time: toTimeInput(start),
+        time: startTime,
+        end_time: isEndTimeSport ? endTimeFromStartAndDuration(startTime, data.estimated_duration_min) : "",
         distance_km: data.distance_km || "",
         intensity_label: data.intensity_label || "",
         visibility: data.visibility || "public",
@@ -158,6 +203,7 @@ export default function EditTrainingPage() {
 
     try {
       const startsAt = combineDateTime(form.date, form.time);
+      const durationFromEndTime = useEndTimeInsteadOfDistance ? minutesBetweenTimes(form.time, form.end_time) : "";
       let teaserPhotoUrl = form.teaser_photo_url || null;
 
       if (removePhoto) {
@@ -172,7 +218,8 @@ export default function EditTrainingPage() {
         title: form.title.trim(),
         description: form.description.trim(),
         start_location: form.start_location.trim(),
-        distance_km: form.distance_km === "" ? null : Number(form.distance_km),
+        distance_km: useEndTimeInsteadOfDistance ? null : form.distance_km === "" ? null : Number(form.distance_km),
+        estimated_duration_min: useEndTimeInsteadOfDistance && durationFromEndTime ? Number(durationFromEndTime) : null,
         intensity_label: form.intensity_label.trim() || null,
         visibility: form.visibility,
         teaser_photo_url: teaserPhotoUrl,
@@ -283,10 +330,17 @@ export default function EditTrainingPage() {
               </div>
 
               <div style={styles.twoCols}>
-                <label style={styles.label}>
-                  Distance km
-                  <input type="number" step="0.1" value={form.distance_km} onChange={(event) => updateField("distance_km", event.target.value)} style={styles.input} />
-                </label>
+                {useEndTimeInsteadOfDistance ? (
+                  <label style={styles.label}>
+                    End time
+                    <input type="time" value={form.end_time} onChange={(event) => updateField("end_time", event.target.value)} style={styles.input} />
+                  </label>
+                ) : (
+                  <label style={styles.label}>
+                    Distance km
+                    <input type="number" step="0.1" value={form.distance_km} onChange={(event) => updateField("distance_km", event.target.value)} style={styles.input} />
+                  </label>
+                )}
 
                 <label style={styles.label}>
                   Effort
