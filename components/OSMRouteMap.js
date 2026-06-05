@@ -50,6 +50,35 @@ function normalizeRoutePoints(routePoints) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
+function editableHandleIndexes(points) {
+  if (!Array.isArray(points) || points.length < 2) return [];
+
+  if (points.length <= 80) {
+    return points.map((_, index) => index);
+  }
+
+  const maxHandles = 36;
+  const step = Math.max(1, Math.floor((points.length - 1) / (maxHandles - 1)));
+  const indexes = [];
+
+  for (let index = 0; index < points.length; index += step) {
+    indexes.push(index);
+  }
+
+  const lastIndex = points.length - 1;
+  if (indexes[indexes.length - 1] !== lastIndex) indexes.push(lastIndex);
+
+  return [...new Set(indexes)];
+}
+
+function clonePoint(point) {
+  return {
+    lat: Number(point.lat),
+    lon: Number(point.lon),
+    ele: Number.isFinite(Number(point.ele)) ? Number(point.ele) : null,
+  };
+}
+
 function loadLeaflet() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Window unavailable"));
@@ -96,19 +125,36 @@ export default function OSMRouteMap({
   showFullscreen = false,
   showLayerControl = false,
   defaultLayer = "dark",
+  editable = false,
+  saving = false,
+  onSaveRoutePoints = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
   const routeLayerRef = useRef(null);
+  const editLayerRef = useRef(null);
   const resizeObserverRef = useRef(null);
 
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [layerKey, setLayerKey] = useState(defaultLayer);
   const [mounted, setMounted] = useState(false);
+  const [editablePoints, setEditablePoints] = useState([]);
+  const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
 
   const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
+  const mapPoints = useMemo(
+    () => (fullscreen && editable && editablePoints.length >= 2 ? editablePoints : points),
+    [fullscreen, editable, editablePoints, points]
+  );
+
+  useEffect(() => {
+    setEditablePoints(points.map(clonePoint));
+    setHasUnsavedEdit(false);
+    setSaveMessage("");
+  }, [points]);
 
   useEffect(() => {
     setMounted(true);
@@ -142,7 +188,7 @@ export default function OSMRouteMap({
     let timeoutIds = [];
 
     async function renderMap() {
-      if (!containerRef.current || points.length < 2) return;
+      if (!containerRef.current || mapPoints.length < 2) return;
 
       try {
         setError("");
@@ -189,7 +235,12 @@ export default function OSMRouteMap({
           routeLayerRef.current.remove();
         }
 
-        const latLngs = points.map((point) => [point.lat, point.lon]);
+        if (editLayerRef.current) {
+          editLayerRef.current.remove();
+          editLayerRef.current = null;
+        }
+
+        const latLngs = mapPoints.map((point) => [point.lat, point.lon]);
         const bounds = L.latLngBounds(latLngs);
         const group = L.layerGroup();
 
@@ -237,6 +288,52 @@ export default function OSMRouteMap({
         group.addTo(mapRef.current);
         routeLayerRef.current = group;
 
+        if (fullscreen && editable) {
+          const editGroup = L.layerGroup();
+          const handleIcon = L.divIcon({
+            className: "endurance-route-edit-handle",
+            html: `<span></span>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+
+          editableHandleIndexes(mapPoints).forEach((pointIndex) => {
+            const point = mapPoints[pointIndex];
+            const marker = L.marker([point.lat, point.lon], {
+              icon: handleIcon,
+              draggable: true,
+              autoPan: true,
+              title: "Drag route point",
+            });
+
+            marker.on("dragend", (event) => {
+              const nextLatLng = event.target.getLatLng();
+
+              setEditablePoints((current) => {
+                const base = current.length >= 2 ? current : mapPoints;
+                const next = base.map(clonePoint);
+                if (!next[pointIndex]) return next;
+
+                next[pointIndex] = {
+                  ...next[pointIndex],
+                  lat: Number(nextLatLng.lat.toFixed(6)),
+                  lon: Number(nextLatLng.lng.toFixed(6)),
+                };
+
+                return next;
+              });
+
+              setHasUnsavedEdit(true);
+              setSaveMessage("Route changed. Save to keep these changes.");
+            });
+
+            marker.addTo(editGroup);
+          });
+
+          editGroup.addTo(mapRef.current);
+          editLayerRef.current = editGroup;
+        }
+
         const fit = () => {
           if (!mapRef.current || cancelled) return;
 
@@ -275,7 +372,7 @@ export default function OSMRouteMap({
         resizeObserverRef.current = null;
       }
     };
-  }, [points, title, compact, interactive, fullscreen, layerKey]);
+  }, [mapPoints, title, compact, interactive, fullscreen, layerKey, editable]);
 
   useEffect(() => {
     return () => {
@@ -293,7 +390,27 @@ export default function OSMRouteMap({
     mapRef.current = null;
     tileLayerRef.current = null;
     routeLayerRef.current = null;
+    editLayerRef.current = null;
   }, [fullscreen]);
+
+  async function saveEditedRoute() {
+    if (!onSaveRoutePoints || !hasUnsavedEdit) return;
+
+    try {
+      setSaveMessage("Saving route...");
+      await onSaveRoutePoints(editablePoints);
+      setHasUnsavedEdit(false);
+      setSaveMessage("Route saved.");
+    } catch (err) {
+      setSaveMessage(err?.message || "Could not save route.");
+    }
+  }
+
+  function resetEditedRoute() {
+    setEditablePoints(points.map(clonePoint));
+    setHasUnsavedEdit(false);
+    setSaveMessage("");
+  }
 
   if (points.length < 2) {
     return (
@@ -306,6 +423,9 @@ export default function OSMRouteMap({
 
   const mapContent = (
     <div className={fullscreen ? "" : className} style={fullscreen ? styles.fullscreenWrapper : compact ? styles.compactWrapper : styles.wrapper}>
+      {fullscreen && editable ? (
+        <style>{`.endurance-route-edit-handle span{display:block;width:18px;height:18px;border-radius:999px;background:#e6ff00;border:3px solid rgba(5,8,5,.9);box-shadow:0 0 0 4px rgba(230,255,0,.22),0 0 24px rgba(230,255,0,.5);}`}</style>
+      ) : null}
       <div
         ref={containerRef}
         style={{
@@ -361,6 +481,25 @@ export default function OSMRouteMap({
 
           <span style={styles.osmLabel}>{TILE_LAYERS[layerKey]?.label || "OpenStreetMap"}</span>
         </div>
+      ) : null}
+
+      {fullscreen && editable ? (
+        <div style={styles.editToolbarFullscreen}>
+          <strong>Edit route</strong>
+          <span>{hasUnsavedEdit ? saveMessage || "Drag the yellow points to adjust the route." : "Drag the yellow points to adjust the route."}</span>
+          <div style={styles.editToolbarActions}>
+            <button type="button" onClick={resetEditedRoute} style={styles.editToolbarSecondary} disabled={saving || !hasUnsavedEdit}>
+              Reset
+            </button>
+            <button type="button" onClick={saveEditedRoute} style={styles.editToolbarPrimary} disabled={saving || !hasUnsavedEdit}>
+              {saving ? "Saving..." : "Save route"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {fullscreen && !editable ? (
+        <div style={styles.viewerHintFullscreen}>View only</div>
       ) : null}
 
       {error ? <div style={compact ? styles.compactError : styles.error}>{error}</div> : null}
@@ -477,6 +616,58 @@ const styles = {
     padding: "11px 15px",
     fontWeight: 1000,
     cursor: "pointer",
+    backdropFilter: "blur(10px)",
+  },
+  editToolbarFullscreen: {
+    position: "fixed",
+    left: 14,
+    right: 14,
+    bottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
+    zIndex: 2147483004,
+    borderRadius: 22,
+    padding: 14,
+    display: "grid",
+    gap: 8,
+    background: "rgba(5,8,5,0.86)",
+    border: "1px solid rgba(230,255,0,0.22)",
+    color: "white",
+    backdropFilter: "blur(14px)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.38)",
+  },
+  editToolbarActions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+  },
+  editToolbarPrimary: {
+    border: 0,
+    borderRadius: 999,
+    padding: "12px 14px",
+    background: "#e6ff00",
+    color: "#101406",
+    fontWeight: 1000,
+    cursor: "pointer",
+  },
+  editToolbarSecondary: {
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    padding: "12px 14px",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+  viewerHintFullscreen: {
+    position: "fixed",
+    left: 16,
+    bottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
+    zIndex: 2147483004,
+    borderRadius: 999,
+    padding: "10px 13px",
+    background: "rgba(5,8,5,0.78)",
+    color: "rgba(255,255,255,0.82)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    fontWeight: 900,
     backdropFilter: "blur(10px)",
   },
   compactShade: {
