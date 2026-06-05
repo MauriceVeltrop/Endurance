@@ -286,6 +286,15 @@ export default function OSMRouteMap({
     };
   }, []);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    mapRef.current.remove();
+    mapRef.current = null;
+    tileLayerRef.current = null;
+    routeLayerRef.current = null;
+  }, [fullscreen]);
+
   if (points.length < 2) {
     return (
       <div style={compact ? { ...styles.empty, minHeight: height, borderRadius: 0 } : styles.empty}>
@@ -301,8 +310,10 @@ export default function OSMRouteMap({
         ref={containerRef}
         style={{
           ...styles.map,
-          height: fullscreen ? "100dvh" : height,
-          minHeight: fullscreen ? "100dvh" : height,
+          position: fullscreen ? "absolute" : "relative",
+          inset: fullscreen ? 0 : "auto",
+          height: fullscreen ? "100%" : height,
+          minHeight: fullscreen ? "100%" : height,
           borderRadius: fullscreen || compact ? 0 : styles.map.borderRadius,
           border: fullscreen || compact ? 0 : styles.map.border,
           boxShadow: fullscreen ? "none" : styles.map.boxShadow,
@@ -386,6 +397,7 @@ const styles = {
     background: "#05070a",
     overflow: "hidden",
     display: "block",
+    isolation: "isolate",
   },
   map: {
     width: "100%",
