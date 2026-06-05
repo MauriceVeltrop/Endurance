@@ -828,7 +828,15 @@ export default function FullscreenRouteDrawPage() {
       const draft = buildCurrentDraft();
       window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
       window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
-      window.location.assign("/routes/new?routeDraft=1");
+
+      const params = new URLSearchParams(window.location.search);
+      const detailsParams = new URLSearchParams({ routeDraft: "1" });
+      const returnTo = params.get("returnTo");
+      const step = params.get("step");
+      if (returnTo) detailsParams.set("returnTo", returnTo);
+      if (step) detailsParams.set("step", step);
+
+      window.location.assign(`/routes/new?${detailsParams.toString()}`);
     } catch (error) {
       console.error("Could not save route draft", error);
       setMessage("Could not prepare the route details. Try again with fewer routepoints.");
