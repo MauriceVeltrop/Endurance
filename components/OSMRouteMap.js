@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const LEAFLET_CSS_ID = "endurance-leaflet-css";
 const LEAFLET_SCRIPT_ID = "endurance-leaflet-script";
@@ -105,8 +106,36 @@ export default function OSMRouteMap({
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [layerKey, setLayerKey] = useState(defaultLayer);
+  const [mounted, setMounted] = useState(false);
 
   const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!fullscreen || typeof document === "undefined") return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    const timers = [50, 250, 700].map((delay) =>
+      window.setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize(true);
+        }
+      }, delay)
+    );
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.touchAction = previousTouchAction;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [fullscreen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,21 +295,22 @@ export default function OSMRouteMap({
     );
   }
 
-  return (
-    <div className={className} style={fullscreen ? styles.fullscreenWrapper : compact ? styles.compactWrapper : styles.wrapper}>
+  const mapContent = (
+    <div className={fullscreen ? "" : className} style={fullscreen ? styles.fullscreenWrapper : compact ? styles.compactWrapper : styles.wrapper}>
       <div
         ref={containerRef}
         style={{
           ...styles.map,
-          height: fullscreen ? "100%" : height,
-          minHeight: fullscreen ? "100%" : height,
+          height: fullscreen ? "100dvh" : height,
+          minHeight: fullscreen ? "100dvh" : height,
           borderRadius: fullscreen || compact ? 0 : styles.map.borderRadius,
-          border: compact ? 0 : styles.map.border,
+          border: fullscreen || compact ? 0 : styles.map.border,
+          boxShadow: fullscreen ? "none" : styles.map.boxShadow,
         }}
       />
 
       {showLayerControl && !compact ? (
-        <div style={styles.layerControl}>
+        <div style={fullscreen ? styles.layerControlFullscreen : styles.layerControl}>
           {Object.entries(TILE_LAYERS).map(([key, layer]) => (
             <button
               key={key}
@@ -298,7 +328,7 @@ export default function OSMRouteMap({
         <button
           type="button"
           onClick={() => setFullscreen((value) => !value)}
-          style={styles.fullscreenButton}
+          style={fullscreen ? styles.closeFullscreenButton : styles.fullscreenButton}
         >
           {fullscreen ? "Close map" : "Fullscreen"}
         </button>
@@ -325,6 +355,12 @@ export default function OSMRouteMap({
       {error ? <div style={compact ? styles.compactError : styles.error}>{error}</div> : null}
     </div>
   );
+
+  if (fullscreen && mounted && typeof document !== "undefined") {
+    return createPortal(mapContent, document.body);
+  }
+
+  return mapContent;
 }
 
 const styles = {
@@ -343,8 +379,13 @@ const styles = {
   fullscreenWrapper: {
     position: "fixed",
     inset: 0,
-    zIndex: 9999,
+    width: "100vw",
+    height: "100dvh",
+    minHeight: "100dvh",
+    zIndex: 2147483000,
     background: "#05070a",
+    overflow: "hidden",
+    display: "block",
   },
   map: {
     width: "100%",
@@ -365,6 +406,16 @@ const styles = {
     gap: 7,
     flexWrap: "wrap",
     maxWidth: "calc(100% - 128px)",
+  },
+  layerControlFullscreen: {
+    position: "fixed",
+    left: 14,
+    top: "calc(env(safe-area-inset-top, 0px) + 14px)",
+    zIndex: 2147483002,
+    display: "flex",
+    gap: 7,
+    flexWrap: "wrap",
+    maxWidth: "calc(100vw - 150px)",
   },
   layerButton: {
     border: "1px solid rgba(255,255,255,0.12)",
@@ -392,12 +443,26 @@ const styles = {
     position: "absolute",
     right: 14,
     top: 14,
-    zIndex: 99999,
+    zIndex: 2147483002,
     border: "1px solid rgba(230,255,0,0.30)",
     background: "rgba(5,8,5,0.82)",
     color: "#e6ff00",
     borderRadius: 999,
     padding: "10px 14px",
+    fontWeight: 1000,
+    cursor: "pointer",
+    backdropFilter: "blur(10px)",
+  },
+  closeFullscreenButton: {
+    position: "fixed",
+    right: 14,
+    top: "calc(env(safe-area-inset-top, 0px) + 14px)",
+    zIndex: 2147483003,
+    border: "1px solid rgba(230,255,0,0.30)",
+    background: "rgba(5,8,5,0.88)",
+    color: "#e6ff00",
+    borderRadius: 999,
+    padding: "11px 15px",
     fontWeight: 1000,
     cursor: "pointer",
     backdropFilter: "blur(10px)",
@@ -435,7 +500,7 @@ const styles = {
     position: "absolute",
     left: 16,
     bottom: 16,
-    zIndex: 99999,
+    zIndex: 2147483002,
     display: "flex",
     alignItems: "center",
     gap: 14,
