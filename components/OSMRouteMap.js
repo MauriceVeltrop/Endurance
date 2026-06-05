@@ -79,6 +79,82 @@ function clonePoint(point) {
   };
 }
 
+function haversineMeters(a, b) {
+  const toRad = (value) => (Number(value) * Math.PI) / 180;
+  const lat1 = Number(a?.lat);
+  const lon1 = Number(a?.lon);
+  const lat2 = Number(b?.lat);
+  const lon2 = Number(b?.lon);
+
+  if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return 0;
+
+  const earthRadius = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const rLat1 = toRad(lat1);
+  const rLat2 = toRad(lat2);
+
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLon / 2) ** 2;
+
+  return 2 * earthRadius * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function calculateMapMetrics(points) {
+  const safePoints = Array.isArray(points) ? points : [];
+  let distanceMeters = 0;
+  let gain = 0;
+
+  for (let index = 1; index < safePoints.length; index += 1) {
+    distanceMeters += haversineMeters(safePoints[index - 1], safePoints[index]);
+
+    const previousElevation = Number(safePoints[index - 1]?.ele);
+    const currentElevation = Number(safePoints[index]?.ele);
+    if (Number.isFinite(previousElevation) && Number.isFinite(currentElevation)) {
+      const difference = currentElevation - previousElevation;
+      if (difference > 1) gain += difference;
+    }
+  }
+
+  return {
+    distanceKm: Number((distanceMeters / 1000).toFixed(2)),
+    elevationGainM: Math.round(gain),
+  };
+}
+
+function formatDistanceKm(value) {
+  const distance = Number(value || 0);
+  if (!Number.isFinite(distance) || distance <= 0) return "—";
+  return `${distance.toFixed(1).replace(".0", "")} km`;
+}
+
+function formatElevationMeters(value) {
+  const elevation = Number(value || 0);
+  if (!Number.isFinite(elevation) || elevation <= 0) return "—";
+  return `${Math.round(elevation)} m`;
+}
+
+function compactRoutingPoints(points) {
+  const safePoints = (Array.isArray(points) ? points : []).map(clonePoint).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+
+  if (safePoints.length <= 9) return safePoints;
+  if (safePoints.length <= 40) return editableHandleIndexes(safePoints).map((index) => safePoints[index]).filter(Boolean);
+
+  const maxPoints = 18;
+  const step = Math.max(1, Math.floor((safePoints.length - 1) / (maxPoints - 1)));
+  const result = [];
+
+  for (let index = 0; index < safePoints.length; index += step) {
+    result.push(safePoints[index]);
+  }
+
+  const last = safePoints[safePoints.length - 1];
+  if (result[result.length - 1] !== last) result.push(last);
+
+  return result;
+}
+
 function loadLeaflet() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Window unavailable"));
@@ -128,6 +204,7 @@ export default function OSMRouteMap({
   editable = false,
   saving = false,
   onSaveRoutePoints = null,
+  sportId = "",
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -135,6 +212,8 @@ export default function OSMRouteMap({
   const routeLayerRef = useRef(null);
   const editLayerRef = useRef(null);
   const resizeObserverRef = useRef(null);
+  const preserveViewRef = useRef(false);
+  const pendingViewRef = useRef(null);
 
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -143,6 +222,8 @@ export default function OSMRouteMap({
   const [editablePoints, setEditablePoints] = useState([]);
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [routingStatus, setRoutingStatus] = useState("idle");
+  const [routeMetrics, setRouteMetrics] = useState({ distanceKm: 0, elevationGainM: 0 });
 
   const points = useMemo(() => normalizeRoutePoints(routePoints), [routePoints]);
   const mapPoints = useMemo(
@@ -155,6 +236,10 @@ export default function OSMRouteMap({
     setHasUnsavedEdit(false);
     setSaveMessage("");
   }, [points]);
+
+  useEffect(() => {
+    setRouteMetrics(calculateMapMetrics(mapPoints));
+  }, [mapPoints]);
 
   useEffect(() => {
     setMounted(true);
@@ -308,23 +393,21 @@ export default function OSMRouteMap({
 
             marker.on("dragend", (event) => {
               const nextLatLng = event.target.getLatLng();
+              const base = editablePoints.length >= 2 ? editablePoints : mapPoints;
+              const next = base.map(clonePoint);
 
-              setEditablePoints((current) => {
-                const base = current.length >= 2 ? current : mapPoints;
-                const next = base.map(clonePoint);
-                if (!next[pointIndex]) return next;
+              if (!next[pointIndex]) return;
 
-                next[pointIndex] = {
-                  ...next[pointIndex],
-                  lat: Number(nextLatLng.lat.toFixed(6)),
-                  lon: Number(nextLatLng.lng.toFixed(6)),
-                };
+              next[pointIndex] = {
+                ...next[pointIndex],
+                lat: Number(nextLatLng.lat.toFixed(6)),
+                lon: Number(nextLatLng.lng.toFixed(6)),
+              };
 
-                return next;
-              });
-
+              setEditablePoints(next);
               setHasUnsavedEdit(true);
-              setSaveMessage("Route changed. Save to keep these changes.");
+              setSaveMessage("Route changed. Rerouting...");
+              rerouteEditedPoints(next);
             });
 
             marker.addTo(editGroup);
@@ -338,6 +421,12 @@ export default function OSMRouteMap({
           if (!mapRef.current || cancelled) return;
 
           mapRef.current.invalidateSize(true);
+
+          if (preserveViewRef.current && pendingViewRef.current) {
+            mapRef.current.setView(pendingViewRef.current.center, pendingViewRef.current.zoom, { animate: false });
+            return;
+          }
+
           mapRef.current.fitBounds(bounds, {
             padding: fullscreen ? [70, 42] : compact ? [14, 14] : [34, 34],
             maxZoom: compact ? 14 : 15,
@@ -393,6 +482,66 @@ export default function OSMRouteMap({
     editLayerRef.current = null;
   }, [fullscreen]);
 
+  async function rerouteEditedPoints(nextPoints) {
+    const control = compactRoutingPoints(nextPoints);
+    if (control.length < 2) return nextPoints;
+
+    const map = mapRef.current;
+    if (map) {
+      const center = map.getCenter();
+      pendingViewRef.current = {
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      };
+      preserveViewRef.current = true;
+    }
+
+    try {
+      setRoutingStatus("routing");
+      setSaveMessage("Rerouting route on OSM paths...");
+
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points: control,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Rerouting failed.");
+      }
+
+      const routed = data.route_points || data;
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+      if (geometry.length < 2) {
+        throw new Error("No routed geometry returned.");
+      }
+
+      setEditablePoints(geometry.map(clonePoint));
+      setRouteMetrics({
+        distanceKm: Number(data?.distance_km || calculateMapMetrics(geometry).distanceKm || 0),
+        elevationGainM: Number(data?.elevation_gain_m || calculateMapMetrics(geometry).elevationGainM || 0),
+      });
+      setRoutingStatus("done");
+      setHasUnsavedEdit(true);
+      setSaveMessage("Route rerouted. Save to keep these changes.");
+      return geometry;
+    } catch (error) {
+      console.error("Fullscreen reroute failed", error);
+      setRoutingStatus("error");
+      setHasUnsavedEdit(true);
+      setSaveMessage(error?.message || "Could not reroute. Save keeps the adjusted line.");
+      return nextPoints;
+    }
+  }
+
   async function saveEditedRoute() {
     if (!onSaveRoutePoints || !hasUnsavedEdit) return;
 
@@ -400,6 +549,7 @@ export default function OSMRouteMap({
       setSaveMessage("Saving route...");
       await onSaveRoutePoints(editablePoints);
       setHasUnsavedEdit(false);
+      setRoutingStatus("done");
       setSaveMessage("Route saved.");
     } catch (err) {
       setSaveMessage(err?.message || "Could not save route.");
@@ -407,8 +557,12 @@ export default function OSMRouteMap({
   }
 
   function resetEditedRoute() {
+    preserveViewRef.current = false;
+    pendingViewRef.current = null;
     setEditablePoints(points.map(clonePoint));
+    setRouteMetrics(calculateMapMetrics(points));
     setHasUnsavedEdit(false);
+    setRoutingStatus("idle");
     setSaveMessage("");
   }
 
@@ -487,6 +641,13 @@ export default function OSMRouteMap({
         <div style={styles.editToolbarFullscreen}>
           <strong>Edit route</strong>
           <span>{hasUnsavedEdit ? saveMessage || "Drag the yellow points to adjust the route." : "Drag the yellow points to adjust the route."}</span>
+          <div style={styles.editMetricsRow}>
+            <b>{formatDistanceKm(routeMetrics.distanceKm)}</b>
+            <small>distance</small>
+            <b>{formatElevationMeters(routeMetrics.elevationGainM)}</b>
+            <small>elevation gain</small>
+            <b>{routingStatus === "routing" ? "Rerouting..." : routingStatus === "error" ? "Check route" : "OSM route"}</b>
+          </div>
           <div style={styles.editToolbarActions}>
             <button type="button" onClick={resetEditedRoute} style={styles.editToolbarSecondary} disabled={saving || !hasUnsavedEdit}>
               Reset
@@ -633,6 +794,14 @@ const styles = {
     color: "white",
     backdropFilter: "blur(14px)",
     boxShadow: "0 20px 60px rgba(0,0,0,0.38)",
+  },
+  editMetricsRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    color: "rgba(255,255,255,0.74)",
+    fontWeight: 850,
   },
   editToolbarActions: {
     display: "grid",
