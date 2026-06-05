@@ -8,6 +8,7 @@ import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
 import RouteElevationProfile from "../../../components/routes/RouteElevationProfile";
+import { calculateRouteMetrics } from "../../../lib/routeMetrics";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import {
@@ -79,6 +80,43 @@ function makeRouteStartLocation(route) {
   const first = points?.[0];
   if (first?.lat && first?.lon) return `${Number(first.lat).toFixed(5)}, ${Number(first.lon).toFixed(5)}`;
   return routeArea(route);
+}
+
+function routePointsToGpx(route) {
+  const points = getRoutePoints(route?.route_points);
+  const name = route?.title || "Endurance route";
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Endurance" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${escapeXml(name)}</name></metadata>
+  <trk><name>${escapeXml(name)}</name><trkseg>
+${points
+  .map((point) => `    <trkpt lat="${point.lat}" lon="${point.lon}">${Number.isFinite(Number(point.ele)) ? `<ele>${Number(point.ele).toFixed(1)}</ele>` : ""}</trkpt>`)
+  .join("\n")}
+  </trkseg></trk>
+</gpx>`;
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function downloadTextFile(filename, text, type = "application/gpx+xml") {
+  if (typeof window === "undefined") return;
+
+  const blob = new Blob([text], { type });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
 export default function RouteDetailPage() {
@@ -204,22 +242,61 @@ export default function RouteDetailPage() {
     router.push(`/trainings/new?route_id=${route.id}`);
   }
 
-  async function shareRoute() {
+  function downloadRouteGpx() {
     if (!route) return;
 
-    const url = `${window.location.origin}/routes/${route.id}`;
-
-    if (navigator.share) {
-      await navigator.share({
-        title: route.title,
-        text: "Check this Endurance route.",
-        url,
-      });
+    if (route.gpx_file_url) {
+      window.open(route.gpx_file_url, "_blank", "noopener,noreferrer");
       return;
     }
 
-    await navigator.clipboard.writeText(url);
-    setMessage("Route link copied.");
+    const safeName = String(route.title || "endurance-route").replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "") || "endurance-route";
+    downloadTextFile(`${safeName}.gpx`, routePointsToGpx(route));
+  }
+
+  async function saveRoutePointChanges(nextPoints) {
+    if (!route || !editable) return;
+
+    try {
+      setBusy(true);
+      setMessage("");
+
+      const safePoints = getRoutePoints(nextPoints);
+      const nextRoutePoints = {
+        ...(route.route_points && typeof route.route_points === "object" && !Array.isArray(route.route_points) ? route.route_points : {}),
+        source: route.route_points?.source || "editable-osm-map",
+        points: safePoints,
+        point_count: safePoints.length,
+        edited_at: new Date().toISOString(),
+      };
+
+      const metrics = calculateRouteMetrics(safePoints);
+
+      const payload = {
+        route_points: nextRoutePoints,
+        distance_km: metrics.distance_km || route.distance_km || null,
+        elevation_gain_m: metrics.elevation_gain_m || route.elevation_gain_m || 0,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("routes")
+        .update(payload)
+        .eq("id", route.id)
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setRoute(data || { ...route, ...payload });
+      setMessage("Route updated.");
+    } catch (error) {
+      console.error("Could not update route points", error);
+      setMessage(error?.message || "Could not update route.");
+      throw error;
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (loading) {
@@ -287,14 +364,7 @@ export default function RouteDetailPage() {
             <span>Elevation</span>
             <strong>{elevationStats.available ? `${elevationStats.gain} m` : elevationGainText(route)}</strong>
           </div>
-          <div>
-            <span>Duration</span>
-            <strong>{estimateDuration(route)}</strong>
-          </div>
-          <div>
-            <span>Area</span>
-            <strong>{routeArea(route)}</strong>
-          </div>
+
         </div>
       </section>
 
@@ -304,15 +374,10 @@ export default function RouteDetailPage() {
         <button type="button" className="route-detail-primary" onClick={createTrainingFromRoute}>
           Plan training with this route
         </button>
-        <button type="button" className="route-detail-secondary" onClick={shareRoute}>Share</button>
-        {route.gpx_file_url ? (
-          <a href={route.gpx_file_url} target="_blank" rel="noreferrer" className="route-detail-secondary">
-            GPX
-          </a>
-        ) : null}
+        <button type="button" className="route-detail-secondary" onClick={downloadRouteGpx}>Download GPX</button>
         {editable ? (
           <button type="button" className="route-detail-secondary" onClick={() => router.push(`/routes/${route.id}/edit`)}>
-            Edit
+            Edit details
           </button>
         ) : null}
       </section>
@@ -334,7 +399,10 @@ export default function RouteDetailPage() {
           showLegend
           showFullscreen
           showLayerControl
-          defaultLayer="dark"
+          defaultLayer="osm"
+          editable={editable}
+          saving={busy}
+          onSaveRoutePoints={saveRoutePointChanges}
           className="route-detail-map"
         />
       </section>
@@ -352,7 +420,7 @@ export default function RouteDetailPage() {
             <div><span>Sport</span><strong>{sportLabel}</strong></div>
             <div><span>Distance</span><strong>{distanceText(route)}</strong></div>
             <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
-            <div><span>Estimated time</span><strong>{estimateDuration(route)}</strong></div>
+
             <div><span>Control points</span><strong>{pointStats.controlPointCount || "—"}</strong></div>
             <div><span>Geometry points</span><strong>{pointStats.pointCount || 0}</strong></div>
             <div><span>Point density</span><strong>{pointStats.pointDensity ? `${pointStats.pointDensity}/km` : "—"}</strong></div>
