@@ -751,6 +751,16 @@ function CreateTrainingPageContent() {
     if (form.sport_id) params.set("sport", form.sport_id);
     if (mode) params.set("method", mode);
 
+    if (mode === "draw") {
+      const drawParams = new URLSearchParams({
+        sport_id: form.sport_id,
+        returnTo: "/trainings/new",
+        step: "route",
+      });
+      router.push(`/routes/draw?${drawParams.toString()}`);
+      return;
+    }
+
     router.push(`/routes/new?${params.toString()}`);
   }
 
