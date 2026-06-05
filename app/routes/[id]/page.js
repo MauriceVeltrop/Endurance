@@ -423,10 +423,10 @@ export default function RouteDetailPage() {
           routePoints={route.route_points}
           title={route.title}
           height={460}
-          interactive
+          interactive={false}
           showLegend
           showFullscreen
-          showLayerControl
+          showLayerControl={false}
           defaultLayer="osm"
           sportId={route.sport_id}
           editable={editable}
