@@ -324,11 +324,27 @@ export default function NewRoutePage() {
     const requestedSport = params.get("sport");
     const requestedMethod = params.get("method");
 
+    if (requestedSport && requestedMethod === "draw") {
+      const drawParams = new URLSearchParams({
+        sport_id: requestedSport,
+      });
+
+      const returnTo = params.get("returnTo");
+      const step = params.get("step");
+      if (returnTo) drawParams.set("returnTo", returnTo);
+      if (step) drawParams.set("step", step);
+
+      router.replace(`/routes/draw?${drawParams.toString()}`);
+      return;
+    }
+
     if (requestedSport) {
       setForm((current) => ({
         ...current,
         sport_id: requestedSport,
+        title: current.title || `${getSportLabel(requestedSport)} Route`,
       }));
+      setCurrentStep(requestedMethod ? 3 : 2);
     }
 
     if (requestedMethod) {
@@ -336,8 +352,9 @@ export default function NewRoutePage() {
         ...current,
         method: requestedMethod,
       }));
+      setCurrentStep(requestedSport ? 3 : 2);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setPreviewMapReady(true), 450);
@@ -398,7 +415,12 @@ export default function NewRoutePage() {
       setCurrentStep(3);
       setMessage("Drawn route loaded. Review the details and save your route.");
       window.sessionStorage.removeItem("endurance_route_draft");
-      window.history.replaceState({}, "", "/routes/new");
+      const keepParams = new URLSearchParams();
+      const returnTo = params.get("returnTo");
+      const step = params.get("step");
+      if (returnTo) keepParams.set("returnTo", returnTo);
+      if (step) keepParams.set("step", step);
+      window.history.replaceState({}, "", `/routes/new${keepParams.toString() ? `?${keepParams.toString()}` : ""}`);
     } catch (error) {
       console.error("Could not safely load route draft", error);
       window.sessionStorage.removeItem("endurance_route_draft");
@@ -464,12 +486,21 @@ export default function NewRoutePage() {
       setAvailableSports(allowed);
 
       if (allowed.length) {
-        const first = allowed[0];
+        const params = new URLSearchParams(window.location.search);
+        const requestedSport = params.get("sport");
+        const requestedMethod = params.get("method");
+        const requestedAllowedSport = allowed.find((sport) => sport.id === requestedSport);
+        const first = requestedAllowedSport || allowed[0];
+
         setForm((current) => ({
           ...current,
           sport_id: current.sport_id || first.id,
-          title: current.title || `${getSportLabel(first.id)} Route`,
+          title: current.title || `${getSportLabel(current.sport_id || first.id)} Route`,
         }));
+
+        if (requestedAllowedSport) {
+          setCurrentStep(requestedMethod ? 3 : 2);
+        }
       }
     } catch (error) {
       console.error("Create route access error", error);
