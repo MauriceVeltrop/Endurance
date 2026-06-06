@@ -685,6 +685,7 @@ export default function NewRoutePage() {
         window.sessionStorage.removeItem("endurance_route_draft");
         window.sessionStorage.removeItem("endurance_route_edit_draft");
         window.localStorage.removeItem("endurance_route_draft");
+        window.localStorage.removeItem("endurance_route_draft_backup");
       } catch (_) {
         // Ignore browser storage cleanup failures.
       }
