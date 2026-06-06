@@ -29,11 +29,15 @@ const PROFILE_CANDIDATES = {
 
 const SPORT_ROUTE_QUALITY = {
   running: {
-    maxDetourFactor: 1.2,
+    // Road/park running should prefer smooth, predictable surfaces.
+    // Trail-specific unpaved preference belongs to trail_running, not running.
+    maxDetourFactor: 1.15,
     alternativeCount: 2,
     preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["footway", "path", "track", "cycleway", "pedestrian"],
-    avoidWayTypes: ["state_road", "road"],
+    rewardWayTypes: ["footway", "pedestrian", "cycleway", "street"],
+    avoidWayTypes: ["track", "path", "state_road", "road", "steps"],
+    rewardSurfaces: ["paved", "asphalt", "concrete", "paving_stones"],
+    avoidSurfaces: ["unpaved", "gravel", "fine_gravel", "dirt", "ground", "sand", "grass", "woodchips"],
   },
   trail_running: {
     maxDetourFactor: 1.4,
@@ -127,6 +131,29 @@ const WAYTYPE_LABELS = {
   9: "ferry",
   10: "construction",
   11: "pedestrian",
+};
+
+
+
+const SURFACE_LABELS = {
+  0: "unknown",
+  1: "paved",
+  2: "unpaved",
+  3: "asphalt",
+  4: "concrete",
+  5: "cobblestone",
+  6: "metal",
+  7: "wood",
+  8: "compacted_gravel",
+  9: "fine_gravel",
+  10: "gravel",
+  11: "dirt",
+  12: "ground",
+  13: "ice",
+  14: "paving_stones",
+  15: "sand",
+  16: "woodchips",
+  17: "grass",
 };
 
 const MAX_WAYPOINTS_PER_PROVIDER_CALL = 9;
@@ -275,11 +302,24 @@ function summarizeWayTypes(feature) {
   return result;
 }
 
+function summarizeSurfaces(feature) {
+  const summary = feature?.properties?.extras?.surface?.summary || [];
+  const result = {};
+
+  for (const item of summary) {
+    const label = SURFACE_LABELS[item.value] || String(item.value ?? "unknown");
+    result[label] = (result[label] || 0) + Number(item.distance || 0);
+  }
+
+  return result;
+}
+
 function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance }) {
   const quality = routeQualityForSport(sportId);
   const distance = Number(feature?.properties?.summary?.distance || 0);
   const safeDistance = distance > 0 ? distance : directDistance || 1;
   const wayTypes = summarizeWayTypes(feature);
+  const surfaces = summarizeSurfaces(feature);
 
   let score = 100;
 
@@ -296,13 +336,22 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   }
 
   const totalKnownWayTypeDistance = Object.values(wayTypes).reduce((sum, value) => sum + Number(value || 0), 0) || safeDistance;
+  const totalKnownSurfaceDistance = Object.values(surfaces).reduce((sum, value) => sum + Number(value || 0), 0) || safeDistance;
 
   for (const label of quality.rewardWayTypes || []) {
-    score += ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 45;
+    score += ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 35;
   }
 
   for (const label of quality.avoidWayTypes || []) {
-    score -= ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 55;
+    score -= ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 70;
+  }
+
+  for (const label of quality.rewardSurfaces || []) {
+    score += ((surfaces[label] || 0) / totalKnownSurfaceDistance) * 65;
+  }
+
+  for (const label of quality.avoidSurfaces || []) {
+    score -= ((surfaces[label] || 0) / totalKnownSurfaceDistance) * 85;
   }
 
   if (preference === "recommended") score += 3;
@@ -314,6 +363,7 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   }
 
   if (profile === "foot-hiking" && ["trail_running", "trailrunning", "hiking"].includes(sportKey(sportId))) score += 5;
+  if (profile === "foot-hiking" && sportKey(sportId) === "running") score -= 12;
   if (profile === "foot-walking" && ["running", "walking"].includes(sportKey(sportId))) score += 4;
   if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
   if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 5;
@@ -322,6 +372,7 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
     score,
     detourFactor: Number(detourFactor.toFixed(3)),
     wayTypes,
+    surfaces,
   };
 }
 
@@ -340,7 +391,7 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
       preference,
       geometry_simplify: false,
       format: "geojson",
-      extra_info: ["waytype"],
+      extra_info: ["waytype", "surface"],
     };
 
     // ORS can return alternatives in one request. This is much lighter than doing
@@ -402,6 +453,7 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
           suitability_score: Number(score.score.toFixed(2)),
           detour_factor: score.detourFactor,
           waytypes: score.wayTypes,
+          surfaces: score.surfaces,
           alternative_index: index,
         };
       })
@@ -428,6 +480,7 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
   let detourFactor = 1;
   const selectedAlternatives = [];
   const waytypes = {};
+  const surfaces = {};
 
   for (let index = 0; index < chunks.length; index += 1) {
     const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId });
@@ -457,6 +510,10 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     for (const [label, value] of Object.entries(selected.waytypes || {})) {
       waytypes[label] = (waytypes[label] || 0) + Number(value || 0);
     }
+
+    for (const [label, value] of Object.entries(selected.surfaces || {})) {
+      surfaces[label] = (surfaces[label] || 0) + Number(value || 0);
+    }
   }
 
   return {
@@ -470,6 +527,7 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     detour_factor: Number(detourFactor.toFixed(3)),
     selected_alternatives: selectedAlternatives,
     waytypes,
+    surfaces,
   };
 }
 
@@ -575,6 +633,7 @@ export async function POST(request) {
           suitability_score: selected.result.suitability_score,
           selected_alternatives: selected.result.selected_alternatives,
           waytypes: selected.result.waytypes,
+          surfaces: selected.result.surfaces,
           candidates_considered: successfulCandidates.length,
           eligible_candidates: eligible.length || successfulCandidates.length,
         },
