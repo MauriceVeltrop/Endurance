@@ -12,7 +12,7 @@ const ROUTING_BASES = [
 ].filter(Boolean);
 
 const PROFILE_CANDIDATES = {
-  running: ["foot-walking", "foot-hiking"],
+  running: ["cycling-regular", "cycling-road", "foot-walking", "foot-hiking"],
   trail_running: ["foot-hiking", "foot-walking"],
   trailrunning: ["foot-hiking", "foot-walking"],
   walking: ["foot-walking", "foot-hiking"],
@@ -54,6 +54,54 @@ function toPoints(coords) {
       ele: Number.isFinite(Number(coord[2])) ? Number(coord[2]) : null,
     }))
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+}
+
+
+function fallbackRoutePayload({ waypoints, profiles, reason, details = [] }) {
+  const points = waypoints.map((point) => ({
+    lat: Number(Number(point.lat).toFixed(6)),
+    lon: Number(Number(point.lon).toFixed(6)),
+    ele: Number.isFinite(Number(point.ele)) ? Number(Number(point.ele).toFixed(1)) : null,
+  }));
+
+  let distanceMeters = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const R = 6371000;
+    const toRad = (value) => (Number(value) * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lon - a.lon);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    distanceMeters += 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  }
+
+  return {
+    ok: true,
+    routed: false,
+    warning: reason || "Routing provider could not snap this route. Using the drawn line as a fallback.",
+    details,
+    profile: profiles?.[0] || null,
+    route_points: {
+      source: "drawn-fallback",
+      profile: profiles?.[0] || null,
+      provider_url: null,
+      waypoints,
+      control_points: waypoints,
+      points,
+      geometry_points: points,
+      point_count: points.length,
+      routed: false,
+      fallback_reason: reason || null,
+      routed_at: new Date().toISOString(),
+    },
+    distance_km: distanceMeters ? Number((distanceMeters / 1000).toFixed(2)) : null,
+    duration_min: null,
+    elevation_gain_m: 0,
+    elevation_loss_m: 0,
+  };
 }
 
 function cleanProviderError(text) {
@@ -187,8 +235,13 @@ export async function POST(request) {
 
     if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "Routing key is missing. Check OPENROUTE_API_KEY / OPENROUTESERVICE_API_KEY / ORS_API_KEY in Vercel." },
-        { status: 500 }
+        fallbackRoutePayload({
+          waypoints,
+          profiles,
+          reason: "Routing key is missing. The route was saved as a drawn fallback route.",
+          details: ["Missing OPENROUTE_API_KEY / OPENROUTESERVICE_API_KEY / ORS_API_KEY"],
+        }),
+        { status: 200 }
       );
     }
 
@@ -238,12 +291,13 @@ export async function POST(request) {
     }
 
     return NextResponse.json(
-      {
-        ok: false,
-        error: "Routing provider could not snap this route. Try fewer points or move the last point closer to a road/path.",
+      fallbackRoutePayload({
+        waypoints,
+        profiles,
+        reason: "Routing provider could not snap this route. Using the drawn line as a fallback.",
         details: providerErrors.slice(-12),
-      },
-      { status: 502 }
+      }),
+      { status: 200 }
     );
   } catch (error) {
     return NextResponse.json({ ok: false, error: error?.message || "Could not reroute." }, { status: 500 });
