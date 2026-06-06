@@ -347,6 +347,8 @@ export default function FullscreenRouteDrawPage() {
   const currentLocationRequestedRef = useRef(false);
   const draftSavedMessageTimerRef = useRef(null);
   const routeStartLookupRef = useRef("");
+  const routingAbortRef = useRef(null);
+  const routingRequestIdRef = useRef(0);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -627,16 +629,15 @@ export default function FullscreenRouteDrawPage() {
     setRoutingStatus("idle");
     setRoutingError("");
 
-    if (["promote_shape_handle", "move_control_point"].includes(meta?.type) && safeControlPoints.length >= 2) {
-      // Keep the existing routed geometry visible while the new route is calculated.
-      // This prevents the temporary straight-line spike/uitstulping that happens when
-      // a moved handle is rendered before ORS has returned the snapped route.
-      setRoutingStatus("routing");
-      rerouteControlPoints(safeControlPoints, { silent: true });
+    if (safeControlPoints.length < 2) {
+      setRoutedPayload(null);
       return;
     }
 
-    setRoutedPayload(null);
+    // Keep the last routed geometry visible while the debounced route request runs.
+    // Professional routebuilders avoid clearing the route on every tiny edit because
+    // that makes snapping feel slow and jumpy on mobile.
+    setRoutingStatus("routing");
   }
 
   function undoPoint() {
@@ -694,6 +695,16 @@ export default function FullscreenRouteDrawPage() {
     const control = compactControlPoints(controlPoints);
     if (control.length < 2) return;
 
+    const requestId = routingRequestIdRef.current + 1;
+    routingRequestIdRef.current = requestId;
+
+    if (routingAbortRef.current) {
+      routingAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    routingAbortRef.current = controller;
+
     try {
       setRoutingStatus("routing");
 
@@ -706,9 +717,12 @@ export default function FullscreenRouteDrawPage() {
           sport_id: sportId,
           points: control,
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json().catch(() => ({}));
+
+      if (requestId !== routingRequestIdRef.current) return;
 
       if (!response.ok || !data?.ok) {
         const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
@@ -733,9 +747,11 @@ export default function FullscreenRouteDrawPage() {
       const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
       const routePayload = geometry.length >= 2
         ? {
-            ...routePayloadFromGeometry(geometry, control, "full-controlpoint-reroute"),
-            profile: routed?.profile || null,
-            provider_url: routed?.provider_url || null,
+            ...routePayloadFromGeometry(geometry, control, data?.routed === false ? "drawn-fallback" : "full-controlpoint-reroute"),
+            profile: routed?.profile || data?.profile || null,
+            provider_url: routed?.provider_url || data?.provider_url || null,
+            routed: data?.routed !== false,
+            fallback_reason: data?.routed === false ? data?.warning || "Routing provider used fallback geometry." : null,
             routed_at: new Date().toISOString(),
           }
         : routed;
@@ -750,6 +766,9 @@ export default function FullscreenRouteDrawPage() {
         setMessage("");
       }
     } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (requestId !== routingRequestIdRef.current) return;
+
       console.error("Routing failed", error);
       const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
       setRoutedPayload({
@@ -761,6 +780,10 @@ export default function FullscreenRouteDrawPage() {
       setRoutingStatus("done");
       setRoutingError("");
       if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+    } finally {
+      if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
+        routingAbortRef.current = null;
+      }
     }
   }
 
@@ -907,7 +930,7 @@ export default function FullscreenRouteDrawPage() {
 
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
-    }, 850);
+    }, 450);
 
     return () => window.clearTimeout(timeout);
   }, [routeSignature, sportId]);
