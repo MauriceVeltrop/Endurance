@@ -70,15 +70,49 @@ function normalizeRoutePoints(routePoints) {
   return [];
 }
 
-function routeStartLocation(route) {
+function routeStartPoint(route) {
   const points = normalizeRoutePoints(route?.route_points);
   const first = points[0];
 
-  if (first?.lat && first?.lon) {
+  if (!first?.lat || !first?.lon) return null;
+
+  return {
+    lat: Number(first.lat),
+    lon: Number(first.lon),
+  };
+}
+
+function routeStartLocation(route) {
+  const first = routeStartPoint(route);
+
+  if (first) {
     return `${Number(first.lat).toFixed(5)}, ${Number(first.lon).toFixed(5)}`;
   }
 
   return route?.title || "";
+}
+
+function isCoordinateLabel(value) {
+  return /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(String(value || ""));
+}
+
+async function resolveRouteStartLocation(route) {
+  const first = routeStartPoint(route);
+
+  if (!first) return route?.title || "";
+
+  try {
+    const response = await fetch(`/api/geocode/reverse?lat=${encodeURIComponent(first.lat)}&lon=${encodeURIComponent(first.lon)}&prefer=poi`);
+    if (!response.ok) throw new Error("Reverse geocode failed");
+
+    const data = await response.json();
+    const label = String(data?.label || data?.name || data?.place || "").trim();
+
+    return label || routeStartLocation(route);
+  } catch (error) {
+    console.warn("Could not resolve route start location", error);
+    return routeStartLocation(route);
+  }
 }
 
 function routeEstimatedDuration(route) {
@@ -469,7 +503,8 @@ function CreateTrainingPageContent() {
       }
 
       if (routeToPrefill) {
-        const startPoint = normalizeRoutePoints(routeToPrefill.route_points)[0];
+        const startPoint = routeStartPoint(routeToPrefill);
+        const resolvedStartLocation = await resolveRouteStartLocation(routeToPrefill);
 
         setPrefilledRoute(routeToPrefill);
         setForm((current) => ({
@@ -480,9 +515,12 @@ function CreateTrainingPageContent() {
           route_id: routeToPrefill.id,
           distance_km: routeToPrefill.distance_km ? String(routeToPrefill.distance_km) : current.distance_km,
           estimated_duration_min: routeEstimatedDuration(routeToPrefill) || current.estimated_duration_min,
-          start_location: current.start_location?.trim() || routeStartLocation(routeToPrefill),
-          latitude: startPoint?.lat ? Number(startPoint.lat) : current.latitude,
-          longitude: startPoint?.lon ? Number(startPoint.lon) : current.longitude,
+          start_location:
+            current.start_location?.trim() && !isCoordinateLabel(current.start_location)
+              ? current.start_location
+              : resolvedStartLocation,
+          latitude: Number.isFinite(startPoint?.lat) ? Number(startPoint.lat) : current.latitude,
+          longitude: Number.isFinite(startPoint?.lon) ? Number(startPoint.lon) : current.longitude,
         }));
         setMessage(`Route attached: ${routeToPrefill.title}`);
       }
@@ -1381,19 +1419,27 @@ function CreateTrainingPageContent() {
 
                 {filteredRoutes.length ? (
                   <>
-                    <select value={form.route_id} onChange={(event) => {
+                    <select value={form.route_id} onChange={async (event) => {
                       const routeId = event.target.value;
                       const selectedRoute = filteredRoutes.find((route) => route.id === routeId);
                       updateForm("route_id", routeId);
 
                       if (selectedRoute) {
+                        const startPoint = routeStartPoint(selectedRoute);
+                        const resolvedStartLocation = await resolveRouteStartLocation(selectedRoute);
+
                         setPrefilledRoute(selectedRoute);
                         setForm((current) => ({
                           ...current,
                           route_id: selectedRoute.id,
                           distance_km: selectedRoute.distance_km ? String(selectedRoute.distance_km) : current.distance_km,
                           estimated_duration_min: routeEstimatedDuration(selectedRoute) || current.estimated_duration_min,
-                          start_location: current.start_location?.trim() || routeStartLocation(selectedRoute),
+                          start_location:
+                            current.start_location?.trim() && !isCoordinateLabel(current.start_location)
+                              ? current.start_location
+                              : resolvedStartLocation,
+                          latitude: Number.isFinite(startPoint?.lat) ? Number(startPoint.lat) : current.latitude,
+                          longitude: Number.isFinite(startPoint?.lon) ? Number(startPoint.lon) : current.longitude,
                         }));
                       }
                     }} style={styles.input}>
