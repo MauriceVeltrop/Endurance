@@ -578,7 +578,7 @@ export default function FullscreenRouteDrawPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || !data?.ok) {
         throw new Error(data?.error || "Local rerouting failed.");
@@ -708,10 +708,20 @@ export default function FullscreenRouteDrawPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Routing failed.");
+        const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
+        setRoutedPayload({
+          ...fallbackPayload,
+          routed: false,
+          fallback_reason: data?.error || "Routing failed.",
+          routed_at: new Date().toISOString(),
+        });
+        setRoutingStatus("done");
+        setRoutingError("");
+        if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+        return;
       }
 
       const routed = data.route_points || data;
@@ -741,9 +751,16 @@ export default function FullscreenRouteDrawPage() {
       }
     } catch (error) {
       console.error("Routing failed", error);
-      setRoutingStatus("error");
-      setRoutingError(error?.message || "Routing failed.");
-      if (!silent) setMessage(error?.message || "Could not snap this route to roads/paths.");
+      const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
+      setRoutedPayload({
+        ...fallbackPayload,
+        routed: false,
+        fallback_reason: error?.message || "Routing failed.",
+        routed_at: new Date().toISOString(),
+      });
+      setRoutingStatus("done");
+      setRoutingError("");
+      if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
     }
   }
 
@@ -820,8 +837,7 @@ export default function FullscreenRouteDrawPage() {
     }
 
     if (points.length >= 2 && !routedPayload?.points?.length) {
-      setMessage("This route has not been snapped yet. Tap the route again or wait for routing to finish.");
-      return;
+      setRoutedPayload(routePayloadFromGeometry(points, points, "drawn-fallback"));
     }
 
     try {
