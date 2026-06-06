@@ -12,7 +12,7 @@ const ROUTING_BASES = [
 ].filter(Boolean);
 
 const PROFILE_CANDIDATES = {
-  running: ["cycling-regular", "cycling-road", "foot-walking", "foot-hiking"],
+  running: ["foot-walking", "foot-hiking"],
   trail_running: ["foot-hiking", "foot-walking"],
   trailrunning: ["foot-hiking", "foot-walking"],
   walking: ["foot-walking", "foot-hiking"],
