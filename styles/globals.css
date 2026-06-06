@@ -11178,20 +11178,24 @@ main {
   }
 }
 
-/* Routebuilder quality panel: explanation and inferred data notes */
-.route-quality-reasons,
-.route-quality-data-note {
+/* Routebuilder quality panel position and score debug refinement */
+.route-quality-note,
+.route-quality-explain,
+.route-quality-debug {
   border-radius: 16px !important;
-  padding: 10px 12px !important;
-  margin: 8px 0 12px !important;
   background: rgba(255,255,255,.045) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
+  border: 1px solid rgba(255,255,255,.075) !important;
+  padding: 10px 12px !important;
+  margin: 8px 0 10px !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
 }
 
-.route-quality-reasons small,
-.route-quality-data-note small {
+.route-quality-explain small,
+.route-quality-debug summary {
   display: block !important;
-  color: rgba(234,255,0,.9) !important;
+  color: rgba(234,255,0,.92) !important;
   font-size: 10px !important;
   font-weight: 950 !important;
   letter-spacing: .12em !important;
@@ -11199,16 +11203,43 @@ main {
   margin-bottom: 7px !important;
 }
 
-.route-quality-reasons p,
-.route-quality-data-note p {
+.route-quality-explain p,
+.route-quality-debug p {
   margin: 5px 0 !important;
-  color: rgba(255,255,255,.78) !important;
-  font-size: 12px !important;
-  font-weight: 750 !important;
-  line-height: 1.25 !important;
+  line-height: 1.35 !important;
 }
 
-.route-quality-data-note {
-  background: rgba(234,255,0,.07) !important;
-  border-color: rgba(234,255,0,.16) !important;
+.route-quality-debug summary {
+  cursor: pointer !important;
+  margin-bottom: 0 !important;
+}
+
+.route-quality-debug[open] summary {
+  margin-bottom: 7px !important;
+}
+
+@media (max-width: 760px) {
+  .route-quality-panel-expanded {
+    left: 112px !important;
+    right: 12px !important;
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 82px) !important;
+    max-height: 44dvh !important;
+    padding: 12px !important;
+    border-radius: 24px !important;
+  }
+
+  .route-quality-panel-header strong {
+    font-size: 16px !important;
+  }
+
+  .route-quality-panel-header > b {
+    font-size: 18px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .route-quality-panel-expanded {
+    left: 104px !important;
+    right: 8px !important;
+  }
 }
