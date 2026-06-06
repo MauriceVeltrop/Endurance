@@ -378,13 +378,119 @@ function surfaceRulesForSport(sportId) {
   return SPORT_SURFACE_RULES[sportKey(sportId)] || SPORT_SURFACE_RULES.running;
 }
 
+
+function addDistance(summary, label, meters) {
+  const safeMeters = Number(meters || 0);
+  if (!label || safeMeters <= 0) return;
+  summary[label] = (summary[label] || 0) + safeMeters;
+}
+
+function inferUnknownSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId }) {
+  const resolved = { ...(surfaces || {}) };
+  const unknownMeters = Number(resolved.unknown || 0);
+  const notes = [];
+
+  if (!unknownMeters) {
+    return { surfaces: resolved, notes, inferred_meters: 0 };
+  }
+
+  const totalWayTypeMeters = Object.values(wayTypes || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  if (!totalWayTypeMeters) {
+    return { surfaces: resolved, notes, inferred_meters: 0 };
+  }
+
+  const key = sportKey(sportId);
+  const inferred = {};
+  let remainingUnknown = unknownMeters;
+
+  const inferByWaytype = (waytype, targetSurface, confidence = 0.7, label = null) => {
+    const waytypeMeters = Number(wayTypes?.[waytype] || 0);
+    if (!waytypeMeters || remainingUnknown <= 0) return;
+
+    // Surface and waytype summaries are separate ORS aggregates, so this is a conservative estimate.
+    const estimatedMeters = Math.min(remainingUnknown, unknownMeters * (waytypeMeters / totalWayTypeMeters) * confidence);
+
+    if (estimatedMeters <= 0) return;
+
+    remainingUnknown -= estimatedMeters;
+    addDistance(inferred, targetSurface, estimatedMeters);
+    if (label) notes.push(label);
+  };
+
+  if (["running", "road_cycling", "roadcycling", "cycling"].includes(key)) {
+    inferByWaytype("cycleway", "paved", 0.95, "Unknown cycleway surface treated as likely paved.");
+    inferByWaytype("street", "paved", 0.9, "Unknown street surface treated as likely paved.");
+    inferByWaytype("road", "paved", 0.85, "Unknown road surface treated as likely paved.");
+    inferByWaytype("pedestrian", "paving_stones", 0.75, "Unknown pedestrian surface treated as likely paved.");
+    inferByWaytype("footway", "paved", 0.55, "Unknown footway surface treated as likely paved.");
+  } else if (["trail_running", "trailrunning", "hiking", "mountain_biking", "mtb"].includes(key)) {
+    inferByWaytype("path", "ground", 0.75, "Unknown path surface treated as likely natural trail.");
+    inferByWaytype("track", "compacted_gravel", 0.7, "Unknown track surface treated as likely compacted/off-road.");
+    inferByWaytype("footway", "compacted_gravel", 0.45, "Unknown footway surface treated as mixed trail surface.");
+  } else if (["gravel", "gravel_cycling"].includes(key)) {
+    inferByWaytype("track", "compacted_gravel", 0.75, "Unknown track surface treated as likely gravel/compacted.");
+    inferByWaytype("path", "fine_gravel", 0.55, "Unknown path surface treated as possible gravel.");
+    inferByWaytype("cycleway", "paved", 0.75, "Unknown cycleway surface treated as likely paved.");
+  }
+
+  const inferredMeters = Object.values(inferred).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  if (inferredMeters > 0) {
+    resolved.unknown = Math.max(0, unknownMeters - inferredMeters);
+    for (const [label, meters] of Object.entries(inferred)) {
+      addDistance(resolved, label, meters);
+    }
+  }
+
+  return {
+    surfaces: resolved,
+    notes: [...new Set(notes)].slice(0, 4),
+    inferred_meters: Number(inferredMeters.toFixed(1)),
+  };
+}
+
+function clampRouteQualityScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.max(0, Math.min(100, Number(number.toFixed(2))));
+}
+
+function explainRouteChoice({ sportId, displayScore, surfaceQuality, detourFactor, surfaceResolution }) {
+  const key = sportKey(sportId);
+  const explanations = [];
+  const ideal = Number(surfaceQuality?.ideal_ratio || 0);
+  const acceptable = Number(surfaceQuality?.acceptable_ratio || 0);
+  const avoid = Number(surfaceQuality?.avoid_ratio || 0);
+  const unknown = Number(surfaceQuality?.unknown_ratio || 0);
+
+  if (["running", "road_cycling", "roadcycling"].includes(key)) {
+    if (ideal + acceptable >= 0.75) explanations.push("Mostly paved or smooth enough for this sport.");
+    if (avoid >= 0.12) explanations.push("Contains meaningful unpaved/rough sections.");
+  } else if (["trail_running", "trailrunning", "mountain_biking", "mtb"].includes(key)) {
+    if (ideal >= 0.55) explanations.push("Contains a strong share of natural/off-road surface.");
+    if (ideal < 0.35) explanations.push("May be too paved for this sport.");
+  } else if (["gravel", "gravel_cycling"].includes(key)) {
+    if (ideal + acceptable >= 0.65) explanations.push("Surface mix looks suitable for gravel.");
+  }
+
+  if (unknown >= 0.15) explanations.push("Some surface data is missing in OSM/ORS.");
+  if (detourFactor > 1.25) explanations.push("Route takes a noticeable detour for better sport suitability.");
+  if (displayScore >= 90) explanations.push("Overall route quality is high for the selected sport.");
+  if (surfaceResolution?.notes?.length) explanations.push(...surfaceResolution.notes.slice(0, 2));
+
+  return [...new Set(explanations)].slice(0, 5);
+}
+
 function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance }) {
   const quality = routeQualityForSport(sportId);
   const surfaceRules = surfaceRulesForSport(sportId);
   const distance = Number(feature?.properties?.summary?.distance || 0);
   const safeDistance = distance > 0 ? distance : directDistance || 1;
   const wayTypes = summarizeWayTypes(feature);
-  const surfaces = summarizeSurfaces(feature);
+  const rawSurfaces = summarizeSurfaces(feature);
+  const surfaceResolution = inferUnknownSurfaceFromWaytypes({ surfaces: rawSurfaces, wayTypes, sportId });
+  const surfaces = surfaceResolution.surfaces;
 
   let score = 100;
 
@@ -442,17 +548,27 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
   if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 5;
 
+  const surfaceQuality = {
+    ideal_ratio: Number(idealSurfaceRatio.toFixed(3)),
+    acceptable_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
+    avoid_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
+    unknown_ratio: Number(unknownSurfaceRatio.toFixed(3)),
+  };
+
+  const displayScore = clampRouteQualityScore(
+    score - (unknownSurfaceRatio * 35) - (avoidedSurfaceRatio * 60) - (Math.max(0, detourFactor - 1) * 10)
+  );
+
   return {
     score,
+    displayScore,
     detourFactor: Number(detourFactor.toFixed(3)),
     wayTypes,
     surfaces,
-    surfaceQuality: {
-      ideal_ratio: Number(idealSurfaceRatio.toFixed(3)),
-      acceptable_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
-      avoid_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
-      unknown_ratio: Number(unknownSurfaceRatio.toFixed(3)),
-    },
+    rawSurfaces,
+    surfaceQuality,
+    surfaceResolution,
+    explanations: explainRouteChoice({ sportId, displayScore, surfaceQuality, detourFactor, surfaceResolution }),
   };
 }
 
@@ -531,10 +647,14 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
           ascent: Number(feature?.properties?.ascent || 0),
           descent: Number(feature?.properties?.descent || 0),
           suitability_score: Number(score.score.toFixed(2)),
+          display_suitability_score: score.displayScore,
           detour_factor: score.detourFactor,
           waytypes: score.wayTypes,
           surfaces: score.surfaces,
+          raw_surfaces: score.rawSurfaces,
           surface_quality: score.surfaceQuality,
+          surface_resolution: score.surfaceResolution,
+          explanations: score.explanations,
           alternative_index: index,
         };
       })
@@ -558,10 +678,14 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
   let ascent = 0;
   let descent = 0;
   let suitabilityScore = 0;
+  let displaySuitabilityScore = 0;
   let detourFactor = 1;
   const selectedAlternatives = [];
   const waytypes = {};
   const surfaces = {};
+  const rawSurfaces = {};
+  const surfaceResolutionNotes = [];
+  const explanations = [];
   const surfaceQualityTotals = { ideal_ratio: 0, acceptable_ratio: 0, avoid_ratio: 0, unknown_ratio: 0 };
 
   for (let index = 0; index < chunks.length; index += 1) {
@@ -586,6 +710,7 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     ascent += selected.ascent || 0;
     descent += selected.descent || 0;
     suitabilityScore += selected.suitability_score || 0;
+    displaySuitabilityScore += Number.isFinite(Number(selected.display_suitability_score)) ? Number(selected.display_suitability_score) : Number(selected.suitability_score || 0);
     detourFactor = Math.max(detourFactor, selected.detour_factor || 1);
     selectedAlternatives.push(selected.alternative_index || 0);
 
@@ -595,6 +720,18 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
 
     for (const [label, value] of Object.entries(selected.surfaces || {})) {
       surfaces[label] = (surfaces[label] || 0) + Number(value || 0);
+    }
+
+    for (const [label, value] of Object.entries(selected.raw_surfaces || {})) {
+      rawSurfaces[label] = (rawSurfaces[label] || 0) + Number(value || 0);
+    }
+
+    if (selected.surface_resolution?.notes?.length) {
+      surfaceResolutionNotes.push(...selected.surface_resolution.notes);
+    }
+
+    if (selected.explanations?.length) {
+      explanations.push(...selected.explanations);
     }
 
     for (const [label, value] of Object.entries(selected.surface_quality || {})) {
@@ -610,10 +747,14 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     descent,
     chunks: chunks.length,
     suitability_score: Number((suitabilityScore / chunks.length).toFixed(2)),
+    display_suitability_score: clampRouteQualityScore(displaySuitabilityScore / chunks.length),
     detour_factor: Number(detourFactor.toFixed(3)),
     selected_alternatives: selectedAlternatives,
     waytypes,
     surfaces,
+    raw_surfaces: rawSurfaces,
+    surface_resolution_notes: [...new Set(surfaceResolutionNotes)].slice(0, 6),
+    explanations: [...new Set(explanations)].slice(0, 6),
     surface_quality: Object.fromEntries(
       Object.entries(surfaceQualityTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
     ),
@@ -720,10 +861,14 @@ export async function POST(request) {
           max_detour_factor: maxDetourFactor,
           detour_factor: selected.result.detour_factor,
           suitability_score: selected.result.suitability_score,
+          display_suitability_score: selected.result.display_suitability_score,
           selected_alternatives: selected.result.selected_alternatives,
           waytypes: selected.result.waytypes,
           surfaces: selected.result.surfaces,
+          raw_surfaces: selected.result.raw_surfaces,
           surface_quality: selected.result.surface_quality,
+          surface_resolution_notes: selected.result.surface_resolution_notes,
+          explanations: selected.result.explanations,
           candidates_considered: successfulCandidates.length,
           eligible_candidates: eligible.length || successfulCandidates.length,
         },
@@ -743,10 +888,14 @@ export async function POST(request) {
             max_detour_factor: maxDetourFactor,
             detour_factor: selected.result.detour_factor,
             suitability_score: selected.result.suitability_score,
+            display_suitability_score: selected.result.display_suitability_score,
             selected_alternatives: selected.result.selected_alternatives,
             waytypes: selected.result.waytypes,
             surfaces: selected.result.surfaces,
+            raw_surfaces: selected.result.raw_surfaces,
             surface_quality: selected.result.surface_quality,
+            surface_resolution_notes: selected.result.surface_resolution_notes,
+            explanations: selected.result.explanations,
             candidates_considered: successfulCandidates.length,
             eligible_candidates: eligible.length || successfulCandidates.length,
           },
