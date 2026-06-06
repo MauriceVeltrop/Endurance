@@ -11023,3 +11023,157 @@ main {
   margin-left: -15px !important;
   font-size: 12px !important;
 }
+
+/* Routebuilder quality panel */
+.route-quality-panel-expanded {
+  position: fixed !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 82px) !important;
+  z-index: 2147482200 !important;
+  border-radius: 28px !important;
+  padding: 14px !important;
+  background: rgba(5, 8, 8, .88) !important;
+  border: 1px solid rgba(234, 255, 0, .22) !important;
+  box-shadow: 0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  max-height: 42dvh !important;
+  overflow: auto !important;
+  color: #fff !important;
+}
+
+.route-quality-panel-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin-bottom: 12px !important;
+}
+
+.route-quality-panel-header span {
+  color: #eaff00 !important;
+  font-size: 24px !important;
+  line-height: 1 !important;
+}
+
+.route-quality-panel-header strong {
+  flex: 1 !important;
+  font-size: 18px !important;
+  font-weight: 950 !important;
+}
+
+.route-quality-panel-header > b {
+  color: #eaff00 !important;
+  font-size: 20px !important;
+  font-weight: 950 !important;
+}
+
+.route-quality-panel-header button {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.06) !important;
+  color: #fff !important;
+  font-weight: 950 !important;
+}
+
+.route-quality-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+.route-quality-grid div {
+  border-radius: 16px !important;
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  padding: 9px 8px !important;
+}
+
+.route-quality-grid span {
+  display: block !important;
+  color: rgba(255,255,255,.62) !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  letter-spacing: .03em !important;
+  line-height: 1.1 !important;
+}
+
+.route-quality-grid b {
+  display: block !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+  margin-top: 4px !important;
+}
+
+.route-quality-warning,
+.route-quality-ok {
+  border-radius: 16px !important;
+  padding: 10px 12px !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  margin: 8px 0 12px !important;
+}
+
+.route-quality-warning {
+  background: rgba(255, 99, 99, .14) !important;
+  border: 1px solid rgba(255, 99, 99, .25) !important;
+  color: #ffd1d1 !important;
+}
+
+.route-quality-ok {
+  background: rgba(234, 255, 0, .12) !important;
+  border: 1px solid rgba(234, 255, 0, .22) !important;
+  color: #f3ff8f !important;
+}
+
+.route-quality-breakdown {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.route-quality-breakdown > div {
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(255,255,255,.075) !important;
+  padding: 10px !important;
+}
+
+.route-quality-breakdown small {
+  display: block !important;
+  color: rgba(234,255,0,.9) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: .12em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 7px !important;
+}
+
+.route-quality-breakdown p {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 5px 0 !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+}
+
+.route-quality-breakdown p b {
+  color: #fff !important;
+  font-weight: 950 !important;
+}
+
+@media (max-width: 480px) {
+  .route-quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .route-quality-breakdown {
+    grid-template-columns: 1fr !important;
+  }
+}
