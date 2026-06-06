@@ -362,9 +362,12 @@ function getRouteQuality(payload = {}, sportId = "") {
   const pavedRatio = Number(surfaceQuality.ideal_ratio || 0) + Number(surfaceQuality.acceptable_ratio || 0);
   const unsuitableRatio = Number(surfaceQuality.avoid_ratio || 0);
   const unknownRatio = Number(surfaceQuality.unknown_ratio || 0);
-  const score = Number.isFinite(Number(quality.suitability_score))
-    ? Math.max(0, Math.min(100, Math.round(Number(quality.suitability_score))))
-    : Math.max(0, Math.min(100, Math.round((pavedRatio * 88) + ((1 - unsuitableRatio) * 12))));
+  const scoreSource = Number.isFinite(Number(quality.display_suitability_score))
+    ? quality.display_suitability_score
+    : quality.suitability_score;
+  const score = Number.isFinite(Number(scoreSource))
+    ? Math.max(0, Math.min(100, Math.round(Number(scoreSource))))
+    : Math.max(0, Math.min(100, Math.round((pavedRatio * 82) + ((1 - unsuitableRatio) * 12) - (unknownRatio * 28))));
 
   const warnings = [];
   const key = String(sportId || quality.sport_id || "").toLowerCase();
@@ -377,8 +380,22 @@ function getRouteQuality(payload = {}, sportId = "") {
     warnings.push("This route is quite paved for the selected sport.");
   }
 
-  if (unknownRatio >= 0.35) {
+  if (unknownRatio >= 0.25) {
     warnings.push("A large part of the surface is unknown in OSM/ORS data.");
+  }
+
+  const explanationItems = Array.isArray(quality.explanations)
+    ? quality.explanations.filter(Boolean).slice(0, 4)
+    : [];
+
+  const resolutionItems = Array.isArray(quality.surface_resolution_notes)
+    ? quality.surface_resolution_notes.filter(Boolean).slice(0, 3)
+    : [];
+
+  if (!explanationItems.length && !warnings.length) {
+    if (pavedRatio >= 0.75) explanationItems.push("Mostly paved or smooth enough for the selected sport.");
+    if (unsuitableRatio <= 0.05) explanationItems.push("Very little unsuitable surface detected.");
+    if (Number(quality.detour_factor || 1) <= 1.2) explanationItems.push("Route stays within the sport-specific detour margin.");
   }
 
   return {
@@ -388,8 +405,11 @@ function getRouteQuality(payload = {}, sportId = "") {
     unknownPercent: Math.round(unknownRatio * 100),
     detourFactor: Number(quality.detour_factor || 1),
     candidates: Number(quality.candidates_considered || 0),
-    surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
-    waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
+    surfaces: metersToPercentMap(quality.surfaces).slice(0, 5),
+    rawSurfaces: metersToPercentMap(quality.raw_surfaces).slice(0, 5),
+    waytypes: metersToPercentMap(quality.waytypes).slice(0, 5),
+    explanations: explanationItems,
+    resolutionItems,
     warnings,
   };
 }
@@ -397,7 +417,7 @@ function getRouteQuality(payload = {}, sportId = "") {
 function humanizeRouteLabel(value = "") {
   return String(value || "unknown")
     .replace(/_/g, " ")
-    .replace(/\w/g, (char) => char.toUpperCase());
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function RouteQualityPanel({ payload, sportId, onClose }) {
@@ -426,6 +446,24 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
       ) : (
         <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
       )}
+
+      {quality.explanations.length ? (
+        <div className="route-quality-reasons">
+          <small>Why this route?</small>
+          {quality.explanations.map((item, index) => (
+            <p key={`quality-reason-${index}`}>✓ {item}</p>
+          ))}
+        </div>
+      ) : null}
+
+      {quality.resolutionItems.length ? (
+        <div className="route-quality-data-note">
+          <small>Data interpretation</small>
+          {quality.resolutionItems.map((item, index) => (
+            <p key={`quality-resolution-${index}`}>↳ {item}</p>
+          ))}
+        </div>
+      ) : null}
 
       <div className="route-quality-breakdown">
         <div>
