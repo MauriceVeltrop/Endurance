@@ -29,6 +29,132 @@ const PROFILE_CANDIDATES = {
 
 const MAX_WAYPOINTS_PER_PROVIDER_CALL = 9;
 const PROVIDER_TIMEOUT_MS = 16000;
+const FOOT_SNAP_TIMEOUT_MS = 5000;
+const FOOT_SNAP_RADIUS_M = 35;
+
+
+function isFootSport(sportId) {
+  const id = String(sportId || "").toLowerCase();
+  return ["running", "trail_running", "trailrunning", "walking", "hiking"].includes(id);
+}
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (value) => (Number(value) * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function projectPointToSegment(point, a, b) {
+  const latScale = 111320;
+  const lonScale = 111320 * Math.cos((point.lat * Math.PI) / 180);
+  const ax = (a.lon - point.lon) * lonScale;
+  const ay = (a.lat - point.lat) * latScale;
+  const bx = (b.lon - point.lon) * lonScale;
+  const by = (b.lat - point.lat) * latScale;
+  const abx = bx - ax;
+  const aby = by - ay;
+  const ab2 = abx * abx + aby * aby;
+  const t = ab2 ? Math.max(0, Math.min(1, -(ax * abx + ay * aby) / ab2)) : 0;
+  const x = ax + abx * t;
+  const y = ay + aby * t;
+
+  return {
+    lat: Number((point.lat + y / latScale).toFixed(7)),
+    lon: Number((point.lon + x / lonScale).toFixed(7)),
+    distance_m: Math.sqrt(x * x + y * y),
+  };
+}
+
+function nearestPointOnFootWays(point, elements) {
+  let best = null;
+
+  for (const element of elements || []) {
+    const tags = element?.tags || {};
+    const highway = tags.highway;
+    const access = tags.access;
+    const foot = tags.foot;
+    const geometry = Array.isArray(element?.geometry) ? element.geometry : [];
+
+    if (!geometry.length || ["no", "private"].includes(access) || foot === "no") continue;
+    if (!["path", "footway", "pedestrian", "steps", "track", "cycleway", "bridleway", "living_street", "residential", "service"].includes(highway)) continue;
+
+    for (let i = 1; i < geometry.length; i += 1) {
+      const a = { lat: Number(geometry[i - 1].lat), lon: Number(geometry[i - 1].lon) };
+      const b = { lat: Number(geometry[i].lat), lon: Number(geometry[i].lon) };
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon) || !Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
+      const projected = projectPointToSegment(point, a, b);
+      if (!best || projected.distance_m < best.distance_m) {
+        best = { ...projected, highway, name: tags.name || null };
+      }
+    }
+  }
+
+  return best;
+}
+
+async function fetchFootWaysAround(point, radiusM) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FOOT_SNAP_TIMEOUT_MS);
+
+  try {
+    const query = `
+      [out:json][timeout:4];
+      way(around:${radiusM},${point.lat},${point.lon})["highway"~"^(path|footway|pedestrian|steps|track|cycleway|bridleway|living_street|residential|service)$"];
+      out geom;
+    `;
+
+    const response = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: new URLSearchParams({ data: query }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data?.elements) ? data.elements : [];
+  } catch (_) {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function snapFootWaypoints({ waypoints, sportId }) {
+  if (!isFootSport(sportId) || waypoints.length < 2) {
+    return { waypoints, snapped: false, snapDetails: [] };
+  }
+
+  const snappedWaypoints = [];
+  const snapDetails = [];
+
+  for (const waypoint of waypoints) {
+    const elements = await fetchFootWaysAround(waypoint, FOOT_SNAP_RADIUS_M);
+    const nearest = nearestPointOnFootWays(waypoint, elements);
+
+    if (nearest && nearest.distance_m <= FOOT_SNAP_RADIUS_M) {
+      snappedWaypoints.push({ ...waypoint, lat: nearest.lat, lon: nearest.lon });
+      snapDetails.push({
+        original: waypoint,
+        snapped: { lat: nearest.lat, lon: nearest.lon },
+        distance_m: Number(nearest.distance_m.toFixed(1)),
+        highway: nearest.highway,
+        name: nearest.name,
+      });
+    } else {
+      snappedWaypoints.push(waypoint);
+      snapDetails.push({ original: waypoint, snapped: null, distance_m: null });
+    }
+  }
+
+  const changed = snappedWaypoints.some((point, index) => haversineMeters(point, waypoints[index]) > 1);
+  return { waypoints: changed ? snappedWaypoints : waypoints, snapped: changed, snapDetails };
+}
 
 function profilesForSport(sportId, requestedProfile) {
   const requested = String(requestedProfile || "").trim();
@@ -220,12 +346,15 @@ async function routeInChunks({ url, apiKey, waypoints }) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const waypoints = normalize(body?.points);
+    const rawWaypoints = normalize(body?.points);
     const profiles = profilesForSport(body?.sport_id, body?.profile);
 
-    if (waypoints.length < 2) {
+    if (rawWaypoints.length < 2) {
       return NextResponse.json({ ok: false, error: "At least two route points are required." }, { status: 400 });
     }
+
+    const snapResult = await snapFootWaypoints({ waypoints: rawWaypoints, sportId: body?.sport_id });
+    const waypoints = snapResult.waypoints;
 
     const apiKey =
       process.env.OPENROUTE_API_KEY ||
@@ -263,6 +392,7 @@ export async function POST(request) {
           return NextResponse.json({
             ok: true,
             routed: true,
+            snapped: snapResult.snapped,
             chunked: result.chunks > 1,
             chunk_count: result.chunks,
             profile,
@@ -272,6 +402,9 @@ export async function POST(request) {
               profile,
               provider_url: url,
               waypoints,
+              original_waypoints: rawWaypoints,
+              snapped_waypoints: snapResult.snapped ? waypoints : null,
+              snap_details: snapResult.snapDetails,
               points,
               point_count: points.length,
               chunked: result.chunks > 1,
