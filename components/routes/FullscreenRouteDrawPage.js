@@ -129,6 +129,7 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
     point_count: points.length,
     distance_km: payload?.distance_km || null,
     elevation_gain_m: payload?.elevation_gain_m || 0,
+    route_quality: payload?.route_quality || null,
     routed_at: payload?.routed_at || payload?.drawn_at || payload?.edited_at || new Date().toISOString(),
   };
 }
@@ -341,6 +342,110 @@ function ElevationMiniStrip({ points = [] }) {
   );
 }
 
+function metersToPercentMap(summary = {}) {
+  const entries = Object.entries(summary || {}).map(([label, meters]) => [label, Number(meters || 0)]);
+  const total = entries.reduce((sum, [, meters]) => sum + meters, 0);
+
+  if (!total) return [];
+
+  return entries
+    .filter(([, meters]) => meters > 0)
+    .map(([label, meters]) => ({ label, meters, percent: Math.round((meters / total) * 100) }))
+    .sort((a, b) => b.meters - a.meters);
+}
+
+function getRouteQuality(payload = {}, sportId = "") {
+  const quality = payload?.route_quality;
+  if (!quality) return null;
+
+  const surfaceQuality = quality.surface_quality || {};
+  const pavedRatio = Number(surfaceQuality.ideal_ratio || 0) + Number(surfaceQuality.acceptable_ratio || 0);
+  const unsuitableRatio = Number(surfaceQuality.avoid_ratio || 0);
+  const unknownRatio = Number(surfaceQuality.unknown_ratio || 0);
+  const score = Number.isFinite(Number(quality.suitability_score))
+    ? Math.max(0, Math.min(100, Math.round(Number(quality.suitability_score))))
+    : Math.max(0, Math.min(100, Math.round((pavedRatio * 88) + ((1 - unsuitableRatio) * 12))));
+
+  const warnings = [];
+  const key = String(sportId || quality.sport_id || "").toLowerCase();
+
+  if (["running", "road_cycling", "roadcycling"].includes(key) && unsuitableRatio >= 0.18) {
+    warnings.push("Contains a lot of unpaved surface for this sport.");
+  }
+
+  if (["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key) && pavedRatio >= 0.75) {
+    warnings.push("This route is quite paved for the selected sport.");
+  }
+
+  if (unknownRatio >= 0.35) {
+    warnings.push("A large part of the surface is unknown in OSM/ORS data.");
+  }
+
+  return {
+    score,
+    pavedPercent: Math.round(pavedRatio * 100),
+    unsuitablePercent: Math.round(unsuitableRatio * 100),
+    unknownPercent: Math.round(unknownRatio * 100),
+    detourFactor: Number(quality.detour_factor || 1),
+    candidates: Number(quality.candidates_considered || 0),
+    surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
+    waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
+    warnings,
+  };
+}
+
+function humanizeRouteLabel(value = "") {
+  return String(value || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\w/g, (char) => char.toUpperCase());
+}
+
+function RouteQualityPanel({ payload, sportId, onClose }) {
+  const quality = getRouteQuality(payload, sportId);
+
+  if (!quality) return null;
+
+  return (
+    <section className="route-quality-panel-expanded" aria-label="Route quality">
+      <div className="route-quality-panel-header">
+        <span>◎</span>
+        <strong>Route quality</strong>
+        <b>{quality.score}/100</b>
+        <button type="button" onClick={onClose} aria-label="Close route quality">×</button>
+      </div>
+
+      <div className="route-quality-grid">
+        <div><span>Paved / suitable</span><b>{quality.pavedPercent}%</b></div>
+        <div><span>Unsuitable</span><b>{quality.unsuitablePercent}%</b></div>
+        <div><span>Unknown</span><b>{quality.unknownPercent}%</b></div>
+        <div><span>Detour</span><b>{quality.detourFactor.toFixed(2)}×</b></div>
+      </div>
+
+      {quality.warnings.length ? (
+        <div className="route-quality-warning">{quality.warnings[0]}</div>
+      ) : (
+        <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
+      )}
+
+      <div className="route-quality-breakdown">
+        <div>
+          <small>Surface</small>
+          {quality.surfaces.length ? quality.surfaces.map((item) => (
+            <p key={`surface-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
+          )) : <p><span>Unknown</span><b>—</b></p>}
+        </div>
+        <div>
+          <small>Waytype</small>
+          {quality.waytypes.length ? quality.waytypes.map((item) => (
+            <p key={`waytype-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
+          )) : <p><span>Unknown</span><b>—</b></p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
   const loadedDraftRef = useRef(false);
@@ -360,6 +465,7 @@ export default function FullscreenRouteDrawPage() {
   const [checking, setChecking] = useState(true);
   const [showPointPanel, setShowPointPanel] = useState(false);
   const [showElevationPanel, setShowElevationPanel] = useState(false);
+  const [showQualityPanel, setShowQualityPanel] = useState(false);
   const [routedPayload, setRoutedPayload] = useState(null);
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
@@ -376,6 +482,7 @@ export default function FullscreenRouteDrawPage() {
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
   const points = controlPoints;
   const activeRoutePayload = routedPayload || pointsPayload;
+  const routeQuality = useMemo(() => getRouteQuality(routedPayload || activeRoutePayload, sportId), [routedPayload, activeRoutePayload, sportId]);
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2;
   const routeSignature = useMemo(
@@ -606,6 +713,7 @@ export default function FullscreenRouteDrawPage() {
         ...routePayloadFromGeometry(mergedGeometry, next, data?.routed === false ? "manual-local-segment" : "local-segment-reroute"),
         profile: routed?.profile || null,
         provider_url: routed?.provider_url || null,
+        route_quality: routed?.route_quality || data?.route_quality || null,
         routed_at: new Date().toISOString(),
       });
       setRoutingStatus("done");
@@ -750,6 +858,7 @@ export default function FullscreenRouteDrawPage() {
             ...routePayloadFromGeometry(geometry, control, data?.routed === false ? "drawn-fallback" : "full-controlpoint-reroute"),
             profile: routed?.profile || data?.profile || null,
             provider_url: routed?.provider_url || data?.provider_url || null,
+            route_quality: routed?.route_quality || data?.route_quality || null,
             routed: data?.routed !== false,
             fallback_reason: data?.routed === false ? data?.warning || "Routing provider used fallback geometry." : null,
             routed_at: new Date().toISOString(),
@@ -1096,6 +1205,14 @@ export default function FullscreenRouteDrawPage() {
         </section>
       ) : null}
 
+      {showQualityPanel ? (
+        <RouteQualityPanel
+          payload={routedPayload || activeRoutePayload}
+          sportId={sportId}
+          onClose={() => setShowQualityPanel(false)}
+        />
+      ) : null}
+
 
 
       {showPointPanel ? (
@@ -1141,6 +1258,9 @@ export default function FullscreenRouteDrawPage() {
           </button>
           <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
             <b className="route-tool-danger">⌫</b><span>Clear</span>
+          </button>
+          <button type="button" onClick={() => setShowQualityPanel((value) => !value)} className={showQualityPanel ? "active" : ""} disabled={!routeQuality} aria-label="Route quality">
+            <b>◎</b><span>Quality</span>
           </button>
           <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile">
             <b>△</b><span>Elevation</span>
