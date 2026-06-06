@@ -24,6 +24,58 @@ function pickPlace(properties = {}) {
   );
 }
 
+function cleanParts(parts) {
+  return parts.map((part) => String(part || "").trim()).filter(Boolean);
+}
+
+function formatAddressLabel(address = {}, fallback = "") {
+  const namedPlace =
+    address.amenity ||
+    address.tourism ||
+    address.leisure ||
+    address.shop ||
+    address.office ||
+    address.craft ||
+    address.building ||
+    "";
+
+  const street = cleanParts([address.road, address.house_number]).join(" ");
+  const place =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.hamlet ||
+    address.suburb ||
+    address.neighbourhood ||
+    address.county ||
+    "";
+
+  if (namedPlace && place) return cleanParts([namedPlace, place]).join(", ");
+  if (namedPlace) return namedPlace;
+  if (street && place) return `${street}, ${place}`;
+  if (street) return street;
+  if (place) return place;
+
+  return String(fallback || "").trim();
+}
+
+function formatFeatureLabel(properties = {}) {
+  const name = properties.name || properties.label || "";
+  const locality =
+    properties.locality ||
+    properties.localadmin ||
+    properties.municipality ||
+    properties.city ||
+    properties.town ||
+    properties.village ||
+    properties.neighbourhood ||
+    properties.county ||
+    "";
+
+  return cleanParts([name, locality]).join(", ") || properties.label || name || "";
+}
+
 async function reverseWithOrs(lat, lon, apiKey) {
   if (!apiKey) return null;
 
@@ -33,21 +85,27 @@ async function reverseWithOrs(lat, lon, apiKey) {
         `${base}?api_key=${encodeURIComponent(apiKey)}` +
         `&point.lat=${encodeURIComponent(lat)}` +
         `&point.lon=${encodeURIComponent(lon)}` +
-        `&size=1`;
+        `&size=6` + `&layers=venue,address,street,locality,neighbourhood`;
 
       const response = await fetch(url, { headers: { Accept: "application/json" } });
       if (!response.ok) continue;
 
       const data = await response.json();
-      const feature = data?.features?.[0];
+      const features = Array.isArray(data?.features) ? data.features : [];
+      const feature =
+        features.find((item) => ["venue", "address"].includes(item?.properties?.layer)) ||
+        features[0];
+
       if (!feature) continue;
 
       const properties = feature?.properties || {};
       const coordinates = feature?.geometry?.coordinates || [];
+      const label = formatFeatureLabel(properties);
 
       return {
         place: pickPlace(properties),
-        label: properties.label || properties.name || "",
+        label,
+        name: properties.name || "",
         city: properties.city || "",
         town: properties.town || "",
         village: properties.village || "",
@@ -72,7 +130,7 @@ async function reverseWithNominatim(lat, lon) {
       lon: String(lon),
       format: "jsonv2",
       addressdetails: "1",
-      zoom: "16",
+      zoom: "18",
     });
 
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
@@ -98,9 +156,12 @@ async function reverseWithNominatim(lat, lon) {
       data?.name ||
       "";
 
+    const label = formatAddressLabel(address, data?.display_name || data?.name || "");
+
     return {
       place,
-      label: data?.display_name || data?.name || "",
+      label,
+      name: data?.name || address.amenity || address.tourism || address.shop || "",
       city: address.city || "",
       town: address.town || "",
       village: address.village || "",
