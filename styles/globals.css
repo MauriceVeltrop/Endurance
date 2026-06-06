@@ -11177,3 +11177,38 @@ main {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Routebuilder quality panel: explanation and inferred data notes */
+.route-quality-reasons,
+.route-quality-data-note {
+  border-radius: 16px !important;
+  padding: 10px 12px !important;
+  margin: 8px 0 12px !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+}
+
+.route-quality-reasons small,
+.route-quality-data-note small {
+  display: block !important;
+  color: rgba(234,255,0,.9) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: .12em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 7px !important;
+}
+
+.route-quality-reasons p,
+.route-quality-data-note p {
+  margin: 5px 0 !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  line-height: 1.25 !important;
+}
+
+.route-quality-data-note {
+  background: rgba(234,255,0,.07) !important;
+  border-color: rgba(234,255,0,.16) !important;
+}
