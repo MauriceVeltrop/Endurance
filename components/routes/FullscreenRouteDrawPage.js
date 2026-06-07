@@ -154,24 +154,23 @@ function nearestGeometryIndex(target, geometry) {
   return bestIndex;
 }
 
-function pointsAreClose(a, b, tolerance = 0.00003) {
+function sameRoutePoint(a, b, precision = 1e-6) {
   if (!a || !b) return false;
-  const latDiff = Math.abs(Number(a.lat) - Number(b.lat));
-  const lonDiff = Math.abs(Number(a.lon) - Number(b.lon));
-  return Number.isFinite(latDiff) && Number.isFinite(lonDiff) && latDiff <= tolerance && lonDiff <= tolerance;
+  return Math.abs(Number(a.lat) - Number(b.lat)) <= precision && Math.abs(Number(a.lon) - Number(b.lon)) <= precision;
 }
 
-function appendWithoutDuplicate(base, addition) {
-  const safeBase = normalizeRoutePoints(base);
-  const safeAddition = normalizeRoutePoints(addition);
-  if (!safeBase.length) return safeAddition;
-  if (!safeAddition.length) return safeBase;
+function joinRouteParts(parts) {
+  const output = [];
 
-  const tail = pointsAreClose(safeBase[safeBase.length - 1], safeAddition[0])
-    ? safeAddition.slice(1)
-    : safeAddition;
+  parts.flat().forEach((point) => {
+    const normalized = normalizeRoutePoints([point])[0];
+    if (!normalized) return;
 
-  return [...safeBase, ...tail];
+    const previous = output[output.length - 1];
+    if (!sameRoutePoint(previous, normalized)) output.push(normalized);
+  });
+
+  return compactRoutePoints(output, 1200);
 }
 
 function mergeLocalSegmentGeometry(existingGeometry, previousControlPoints, nextControlPoints, insertAt, segmentGeometry) {
@@ -180,62 +179,72 @@ function mergeLocalSegmentGeometry(existingGeometry, previousControlPoints, next
   const next = normalizeRoutePoints(nextControlPoints);
   const segment = normalizeRoutePoints(segmentGeometry);
 
-  if (!next.length) return [];
-  if (next.length < 2) return next;
+  if (next.length < 2) return [];
 
-  const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
-  const isTailSegment = safeInsertAt >= next.length - 1;
+  const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
+  const hasInsertedTail = next.length > previous.length && safeInsertAt === next.length - 1;
+  const isTailChange = safeInsertAt >= next.length - 1;
+  const isHeadChange = safeInsertAt <= 0;
 
-  // Appending a new final point is the most common mobile flow. There is no
-  // “next anchor” after the finish marker, so the older merge logic returned
-  // the raw control line. That made snapping appear to stop after several km.
-  // For a tail segment we keep all existing snapped geometry up to the previous
-  // control point and append the newly snapped last segment.
-  if (isTailSegment) {
-    const anchorPoint = next[next.length - 2] || previous[previous.length - 1];
-    const finishPoint = next[next.length - 1];
-    const replacement = segment.length >= 2 ? segment : [anchorPoint, finishPoint].filter(Boolean);
-
-    if (existing.length < 2 || !anchorPoint) {
-      return compactRoutePoints(replacement.length >= 2 ? replacement : next, 900);
-    }
-
-    const anchorIndex = nearestGeometryIndex(anchorPoint, existing);
-    if (anchorIndex < 0) {
-      return compactRoutePoints(appendWithoutDuplicate(existing, replacement), 900);
-    }
-
-    const before = existing.slice(0, anchorIndex + 1);
-    return compactRoutePoints(appendWithoutDuplicate(before, replacement), 900);
-  }
-
-  const previousPoint = previous[safeInsertAt - 1] || next[safeInsertAt - 1];
-  const nextPoint = previous[safeInsertAt] || next[safeInsertAt + 1];
-  const promotedPoint = next[safeInsertAt];
+  const leftAnchor = isHeadChange ? next[0] : next[safeInsertAt - 1];
+  const changedPoint = next[safeInsertAt];
+  const rightAnchor = isTailChange ? next[next.length - 1] : next[safeInsertAt + 1];
   const replacement = segment.length >= 2
     ? segment
-    : [previousPoint, promotedPoint, nextPoint].filter(Boolean);
+    : [leftAnchor, changedPoint, rightAnchor].filter(Boolean);
 
-  if (existing.length < 2 || !previousPoint || !nextPoint) {
-    return compactRoutePoints(replacement.length >= 2 ? replacement : next, 900);
+  if (replacement.length < 2) return next;
+  if (existing.length < 2 || !leftAnchor || !rightAnchor) return joinRouteParts([next]);
+
+  // Appending a new endpoint is the critical mobile flow. The new endpoint does
+  // not exist in the old geometry, so looking for an end anchor will fail and the
+  // old implementation fell back to straight control lines after several points.
+  // For a tail append/move we keep all snapped geometry up to the previous anchor
+  // and append only the newly routed tail segment.
+  if (hasInsertedTail || isTailChange) {
+    const startIndex = nearestGeometryIndex(leftAnchor, existing);
+
+    if (startIndex < 0) {
+      return joinRouteParts([existing, replacement]);
+    }
+
+    return joinRouteParts([
+      existing.slice(0, startIndex),
+      replacement,
+    ]);
   }
 
-  let startIndex = nearestGeometryIndex(previousPoint, existing);
-  let endIndex = nearestGeometryIndex(nextPoint, existing);
+  // Moving the first point is the opposite case: the start anchor is new, so keep
+  // everything after the next stable anchor.
+  if (isHeadChange) {
+    const endIndex = nearestGeometryIndex(rightAnchor, existing);
+
+    if (endIndex < 0) {
+      return joinRouteParts([replacement, existing]);
+    }
+
+    return joinRouteParts([
+      replacement,
+      existing.slice(endIndex + 1),
+    ]);
+  }
+
+  let startIndex = nearestGeometryIndex(leftAnchor, existing);
+  let endIndex = nearestGeometryIndex(rightAnchor, existing);
 
   if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) {
-    return compactRoutePoints(next, 900);
+    return joinRouteParts([existing, replacement]);
   }
 
   if (startIndex > endIndex) {
     [startIndex, endIndex] = [endIndex, startIndex];
   }
 
-  const before = existing.slice(0, startIndex);
-  const after = existing.slice(endIndex + 1);
-  const merged = [...before, ...replacement, ...after];
-
-  return compactRoutePoints(merged, 900);
+  return joinRouteParts([
+    existing.slice(0, startIndex),
+    replacement,
+    existing.slice(endIndex + 1),
+  ]);
 }
 
 function routePayloadFromGeometry(points, waypoints, source = "local-segment-reroute") {
@@ -601,7 +610,7 @@ export default function FullscreenRouteDrawPage() {
   const routeStartLookupRef = useRef("");
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
-  const localRoutingRequestIdRef = useRef(0);
+  const localSegmentRequestIdRef = useRef(0);
   const skipNextFullRerouteRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
@@ -810,19 +819,20 @@ export default function FullscreenRouteDrawPage() {
   }
 
   async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
-    const localRequestId = localRoutingRequestIdRef.current + 1;
-    localRoutingRequestIdRef.current = localRequestId;
     const previous = normalizeRoutePoints(previousControlPoints);
     const next = compactControlPoints(nextControlPoints);
-    const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
+    const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
 
     const segmentControlPoints = [
-      next[safeInsertAt - 1],
+      safeInsertAt <= 0 ? null : next[safeInsertAt - 1],
       next[safeInsertAt],
-      next[safeInsertAt + 1],
+      safeInsertAt >= next.length - 1 ? null : next[safeInsertAt + 1],
     ].filter(Boolean);
 
     if (segmentControlPoints.length < 2) return;
+
+    const localRequestId = localSegmentRequestIdRef.current + 1;
+    localSegmentRequestIdRef.current = localRequestId;
 
     try {
       setRoutingStatus("routing");
@@ -840,7 +850,7 @@ export default function FullscreenRouteDrawPage() {
 
       const data = await response.json().catch(() => ({}));
 
-      if (localRequestId !== localRoutingRequestIdRef.current) return;
+      if (localRequestId !== localSegmentRequestIdRef.current) return;
 
       if (!response.ok || !data?.ok) {
         throw new Error(data?.error || "Local rerouting failed.");
@@ -862,6 +872,10 @@ export default function FullscreenRouteDrawPage() {
         segmentGeometry
       );
 
+      if (mergedGeometry.length < 2) {
+        throw new Error("Could not merge local segment geometry.");
+      }
+
       setRoutedPayload({
         ...routePayloadFromGeometry(mergedGeometry, next, data?.routed === false ? "manual-local-segment" : "local-segment-reroute"),
         profile: routed?.profile || null,
@@ -875,11 +889,33 @@ export default function FullscreenRouteDrawPage() {
         setMessage(data?.warning || "No snapped path found. Using the drawn line.");
       }
     } catch (error) {
-      if (localRequestId !== localRoutingRequestIdRef.current) return;
+      if (localRequestId !== localSegmentRequestIdRef.current) return;
       console.error("Local segment rerouting failed", error);
-      setRoutingStatus("error");
-      setRoutingError(error?.message || "Local rerouting failed.");
-      setMessage(error?.message || "Could not snap this segment to roads/paths.");
+
+      // Never replace the already-snapped route with a full straight control line.
+      // If the provider fails for one segment, preserve the existing snapped route
+      // and append/replace only this segment as a temporary straight fallback.
+      const baseGeometry = routedPoints.length ? routedPoints : previous;
+      const fallbackGeometry = mergeLocalSegmentGeometry(
+        baseGeometry,
+        previous,
+        next,
+        safeInsertAt,
+        segmentControlPoints
+      );
+
+      if (fallbackGeometry.length >= 2) {
+        setRoutedPayload({
+          ...routePayloadFromGeometry(fallbackGeometry, next, "local-segment-fallback"),
+          routed: false,
+          fallback_reason: error?.message || "Local rerouting failed.",
+          routed_at: new Date().toISOString(),
+        });
+      }
+
+      setRoutingStatus("done");
+      setRoutingError("");
+      setMessage("This segment could not be snapped yet. The rest of the route stays intact.");
     }
   }
 
@@ -931,7 +967,6 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function clearRoute() {
-    localRoutingRequestIdRef.current += 1;
     setPointsPayload(null);
     setRoutedPayload(null);
     setRoutingStatus("idle");
