@@ -156,29 +156,59 @@ function nearestGeometryIndex(target, geometry) {
 
 function mergeLocalSegmentGeometry(existingGeometry, previousControlPoints, nextControlPoints, insertAt, segmentGeometry) {
   const existing = normalizeRoutePoints(existingGeometry);
-  const previous = normalizeRoutePoints(previousControlPoints);
   const next = normalizeRoutePoints(nextControlPoints);
   const segment = normalizeRoutePoints(segmentGeometry);
 
-  if (!next.length) return [];
+  if (next.length < 2) return next;
 
-  const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
-  const previousPoint = previous[safeInsertAt - 1] || next[safeInsertAt - 1];
-  const nextPoint = previous[safeInsertAt] || next[safeInsertAt + 1];
-  const promotedPoint = next[safeInsertAt];
-  const replacement = segment.length >= 2
-    ? segment
-    : [previousPoint, promotedPoint, nextPoint].filter(Boolean);
+  const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || 0, next.length - 1));
+  const isFirstPoint = safeInsertAt <= 0;
+  const isLastPoint = safeInsertAt >= next.length - 1;
+  const replacement = segment.length >= 2 ? segment : next;
 
-  if (existing.length < 2 || !previousPoint || !nextPoint) {
-    return next;
+  if (existing.length < 2) {
+    return compactRoutePoints(replacement.length >= 2 ? replacement : next, 900);
+  }
+
+  // Adding or moving the final control point is the most common mobile drawing
+  // action. The old implementation expected an existing next anchor after the
+  // new point. For appended points that anchor does not exist, so it returned
+  // raw control points and the route looked like it stopped snapping. Replace
+  // the tail of the existing geometry from the previous control point onward.
+  if (isLastPoint) {
+    const startAnchor = next[safeInsertAt - 1];
+    const startIndex = nearestGeometryIndex(startAnchor, existing);
+
+    if (startIndex < 0) return compactRoutePoints(replacement, 900);
+
+    const before = existing.slice(0, startIndex);
+    return compactRoutePoints([...before, ...replacement], 900);
+  }
+
+  // Moving the first control point should replace the head up to the next
+  // anchor. This prevents the first segment from falling back to a straight line.
+  if (isFirstPoint) {
+    const endAnchor = next[1];
+    const endIndex = nearestGeometryIndex(endAnchor, existing);
+
+    if (endIndex < 0) return compactRoutePoints(replacement, 900);
+
+    const after = existing.slice(endIndex + 1);
+    return compactRoutePoints([...replacement, ...after], 900);
+  }
+
+  const previousPoint = next[safeInsertAt - 1];
+  const nextPoint = next[safeInsertAt + 1];
+
+  if (!previousPoint || !nextPoint) {
+    return compactRoutePoints(replacement, 900);
   }
 
   let startIndex = nearestGeometryIndex(previousPoint, existing);
   let endIndex = nearestGeometryIndex(nextPoint, existing);
 
   if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) {
-    return next;
+    return compactRoutePoints(replacement, 900);
   }
 
   if (startIndex > endIndex) {
@@ -765,13 +795,23 @@ export default function FullscreenRouteDrawPage() {
   async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
     const previous = normalizeRoutePoints(previousControlPoints);
     const next = compactControlPoints(nextControlPoints);
-    const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
+    const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || 0, next.length - 1));
 
-    const segmentControlPoints = [
-      next[safeInsertAt - 1],
-      next[safeInsertAt],
-      next[safeInsertAt + 1],
-    ].filter(Boolean);
+    let segmentControlPoints;
+
+    if (safeInsertAt <= 0) {
+      segmentControlPoints = [next[0], next[1]];
+    } else if (safeInsertAt >= next.length - 1) {
+      segmentControlPoints = [next[safeInsertAt - 1], next[safeInsertAt]];
+    } else {
+      segmentControlPoints = [
+        next[safeInsertAt - 1],
+        next[safeInsertAt],
+        next[safeInsertAt + 1],
+      ];
+    }
+
+    segmentControlPoints = segmentControlPoints.filter(Boolean);
 
     if (segmentControlPoints.length < 2) return;
 
