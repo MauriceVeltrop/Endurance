@@ -364,6 +364,76 @@ function runningCandidatePriority(candidate) {
   };
 }
 
+
+function isOffRoadFirstSport(sportId) {
+  return ["gravel", "gravel_cycling", "mountain_biking", "mtb"].includes(sportKey(sportId));
+}
+
+function offRoadCandidatePriority(candidate, sportId) {
+  const wayTypes = candidate?.result?.waytypes || candidate?.waytypes || {};
+  const surfaces = candidate?.result?.surfaces || candidate?.surfaces || {};
+  const quality = candidate?.result?.surface_quality || candidate?.surface_quality || {};
+  const profile = String(candidate?.profile || "");
+  const key = sportKey(sportId);
+
+  const trackRatio = routeRatio(wayTypes, ["track"]);
+  const pathRatio = routeRatio(wayTypes, ["path"]);
+  const pathTrackRatio = trackRatio + pathRatio;
+  const roadLikeRatio = routeRatio(wayTypes, ["state_road", "road", "street"]);
+  const cyclewayRatio = routeRatio(wayTypes, ["cycleway"]);
+  const offRoadSurfaceRatio = Number(
+    quality.ideal_ratio ??
+      routeRatio(surfaces, [
+        "compacted_gravel",
+        "fine_gravel",
+        "gravel",
+        "unpaved",
+        "ground",
+        "dirt",
+        "likely_gravel",
+        "likely_unpaved",
+        "estimated_gravel_surface",
+        "estimated_trail_surface",
+      ])
+  );
+  const pavedSurfaceRatio = routeRatio(surfaces, ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"]);
+  const unknownRatio = Number(quality.unknown_ratio ?? routeRatio(surfaces, ["unknown"]));
+
+  let priority = 0;
+
+  if (["gravel", "gravel_cycling"].includes(key)) {
+    priority += trackRatio * 170;
+    priority += pathRatio * 80;
+    priority += offRoadSurfaceRatio * 150;
+    priority += cyclewayRatio * 20;
+    priority -= roadLikeRatio * 115;
+    priority -= pavedSurfaceRatio * 55;
+    priority -= unknownRatio * 18;
+    if (profile === "cycling-mountain") priority += 28;
+    if (profile === "cycling-regular" && pathTrackRatio < 0.25) priority -= 25;
+    if (trackRatio >= 0.30 || offRoadSurfaceRatio >= 0.35) priority += 35;
+  } else {
+    // MTB should be even stricter than gravel: roads and cycleways are connectors only.
+    priority += pathTrackRatio * 190;
+    priority += offRoadSurfaceRatio * 170;
+    priority -= roadLikeRatio * 165;
+    priority -= cyclewayRatio * 60;
+    priority -= pavedSurfaceRatio * 80;
+    priority -= unknownRatio * 12;
+    if (profile === "cycling-mountain") priority += 40;
+    if (pathTrackRatio >= 0.38 || offRoadSurfaceRatio >= 0.45) priority += 45;
+  }
+
+  return {
+    priority,
+    path_track_ratio: Number(pathTrackRatio.toFixed(3)),
+    road_like_ratio: Number(roadLikeRatio.toFixed(3)),
+    offroad_surface_ratio: Number(offRoadSurfaceRatio.toFixed(3)),
+    paved_surface_ratio: Number(pavedSurfaceRatio.toFixed(3)),
+    unknown_surface_ratio: Number(unknownRatio.toFixed(3)),
+  };
+}
+
 function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance, optimizeMode = "balanced" }) {
   const quality = routeQualityForSport(sportId);
   const surfaceRules = surfaceRulesForSport(sportId);
@@ -455,6 +525,35 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
     }
   }
 
+
+  if (isOffRoadFirstSport(sportId)) {
+    const key = sportKey(sportId);
+    const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
+    const trackRatio = ratioOf(wayTypes, ["track"], totalKnownWayTypeDistance);
+    const roadLikeRatio = ratioOf(wayTypes, ["state_road", "road", "street"], totalKnownWayTypeDistance);
+    const cyclewayRatio = ratioOf(wayTypes, ["cycleway"], totalKnownWayTypeDistance);
+    const pavedSurfaceRatio = ratioOf(surfaces, ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"], totalKnownSurfaceDistance);
+    const offRoadSurfaceRatio = idealSurfaceRatio;
+    const minOffRoadRatio = Number(surfaceRules.minOffRoadRatio || (key.includes("mountain") || key === "mtb" ? 0.45 : 0.35));
+    const maxPavedConnectorRatio = Number(surfaceRules.maxPavedConnectorRatio || (key.includes("mountain") || key === "mtb" ? 0.5 : 0.62));
+
+    score += pathTrackRatio * (key.includes("mountain") || key === "mtb" ? 120 : 85);
+    score += offRoadSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 95 : 75);
+    score += trackRatio * 35;
+
+    score -= roadLikeRatio * (key.includes("mountain") || key === "mtb" ? 115 : 75);
+    score -= pavedSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 75 : 42);
+    score -= cyclewayRatio * (key.includes("mountain") || key === "mtb" ? 45 : 12);
+
+    if (offRoadSurfaceRatio < minOffRoadRatio && pathTrackRatio < minOffRoadRatio) {
+      score = Math.min(score, 72 - (minOffRoadRatio - Math.max(offRoadSurfaceRatio, pathTrackRatio)) * 130);
+    }
+
+    if (pavedSurfaceRatio > maxPavedConnectorRatio && pathTrackRatio < 0.25) {
+      score = Math.min(score, 76 - (pavedSurfaceRatio - maxPavedConnectorRatio) * 110);
+    }
+  }
+
   if (preference === "recommended") score += 3;
   if (preference === "shortest" && ["walking", "trail_running", "trailrunning", "hiking"].includes(sportKey(sportId))) {
     score += 2;
@@ -469,7 +568,9 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   if (profile === "cycling-regular" && sportKey(sportId) === "running") score += 16;
   if (profile === "cycling-road" && sportKey(sportId) === "running") score += 10;
   if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
-  if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 5;
+  if (profile === "cycling-mountain" && ["gravel", "gravel_cycling"].includes(sportKey(sportId))) score += 10;
+  if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 16;
+  if (profile === "cycling-regular" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score -= 8;
 
   const finalScore = Math.max(0, Math.min(100, score));
   const dataConfidence = Math.max(0, Math.min(100, Math.round((1 - unknownSurfaceRatio) * 100)));
@@ -641,6 +742,12 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
       if (sportKey(sportId) === "running") {
         const ar = runningCandidatePriority(a);
         const br = runningCandidatePriority(b);
+        const priorityDiff = br.priority - ar.priority;
+        if (Math.abs(priorityDiff) > 4) return priorityDiff;
+      }
+      if (isOffRoadFirstSport(sportId)) {
+        const ar = offRoadCandidatePriority(a, sportId);
+        const br = offRoadCandidatePriority(b, sportId);
         const priorityDiff = br.priority - ar.priority;
         if (Math.abs(priorityDiff) > 4) return priorityDiff;
       }
@@ -816,6 +923,7 @@ export async function POST(request) {
       })[0];
 
       const running_priority = sportKey(sportId) === "running" ? runningCandidatePriority(selected) : null;
+      const offroad_priority = isOffRoadFirstSport(sportId) ? offRoadCandidatePriority(selected, sportId) : null;
 
       return NextResponse.json({
         ok: true,
@@ -845,6 +953,7 @@ export async function POST(request) {
           candidates_considered: successfulCandidates.length,
           eligible_candidates: eligible.length || successfulCandidates.length,
           running_priority,
+          offroad_priority,
         },
         route_points: {
           source: selected.result.chunks > 1 ? "openrouteservice-sport-aware-chunked" : "openrouteservice-sport-aware",
@@ -873,6 +982,7 @@ export async function POST(request) {
             candidates_considered: successfulCandidates.length,
             eligible_candidates: eligible.length || successfulCandidates.length,
             running_priority,
+            offroad_priority,
           },
           routed_at: new Date().toISOString(),
         },
