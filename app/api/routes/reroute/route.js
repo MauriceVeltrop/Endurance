@@ -154,63 +154,63 @@ const SURFACE_LABELS = {
 const SPORT_SURFACE_RULES = {
   running: {
     pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved"],
+    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"],
     acceptable: ["compacted_gravel", "fine_gravel", "cobblestone", "likely_compacted"],
     avoid: ["unpaved", "gravel", "dirt", "ground", "sand", "woodchips", "grass", "ice"],
     maxUnpavedRatio: 0.18,
   },
   trail_running: {
-    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted"],
+    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["sand", "ice"],
   },
   trailrunning: {
-    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted"],
+    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["sand", "ice"],
   },
   walking: {
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "compacted_gravel", "fine_gravel", "likely_paved", "likely_compacted"],
+    ideal: ["asphalt", "paved", "concrete", "paving_stones", "compacted_gravel", "fine_gravel", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     acceptable: ["ground", "dirt", "gravel", "likely_unpaved"],
     avoid: ["sand", "ice"],
   },
   road_cycling: {
     pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "likely_paved"],
+    ideal: ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"],
     acceptable: ["paving_stones", "cobblestone"],
     avoid: ["unpaved", "compacted_gravel", "fine_gravel", "gravel", "dirt", "ground", "sand", "grass", "woodchips"],
     maxUnpavedRatio: 0.08,
   },
   roadcycling: {
     pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "likely_paved"],
+    ideal: ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"],
     acceptable: ["paving_stones", "cobblestone"],
     avoid: ["unpaved", "compacted_gravel", "fine_gravel", "gravel", "dirt", "ground", "sand", "grass", "woodchips"],
     maxUnpavedRatio: 0.08,
   },
   cycling: {
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved"],
+    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"],
     acceptable: ["compacted_gravel", "fine_gravel", "likely_compacted"],
     avoid: ["sand", "grass", "woodchips", "ice"],
   },
   gravel_cycling: {
-    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved"],
-    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted"],
+    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved", "estimated_gravel_surface", "estimated_trail_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["sand", "grass", "woodchips", "ice"],
   },
   gravel: {
-    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved"],
-    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted"],
+    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved", "estimated_gravel_surface", "estimated_trail_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["sand", "grass", "woodchips", "ice"],
   },
   mountain_biking: {
-    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted"],
+    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["ice"],
   },
   mtb: {
-    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted"],
+    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
+    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
     avoid: ["ice"],
   },
 };
@@ -381,7 +381,20 @@ function addMeters(summary, label, meters) {
   summary[label] = (summary[label] || 0) + value;
 }
 
-function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId = "" }) {
+
+function isTrailLikeSport(sportId) {
+  return ["trail_running", "trailrunning", "hiking", "mountain_biking", "mtb"].includes(sportKey(sportId));
+}
+
+function isGravelLikeSport(sportId) {
+  return ["gravel", "gravel_cycling"].includes(sportKey(sportId));
+}
+
+function isPavedFirstSport(sportId) {
+  return ["running", "road_cycling", "roadcycling"].includes(sportKey(sportId));
+}
+
+function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId = "", profile = "" }) {
   const rawSurfaces = { ...(surfaces || {}) };
   const enhancedSurfaces = { ...(surfaces || {}) };
   const unknownSurfaceMeters = Number(enhancedSurfaces.unknown || 0);
@@ -427,35 +440,63 @@ function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId
   // These waytypes are usually paved or deliberately surfaced in OSM/ORS data.
   assign(["street", "road", "state_road", "cycleway", "pedestrian"], "likely_paved", 0.95);
 
-  // Footways are often paved in urban/running contexts, but less certain in trail contexts.
-  if (["trail_running", "trailrunning", "hiking", "mountain_biking", "mtb"].includes(key)) {
+  // Footways are often paved in running/urban contexts, but less certain in trail contexts.
+  if (isTrailLikeSport(key)) {
     assign(["footway"], "likely_compacted", 0.65);
   } else {
     assign(["footway"], "likely_paved", 0.8);
   }
 
-  // Paths and tracks are intentionally not treated as paved for Running.
-  // For trail/gravel/MTB they are useful sport surfaces; for road/running they stay less suitable.
-  if (["trail_running", "trailrunning", "hiking", "mountain_biking", "mtb"].includes(key)) {
-    assign(["path", "track"], "likely_unpaved", 0.8);
-  } else if (["gravel", "gravel_cycling"].includes(key)) {
-    assign(["track"], "likely_gravel", 0.85);
-    assign(["path"], "likely_unpaved", 0.55);
+  // Paths and tracks are sport-dependent. Running does not treat generic paths as paved.
+  if (isTrailLikeSport(key)) {
+    assign(["path", "track"], "likely_unpaved", 0.9);
+  } else if (isGravelLikeSport(key)) {
+    assign(["track"], "likely_gravel", 0.9);
+    assign(["path"], "likely_unpaved", 0.65);
   } else {
     assign(["track"], "likely_unpaved", 0.75);
     assign(["path"], "likely_compacted", 0.45);
   }
 
-  const inferred = Math.min(unknownSurfaceMeters, intelligence.inferred_meters);
+  let inferred = Math.min(unknownSurfaceMeters, intelligence.inferred_meters);
+
+  // ORS sometimes returns surface=unknown while waytype is also too generic to resolve.
+  // For trail/gravel/MTB, a selected foot-hiking/cycling-mountain route through path networks
+  // is still useful route intelligence: mark most of the unresolved part as estimated sport terrain.
+  const unresolvedAfterWaytype = Math.max(0, unknownSurfaceMeters - inferred);
+  if (unresolvedAfterWaytype > 0) {
+    let contextualLabel = null;
+    let contextualConfidence = 0;
+
+    if (isTrailLikeSport(key) || String(profile || "").includes("foot-hiking")) {
+      contextualLabel = "estimated_trail_surface";
+      contextualConfidence = 0.7;
+    } else if (isGravelLikeSport(key)) {
+      contextualLabel = "estimated_gravel_surface";
+      contextualConfidence = 0.6;
+    } else if (isPavedFirstSport(key) && String(profile || "").includes("cycling")) {
+      contextualLabel = "estimated_paved_surface";
+      contextualConfidence = 0.45;
+    }
+
+    if (contextualLabel && contextualConfidence > 0) {
+      const contextualMeters = unresolvedAfterWaytype * contextualConfidence;
+      addMeters(enhancedSurfaces, contextualLabel, contextualMeters);
+      addMeters(intelligence.inferred, contextualLabel, contextualMeters);
+      intelligence.inferred_meters += contextualMeters;
+      inferred += contextualMeters;
+    }
+  }
+
   if (inferred > 0) {
     enhancedSurfaces.unknown = Math.max(0, unknownSurfaceMeters - inferred);
     intelligence.applied = true;
     intelligence.unresolved_unknown_meters = enhancedSurfaces.unknown;
-    intelligence.notes.push("Missing surface data was partly inferred from OSM/ORS waytypes.");
+    intelligence.notes.push("Missing surface data was partly inferred from route context and OSM/ORS waytypes.");
   }
 
   if (enhancedSurfaces.unknown > 0) {
-    intelligence.notes.push("Some surface remains unknown because waytype data is not specific enough.");
+    intelligence.notes.push("Some surface remains unresolved because the map data is not specific enough.");
   }
 
   return { surfaces: enhancedSurfaces, rawSurfaces, intelligence };
@@ -472,7 +513,7 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   const safeDistance = distance > 0 ? distance : directDistance || 1;
   const wayTypes = summarizeWayTypes(feature);
   const rawSurfaces = summarizeSurfaces(feature);
-  const surfaceIntelligence = inferMissingSurfaceFromWaytypes({ surfaces: rawSurfaces, wayTypes, sportId });
+  const surfaceIntelligence = inferMissingSurfaceFromWaytypes({ surfaces: rawSurfaces, wayTypes, sportId, profile });
   const surfaces = surfaceIntelligence.surfaces;
 
   let score = 100;
@@ -535,8 +576,11 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
   if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 5;
 
+  const finalScore = Math.max(0, Math.min(100, score));
+  const dataConfidence = Math.max(0, Math.min(100, Math.round((1 - unknownSurfaceRatio) * 100)));
+
   return {
-    score,
+    score: finalScore,
     detourFactor: Number(detourFactor.toFixed(3)),
     wayTypes,
     surfaces,
@@ -547,6 +591,17 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
       acceptable_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
       avoid_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
       unknown_ratio: Number(unknownSurfaceRatio.toFixed(3)),
+    },
+    score_breakdown: {
+      final_score: Number(finalScore.toFixed(2)),
+      data_confidence: dataConfidence,
+      ideal_surface_ratio: Number(idealSurfaceRatio.toFixed(3)),
+      acceptable_surface_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
+      avoid_surface_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
+      unknown_surface_ratio: Number(unknownSurfaceRatio.toFixed(3)),
+      detour_factor: Number(detourFactor.toFixed(3)),
+      profile,
+      preference,
     },
   };
 }
@@ -632,6 +687,7 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
           raw_surfaces: score.raw_surfaces,
           surface_intelligence: score.surface_intelligence,
           surface_quality: score.surfaceQuality,
+          score_breakdown: score.score_breakdown,
           alternative_index: index,
         };
       })
@@ -670,6 +726,7 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     notes: [],
   };
   const surfaceQualityTotals = { ideal_ratio: 0, acceptable_ratio: 0, avoid_ratio: 0, unknown_ratio: 0 };
+  const scoreBreakdownTotals = {};
 
   for (let index = 0; index < chunks.length; index += 1) {
     const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId });
@@ -723,6 +780,10 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     for (const [label, value] of Object.entries(selected.surface_quality || {})) {
       surfaceQualityTotals[label] = (surfaceQualityTotals[label] || 0) + Number(value || 0);
     }
+
+    for (const [label, value] of Object.entries(selected.score_breakdown || {})) {
+      if (typeof value === "number") scoreBreakdownTotals[label] = (scoreBreakdownTotals[label] || 0) + Number(value || 0);
+    }
   }
 
   return {
@@ -746,6 +807,9 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
     },
     surface_quality: Object.fromEntries(
       Object.entries(surfaceQualityTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
+    ),
+    score_breakdown: Object.fromEntries(
+      Object.entries(scoreBreakdownTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
     ),
   };
 }
@@ -847,6 +911,8 @@ export async function POST(request) {
         provider_url: selected.url,
         route_quality: {
           sport_id: sportId || null,
+          profile: selected.profile,
+          preference: selected.preference,
           max_detour_factor: maxDetourFactor,
           detour_factor: selected.result.detour_factor,
           suitability_score: selected.result.suitability_score,
@@ -856,6 +922,7 @@ export async function POST(request) {
           raw_surfaces: selected.result.raw_surfaces,
           surface_intelligence: selected.result.surface_intelligence,
           surface_quality: selected.result.surface_quality,
+          score_breakdown: selected.result.score_breakdown,
           candidates_considered: successfulCandidates.length,
           eligible_candidates: eligible.length || successfulCandidates.length,
         },
@@ -872,6 +939,8 @@ export async function POST(request) {
           chunk_count: selected.result.chunks,
           route_quality: {
             sport_id: sportId || null,
+            profile: selected.profile,
+            preference: selected.preference,
             max_detour_factor: maxDetourFactor,
             detour_factor: selected.result.detour_factor,
             suitability_score: selected.result.suitability_score,
