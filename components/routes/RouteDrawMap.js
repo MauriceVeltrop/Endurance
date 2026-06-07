@@ -359,8 +359,6 @@ export default function RouteDrawMap({
 
             let next = [...pointsRef.current];
 
-            let changeMeta = { type: "add_control_point", insertAt: next.length };
-
             if (insertMode && next.length >= 2) {
               let bestIndex = next.length;
               let bestDistance = Infinity;
@@ -378,13 +376,11 @@ export default function RouteDrawMap({
               }
 
               next.splice(bestIndex, 0, point);
-              changeMeta = { type: "insert_control_point", insertAt: bestIndex, segmentIndex: bestIndex - 1 };
             } else {
               next.push(point);
-              changeMeta = { type: "add_control_point", insertAt: next.length - 1, segmentIndex: next.length - 2 };
             }
 
-            onChange?.(next, changeMeta);
+            onChange?.(next);
           });
         }
 
