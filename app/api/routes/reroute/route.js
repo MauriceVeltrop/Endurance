@@ -1,5 +1,15 @@
 // app/api/routes/reroute/route.js
 import { NextResponse } from "next/server";
+import {
+  WAYTYPE_LABELS,
+  SURFACE_LABELS,
+  routeQualityForSportConfig,
+  surfaceRulesForSportConfig,
+  optimizationModeConfig,
+  effectiveMaxDetourFactor,
+  profilesForSportConfig,
+  preferencesForSportConfig,
+} from "../../../../lib/routes/sportRouteProfiles";
 
 export const runtime = "nodejs";
 
@@ -11,210 +21,6 @@ const ROUTING_BASES = [
   "https://api.heigit.org/v2/directions",
 ].filter(Boolean);
 
-const PROFILE_CANDIDATES = {
-  running: ["foot-walking", "cycling-regular", "cycling-road", "foot-hiking"],
-  trail_running: ["foot-hiking", "foot-walking"],
-  trailrunning: ["foot-hiking", "foot-walking"],
-  walking: ["foot-walking", "foot-hiking"],
-  hiking: ["foot-hiking", "foot-walking"],
-
-  road_cycling: ["cycling-road", "cycling-regular"],
-  roadcycling: ["cycling-road", "cycling-regular"],
-  cycling: ["cycling-regular", "cycling-road"],
-  gravel_cycling: ["cycling-regular", "cycling-mountain"],
-  gravel: ["cycling-regular", "cycling-mountain"],
-  mountain_biking: ["cycling-mountain", "cycling-regular"],
-  mtb: ["cycling-mountain", "cycling-regular"],
-};
-
-const SPORT_ROUTE_QUALITY = {
-  running: {
-    maxDetourFactor: 1.2,
-    alternativeCount: 2,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["footway", "path", "track", "cycleway", "pedestrian"],
-    avoidWayTypes: ["state_road", "road"],
-  },
-  trail_running: {
-    maxDetourFactor: 1.4,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["path", "track", "footway"],
-    avoidWayTypes: ["state_road", "road", "street"],
-  },
-  trailrunning: {
-    maxDetourFactor: 1.4,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["path", "track", "footway"],
-    avoidWayTypes: ["state_road", "road", "street"],
-  },
-  walking: {
-    maxDetourFactor: 1.3,
-    alternativeCount: 2,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["footway", "path", "track", "pedestrian"],
-    avoidWayTypes: ["state_road"],
-  },
-  hiking: {
-    maxDetourFactor: 1.35,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["path", "track", "footway"],
-    avoidWayTypes: ["state_road", "road"],
-  },
-  road_cycling: {
-    maxDetourFactor: 1.12,
-    alternativeCount: 2,
-    preferences: ["recommended", "fastest"],
-    rewardWayTypes: ["cycleway", "street", "road"],
-    avoidWayTypes: ["path", "steps", "ferry"],
-  },
-  roadcycling: {
-    maxDetourFactor: 1.12,
-    alternativeCount: 2,
-    preferences: ["recommended", "fastest"],
-    rewardWayTypes: ["cycleway", "street", "road"],
-    avoidWayTypes: ["path", "steps", "ferry"],
-  },
-  cycling: {
-    maxDetourFactor: 1.18,
-    alternativeCount: 2,
-    preferences: ["recommended", "fastest"],
-    rewardWayTypes: ["cycleway", "street", "road", "track"],
-    avoidWayTypes: ["steps", "ferry"],
-  },
-  gravel_cycling: {
-    maxDetourFactor: 1.3,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["track", "path", "cycleway", "road"],
-    avoidWayTypes: ["state_road", "steps"],
-  },
-  gravel: {
-    maxDetourFactor: 1.3,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["track", "path", "cycleway", "road"],
-    avoidWayTypes: ["state_road", "steps"],
-  },
-  mountain_biking: {
-    maxDetourFactor: 1.35,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["track", "path"],
-    avoidWayTypes: ["state_road", "road", "steps"],
-  },
-  mtb: {
-    maxDetourFactor: 1.35,
-    alternativeCount: 3,
-    preferences: ["recommended", "shortest"],
-    rewardWayTypes: ["track", "path"],
-    avoidWayTypes: ["state_road", "road", "steps"],
-  },
-};
-
-const WAYTYPE_LABELS = {
-  0: "unknown",
-  1: "state_road",
-  2: "road",
-  3: "street",
-  4: "path",
-  5: "track",
-  6: "cycleway",
-  7: "footway",
-  8: "steps",
-  9: "ferry",
-  10: "construction",
-  11: "pedestrian",
-};
-
-const SURFACE_LABELS = {
-  0: "unknown",
-  1: "paved",
-  2: "unpaved",
-  3: "asphalt",
-  4: "concrete",
-  5: "cobblestone",
-  6: "metal",
-  7: "wood",
-  8: "compacted_gravel",
-  9: "fine_gravel",
-  10: "gravel",
-  11: "dirt",
-  12: "ground",
-  13: "ice",
-  14: "paving_stones",
-  15: "sand",
-  16: "woodchips",
-  17: "grass",
-  18: "grass_paver",
-};
-
-const SPORT_SURFACE_RULES = {
-  running: {
-    pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"],
-    acceptable: ["compacted_gravel", "fine_gravel", "cobblestone", "likely_compacted"],
-    avoid: ["unpaved", "gravel", "dirt", "ground", "sand", "woodchips", "grass", "ice"],
-    maxUnpavedRatio: 0.18,
-  },
-  trail_running: {
-    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["sand", "ice"],
-  },
-  trailrunning: {
-    ideal: ["ground", "dirt", "unpaved", "compacted_gravel", "fine_gravel", "gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["sand", "ice"],
-  },
-  walking: {
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "compacted_gravel", "fine_gravel", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    acceptable: ["ground", "dirt", "gravel", "likely_unpaved"],
-    avoid: ["sand", "ice"],
-  },
-  road_cycling: {
-    pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"],
-    acceptable: ["paving_stones", "cobblestone"],
-    avoid: ["unpaved", "compacted_gravel", "fine_gravel", "gravel", "dirt", "ground", "sand", "grass", "woodchips"],
-    maxUnpavedRatio: 0.08,
-  },
-  roadcycling: {
-    pavedFirst: true,
-    ideal: ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"],
-    acceptable: ["paving_stones", "cobblestone"],
-    avoid: ["unpaved", "compacted_gravel", "fine_gravel", "gravel", "dirt", "ground", "sand", "grass", "woodchips"],
-    maxUnpavedRatio: 0.08,
-  },
-  cycling: {
-    ideal: ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"],
-    acceptable: ["compacted_gravel", "fine_gravel", "likely_compacted"],
-    avoid: ["sand", "grass", "woodchips", "ice"],
-  },
-  gravel_cycling: {
-    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved", "estimated_gravel_surface", "estimated_trail_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["sand", "grass", "woodchips", "ice"],
-  },
-  gravel: {
-    ideal: ["compacted_gravel", "fine_gravel", "gravel", "unpaved", "likely_gravel", "likely_unpaved", "estimated_gravel_surface", "estimated_trail_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "ground", "dirt", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["sand", "grass", "woodchips", "ice"],
-  },
-  mountain_biking: {
-    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["ice"],
-  },
-  mtb: {
-    ideal: ["ground", "dirt", "unpaved", "gravel", "compacted_gravel", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"],
-    acceptable: ["asphalt", "paved", "concrete", "likely_paved", "likely_compacted", "estimated_paved_surface"],
-    avoid: ["ice"],
-  },
-};
-
 const MAX_WAYPOINTS_PER_PROVIDER_CALL = 9;
 const PROVIDER_TIMEOUT_MS = 16000;
 
@@ -223,17 +29,15 @@ function sportKey(sportId) {
 }
 
 function routeQualityForSport(sportId) {
-  return SPORT_ROUTE_QUALITY[sportKey(sportId)] || SPORT_ROUTE_QUALITY.running;
+  return routeQualityForSportConfig(sportId);
 }
 
-function profilesForSport(sportId, requestedProfile) {
-  const requested = String(requestedProfile || "").trim();
-  const defaults = PROFILE_CANDIDATES[sportKey(sportId)] || ["foot-walking", "foot-hiking"];
-  return [...new Set([requested, ...defaults].filter(Boolean))];
+function profilesForSport(sportId, requestedProfile, optimizeMode) {
+  return profilesForSportConfig(sportId, requestedProfile, optimizeMode);
 }
 
-function preferencesForSport(sportId) {
-  return [...new Set((routeQualityForSport(sportId).preferences || ["recommended"]).filter(Boolean))];
+function preferencesForSport(sportId, optimizeMode) {
+  return preferencesForSportConfig(sportId, optimizeMode);
 }
 
 function normalize(points) {
@@ -503,12 +307,14 @@ function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId
 }
 
 function surfaceRulesForSport(sportId) {
-  return SPORT_SURFACE_RULES[sportKey(sportId)] || SPORT_SURFACE_RULES.running;
+  return surfaceRulesForSportConfig(sportId);
 }
 
-function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance }) {
+function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance, optimizeMode = "balanced" }) {
   const quality = routeQualityForSport(sportId);
   const surfaceRules = surfaceRulesForSport(sportId);
+  const optimization = optimizationModeConfig(optimizeMode);
+  const optimizationAdjustments = optimization.scoreAdjustments || {};
   const distance = Number(feature?.properties?.summary?.distance || 0);
   const safeDistance = distance > 0 ? distance : directDistance || 1;
   const wayTypes = summarizeWayTypes(feature);
@@ -519,11 +325,11 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   let score = 100;
 
   const detourFactor = directDistance > 0 ? safeDistance / directDistance : 1;
-  score -= Math.max(0, detourFactor - 1) * 35;
+  score -= Math.max(0, detourFactor - 1) * (35 - Number(optimizationAdjustments.detour || 0));
 
   if (baselineDistance > 0) {
     const extraVsBaseline = safeDistance / baselineDistance;
-    score -= Math.max(0, extraVsBaseline - 1) * 25;
+    score -= Math.max(0, extraVsBaseline - 1) * (25 - Number(optimizationAdjustments.detour || 0));
   }
 
   const totalKnownWayTypeDistance = Object.values(wayTypes).reduce((sum, value) => sum + Number(value || 0), 0) || safeDistance;
@@ -542,12 +348,12 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   const avoidedSurfaceRatio = ratioOf(surfaces, surfaceRules.avoid || [], totalKnownSurfaceDistance);
   const unknownSurfaceRatio = ratioOf(surfaces, ["unknown"], totalKnownSurfaceDistance);
 
-  score += idealSurfaceRatio * 70;
-  score += acceptableSurfaceRatio * 28;
-  score -= avoidedSurfaceRatio * 85;
+  score += idealSurfaceRatio * (70 + Number(optimizationAdjustments.idealSurface || 0));
+  score += acceptableSurfaceRatio * (28 + Number(optimizationAdjustments.acceptableSurface || 0));
+  score -= avoidedSurfaceRatio * (85 - Number(optimizationAdjustments.avoidedSurface || 0));
 
   // Unknown surface is not a disaster, but it must prevent unrealistic 100/100 scores.
-  score -= unknownSurfaceRatio * 22;
+  score -= unknownSurfaceRatio * (22 - Number(optimizationAdjustments.unknownSurface || 0));
 
   if (unknownSurfaceRatio > 0.08) {
     score = Math.min(score, 96 - unknownSurfaceRatio * 35);
@@ -602,11 +408,13 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
       detour_factor: Number(detourFactor.toFixed(3)),
       profile,
       preference,
+      optimize_mode: optimizeMode,
+      optimization_label: optimization.label || "Balanced",
     },
   };
 }
 
-async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) {
+async function fetchProviderRoute({ url, apiKey, points, preference, sportId, optimizeMode = "balanced" }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
@@ -672,6 +480,7 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
           profile: url.split("/").slice(-2, -1)[0],
           preference,
           baselineDistance: firstDistance,
+          optimizeMode,
         });
 
         return {
@@ -703,7 +512,7 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId }) 
   }
 }
 
-async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
+async function routeInChunks({ url, apiKey, waypoints, preference, sportId, optimizeMode = "balanced" }) {
   const chunks = splitWaypointsForProvider(waypoints);
   const mergedCoords = [];
   let distance = 0;
@@ -729,9 +538,9 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId }) {
   const scoreBreakdownTotals = {};
 
   for (let index = 0; index < chunks.length; index += 1) {
-    const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId });
+    const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId, optimizeMode });
     const directDistance = directWaypointDistanceMeters(chunks[index]);
-    const maxDetourFactor = routeQualityForSport(sportId).maxDetourFactor || 1.2;
+    const maxDetourFactor = effectiveMaxDetourFactor(sportId, optimizeMode);
 
     const withinDetour = candidates.filter((candidate) => {
       const factor = directDistance > 0 && candidate.distance > 0 ? candidate.distance / directDistance : 1;
@@ -819,8 +628,9 @@ export async function POST(request) {
     const body = await request.json();
     const rawWaypoints = normalize(body?.points);
     const sportId = body?.sport_id || body?.sportId || body?.sport;
-    const profiles = profilesForSport(sportId, body?.profile);
-    const preferences = preferencesForSport(sportId);
+    const optimizeMode = body?.optimize_mode || body?.optimizeMode || "balanced";
+    const profiles = profilesForSport(sportId, body?.profile, optimizeMode);
+    const preferences = preferencesForSport(sportId, optimizeMode);
 
     if (rawWaypoints.length < 2) {
       return NextResponse.json({ ok: false, error: "At least two route points are required." }, { status: 400 });
@@ -855,7 +665,7 @@ export async function POST(request) {
           const url = providerUrl(base, profile);
 
           try {
-            const result = await routeInChunks({ url, apiKey, waypoints, preference, sportId });
+            const result = await routeInChunks({ url, apiKey, waypoints, preference, sportId, optimizeMode });
             const points = toPoints(result.coords);
 
             if (points.length < 2) {
@@ -886,7 +696,7 @@ export async function POST(request) {
 
     if (successfulCandidates.length) {
       const directDistance = directWaypointDistanceMeters(waypoints);
-      const maxDetourFactor = routeQualityForSport(sportId).maxDetourFactor || 1.2;
+      const maxDetourFactor = effectiveMaxDetourFactor(sportId, optimizeMode);
 
       const eligible = successfulCandidates.filter((candidate) => {
         const distance = Number(candidate.result.distance || 0);
@@ -913,6 +723,8 @@ export async function POST(request) {
           sport_id: sportId || null,
           profile: selected.profile,
           preference: selected.preference,
+          optimize_mode: optimizeMode,
+          optimization_label: optimizationModeConfig(optimizeMode).label,
           max_detour_factor: maxDetourFactor,
           detour_factor: selected.result.detour_factor,
           suitability_score: selected.result.suitability_score,
@@ -941,6 +753,8 @@ export async function POST(request) {
             sport_id: sportId || null,
             profile: selected.profile,
             preference: selected.preference,
+            optimize_mode: optimizeMode,
+            optimization_label: optimizationModeConfig(optimizeMode).label,
             max_detour_factor: maxDetourFactor,
             detour_factor: selected.result.detour_factor,
             suitability_score: selected.result.suitability_score,
