@@ -251,12 +251,16 @@ function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId
     assign(["footway"], "likely_paved", 0.8);
   }
 
-  // Paths and tracks are sport-dependent. Running does not treat generic paths as paved.
+  // Paths and tracks are sport-dependent. Running must not silently convert generic
+  // path/track data into a paved result; Trail Running is the off-road sport choice.
   if (isTrailLikeSport(key)) {
     assign(["path", "track"], "likely_unpaved", 0.9);
   } else if (isGravelLikeSport(key)) {
     assign(["track"], "likely_gravel", 0.9);
     assign(["path"], "likely_unpaved", 0.65);
+  } else if (key === "running") {
+    assign(["track"], "likely_unpaved", 0.9);
+    assign(["path"], "likely_unpaved", 0.7);
   } else {
     assign(["track"], "likely_unpaved", 0.75);
     assign(["path"], "likely_compacted", 0.45);
@@ -363,7 +367,30 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
     const unpavedRatio = avoidedSurfaceRatio;
     const maxUnpavedRatio = Number(surfaceRules.maxUnpavedRatio || 0.15);
     if (unpavedRatio > maxUnpavedRatio) {
-      score -= (unpavedRatio - maxUnpavedRatio) * 180;
+      score -= (unpavedRatio - maxUnpavedRatio) * 240;
+    }
+
+    const minIdealRatio = Number(surfaceRules.minIdealRatio || 0);
+    if (minIdealRatio > 0 && idealSurfaceRatio < minIdealRatio) {
+      score -= (minIdealRatio - idealSurfaceRatio) * 120;
+    }
+  }
+
+  if (sportKey(sportId) === "running") {
+    const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
+    const pavedWayRatio = ratioOf(wayTypes, ["cycleway", "footway", "pedestrian", "street", "road"], totalKnownWayTypeDistance);
+
+    // Road Running is intentionally stricter than Walking. A route with a meaningful
+    // amount of path/track should lose against a reasonable paved alternative.
+    score -= pathTrackRatio * 95;
+    score += pavedWayRatio * 20;
+
+    if (avoidedSurfaceRatio > 0.1) {
+      score = Math.min(score, 88 - (avoidedSurfaceRatio - 0.1) * 140);
+    }
+
+    if (idealSurfaceRatio < 0.55) {
+      score = Math.min(score, 82 - (0.55 - idealSurfaceRatio) * 100);
     }
   }
 
@@ -628,7 +655,7 @@ export async function POST(request) {
     const body = await request.json();
     const rawWaypoints = normalize(body?.points);
     const sportId = body?.sport_id || body?.sportId || body?.sport;
-    const optimizeMode = body?.optimize_mode || body?.optimizeMode || "balanced";
+    const optimizeMode = "balanced";
     const profiles = profilesForSport(sportId, body?.profile, optimizeMode);
     const preferences = preferencesForSport(sportId, optimizeMode);
 
