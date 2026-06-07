@@ -314,6 +314,56 @@ function surfaceRulesForSport(sportId) {
   return surfaceRulesForSportConfig(sportId);
 }
 
+
+function routeRatio(summary, labels) {
+  const total = Object.values(summary || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+  if (!total) return 0;
+  return labels.reduce((sum, label) => sum + Number(summary?.[label] || 0), 0) / total;
+}
+
+function runningCandidatePriority(candidate) {
+  const wayTypes = candidate?.result?.waytypes || candidate?.waytypes || {};
+  const surfaces = candidate?.result?.surfaces || candidate?.surfaces || {};
+  const quality = candidate?.result?.surface_quality || candidate?.surface_quality || {};
+  const profile = String(candidate?.profile || "");
+  const distance = Number(candidate?.result?.distance || candidate?.distance || 0);
+
+  const roadLikeRatio = routeRatio(wayTypes, ["cycleway", "street", "road", "pedestrian"]);
+  const pavedWayRatio = routeRatio(wayTypes, ["cycleway", "street", "road", "pedestrian", "footway"]);
+  const pathTrackRatio = routeRatio(wayTypes, ["path", "track"]);
+  const idealSurfaceRatio = Number(quality.ideal_ratio ?? routeRatio(surfaces, ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"]));
+  const avoidSurfaceRatio = Number(quality.avoid_ratio ?? routeRatio(surfaces, ["unpaved", "gravel", "dirt", "ground", "sand", "woodchips", "grass", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"]));
+  const unknownRatio = Number(quality.unknown_ratio ?? routeRatio(surfaces, ["unknown"]));
+
+  // Running in Endurance is road-running by default. Trail Running is the sport choice
+  // for path/track-heavy routes. This priority deliberately prefers a slightly longer
+  // paved road/cycleway candidate over a shorter footpath candidate.
+  let priority = 0;
+  priority += roadLikeRatio * 140;
+  priority += pavedWayRatio * 35;
+  priority += idealSurfaceRatio * 90;
+  priority -= pathTrackRatio * 170;
+  priority -= avoidSurfaceRatio * 170;
+  priority -= unknownRatio * 35;
+
+  if (profile.includes("cycling")) priority += 24;
+  if (profile === "foot-walking" && pathTrackRatio > 0.18) priority -= 45;
+  if (roadLikeRatio >= 0.62 && pathTrackRatio <= 0.18) priority += 45;
+  if (idealSurfaceRatio >= 0.72 && avoidSurfaceRatio <= 0.08) priority += 35;
+  if (pathTrackRatio >= 0.28) priority -= 55;
+
+  return {
+    priority,
+    road_like_ratio: Number(roadLikeRatio.toFixed(3)),
+    paved_way_ratio: Number(pavedWayRatio.toFixed(3)),
+    path_track_ratio: Number(pathTrackRatio.toFixed(3)),
+    ideal_surface_ratio: Number(idealSurfaceRatio.toFixed(3)),
+    avoid_surface_ratio: Number(avoidSurfaceRatio.toFixed(3)),
+    unknown_surface_ratio: Number(unknownRatio.toFixed(3)),
+    distance,
+  };
+}
+
 function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance, optimizeMode = "balanced" }) {
   const quality = routeQualityForSport(sportId);
   const surfaceRules = surfaceRulesForSport(sportId);
@@ -379,32 +429,29 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   if (sportKey(sportId) === "running") {
     const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
     const pavedWayRatio = ratioOf(wayTypes, ["cycleway", "footway", "pedestrian", "street", "road"], totalKnownWayTypeDistance);
-    const clearlyPavedRatio = idealSurfaceRatio;
-    const softSurfaceRatio = avoidedSurfaceRatio;
 
-    // Endurance Running means road/park running. Trail Running is the explicit off-road choice.
-    // Therefore generic path/track and unresolved surfaces must lose against a reasonable paved detour.
-    score -= pathTrackRatio * 150;
-    score += pavedWayRatio * 28;
+    // Road Running is intentionally much stricter than Walking. A path/track-heavy
+    // route should lose against a reasonable paved road/cycleway alternative, even
+    // when the foot route is slightly shorter.
+    const roadLikeRatio = ratioOf(wayTypes, ["cycleway", "street", "road", "pedestrian"], totalKnownWayTypeDistance);
+    score -= pathTrackRatio * 210;
+    score += pavedWayRatio * 34;
+    score += roadLikeRatio * 60;
 
-    if (softSurfaceRatio > 0.06) {
-      score = Math.min(score, 82 - (softSurfaceRatio - 0.06) * 220);
+    if (avoidedSurfaceRatio > 0.06) {
+      score = Math.min(score, 84 - (avoidedSurfaceRatio - 0.06) * 220);
     }
 
-    if (pathTrackRatio > 0.12) {
-      score = Math.min(score, 80 - (pathTrackRatio - 0.12) * 120);
+    if (pathTrackRatio > 0.18) {
+      score = Math.min(score, 78 - (pathTrackRatio - 0.18) * 150);
     }
 
-    if (clearlyPavedRatio < 0.7) {
-      score = Math.min(score, 78 - (0.7 - clearlyPavedRatio) * 120);
+    if (idealSurfaceRatio < 0.68) {
+      score = Math.min(score, 76 - (0.68 - idealSurfaceRatio) * 130);
     }
 
-    if (unknownSurfaceRatio > 0.22) {
-      score = Math.min(score, 76 - (unknownSurfaceRatio - 0.22) * 100);
-    }
-
-    if (clearlyPavedRatio >= 0.78 && pathTrackRatio <= 0.08 && softSurfaceRatio <= 0.06) {
-      score += 8;
+    if (roadLikeRatio > 0.62 && idealSurfaceRatio > 0.65 && pathTrackRatio < 0.16) {
+      score += 18;
     }
   }
 
@@ -417,9 +464,10 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   }
 
   if (profile === "foot-hiking" && ["trail_running", "trailrunning", "hiking"].includes(sportKey(sportId))) score += 5;
-  if (profile === "foot-walking" && ["running", "walking"].includes(sportKey(sportId))) score += 4;
-  if (profile === "cycling-regular" && sportKey(sportId) === "running") score += 2;
-  if (profile === "cycling-road" && sportKey(sportId) === "running") score -= 3;
+  if (profile === "foot-walking" && ["walking"].includes(sportKey(sportId))) score += 4;
+  if (profile === "foot-walking" && sportKey(sportId) === "running") score -= 8;
+  if (profile === "cycling-regular" && sportKey(sportId) === "running") score += 16;
+  if (profile === "cycling-road" && sportKey(sportId) === "running") score += 10;
   if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
   if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 5;
 
@@ -588,9 +636,18 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
       return factor <= maxDetourFactor;
     });
 
-    const selected = [...(withinDetour.length ? withinDetour : candidates)].sort(
-      (a, b) => Number(b.suitability_score || 0) - Number(a.suitability_score || 0)
-    )[0];
+    const pool = [...(withinDetour.length ? withinDetour : candidates)];
+    const selected = pool.sort((a, b) => {
+      if (sportKey(sportId) === "running") {
+        const ar = runningCandidatePriority(a);
+        const br = runningCandidatePriority(b);
+        const priorityDiff = br.priority - ar.priority;
+        if (Math.abs(priorityDiff) > 4) return priorityDiff;
+      }
+      const scoreDiff = Number(b.suitability_score || 0) - Number(a.suitability_score || 0);
+      if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
+      return Number(a.distance || 0) - Number(b.distance || 0);
+    })[0];
 
     const coords = index === 0 ? selected.coords : selected.coords.slice(1);
 
@@ -662,360 +719,6 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
       Object.entries(scoreBreakdownTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
     ),
   };
-}
-
-
-const OVERPASS_BASES = [
-  process.env.OVERPASS_API_URL,
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-].filter(Boolean);
-
-const OVERPASS_TIMEOUT_MS = 8500;
-const MAX_OSM_ROUTE_SAMPLE_POINTS = 180;
-const MAX_OSM_WAY_SEGMENTS = 22000;
-
-function routeBbox(points = [], padding = 0.003) {
-  const valid = (points || []).filter((point) => Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lon)));
-  if (!valid.length) return null;
-
-  const lats = valid.map((point) => Number(point.lat));
-  const lons = valid.map((point) => Number(point.lon));
-  return {
-    south: Math.min(...lats) - padding,
-    west: Math.min(...lons) - padding,
-    north: Math.max(...lats) + padding,
-    east: Math.max(...lons) + padding,
-  };
-}
-
-function sampleRoutePoints(points = [], maxPoints = MAX_OSM_ROUTE_SAMPLE_POINTS) {
-  const clean = (points || []).filter((point) => Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lon)));
-  if (clean.length <= maxPoints) return clean;
-
-  const step = Math.ceil(clean.length / maxPoints);
-  const sampled = clean.filter((_, index) => index % step === 0);
-  const last = clean[clean.length - 1];
-  const sampledLast = sampled[sampled.length - 1];
-  if (!sampledLast || sampledLast.lat !== last.lat || sampledLast.lon !== last.lon) sampled.push(last);
-  return sampled;
-}
-
-function normalizeOsmSurface(value = "") {
-  const key = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-  const aliases = {
-    concrete_slabs: "concrete",
-    concrete_plates: "concrete",
-    sett: "paving_stones",
-    unhewn_cobblestone: "cobblestone",
-    pebblestone: "gravel",
-    earth: "ground",
-    mud: "dirt",
-    compacted: "compacted_gravel",
-    fine_gravel: "fine_gravel",
-    paved: "paved",
-    asphalt: "asphalt",
-    concrete: "concrete",
-    paving_stones: "paving_stones",
-    cobblestone: "cobblestone",
-    gravel: "gravel",
-    dirt: "dirt",
-    ground: "ground",
-    sand: "sand",
-    grass: "grass",
-    woodchips: "woodchips",
-    unpaved: "unpaved",
-  };
-  return aliases[key] || key || "unknown";
-}
-
-function waytypeFromOsmHighway(value = "") {
-  const highway = String(value || "").toLowerCase();
-  if (["motorway", "trunk", "primary", "secondary"].includes(highway)) return "state_road";
-  if (["tertiary", "unclassified"].includes(highway)) return "road";
-  if (["residential", "service", "living_street"].includes(highway)) return "street";
-  if (highway === "cycleway") return "cycleway";
-  if (["footway", "bridleway"].includes(highway)) return "footway";
-  if (highway === "pedestrian") return "pedestrian";
-  if (highway === "track") return "track";
-  if (highway === "path") return "path";
-  if (highway === "steps") return "steps";
-  return "unknown";
-}
-
-function inferredSurfaceFromOsmTags(tags = {}, sportId = "") {
-  const surface = normalizeOsmSurface(tags.surface || "");
-  if (surface && surface !== "unknown") return surface;
-
-  const tracktype = String(tags.tracktype || "").toLowerCase();
-  if (tracktype === "grade1") return "likely_paved";
-  if (tracktype === "grade2") return "likely_compacted";
-  if (tracktype === "grade3") return "likely_gravel";
-  if (["grade4", "grade5"].includes(tracktype)) return "likely_unpaved";
-
-  const highway = String(tags.highway || "").toLowerCase();
-  if (["residential", "service", "living_street", "pedestrian", "cycleway"].includes(highway)) return "likely_paved";
-  if (["tertiary", "unclassified"].includes(highway)) return "likely_paved";
-
-  // Important: road running should not silently treat generic paths/tracks as paved.
-  // Trail Running is the sport that is allowed to prefer those.
-  if (sportKey(sportId) === "running" && ["path", "track"].includes(highway)) return "likely_unpaved";
-  if (["path", "track"].includes(highway)) return isTrailLikeSport(sportId) ? "likely_unpaved" : "unknown";
-  if (highway === "footway") return sportKey(sportId) === "running" ? "likely_paved" : "likely_compacted";
-
-  return "unknown";
-}
-
-function metersSummaryTotal(summary = {}) {
-  return Object.values(summary || {}).reduce((sum, value) => sum + Number(value || 0), 0);
-}
-
-function computeSurfaceQualityFromSummary(surfaces = {}, sportId = "") {
-  const rules = surfaceRulesForSport(sportId);
-  const total = metersSummaryTotal(surfaces) || 1;
-  return {
-    ideal_ratio: Number(ratioOf(surfaces, rules.ideal || [], total).toFixed(3)),
-    acceptable_ratio: Number(ratioOf(surfaces, rules.acceptable || [], total).toFixed(3)),
-    avoid_ratio: Number(ratioOf(surfaces, rules.avoid || [], total).toFixed(3)),
-    unknown_ratio: Number(ratioOf(surfaces, ["unknown"], total).toFixed(3)),
-  };
-}
-
-function xyForMeters(point, originLat) {
-  const lat = Number(point.lat);
-  const lon = Number(point.lon);
-  const x = lon * 111320 * Math.cos((originLat * Math.PI) / 180);
-  const y = lat * 110540;
-  return { x, y };
-}
-
-function pointToSegmentDistanceMeters(point, a, b, originLat) {
-  const p = xyForMeters(point, originLat);
-  const p1 = xyForMeters(a, originLat);
-  const p2 = xyForMeters(b, originLat);
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  if (dx === 0 && dy === 0) return Math.hypot(p.x - p1.x, p.y - p1.y);
-  const t = Math.max(0, Math.min(1, ((p.x - p1.x) * dx + (p.y - p1.y) * dy) / (dx * dx + dy * dy)));
-  return Math.hypot(p.x - (p1.x + t * dx), p.y - (p1.y + t * dy));
-}
-
-function flattenOsmWaySegments(elements = []) {
-  const segments = [];
-  for (const element of elements || []) {
-    if (element?.type !== "way" || !Array.isArray(element.geometry) || element.geometry.length < 2) continue;
-    const tags = element.tags || {};
-    for (let i = 1; i < element.geometry.length; i += 1) {
-      const a = element.geometry[i - 1];
-      const b = element.geometry[i];
-      if (!Number.isFinite(Number(a.lat)) || !Number.isFinite(Number(a.lon)) || !Number.isFinite(Number(b.lat)) || !Number.isFinite(Number(b.lon))) continue;
-      segments.push({
-        a: { lat: Number(a.lat), lon: Number(a.lon) },
-        b: { lat: Number(b.lat), lon: Number(b.lon) },
-        tags,
-      });
-      if (segments.length >= MAX_OSM_WAY_SEGMENTS) return segments;
-    }
-  }
-  return segments;
-}
-
-async function fetchOsmWaysForRoute(points = []) {
-  const bbox = routeBbox(points, 0.004);
-  if (!bbox) return { ok: false, reason: "no-bbox", segments: [] };
-
-  const query = `
-    [out:json][timeout:8];
-    (
-      way["highway"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
-    );
-    out tags geom;
-  `;
-
-  const body = new URLSearchParams({ data: query });
-
-  for (const base of OVERPASS_BASES) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
-    try {
-      const response = await fetch(base, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        body,
-        signal: controller.signal,
-      });
-      if (!response.ok) continue;
-      const data = await response.json();
-      const segments = flattenOsmWaySegments(data?.elements || []);
-      if (segments.length) return { ok: true, source: base, segments, bbox };
-    } catch (_) {
-      // Route generation must never fail because an OSM analysis mirror is slow.
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  return { ok: false, reason: "overpass-unavailable", segments: [], bbox };
-}
-
-function analyzeRouteWithOsmSegments(points = [], osmSegments = [], sportId = "") {
-  const sampled = sampleRoutePoints(points);
-  const surfaces = {};
-  const waytypes = {};
-  let matchedMeters = 0;
-  let unmatchedMeters = 0;
-  let totalMeters = 0;
-  let matchedSegments = 0;
-  let unmatchedSegments = 0;
-
-  if (sampled.length < 2 || !osmSegments.length) {
-    return {
-      applied: false,
-      source: "overpass-osm",
-      matched_ratio: 0,
-      matched_meters: 0,
-      unmatched_meters: 0,
-      surfaces: {},
-      waytypes: {},
-    };
-  }
-
-  const originLat = sampled.reduce((sum, point) => sum + Number(point.lat || 0), 0) / sampled.length;
-
-  for (let i = 1; i < sampled.length; i += 1) {
-    const previous = sampled[i - 1];
-    const current = sampled[i];
-    const meters = haversineMeters(previous, current);
-    if (!Number.isFinite(meters) || meters <= 0) continue;
-
-    totalMeters += meters;
-    const midpoint = { lat: (previous.lat + current.lat) / 2, lon: (previous.lon + current.lon) / 2 };
-    let best = null;
-    let bestDistance = Infinity;
-
-    for (const segment of osmSegments) {
-      const distance = pointToSegmentDistanceMeters(midpoint, segment.a, segment.b, originLat);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = segment;
-      }
-    }
-
-    if (best && bestDistance <= 38) {
-      matchedMeters += meters;
-      matchedSegments += 1;
-      const surface = inferredSurfaceFromOsmTags(best.tags, sportId);
-      const waytype = waytypeFromOsmHighway(best.tags.highway);
-      addMeters(surfaces, surface || "unknown", meters);
-      addMeters(waytypes, waytype || "unknown", meters);
-    } else {
-      unmatchedMeters += meters;
-      unmatchedSegments += 1;
-      addMeters(surfaces, "unknown", meters);
-      addMeters(waytypes, "unknown", meters);
-    }
-  }
-
-  const matchedRatio = totalMeters > 0 ? matchedMeters / totalMeters : 0;
-
-  return {
-    applied: matchedRatio >= 0.25,
-    source: "overpass-osm",
-    matched_ratio: Number(matchedRatio.toFixed(3)),
-    matched_meters: Number(matchedMeters.toFixed(1)),
-    unmatched_meters: Number(unmatchedMeters.toFixed(1)),
-    matched_segments: matchedSegments,
-    unmatched_segments: unmatchedSegments,
-    surfaces,
-    waytypes,
-  };
-}
-
-function scoreRunningWithOsmAnalysis({ originalScore = 0, osmAnalysis = {}, detourFactor = 1, sportId = "running" }) {
-  const surfaces = osmAnalysis.surfaces || {};
-  const waytypes = osmAnalysis.waytypes || {};
-  const surfaceQuality = computeSurfaceQualityFromSummary(surfaces, sportId);
-  const surfaceTotal = metersSummaryTotal(surfaces) || 1;
-  const waytypeTotal = metersSummaryTotal(waytypes) || 1;
-  const pathTrackRatio = ratioOf(waytypes, ["path", "track"], waytypeTotal);
-  const roadLikeRatio = ratioOf(waytypes, ["cycleway", "footway", "pedestrian", "street", "road"], waytypeTotal);
-  const ideal = Number(surfaceQuality.ideal_ratio || 0);
-  const acceptable = Number(surfaceQuality.acceptable_ratio || 0);
-  const avoid = Number(surfaceQuality.avoid_ratio || 0);
-  const unknown = Number(surfaceQuality.unknown_ratio || 0);
-
-  let osmScore = 100;
-  osmScore += ideal * 35;
-  osmScore += acceptable * 12;
-  osmScore += roadLikeRatio * 14;
-  osmScore -= avoid * 160;
-  osmScore -= unknown * 65;
-  osmScore -= pathTrackRatio * 130;
-  osmScore -= Math.max(0, Number(detourFactor || 1) - 1) * 24;
-
-  if (avoid > 0.06) osmScore = Math.min(osmScore, 84 - (avoid - 0.06) * 230);
-  if (pathTrackRatio > 0.12) osmScore = Math.min(osmScore, 80 - (pathTrackRatio - 0.12) * 150);
-  if (ideal < 0.68) osmScore = Math.min(osmScore, 78 - (0.68 - ideal) * 130);
-  if (unknown > 0.28) osmScore = Math.min(osmScore, 74 - (unknown - 0.28) * 80);
-
-  const finalScore = Math.max(0, Math.min(100, (Number(originalScore || 0) * 0.35) + (osmScore * 0.65)));
-
-  return {
-    score: Number(finalScore.toFixed(2)),
-    osm_score: Number(Math.max(0, Math.min(100, osmScore)).toFixed(2)),
-    surface_quality: surfaceQuality,
-    path_track_ratio: Number(pathTrackRatio.toFixed(3)),
-    road_like_ratio: Number(roadLikeRatio.toFixed(3)),
-  };
-}
-
-async function enhanceRunningCandidatesWithOsm(successfulCandidates = [], sportId = "") {
-  if (sportKey(sportId) !== "running" || successfulCandidates.length < 1) return successfulCandidates;
-
-  const allPoints = successfulCandidates.flatMap((candidate) => candidate.points || []);
-  const osm = await fetchOsmWaysForRoute(allPoints);
-  if (!osm.ok || !osm.segments.length) return successfulCandidates;
-
-  return successfulCandidates.map((candidate) => {
-    const analysis = analyzeRouteWithOsmSegments(candidate.points || [], osm.segments, sportId);
-    if (!analysis.applied) {
-      candidate.result.osm_analysis = { ...analysis, source: osm.source || analysis.source };
-      return candidate;
-    }
-
-    const runningScore = scoreRunningWithOsmAnalysis({
-      originalScore: candidate.result.suitability_score,
-      osmAnalysis: analysis,
-      detourFactor: candidate.result.detour_factor,
-      sportId,
-    });
-
-    candidate.result.suitability_score = runningScore.score;
-    candidate.result.surfaces = analysis.surfaces;
-    candidate.result.waytypes = analysis.waytypes;
-    candidate.result.surface_quality = runningScore.surface_quality;
-    candidate.result.osm_analysis = {
-      ...analysis,
-      source: osm.source || analysis.source,
-      score: runningScore.osm_score,
-      path_track_ratio: runningScore.path_track_ratio,
-      road_like_ratio: runningScore.road_like_ratio,
-    };
-    candidate.result.score_breakdown = {
-      ...(candidate.result.score_breakdown || {}),
-      final_score: runningScore.score,
-      osm_score: runningScore.osm_score,
-      osm_matched_ratio: analysis.matched_ratio,
-      path_track_ratio: runningScore.path_track_ratio,
-      road_like_ratio: runningScore.road_like_ratio,
-      ideal_surface_ratio: runningScore.surface_quality.ideal_ratio,
-      acceptable_surface_ratio: runningScore.surface_quality.acceptable_ratio,
-      avoid_surface_ratio: runningScore.surface_quality.avoid_ratio,
-      unknown_surface_ratio: runningScore.surface_quality.unknown_ratio,
-      data_confidence: Math.round((1 - runningScore.surface_quality.unknown_ratio) * 100),
-    };
-    return candidate;
-  });
 }
 
 export async function POST(request) {
@@ -1090,21 +793,29 @@ export async function POST(request) {
     }
 
     if (successfulCandidates.length) {
-      const enhancedCandidates = await enhanceRunningCandidatesWithOsm(successfulCandidates, sportId);
       const directDistance = directWaypointDistanceMeters(waypoints);
       const maxDetourFactor = effectiveMaxDetourFactor(sportId, optimizeMode);
 
-      const eligible = enhancedCandidates.filter((candidate) => {
+      const eligible = successfulCandidates.filter((candidate) => {
         const distance = Number(candidate.result.distance || 0);
         const factor = directDistance > 0 && distance > 0 ? distance / directDistance : 1;
         return factor <= maxDetourFactor;
       });
 
-      const selected = [...(eligible.length ? eligible : enhancedCandidates)].sort((a, b) => {
+      const finalPool = [...(eligible.length ? eligible : successfulCandidates)];
+      const selected = finalPool.sort((a, b) => {
+        if (sportKey(sportId) === "running") {
+          const ar = runningCandidatePriority(a);
+          const br = runningCandidatePriority(b);
+          const priorityDiff = br.priority - ar.priority;
+          if (Math.abs(priorityDiff) > 4) return priorityDiff;
+        }
         const scoreDiff = Number(b.result.suitability_score || 0) - Number(a.result.suitability_score || 0);
         if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
         return Number(a.result.distance || 0) - Number(b.result.distance || 0);
       })[0];
+
+      const running_priority = sportKey(sportId) === "running" ? runningCandidatePriority(selected) : null;
 
       return NextResponse.json({
         ok: true,
@@ -1131,9 +842,9 @@ export async function POST(request) {
           surface_intelligence: selected.result.surface_intelligence,
           surface_quality: selected.result.surface_quality,
           score_breakdown: selected.result.score_breakdown,
-          candidates_considered: enhancedCandidates.length,
-          eligible_candidates: eligible.length || enhancedCandidates.length,
-          osm_analysis: selected.result.osm_analysis || null,
+          candidates_considered: successfulCandidates.length,
+          eligible_candidates: eligible.length || successfulCandidates.length,
+          running_priority,
         },
         route_points: {
           source: selected.result.chunks > 1 ? "openrouteservice-sport-aware-chunked" : "openrouteservice-sport-aware",
@@ -1159,9 +870,9 @@ export async function POST(request) {
             waytypes: selected.result.waytypes,
             surfaces: selected.result.surfaces,
             surface_quality: selected.result.surface_quality,
-            candidates_considered: enhancedCandidates.length,
-            eligible_candidates: eligible.length || enhancedCandidates.length,
-            osm_analysis: selected.result.osm_analysis || null,
+            candidates_considered: successfulCandidates.length,
+            eligible_candidates: eligible.length || successfulCandidates.length,
+            running_priority,
           },
           routed_at: new Date().toISOString(),
         },
