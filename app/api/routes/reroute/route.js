@@ -379,18 +379,32 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
   if (sportKey(sportId) === "running") {
     const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
     const pavedWayRatio = ratioOf(wayTypes, ["cycleway", "footway", "pedestrian", "street", "road"], totalKnownWayTypeDistance);
+    const clearlyPavedRatio = idealSurfaceRatio;
+    const softSurfaceRatio = avoidedSurfaceRatio;
 
-    // Road Running is intentionally stricter than Walking. A route with a meaningful
-    // amount of path/track should lose against a reasonable paved alternative.
-    score -= pathTrackRatio * 95;
-    score += pavedWayRatio * 20;
+    // Endurance Running means road/park running. Trail Running is the explicit off-road choice.
+    // Therefore generic path/track and unresolved surfaces must lose against a reasonable paved detour.
+    score -= pathTrackRatio * 150;
+    score += pavedWayRatio * 28;
 
-    if (avoidedSurfaceRatio > 0.1) {
-      score = Math.min(score, 88 - (avoidedSurfaceRatio - 0.1) * 140);
+    if (softSurfaceRatio > 0.06) {
+      score = Math.min(score, 82 - (softSurfaceRatio - 0.06) * 220);
     }
 
-    if (idealSurfaceRatio < 0.55) {
-      score = Math.min(score, 82 - (0.55 - idealSurfaceRatio) * 100);
+    if (pathTrackRatio > 0.12) {
+      score = Math.min(score, 80 - (pathTrackRatio - 0.12) * 120);
+    }
+
+    if (clearlyPavedRatio < 0.7) {
+      score = Math.min(score, 78 - (0.7 - clearlyPavedRatio) * 120);
+    }
+
+    if (unknownSurfaceRatio > 0.22) {
+      score = Math.min(score, 76 - (unknownSurfaceRatio - 0.22) * 100);
+    }
+
+    if (clearlyPavedRatio >= 0.78 && pathTrackRatio <= 0.08 && softSurfaceRatio <= 0.06) {
+      score += 8;
     }
   }
 
