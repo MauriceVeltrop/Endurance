@@ -20,7 +20,6 @@ function makeRoutePointPayload(points, source = "draw-fullscreen") {
     elevation_gain_m: metrics.elevation_gain_m || 0,
     elevation_loss_m: metrics.elevation_loss_m || 0,
     max_elevation_m: metrics.max_elevation_m || null,
-    elevation_quality: metrics.elevation_quality || null,
     drawn_at: new Date().toISOString(),
   };
 }
@@ -130,8 +129,6 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
     point_count: points.length,
     distance_km: payload?.distance_km || null,
     elevation_gain_m: payload?.elevation_gain_m || 0,
-    elevation_loss_m: payload?.elevation_loss_m || 0,
-    elevation_quality: payload?.elevation_quality || payload?.route_quality?.elevation_quality || null,
     route_quality: payload?.route_quality || null,
     routed_at: payload?.routed_at || payload?.drawn_at || payload?.edited_at || new Date().toISOString(),
   };
@@ -209,7 +206,6 @@ function routePayloadFromGeometry(points, waypoints, source = "local-segment-rer
     distance_km: metrics.distance_km || null,
     elevation_gain_m: metrics.elevation_gain_m || 0,
     elevation_loss_m: metrics.elevation_loss_m || 0,
-    elevation_quality: metrics.elevation_quality || null,
     edited_at: new Date().toISOString(),
   };
 }
@@ -256,9 +252,9 @@ function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, r
     title: title?.trim() || defaultTitle(sportId),
     description: "",
     method,
-    distance_km: routePayload.distance_km || metrics.distance_km || "",
-    elevation_gain_m: routePayload.elevation_gain_m || metrics.elevation_gain_m || "",
-    estimated_time: estimateTimeText(routePayload.distance_km || metrics.distance_km, sportId),
+    distance_km: metrics.distance_km || routePayload.distance_km || "",
+    elevation_gain_m: metrics.elevation_gain_m || routePayload.elevation_gain_m || "",
+    estimated_time: estimateTimeText(metrics.distance_km || routePayload.distance_km, sportId),
     route_points: routePayload,
     created_by: profileId || null,
     saved_at: new Date().toISOString(),
@@ -443,7 +439,6 @@ function getRouteQuality(payload = {}, sportId = "") {
     inferredSurfaces: metersToPercentMap(quality.surface_intelligence?.inferred).slice(0, 6),
     surfaceIntelligence: quality.surface_intelligence || null,
     osmAnalysis: quality.osm_analysis || null,
-    elevationQuality: quality.elevation_quality || payload?.elevation_quality || payload?.route_points?.elevation_quality || null,
     warnings,
     highlights,
     recommendations,
@@ -496,21 +491,6 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
       ) : (
         <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
       )}
-
-      {quality.elevationQuality ? (
-        <div className="route-quality-intelligence route-quality-elevation-quality">
-          <strong>Elevation correction</strong>
-          <span>
-            {Math.round(Number(quality.elevationQuality.smoothed_ascent ?? quality.elevationQuality.ascent ?? 0))} m corrected
-            {Number.isFinite(Number(quality.elevationQuality.provider_ascent)) ? ` · ${Math.round(Number(quality.elevationQuality.provider_ascent))} m raw/provider` : ""}
-          </span>
-          <div className="route-quality-inferred-list">
-            <p><span>Zero outliers removed</span><b>{Math.round(Number(quality.elevationQuality.zero_outliers_removed || 0))}</b></p>
-            <p><span>Spike outliers removed</span><b>{Math.round(Number(quality.elevationQuality.spike_outliers_removed || 0))}</b></p>
-            <p><span>Interpolated points</span><b>{Math.round(Number(quality.elevationQuality.interpolated_points || 0))}</b></p>
-          </div>
-        </div>
-      ) : null}
 
       <div className="route-quality-decision">
         <strong>Why this route?</strong>
@@ -575,6 +555,7 @@ export default function FullscreenRouteDrawPage() {
   const routeStartLookupRef = useRef("");
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
+  const skipNextFullRerouteRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -604,19 +585,7 @@ export default function FullscreenRouteDrawPage() {
   const points = controlPoints;
   const activeRoutePayload = routedPayload || pointsPayload;
   const routeQuality = useMemo(() => getRouteQuality(routedPayload || activeRoutePayload, sportId), [routedPayload, activeRoutePayload, sportId]);
-  const metrics = useMemo(() => {
-    const calculated = calculateRouteMetrics(activeRoutePayload);
-    const payloadElevationGain = Number(activeRoutePayload?.elevation_gain_m);
-    const payloadElevationLoss = Number(activeRoutePayload?.elevation_loss_m);
-    const payloadElevationQuality = activeRoutePayload?.elevation_quality || activeRoutePayload?.route_quality?.elevation_quality || calculated.elevation_quality || null;
-
-    return {
-      ...calculated,
-      elevation_gain_m: Number.isFinite(payloadElevationGain) ? Math.round(payloadElevationGain) : calculated.elevation_gain_m,
-      elevation_loss_m: Number.isFinite(payloadElevationLoss) ? Math.round(payloadElevationLoss) : calculated.elevation_loss_m,
-      elevation_quality: payloadElevationQuality,
-    };
-  }, [activeRoutePayload]);
+  const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2;
   const routeSignature = useMemo(
     () => points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join("|"),
@@ -875,9 +844,33 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
+    const canUseLocalReroute =
+      previousControlPoints.length >= 2 &&
+      safeControlPoints.length >= 2 &&
+      ["add_control_point", "insert_control_point", "promote_shape_handle", "move_control_point"].includes(meta?.type);
+
+    // Do not full-reroute the entire route after every added point. Once a route
+    // has several control points this becomes slow on mobile and can make the
+    // builder appear to stop snapping. Professional routebuilders reroute only the
+    // affected segment and keep the rest of the snapped geometry intact.
+    if (canUseLocalReroute) {
+      skipNextFullRerouteRef.current = true;
+      const insertAt =
+        meta?.type === "move_control_point"
+          ? Number(meta.index)
+          : Number.isFinite(Number(meta.insertAt))
+            ? Number(meta.insertAt)
+            : safeControlPoints.length - 1;
+
+      rerouteLocalSegment({
+        previousControlPoints,
+        nextControlPoints: safeControlPoints,
+        insertAt,
+      });
+      return;
+    }
+
     // Keep the last routed geometry visible while the debounced route request runs.
-    // Professional routebuilders avoid clearing the route on every tiny edit because
-    // that makes snapping feel slow and jumpy on mobile.
     setRoutingStatus("routing");
   }
 
@@ -1170,9 +1163,14 @@ export default function FullscreenRouteDrawPage() {
   useEffect(() => {
     if (points.length < 2 || !routeSignature) return;
 
+    if (skipNextFullRerouteRef.current) {
+      skipNextFullRerouteRef.current = false;
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       rerouteRoute({ silent: true });
-    }, 450);
+    }, points.length > 8 ? 900 : 450);
 
     return () => window.clearTimeout(timeout);
   }, [routeSignature, sportId]);
