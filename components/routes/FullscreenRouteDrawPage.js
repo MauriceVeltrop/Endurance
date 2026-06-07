@@ -362,44 +362,85 @@ function getRouteQuality(payload = {}, sportId = "") {
   const pavedRatio = Number(surfaceQuality.ideal_ratio || 0) + Number(surfaceQuality.acceptable_ratio || 0);
   const unsuitableRatio = Number(surfaceQuality.avoid_ratio || 0);
   const unknownRatio = Number(surfaceQuality.unknown_ratio || 0);
+  const rawUnknown = Number(quality.surface_intelligence?.raw_unknown_meters || 0);
+  const unresolvedUnknown = Number(quality.surface_intelligence?.unresolved_unknown_meters || 0);
+  const inferredMeters = Number(quality.surface_intelligence?.inferred_meters || 0);
+  const scoreBreakdown = quality.score_breakdown || {};
   const score = Number.isFinite(Number(quality.suitability_score))
     ? Math.max(0, Math.min(100, Math.round(Number(quality.suitability_score))))
     : Math.max(0, Math.min(100, Math.round((pavedRatio * 88) + ((1 - unsuitableRatio) * 12))));
 
-  const warnings = [];
   const key = String(sportId || quality.sport_id || "").toLowerCase();
+  const warnings = [];
+  const highlights = [];
+  const recommendations = [];
 
   if (["running", "road_cycling", "roadcycling"].includes(key) && unsuitableRatio >= 0.18) {
-    warnings.push("Deze route bevat relatief veel onverhard voor deze sport.");
+    warnings.push("High unpaved share for this sport.");
+    recommendations.push("Add one or two shaping points on paved roads or cycleways.");
   }
 
   if (["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key) && pavedRatio >= 0.75) {
-    warnings.push("Deze route is vrij verhard voor de gekozen sport.");
+    warnings.push("This route is quite paved for the selected sport.");
+    recommendations.push("Move shaping points deeper into path/track networks for a more sport-specific route.");
   }
 
   if (unknownRatio >= 0.35) {
-    warnings.push("Van een deel van deze route ontbreekt wegdek-informatie in de kaartdata.");
+    warnings.push("A large part of the route still has unresolved surface data.");
   }
+
+  if (pavedRatio >= 0.75 && ["running", "road_cycling", "roadcycling"].includes(key)) {
+    highlights.push("Strong paved/smooth surface match.");
+  }
+
+  if (pavedRatio <= 0.55 && ["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key)) {
+    highlights.push("Good off-road character for the selected sport.");
+  }
+
+  if (Number(quality.detour_factor || 1) <= 1.2) {
+    highlights.push("Efficient route shape without excessive detour.");
+  }
+
+  if (inferredMeters > 0) {
+    highlights.push("Missing surface data was partly resolved by route context.");
+  }
+
+  if (!highlights.length) highlights.push("Route is usable, but quality depends on map data completeness.");
+  if (!recommendations.length && warnings.length) recommendations.push("Review the highlighted surface and waytype split before saving.");
+  if (!recommendations.length) recommendations.push("No major route quality issues detected.");
+
+  const dataConfidence = Number.isFinite(Number(scoreBreakdown.data_confidence))
+    ? Math.max(0, Math.min(100, Math.round(Number(scoreBreakdown.data_confidence))))
+    : Math.max(0, Math.min(100, Math.round((1 - unknownRatio) * 100)));
 
   return {
     score,
+    dataConfidence,
     pavedPercent: Math.round(pavedRatio * 100),
     unsuitablePercent: Math.round(unsuitableRatio * 100),
     unknownPercent: Math.round(unknownRatio * 100),
+    rawUnknownMeters: rawUnknown,
+    unresolvedUnknownMeters: unresolvedUnknown,
+    inferredMeters,
     detourFactor: Number(quality.detour_factor || 1),
     candidates: Number(quality.candidates_considered || 0),
-    surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
-    waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
-    inferredSurfaces: metersToPercentMap(quality.surface_intelligence?.inferred).slice(0, 4),
+    eligibleCandidates: Number(quality.eligible_candidates || 0),
+    profile: quality.profile || scoreBreakdown.profile || "",
+    preference: quality.preference || scoreBreakdown.preference || "",
+    surfaces: metersToPercentMap(quality.surfaces).slice(0, 6),
+    rawSurfaces: metersToPercentMap(quality.raw_surfaces).slice(0, 6),
+    waytypes: metersToPercentMap(quality.waytypes).slice(0, 6),
+    inferredSurfaces: metersToPercentMap(quality.surface_intelligence?.inferred).slice(0, 6),
     surfaceIntelligence: quality.surface_intelligence || null,
     warnings,
+    highlights,
+    recommendations,
   };
 }
-
 function humanizeRouteLabel(value = "") {
   return String(value || "unknown")
     .replace(/_/g, " ")
-    .replace(/\w/g, (char) => char.toUpperCase());
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function RouteQualityPanel({ payload, sportId, onClose }) {
@@ -416,23 +457,39 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
         <button type="button" onClick={onClose} aria-label="Close route quality">×</button>
       </div>
 
-      <div className="route-quality-grid">
-        <div><span>Paved / suitable</span><b>{quality.pavedPercent}%</b></div>
+      <div className="route-quality-grid route-quality-grid-primary">
+        <div><span>Sport fit</span><b>{quality.pavedPercent}%</b></div>
         <div><span>Unsuitable</span><b>{quality.unsuitablePercent}%</b></div>
         <div><span>Unknown</span><b>{quality.unknownPercent}%</b></div>
         <div><span>Detour</span><b>{quality.detourFactor.toFixed(2)}×</b></div>
       </div>
 
+      <div className="route-quality-confidence-row">
+        <div>
+          <span>Data confidence</span>
+          <b>{quality.dataConfidence}%</b>
+        </div>
+        <div>
+          <span>Candidates</span>
+          <b>{quality.eligibleCandidates || quality.candidates}</b>
+        </div>
+      </div>
+
       {quality.warnings.length ? (
         <div className="route-quality-warning">{quality.warnings[0]}</div>
       ) : (
-        <div className="route-quality-ok">Geschikt voor {getSportLabel(sportId || "running")}.</div>
+        <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
       )}
+
+      <div className="route-quality-decision">
+        <strong>Why this route?</strong>
+        {quality.highlights.slice(0, 4).map((text) => <p key={text}>✓ {text}</p>)}
+      </div>
 
       {quality.surfaceIntelligence?.applied ? (
         <div className="route-quality-intelligence">
           <strong>Surface intelligence</strong>
-          <span>Ontbrekend wegdek is deels afgeleid uit OSM-waytypes.</span>
+          <span>{Math.round(quality.inferredMeters)} m inferred · {Math.round(quality.unresolvedUnknownMeters)} m still unresolved</span>
           {quality.inferredSurfaces.length ? (
             <div className="route-quality-inferred-list">
               {quality.inferredSurfaces.map((item) => (
@@ -443,7 +500,7 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
         </div>
       ) : null}
 
-      <div className="route-quality-breakdown">
+      <div className="route-quality-breakdown route-quality-breakdown-wide">
         <div>
           <small>Surface</small>
           {quality.surfaces.length ? quality.surfaces.map((item) => (
@@ -457,10 +514,14 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
           )) : <p><span>Unknown</span><b>—</b></p>}
         </div>
       </div>
+
+      <div className="route-quality-recommendation">
+        <strong>Next action</strong>
+        <span>{quality.recommendations[0]}</span>
+      </div>
     </section>
   );
 }
-
 
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
