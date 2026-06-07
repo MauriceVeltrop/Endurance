@@ -154,61 +154,77 @@ function nearestGeometryIndex(target, geometry) {
   return bestIndex;
 }
 
+function pointsAreClose(a, b, tolerance = 0.00003) {
+  if (!a || !b) return false;
+  const latDiff = Math.abs(Number(a.lat) - Number(b.lat));
+  const lonDiff = Math.abs(Number(a.lon) - Number(b.lon));
+  return Number.isFinite(latDiff) && Number.isFinite(lonDiff) && latDiff <= tolerance && lonDiff <= tolerance;
+}
+
+function appendWithoutDuplicate(base, addition) {
+  const safeBase = normalizeRoutePoints(base);
+  const safeAddition = normalizeRoutePoints(addition);
+  if (!safeBase.length) return safeAddition;
+  if (!safeAddition.length) return safeBase;
+
+  const tail = pointsAreClose(safeBase[safeBase.length - 1], safeAddition[0])
+    ? safeAddition.slice(1)
+    : safeAddition;
+
+  return [...safeBase, ...tail];
+}
+
 function mergeLocalSegmentGeometry(existingGeometry, previousControlPoints, nextControlPoints, insertAt, segmentGeometry) {
   const existing = normalizeRoutePoints(existingGeometry);
+  const previous = normalizeRoutePoints(previousControlPoints);
   const next = normalizeRoutePoints(nextControlPoints);
   const segment = normalizeRoutePoints(segmentGeometry);
 
+  if (!next.length) return [];
   if (next.length < 2) return next;
 
-  const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || 0, next.length - 1));
-  const isFirstPoint = safeInsertAt <= 0;
-  const isLastPoint = safeInsertAt >= next.length - 1;
-  const replacement = segment.length >= 2 ? segment : next;
+  const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
+  const isTailSegment = safeInsertAt >= next.length - 1;
 
-  if (existing.length < 2) {
+  // Appending a new final point is the most common mobile flow. There is no
+  // “next anchor” after the finish marker, so the older merge logic returned
+  // the raw control line. That made snapping appear to stop after several km.
+  // For a tail segment we keep all existing snapped geometry up to the previous
+  // control point and append the newly snapped last segment.
+  if (isTailSegment) {
+    const anchorPoint = next[next.length - 2] || previous[previous.length - 1];
+    const finishPoint = next[next.length - 1];
+    const replacement = segment.length >= 2 ? segment : [anchorPoint, finishPoint].filter(Boolean);
+
+    if (existing.length < 2 || !anchorPoint) {
+      return compactRoutePoints(replacement.length >= 2 ? replacement : next, 900);
+    }
+
+    const anchorIndex = nearestGeometryIndex(anchorPoint, existing);
+    if (anchorIndex < 0) {
+      return compactRoutePoints(appendWithoutDuplicate(existing, replacement), 900);
+    }
+
+    const before = existing.slice(0, anchorIndex + 1);
+    return compactRoutePoints(appendWithoutDuplicate(before, replacement), 900);
+  }
+
+  const previousPoint = previous[safeInsertAt - 1] || next[safeInsertAt - 1];
+  const nextPoint = previous[safeInsertAt] || next[safeInsertAt + 1];
+  const promotedPoint = next[safeInsertAt];
+  const replacement = segment.length >= 2
+    ? segment
+    : [previousPoint, promotedPoint, nextPoint].filter(Boolean);
+
+  if (existing.length < 2 || !previousPoint || !nextPoint) {
     return compactRoutePoints(replacement.length >= 2 ? replacement : next, 900);
-  }
-
-  // Adding or moving the final control point is the most common mobile drawing
-  // action. The old implementation expected an existing next anchor after the
-  // new point. For appended points that anchor does not exist, so it returned
-  // raw control points and the route looked like it stopped snapping. Replace
-  // the tail of the existing geometry from the previous control point onward.
-  if (isLastPoint) {
-    const startAnchor = next[safeInsertAt - 1];
-    const startIndex = nearestGeometryIndex(startAnchor, existing);
-
-    if (startIndex < 0) return compactRoutePoints(replacement, 900);
-
-    const before = existing.slice(0, startIndex);
-    return compactRoutePoints([...before, ...replacement], 900);
-  }
-
-  // Moving the first control point should replace the head up to the next
-  // anchor. This prevents the first segment from falling back to a straight line.
-  if (isFirstPoint) {
-    const endAnchor = next[1];
-    const endIndex = nearestGeometryIndex(endAnchor, existing);
-
-    if (endIndex < 0) return compactRoutePoints(replacement, 900);
-
-    const after = existing.slice(endIndex + 1);
-    return compactRoutePoints([...replacement, ...after], 900);
-  }
-
-  const previousPoint = next[safeInsertAt - 1];
-  const nextPoint = next[safeInsertAt + 1];
-
-  if (!previousPoint || !nextPoint) {
-    return compactRoutePoints(replacement, 900);
   }
 
   let startIndex = nearestGeometryIndex(previousPoint, existing);
   let endIndex = nearestGeometryIndex(nextPoint, existing);
 
   if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) {
-    return compactRoutePoints(replacement, 900);
+    return compactRoutePoints(next, 900);
   }
 
   if (startIndex > endIndex) {
@@ -585,6 +601,7 @@ export default function FullscreenRouteDrawPage() {
   const routeStartLookupRef = useRef("");
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
+  const localRoutingRequestIdRef = useRef(0);
   const skipNextFullRerouteRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
@@ -793,25 +810,17 @@ export default function FullscreenRouteDrawPage() {
   }
 
   async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
+    const localRequestId = localRoutingRequestIdRef.current + 1;
+    localRoutingRequestIdRef.current = localRequestId;
     const previous = normalizeRoutePoints(previousControlPoints);
     const next = compactControlPoints(nextControlPoints);
-    const safeInsertAt = Math.max(0, Math.min(Number(insertAt) || 0, next.length - 1));
+    const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
 
-    let segmentControlPoints;
-
-    if (safeInsertAt <= 0) {
-      segmentControlPoints = [next[0], next[1]];
-    } else if (safeInsertAt >= next.length - 1) {
-      segmentControlPoints = [next[safeInsertAt - 1], next[safeInsertAt]];
-    } else {
-      segmentControlPoints = [
-        next[safeInsertAt - 1],
-        next[safeInsertAt],
-        next[safeInsertAt + 1],
-      ];
-    }
-
-    segmentControlPoints = segmentControlPoints.filter(Boolean);
+    const segmentControlPoints = [
+      next[safeInsertAt - 1],
+      next[safeInsertAt],
+      next[safeInsertAt + 1],
+    ].filter(Boolean);
 
     if (segmentControlPoints.length < 2) return;
 
@@ -830,6 +839,8 @@ export default function FullscreenRouteDrawPage() {
       });
 
       const data = await response.json().catch(() => ({}));
+
+      if (localRequestId !== localRoutingRequestIdRef.current) return;
 
       if (!response.ok || !data?.ok) {
         throw new Error(data?.error || "Local rerouting failed.");
@@ -864,6 +875,7 @@ export default function FullscreenRouteDrawPage() {
         setMessage(data?.warning || "No snapped path found. Using the drawn line.");
       }
     } catch (error) {
+      if (localRequestId !== localRoutingRequestIdRef.current) return;
       console.error("Local segment rerouting failed", error);
       setRoutingStatus("error");
       setRoutingError(error?.message || "Local rerouting failed.");
@@ -919,6 +931,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function clearRoute() {
+    localRoutingRequestIdRef.current += 1;
     setPointsPayload(null);
     setRoutedPayload(null);
     setRoutingStatus("idle");
