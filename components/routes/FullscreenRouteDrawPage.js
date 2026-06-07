@@ -427,6 +427,8 @@ function getRouteQuality(payload = {}, sportId = "") {
     eligibleCandidates: Number(quality.eligible_candidates || 0),
     profile: quality.profile || scoreBreakdown.profile || "",
     preference: quality.preference || scoreBreakdown.preference || "",
+    optimizeMode: quality.optimize_mode || scoreBreakdown.optimize_mode || "balanced",
+    optimizationLabel: quality.optimization_label || scoreBreakdown.optimization_label || "Balanced",
     surfaces: metersToPercentMap(quality.surfaces).slice(0, 6),
     rawSurfaces: metersToPercentMap(quality.raw_surfaces).slice(0, 6),
     waytypes: metersToPercentMap(quality.waytypes).slice(0, 6),
@@ -443,7 +445,7 @@ function humanizeRouteLabel(value = "") {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function RouteQualityPanel({ payload, sportId, onClose }) {
+function RouteQualityPanel({ payload, sportId, onClose, onOptimize, optimizingMode }) {
   const quality = getRouteQuality(payload, sportId);
 
   if (!quality) return null;
@@ -473,6 +475,22 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
           <span>Candidates</span>
           <b>{quality.eligibleCandidates || quality.candidates}</b>
         </div>
+        <div>
+          <span>Mode</span>
+          <b>{quality.optimizationLabel}</b>
+        </div>
+      </div>
+
+      <div className="route-quality-actions" aria-label="Route optimization">
+        <button type="button" onClick={() => onOptimize?.("prefer_paved")} disabled={optimizingMode === "prefer_paved"}>
+          {optimizingMode === "prefer_paved" ? "Optimizing..." : "Prefer paved"}
+        </button>
+        <button type="button" onClick={() => onOptimize?.("prefer_trail")} disabled={optimizingMode === "prefer_trail"}>
+          {optimizingMode === "prefer_trail" ? "Optimizing..." : "Prefer trail"}
+        </button>
+        <button type="button" onClick={() => onOptimize?.("reduce_detour")} disabled={optimizingMode === "reduce_detour"}>
+          {optimizingMode === "reduce_detour" ? "Optimizing..." : "Reduce detour"}
+        </button>
       </div>
 
       {quality.warnings.length ? (
@@ -543,6 +561,7 @@ export default function FullscreenRouteDrawPage() {
   const [showPointPanel, setShowPointPanel] = useState(false);
   const [showElevationPanel, setShowElevationPanel] = useState(false);
   const [showQualityPanel, setShowQualityPanel] = useState(false);
+  const [optimizingMode, setOptimizingMode] = useState("");
   const [routedPayload, setRoutedPayload] = useState(null);
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
@@ -876,7 +895,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
-  async function rerouteControlPoints(controlPoints, { silent = false } = {}) {
+  async function rerouteControlPoints(controlPoints, { silent = false, optimizeMode = "balanced" } = {}) {
     const control = compactControlPoints(controlPoints);
     if (control.length < 2) return;
 
@@ -901,6 +920,7 @@ export default function FullscreenRouteDrawPage() {
         body: JSON.stringify({
           sport_id: sportId,
           points: control,
+          optimize_mode: optimizeMode,
         }),
         signal: controller.signal,
       });
@@ -919,6 +939,7 @@ export default function FullscreenRouteDrawPage() {
         });
         setRoutingStatus("done");
         setRoutingError("");
+        setOptimizingMode("");
         if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
         return;
       }
@@ -945,6 +966,7 @@ export default function FullscreenRouteDrawPage() {
       setRoutedPayload(routePayload);
       setRoutingStatus("done");
       setRoutingError("");
+      setOptimizingMode("");
 
       if (data?.routed === false) {
         if (!silent) setMessage(data?.warning || "No snapped path found. Using the drawn line.");
@@ -965,6 +987,7 @@ export default function FullscreenRouteDrawPage() {
       });
       setRoutingStatus("done");
       setRoutingError("");
+      setOptimizingMode("");
       if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
     } finally {
       if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
@@ -973,8 +996,19 @@ export default function FullscreenRouteDrawPage() {
     }
   }
 
-  async function rerouteRoute({ silent = false } = {}) {
-    return rerouteControlPoints(points, { silent });
+  async function rerouteRoute({ silent = false, optimizeMode = "balanced" } = {}) {
+    return rerouteControlPoints(points, { silent, optimizeMode });
+  }
+
+  async function optimizeRoute(mode) {
+    if (points.length < 2) {
+      setMessage("Add at least two routepoints before optimizing.");
+      return;
+    }
+
+    setShowQualityPanel(true);
+    setOptimizingMode(mode);
+    await rerouteRoute({ silent: false, optimizeMode: mode });
   }
 
 
@@ -1287,6 +1321,8 @@ export default function FullscreenRouteDrawPage() {
           payload={routedPayload || activeRoutePayload}
           sportId={sportId}
           onClose={() => setShowQualityPanel(false)}
+          onOptimize={optimizeRoute}
+          optimizingMode={optimizingMode}
         />
       ) : null}
 
