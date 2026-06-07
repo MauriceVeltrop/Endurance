@@ -7,6 +7,7 @@ import RouteDrawMap from "./RouteDrawMap";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { calculateRouteMetrics, estimateTimeText, normalizeRoutePoints, simplifyRoutePoints } from "../../lib/routeMetrics";
+import { buildRoutePayloadFromSegments, getControlSegments, joinSegmentGeometries } from "../../lib/routes/routeSegmentEngine";
 
 function makeRoutePointPayload(points, source = "draw-fullscreen") {
   const normalized = normalizeRoutePoints(points);
@@ -612,6 +613,8 @@ export default function FullscreenRouteDrawPage() {
   const routingRequestIdRef = useRef(0);
   const localSegmentRequestIdRef = useRef(0);
   const skipNextFullRerouteRef = useRef(false);
+  const segmentCacheRef = useRef(new Map());
+  const segmentedRequestIdRef = useRef(0);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -685,6 +688,11 @@ export default function FullscreenRouteDrawPage() {
       cancelled = true;
     };
   }, [points, routedPoints, titleEditedManually]);
+
+  useEffect(() => {
+    segmentCacheRef.current = new Map();
+    segmentedRequestIdRef.current += 1;
+  }, [sportId]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -818,6 +826,146 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
+
+  async function fetchRouteSegment(segment, requestId) {
+    const fallbackGeometry = normalizeRoutePoints(segment.control);
+
+    try {
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points: segment.control,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (requestId !== segmentedRequestIdRef.current) return null;
+
+      if (!response.ok || !data?.ok) {
+        return {
+          ...segment,
+          geometry: fallbackGeometry,
+          routed: false,
+          error: data?.error || "Segment routing failed.",
+        };
+      }
+
+      const routed = data.route_points || data;
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+      if (geometry.length < 2) {
+        return {
+          ...segment,
+          geometry: fallbackGeometry,
+          routed: false,
+          error: "No segment geometry returned.",
+        };
+      }
+
+      return {
+        ...segment,
+        geometry,
+        routed: data?.routed !== false,
+        profile: routed?.profile || data?.profile || null,
+        route_quality: routed?.route_quality || data?.route_quality || null,
+      };
+    } catch (error) {
+      if (requestId !== segmentedRequestIdRef.current) return null;
+
+      return {
+        ...segment,
+        geometry: fallbackGeometry,
+        routed: false,
+        error: error?.message || "Segment routing failed.",
+      };
+    }
+  }
+
+  async function rerouteSegmentedRoute(controlPoints, { silent = true } = {}) {
+    const control = compactControlPoints(controlPoints);
+
+    if (control.length < 2) {
+      setRoutedPayload(null);
+      setRoutingStatus("idle");
+      return;
+    }
+
+    const requestId = segmentedRequestIdRef.current + 1;
+    segmentedRequestIdRef.current = requestId;
+    routingRequestIdRef.current += 1;
+
+    if (routingAbortRef.current) {
+      routingAbortRef.current.abort();
+      routingAbortRef.current = null;
+    }
+
+    setRoutingStatus("routing");
+    setRoutingError("");
+
+    const controlSegments = getControlSegments(control, sportId);
+    const cache = segmentCacheRef.current;
+    const resolvedSegments = [];
+    let hadFailure = false;
+    let lastQuality = null;
+
+    for (const segment of controlSegments) {
+      if (requestId !== segmentedRequestIdRef.current) return;
+
+      const cached = cache.get(segment.key);
+      if (cached?.geometry?.length >= 2) {
+        resolvedSegments.push(cached);
+        continue;
+      }
+
+      const routedSegment = await fetchRouteSegment(segment, requestId);
+      if (!routedSegment || requestId !== segmentedRequestIdRef.current) return;
+
+      if (routedSegment.routed === false) hadFailure = true;
+      if (routedSegment.route_quality) lastQuality = routedSegment.route_quality;
+
+      cache.set(segment.key, routedSegment);
+      resolvedSegments.push(routedSegment);
+
+      // Progressive rendering keeps mobile feedback immediate and prevents a long
+      // route from appearing as a single straight fallback while later segments
+      // are still being processed.
+      const partialGeometry = joinSegmentGeometries(resolvedSegments);
+      if (partialGeometry.length >= 2) {
+        setRoutedPayload({
+          ...buildRoutePayloadFromSegments({
+            segments: resolvedSegments,
+            controlPoints: control,
+            source: hadFailure ? "segmented-routing-partial-with-fallback" : "segmented-routing-partial",
+            routeQuality: lastQuality,
+          }),
+          points: partialGeometry,
+        });
+      }
+    }
+
+    if (requestId !== segmentedRequestIdRef.current) return;
+
+    const payload = buildRoutePayloadFromSegments({
+      segments: resolvedSegments,
+      controlPoints: control,
+      source: hadFailure ? "segmented-routing-with-fallback" : "segmented-routing",
+      routeQuality: lastQuality,
+    });
+
+    setRoutedPayload(payload);
+    setRoutingStatus("done");
+    setRoutingError("");
+
+    if (hadFailure) {
+      if (!silent) setMessage("Some segments could not be snapped. The rest of the route stays intact.");
+    } else if (!silent) {
+      setMessage("");
+    }
+  }
+
   async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
     const previous = normalizeRoutePoints(previousControlPoints);
     const next = compactControlPoints(nextControlPoints);
@@ -920,46 +1068,25 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function handlePointsChange(nextPoints, meta = {}) {
-    const previousControlPoints = points;
     const safeControlPoints = compactControlPoints(nextPoints);
     loadedDraftRef.current = false;
     setPointsPayload(makeRoutePointPayload(safeControlPoints));
-    setRoutingStatus("idle");
     setRoutingError("");
 
     if (safeControlPoints.length < 2) {
+      segmentedRequestIdRef.current += 1;
       setRoutedPayload(null);
+      setRoutingStatus("idle");
       return;
     }
 
-    const canUseLocalReroute =
-      previousControlPoints.length >= 2 &&
-      safeControlPoints.length >= 2 &&
-      ["add_control_point", "insert_control_point", "promote_shape_handle", "move_control_point"].includes(meta?.type);
-
-    // Do not full-reroute the entire route after every added point. Once a route
-    // has several control points this becomes slow on mobile and can make the
-    // builder appear to stop snapping. Professional routebuilders reroute only the
-    // affected segment and keep the rest of the snapped geometry intact.
-    if (canUseLocalReroute) {
-      skipNextFullRerouteRef.current = true;
-      const insertAt =
-        meta?.type === "move_control_point"
-          ? Number(meta.index)
-          : Number.isFinite(Number(meta.insertAt))
-            ? Number(meta.insertAt)
-            : safeControlPoints.length - 1;
-
-      rerouteLocalSegment({
-        previousControlPoints,
-        nextControlPoints: safeControlPoints,
-        insertAt,
-      });
-      return;
-    }
-
-    // Keep the last routed geometry visible while the debounced route request runs.
+    // New architecture: every route is a list of independent A→B segments.
+    // This avoids the old failure mode where a long multi-point route was sent
+    // to the provider as one large request and eventually fell back to a straight
+    // line. Existing segment results are cached, so only new/changed segments are
+    // requested again.
     setRoutingStatus("routing");
+    rerouteSegmentedRoute(safeControlPoints, { silent: true });
   }
 
   function undoPoint() {
@@ -1249,18 +1376,9 @@ export default function FullscreenRouteDrawPage() {
 
 
   useEffect(() => {
-    if (points.length < 2 || !routeSignature) return;
-
-    if (skipNextFullRerouteRef.current) {
-      skipNextFullRerouteRef.current = false;
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      rerouteRoute({ silent: true });
-    }, points.length > 8 ? 900 : 450);
-
-    return () => window.clearTimeout(timeout);
+    // Segment routing is triggered directly from handlePointsChange. Keeping a
+    // second debounced full-route request here would reintroduce the long-route
+    // failure mode that caused snapping to stop after several kilometers.
   }, [routeSignature, sportId]);
 
 
