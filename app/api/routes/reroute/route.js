@@ -79,6 +79,116 @@ function directWaypointDistanceMeters(points) {
   return distance;
 }
 
+
+function median(values) {
+  const nums = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!nums.length) return null;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function smoothElevationSeries(points) {
+  const elevations = (points || []).map((point) => (Number.isFinite(Number(point.ele)) ? Number(point.ele) : null));
+  const cleaned = elevations.slice();
+
+  for (let index = 1; index < cleaned.length - 1; index += 1) {
+    const prev = cleaned[index - 1];
+    const current = cleaned[index];
+    const next = cleaned[index + 1];
+
+    if (!Number.isFinite(prev) || !Number.isFinite(current) || !Number.isFinite(next)) continue;
+
+    const neighborAverage = (prev + next) / 2;
+    const looksLikeSpike = Math.abs(current - prev) > 12 && Math.abs(current - next) > 12 && Math.abs(prev - next) < 6;
+
+    if (looksLikeSpike) cleaned[index] = neighborAverage;
+  }
+
+  return cleaned.map((value, index) => {
+    if (!Number.isFinite(value)) return null;
+    const window = [];
+    for (let offset = -2; offset <= 2; offset += 1) {
+      const candidate = cleaned[index + offset];
+      if (Number.isFinite(candidate)) window.push(candidate);
+    }
+    return median(window) ?? value;
+  });
+}
+
+function calculateSmoothedElevationStats(points, providerAscent = null, providerDescent = null) {
+  const routePoints = Array.isArray(points) ? points : [];
+  const smoothed = smoothElevationSeries(routePoints);
+  const validCount = smoothed.filter((value) => Number.isFinite(value)).length;
+
+  if (routePoints.length < 2 || validCount < Math.max(2, Math.floor(routePoints.length * 0.35))) {
+    return {
+      ascent: Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null,
+      descent: Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null,
+      corrected: false,
+      method: "provider",
+      valid_elevation_points: validCount,
+      point_count: routePoints.length,
+      provider_ascent: Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null,
+      provider_descent: Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null,
+    };
+  }
+
+  let ascent = 0;
+  let descent = 0;
+  let pendingUp = 0;
+  let pendingDown = 0;
+  const minClimbStep = 2.5;
+
+  for (let index = 1; index < routePoints.length; index += 1) {
+    const prevEle = smoothed[index - 1];
+    const currentEle = smoothed[index];
+    if (!Number.isFinite(prevEle) || !Number.isFinite(currentEle)) continue;
+
+    const horizontalMeters = haversineMeters(routePoints[index - 1], routePoints[index]);
+    const diff = currentEle - prevEle;
+
+    // Reject implausible elevation spikes. This does not prevent MTB climbs;
+    // it only removes jumps that are unrealistic for the segment length.
+    const maxPlausibleStep = Math.max(4, horizontalMeters * 0.35);
+    if (Math.abs(diff) > maxPlausibleStep) continue;
+
+    if (diff > 0) {
+      pendingUp += diff;
+      if (pendingDown >= minClimbStep) descent += pendingDown;
+      pendingDown = 0;
+    } else if (diff < 0) {
+      pendingDown += Math.abs(diff);
+      if (pendingUp >= minClimbStep) ascent += pendingUp;
+      pendingUp = 0;
+    }
+  }
+
+  if (pendingUp >= minClimbStep) ascent += pendingUp;
+  if (pendingDown >= minClimbStep) descent += pendingDown;
+
+  const providerA = Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null;
+  const providerD = Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null;
+  const corrected =
+    (providerA !== null && Math.abs(providerA - ascent) > Math.max(25, ascent * 0.35)) ||
+    (providerD !== null && Math.abs(providerD - descent) > Math.max(25, descent * 0.35));
+
+  return {
+    ascent: Number(ascent.toFixed(1)),
+    descent: Number(descent.toFixed(1)),
+    corrected,
+    method: "smoothed_geometry_elevation",
+    valid_elevation_points: validCount,
+    point_count: routePoints.length,
+    provider_ascent: providerA,
+    provider_descent: providerD,
+    smoothing: {
+      median_window: 5,
+      min_climb_step_m: minClimbStep,
+      max_grade_step: 0.35,
+    },
+  };
+}
+
 function fallbackRoutePayload({ waypoints, profiles, reason, details = [] }) {
   const points = waypoints.map((point) => ({
     lat: Number(Number(point.lat).toFixed(6)),
@@ -414,8 +524,9 @@ function offRoadCandidatePriority(candidate, sportId) {
     if (trackRatio >= 0.30 || offRoadSurfaceRatio >= 0.35) priority += 35;
   } else {
     // MTB should be even stricter than gravel: roads and cycleways are connectors only.
-    priority += pathTrackRatio * 190;
-    priority += offRoadSurfaceRatio * 170;
+    priority += pathTrackRatio * 205;
+    priority += pathRatio * 55;
+    priority += offRoadSurfaceRatio * 175;
     priority -= roadLikeRatio * 165;
     priority -= cyclewayRatio * 60;
     priority -= pavedSurfaceRatio * 80;
@@ -537,8 +648,8 @@ function routeSuitabilityScore({ feature, points, directDistance, sportId, profi
     const minOffRoadRatio = Number(surfaceRules.minOffRoadRatio || (key.includes("mountain") || key === "mtb" ? 0.45 : 0.35));
     const maxPavedConnectorRatio = Number(surfaceRules.maxPavedConnectorRatio || (key.includes("mountain") || key === "mtb" ? 0.5 : 0.62));
 
-    score += pathTrackRatio * (key.includes("mountain") || key === "mtb" ? 120 : 85);
-    score += offRoadSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 95 : 75);
+    score += pathTrackRatio * (key.includes("mountain") || key === "mtb" ? 145 : 85);
+    score += offRoadSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 105 : 75);
     score += trackRatio * 35;
 
     score -= roadLikeRatio * (key.includes("mountain") || key === "mtb" ? 115 : 75);
@@ -662,6 +773,11 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId, op
 
         const distance = Number(feature?.properties?.summary?.distance || 0);
         const duration = Number(feature?.properties?.summary?.duration || 0);
+        const elevationStats = calculateSmoothedElevationStats(
+          routePoints,
+          Number(feature?.properties?.ascent || 0),
+          Number(feature?.properties?.descent || 0)
+        );
         const score = routeSuitabilityScore({
           feature,
           points,
@@ -677,8 +793,9 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId, op
           coords,
           distance,
           duration,
-          ascent: Number(feature?.properties?.ascent || 0),
-          descent: Number(feature?.properties?.descent || 0),
+          ascent: Number.isFinite(Number(elevationStats.ascent)) ? Number(elevationStats.ascent) : Number(feature?.properties?.ascent || 0),
+          descent: Number.isFinite(Number(elevationStats.descent)) ? Number(elevationStats.descent) : Number(feature?.properties?.descent || 0),
+          elevation_quality: elevationStats,
           suitability_score: Number(score.score.toFixed(2)),
           detour_factor: score.detourFactor,
           waytypes: score.wayTypes,
@@ -726,6 +843,15 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
   };
   const surfaceQualityTotals = { ideal_ratio: 0, acceptable_ratio: 0, avoid_ratio: 0, unknown_ratio: 0 };
   const scoreBreakdownTotals = {};
+  const elevationQuality = {
+    method: "smoothed_geometry_elevation",
+    corrected: false,
+    provider_ascent: 0,
+    provider_descent: 0,
+    valid_elevation_points: 0,
+    point_count: 0,
+    chunks: [],
+  };
 
   for (let index = 0; index < chunks.length; index += 1) {
     const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId, optimizeMode });
@@ -763,6 +889,15 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
     duration += selected.duration || 0;
     ascent += selected.ascent || 0;
     descent += selected.descent || 0;
+    if (selected.elevation_quality) {
+      const eq = selected.elevation_quality;
+      elevationQuality.corrected = elevationQuality.corrected || Boolean(eq.corrected);
+      elevationQuality.provider_ascent += Number(eq.provider_ascent || 0);
+      elevationQuality.provider_descent += Number(eq.provider_descent || 0);
+      elevationQuality.valid_elevation_points += Number(eq.valid_elevation_points || 0);
+      elevationQuality.point_count += Number(eq.point_count || 0);
+      elevationQuality.chunks.push(eq);
+    }
     suitabilityScore += selected.suitability_score || 0;
     detourFactor = Math.max(detourFactor, selected.detour_factor || 1);
     selectedAlternatives.push(selected.alternative_index || 0);
@@ -806,6 +941,13 @@ async function routeInChunks({ url, apiKey, waypoints, preference, sportId, opti
     duration,
     ascent,
     descent,
+    elevation_quality: {
+      ...elevationQuality,
+      provider_ascent: Number(elevationQuality.provider_ascent.toFixed(1)),
+      provider_descent: Number(elevationQuality.provider_descent.toFixed(1)),
+      smoothed_ascent: Number(ascent.toFixed(1)),
+      smoothed_descent: Number(descent.toFixed(1)),
+    },
     chunks: chunks.length,
     suitability_score: Number((suitabilityScore / chunks.length).toFixed(2)),
     detour_factor: Number(detourFactor.toFixed(3)),
@@ -950,6 +1092,7 @@ export async function POST(request) {
           surface_intelligence: selected.result.surface_intelligence,
           surface_quality: selected.result.surface_quality,
           score_breakdown: selected.result.score_breakdown,
+          elevation_quality: selected.result.elevation_quality,
           candidates_considered: successfulCandidates.length,
           eligible_candidates: eligible.length || successfulCandidates.length,
           running_priority,
