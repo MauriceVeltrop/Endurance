@@ -11224,3 +11224,130 @@ main {
   color: #fff !important;
   font-weight: 950 !important;
 }
+
+
+/* Routebuilder quality panel v2 - keeps clear of the left tool rail */
+.route-quality-panel-expanded {
+  left: clamp(96px, 15vw, 132px) !important;
+  right: 16px !important;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 78px) !important;
+  max-height: 48dvh !important;
+  padding: 14px !important;
+  border-radius: 26px !important;
+}
+
+.route-quality-grid-primary {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.route-quality-confidence-row {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  margin: 0 0 10px !important;
+}
+
+.route-quality-confidence-row > div,
+.route-quality-recommendation,
+.route-quality-decision {
+  border-radius: 16px !important;
+  background: rgba(255,255,255,.055) !important;
+  border: 1px solid rgba(255,255,255,.085) !important;
+  padding: 10px 12px !important;
+}
+
+.route-quality-confidence-row span,
+.route-quality-recommendation span {
+  display: block !important;
+  color: rgba(255,255,255,.66) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .05em !important;
+  text-transform: uppercase !important;
+}
+
+.route-quality-confidence-row b {
+  display: block !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+  margin-top: 4px !important;
+}
+
+.route-quality-decision,
+.route-quality-recommendation {
+  margin: 8px 0 12px !important;
+}
+
+.route-quality-decision strong,
+.route-quality-recommendation strong {
+  display: block !important;
+  color: #eaff00 !important;
+  font-size: 11px !important;
+  font-weight: 950 !important;
+  letter-spacing: .11em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 7px !important;
+}
+
+.route-quality-decision p {
+  margin: 5px 0 !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  font-weight: 800 !important;
+}
+
+.route-quality-recommendation span {
+  color: rgba(255,255,255,.78) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.route-quality-breakdown-wide {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+}
+
+@media (max-width: 560px) {
+  .route-quality-panel-expanded {
+    left: 104px !important;
+    right: 10px !important;
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 82px) !important;
+    max-height: 50dvh !important;
+    padding: 12px !important;
+  }
+
+  .route-quality-panel-header strong {
+    font-size: 16px !important;
+  }
+
+  .route-quality-panel-header > b {
+    font-size: 19px !important;
+  }
+
+  .route-quality-grid,
+  .route-quality-grid-primary,
+  .route-quality-confidence-row,
+  .route-quality-breakdown,
+  .route-quality-breakdown-wide {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .route-quality-breakdown > div {
+    padding: 9px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .route-quality-panel-expanded {
+    left: 96px !important;
+    right: 8px !important;
+  }
+
+  .route-quality-grid span,
+  .route-quality-confidence-row span {
+    font-size: 9px !important;
+  }
+}
