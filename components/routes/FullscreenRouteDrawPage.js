@@ -362,61 +362,44 @@ function getRouteQuality(payload = {}, sportId = "") {
   const pavedRatio = Number(surfaceQuality.ideal_ratio || 0) + Number(surfaceQuality.acceptable_ratio || 0);
   const unsuitableRatio = Number(surfaceQuality.avoid_ratio || 0);
   const unknownRatio = Number(surfaceQuality.unknown_ratio || 0);
-  const rawUnknownRatio = Number(surfaceQuality.raw_unknown_ratio ?? surfaceQuality.unknown_ratio ?? 0);
-  const debugEntries = Array.isArray(quality.score_debug) ? quality.score_debug : [];
-  const firstDebug = debugEntries[0] || {};
   const score = Number.isFinite(Number(quality.suitability_score))
     ? Math.max(0, Math.min(100, Math.round(Number(quality.suitability_score))))
-    : Math.max(0, Math.min(100, Math.round((pavedRatio * 80) + ((1 - unsuitableRatio) * 14) - (rawUnknownRatio * 25))));
+    : Math.max(0, Math.min(100, Math.round((pavedRatio * 88) + ((1 - unsuitableRatio) * 12))));
 
   const warnings = [];
-  const reasons = [];
-  const debugLines = [];
   const key = String(sportId || quality.sport_id || "").toLowerCase();
 
   if (["running", "road_cycling", "roadcycling"].includes(key) && unsuitableRatio >= 0.18) {
-    warnings.push("Contains a lot of unpaved surface for this sport.");
+    warnings.push("Deze route bevat relatief veel onverhard voor deze sport.");
   }
 
   if (["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key) && pavedRatio >= 0.75) {
-    warnings.push("This route is quite paved for the selected sport.");
+    warnings.push("Deze route is vrij verhard voor de gekozen sport.");
   }
 
-  if (rawUnknownRatio >= 0.2) {
-    warnings.push("A meaningful part of the surface is missing in OSM/ORS data.");
+  if (unknownRatio >= 0.35) {
+    warnings.push("Van een deel van deze route ontbreekt wegdek-informatie in de kaartdata.");
   }
-
-  if (pavedRatio >= 0.75) reasons.push("Mostly paved or smooth enough for this sport.");
-  if (unsuitableRatio <= 0.05) reasons.push("Very little unsuitable surface detected.");
-  if (rawUnknownRatio > unknownRatio) reasons.push("Some missing surface data was inferred from waytype data.");
-  if (Number(quality.detour_factor || 1) <= 1.2) reasons.push("Route stays within the selected sport's detour tolerance.");
-  if (!reasons.length) reasons.push("Best available route from the tested alternatives.");
-
-  if (firstDebug.raw_score !== undefined) debugLines.push(`Raw score: ${Number(firstDebug.raw_score).toFixed(1)}`);
-  if (firstDebug.score_ceiling !== undefined) debugLines.push(`Score ceiling: ${Number(firstDebug.score_ceiling).toFixed(1)}`);
-  if (firstDebug.raw_unknown_ratio !== undefined) debugLines.push(`Raw unknown: ${Math.round(Number(firstDebug.raw_unknown_ratio) * 100)}%`);
-  if (firstDebug.unknown_ratio !== undefined) debugLines.push(`Unresolved unknown: ${Math.round(Number(firstDebug.unknown_ratio) * 100)}%`);
 
   return {
     score,
     pavedPercent: Math.round(pavedRatio * 100),
     unsuitablePercent: Math.round(unsuitableRatio * 100),
     unknownPercent: Math.round(unknownRatio * 100),
-    rawUnknownPercent: Math.round(rawUnknownRatio * 100),
     detourFactor: Number(quality.detour_factor || 1),
     candidates: Number(quality.candidates_considered || 0),
-    surfaces: metersToPercentMap(quality.surfaces).slice(0, 5),
-    waytypes: metersToPercentMap(quality.waytypes).slice(0, 5),
+    surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
+    waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
+    inferredSurfaces: metersToPercentMap(quality.surface_intelligence?.inferred).slice(0, 4),
+    surfaceIntelligence: quality.surface_intelligence || null,
     warnings,
-    reasons,
-    debugLines,
   };
 }
 
 function humanizeRouteLabel(value = "") {
   return String(value || "unknown")
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/\w/g, (char) => char.toUpperCase());
 }
 
 function RouteQualityPanel({ payload, sportId, onClose }) {
@@ -434,31 +417,31 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
       </div>
 
       <div className="route-quality-grid">
-        <div><span>Suitable</span><b>{quality.pavedPercent}%</b></div>
+        <div><span>Paved / suitable</span><b>{quality.pavedPercent}%</b></div>
         <div><span>Unsuitable</span><b>{quality.unsuitablePercent}%</b></div>
         <div><span>Unknown</span><b>{quality.unknownPercent}%</b></div>
         <div><span>Detour</span><b>{quality.detourFactor.toFixed(2)}×</b></div>
       </div>
 
-      {quality.rawUnknownPercent > quality.unknownPercent ? (
-        <div className="route-quality-note">Raw unknown was {quality.rawUnknownPercent}%; unresolved after waytype fallback is {quality.unknownPercent}%.</div>
-      ) : null}
-
       {quality.warnings.length ? (
         <div className="route-quality-warning">{quality.warnings[0]}</div>
       ) : (
-        <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
+        <div className="route-quality-ok">Geschikt voor {getSportLabel(sportId || "running")}.</div>
       )}
 
-      <div className="route-quality-explain">
-        <small>Why this route?</small>
-        {quality.reasons.map((reason) => <p key={reason}>✓ {reason}</p>)}
-      </div>
-
-      <details className="route-quality-debug">
-        <summary>Score debug</summary>
-        {quality.debugLines.length ? quality.debugLines.map((line) => <p key={line}>{line}</p>) : <p>No score debug data available.</p>}
-      </details>
+      {quality.surfaceIntelligence?.applied ? (
+        <div className="route-quality-intelligence">
+          <strong>Surface intelligence</strong>
+          <span>Ontbrekend wegdek is deels afgeleid uit OSM-waytypes.</span>
+          {quality.inferredSurfaces.length ? (
+            <div className="route-quality-inferred-list">
+              {quality.inferredSurfaces.map((item) => (
+                <p key={`inferred-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="route-quality-breakdown">
         <div>
