@@ -405,6 +405,10 @@ function getRouteQuality(payload = {}, sportId = "") {
     highlights.push("Missing surface data was partly resolved by route context.");
   }
 
+  if (quality.osm_analysis?.applied) {
+    highlights.push("OSM segment analysis was used to classify the route surface.");
+  }
+
   if (!highlights.length) highlights.push("Route is usable, but quality depends on map data completeness.");
   if (!recommendations.length && warnings.length) recommendations.push("Review the highlighted surface and waytype split before saving.");
   if (!recommendations.length) recommendations.push("No major route quality issues detected.");
@@ -434,6 +438,7 @@ function getRouteQuality(payload = {}, sportId = "") {
     waytypes: metersToPercentMap(quality.waytypes).slice(0, 6),
     inferredSurfaces: metersToPercentMap(quality.surface_intelligence?.inferred).slice(0, 6),
     surfaceIntelligence: quality.surface_intelligence || null,
+    osmAnalysis: quality.osm_analysis || null,
     warnings,
     highlights,
     recommendations,
@@ -501,6 +506,19 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
               {quality.inferredSurfaces.map((item) => (
                 <p key={`inferred-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
               ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {quality.osmAnalysis?.applied ? (
+        <div className="route-quality-intelligence route-quality-osm-analysis">
+          <strong>OSM segment analysis</strong>
+          <span>{Math.round((quality.osmAnalysis.matched_ratio || 0) * 100)}% matched · {Math.round(quality.osmAnalysis.matched_meters || 0)} m checked</span>
+          {Number.isFinite(Number(quality.osmAnalysis.path_track_ratio)) ? (
+            <div className="route-quality-inferred-list">
+              <p><span>Path / track share</span><b>{Math.round(Number(quality.osmAnalysis.path_track_ratio || 0) * 100)}%</b></p>
+              <p><span>Road-like share</span><b>{Math.round(Number(quality.osmAnalysis.road_like_ratio || 0) * 100)}%</b></p>
             </div>
           ) : null}
         </div>
