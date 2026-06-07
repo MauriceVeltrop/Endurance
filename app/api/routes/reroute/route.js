@@ -1,14 +1,11 @@
 // app/api/routes/reroute/route.js
 import { NextResponse } from "next/server";
 import {
-  WAYTYPE_LABELS,
+  getProviderProfiles,
+  getRoutingPreferences,
+  getSportRouteProfile,
   SURFACE_LABELS,
-  routeQualityForSportConfig,
-  surfaceRulesForSportConfig,
-  optimizationModeConfig,
-  effectiveMaxDetourFactor,
-  profilesForSportConfig,
-  preferencesForSportConfig,
+  WAYTYPE_LABELS,
 } from "../../../../lib/routes/sportRouteProfiles";
 
 export const runtime = "nodejs";
@@ -21,43 +18,23 @@ const ROUTING_BASES = [
   "https://api.heigit.org/v2/directions",
 ].filter(Boolean);
 
-const MAX_WAYPOINTS_PER_PROVIDER_CALL = 9;
-const PROVIDER_TIMEOUT_MS = 16000;
+const PROVIDER_TIMEOUT_MS = 14000;
 
-function sportKey(sportId) {
-  return String(sportId || "").toLowerCase();
+function normalizePoint(point) {
+  const lat = Number(point?.lat ?? point?.latitude);
+  const lon = Number(point?.lon ?? point?.lng ?? point?.longitude);
+  const ele = Number(point?.ele ?? point?.elevation);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon, ele: Number.isFinite(ele) ? ele : null };
 }
 
-function routeQualityForSport(sportId) {
-  return routeQualityForSportConfig(sportId);
+function normalizePoints(points) {
+  return (Array.isArray(points) ? points : []).map(normalizePoint).filter(Boolean);
 }
 
-function profilesForSport(sportId, requestedProfile, optimizeMode) {
-  return profilesForSportConfig(sportId, requestedProfile, optimizeMode);
-}
-
-function preferencesForSport(sportId, optimizeMode) {
-  return preferencesForSportConfig(sportId, optimizeMode);
-}
-
-function normalize(points) {
-  return (Array.isArray(points) ? points : [])
-    .map((point) => ({
-      lat: Number(point.lat ?? point.latitude),
-      lon: Number(point.lon ?? point.lng ?? point.longitude),
-      ele: Number.isFinite(Number(point.ele)) ? Number(point.ele) : null,
-    }))
-    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
-}
-
-function toPoints(coords) {
-  return (coords || [])
-    .map((coord) => ({
-      lon: Number(coord[0]),
-      lat: Number(coord[1]),
-      ele: Number.isFinite(Number(coord[2])) ? Number(coord[2]) : null,
-    }))
-    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+function providerUrl(base, profile) {
+  const cleanBase = String(base || "").replace(/\/+$/, "");
+  return `${cleanBase}/${profile}/geojson`;
 }
 
 function haversineMeters(a, b) {
@@ -71,738 +48,136 @@ function haversineMeters(a, b) {
   return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function directWaypointDistanceMeters(points) {
-  let distance = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    distance += haversineMeters(points[i - 1], points[i]);
+function routeDistanceMeters(points) {
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    total += haversineMeters(points[index - 1], points[index]);
   }
-  return distance;
+  return total;
 }
 
+function routeAscentMeters(points) {
+  let ascent = 0;
+  let previous = null;
 
-function median(values) {
-  const nums = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
-  if (!nums.length) return null;
-  const mid = Math.floor(nums.length / 2);
-  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
-}
-
-function interpolateElevationSeries(values) {
-  const result = values.slice();
-
-  for (let index = 0; index < result.length; index += 1) {
-    if (Number.isFinite(result[index])) continue;
-
-    let prevIndex = index - 1;
-    while (prevIndex >= 0 && !Number.isFinite(result[prevIndex])) prevIndex -= 1;
-
-    let nextIndex = index + 1;
-    while (nextIndex < result.length && !Number.isFinite(result[nextIndex])) nextIndex += 1;
-
-    const prev = prevIndex >= 0 ? result[prevIndex] : null;
-    const next = nextIndex < result.length ? result[nextIndex] : null;
-
-    if (Number.isFinite(prev) && Number.isFinite(next)) {
-      const ratio = (index - prevIndex) / (nextIndex - prevIndex);
-      result[index] = prev + ((next - prev) * ratio);
-    } else if (Number.isFinite(prev)) {
-      result[index] = prev;
-    } else if (Number.isFinite(next)) {
-      result[index] = next;
-    }
-  }
-
-  return result;
-}
-
-function cleanElevationSeries(points) {
-  const routePoints = Array.isArray(points) ? points : [];
-  const raw = routePoints.map((point) => (Number.isFinite(Number(point.ele)) ? Number(point.ele) : null));
-  const nonZero = raw.filter((value) => Number.isFinite(value) && value !== 0);
-  const medianElevation = median(nonZero);
-  const cleaned = raw.slice();
-  let zeroOutliers = 0;
-  let spikeOutliers = 0;
-  let interpolated = 0;
-
-  for (let index = 0; index < cleaned.length; index += 1) {
-    const value = cleaned[index];
-    if (!Number.isFinite(value)) continue;
-
-    const prev = index > 0 ? cleaned[index - 1] : null;
-    const next = index < cleaned.length - 1 ? cleaned[index + 1] : null;
-
-    // ORS/GPX can occasionally inject 0 m elevation points. In Limburg this is
-    // usually bogus when neighbouring points are around 50-120 m.
-    const zeroBetweenNormalPoints =
-      value === 0 &&
-      ((Number.isFinite(prev) && prev > 10) || (Number.isFinite(next) && next > 10) || (Number.isFinite(medianElevation) && medianElevation > 10));
-
-    if (zeroBetweenNormalPoints) {
-      cleaned[index] = null;
-      zeroOutliers += 1;
+  for (const point of points) {
+    const ele = Number(point.ele);
+    if (!Number.isFinite(ele) || ele <= 0) continue;
+    if (previous == null) {
+      previous = ele;
       continue;
     }
 
-    if (!Number.isFinite(prev) || !Number.isFinite(next)) continue;
-
-    const neighborAverage = (prev + next) / 2;
-    const spikeThreshold = Math.max(10, Math.abs(prev - next) + 8);
-    const looksLikeSinglePointSpike =
-      Math.abs(value - prev) > spikeThreshold &&
-      Math.abs(value - next) > spikeThreshold &&
-      Math.abs(prev - next) < 10;
-
-    if (looksLikeSinglePointSpike) {
-      cleaned[index] = null;
-      spikeOutliers += 1;
+    const diff = ele - previous;
+    if (Math.abs(diff) <= 2.5) {
+      previous = ele;
+      continue;
     }
-  }
 
-  const interpolatedSeries = interpolateElevationSeries(cleaned).map((value, index) => {
-    if (!Number.isFinite(cleaned[index]) && Number.isFinite(value)) interpolated += 1;
-    return value;
-  });
-
-  const smoothed = interpolatedSeries.map((value, index) => {
-    if (!Number.isFinite(value)) return null;
-    const window = [];
-    for (let offset = -2; offset <= 2; offset += 1) {
-      const candidate = interpolatedSeries[index + offset];
-      if (Number.isFinite(candidate)) window.push(candidate);
+    if (Math.abs(diff) > 55) {
+      continue;
     }
-    return median(window) ?? value;
-  });
 
-  return {
-    raw,
-    cleaned: smoothed,
-    zero_outliers_removed: zeroOutliers,
-    spike_outliers_removed: spikeOutliers,
-    interpolated_points: interpolated,
-  };
-}
-
-function calculateSmoothedElevationStats(points, providerAscent = null, providerDescent = null) {
-  const routePoints = Array.isArray(points) ? points : [];
-  const cleanedSeries = cleanElevationSeries(routePoints);
-  const smoothed = cleanedSeries.cleaned;
-  const validCount = smoothed.filter((value) => Number.isFinite(value)).length;
-
-  if (routePoints.length < 2 || validCount < Math.max(2, Math.floor(routePoints.length * 0.35))) {
-    return {
-      ascent: Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null,
-      descent: Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null,
-      corrected: false,
-      method: "provider",
-      valid_elevation_points: validCount,
-      point_count: routePoints.length,
-      provider_ascent: Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null,
-      provider_descent: Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null,
-      zero_outliers_removed: cleanedSeries.zero_outliers_removed,
-      spike_outliers_removed: cleanedSeries.spike_outliers_removed,
-      interpolated_points: cleanedSeries.interpolated_points,
-    };
+    if (diff > 0) ascent += diff;
+    previous = ele;
   }
 
-  let ascent = 0;
-  let descent = 0;
-  let pendingUp = 0;
-  let pendingDown = 0;
-  const minClimbStep = 3;
-
-  for (let index = 1; index < routePoints.length; index += 1) {
-    const prevEle = smoothed[index - 1];
-    const currentEle = smoothed[index];
-    if (!Number.isFinite(prevEle) || !Number.isFinite(currentEle)) continue;
-
-    const horizontalMeters = haversineMeters(routePoints[index - 1], routePoints[index]);
-    const diff = currentEle - prevEle;
-
-    // Remove impossible vertical jumps without punishing real MTB climbs.
-    // A 35% grade step is already very steep; values above that are usually
-    // elevation noise or provider artefacts for short map segments.
-    const maxPlausibleStep = Math.max(5, horizontalMeters * 0.35);
-    if (Math.abs(diff) > maxPlausibleStep) continue;
-
-    if (diff > 0) {
-      pendingUp += diff;
-      if (pendingDown >= minClimbStep) descent += pendingDown;
-      pendingDown = 0;
-    } else if (diff < 0) {
-      pendingDown += Math.abs(diff);
-      if (pendingUp >= minClimbStep) ascent += pendingUp;
-      pendingUp = 0;
-    }
-  }
-
-  if (pendingUp >= minClimbStep) ascent += pendingUp;
-  if (pendingDown >= minClimbStep) descent += pendingDown;
-
-  const providerA = Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null;
-  const providerD = Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null;
-  const corrected =
-    cleanedSeries.zero_outliers_removed > 0 ||
-    cleanedSeries.spike_outliers_removed > 0 ||
-    (providerA !== null && Math.abs(providerA - ascent) > Math.max(20, ascent * 0.3)) ||
-    (providerD !== null && Math.abs(providerD - descent) > Math.max(20, descent * 0.3));
-
-  return {
-    ascent: Number(ascent.toFixed(1)),
-    descent: Number(descent.toFixed(1)),
-    corrected,
-    method: "cleaned_smoothed_geometry_elevation",
-    valid_elevation_points: validCount,
-    point_count: routePoints.length,
-    provider_ascent: providerA,
-    provider_descent: providerD,
-    zero_outliers_removed: cleanedSeries.zero_outliers_removed,
-    spike_outliers_removed: cleanedSeries.spike_outliers_removed,
-    interpolated_points: cleanedSeries.interpolated_points,
-    smoothing: {
-      median_window: 5,
-      min_climb_step_m: minClimbStep,
-      max_grade_step: 0.35,
-      zero_elevation_outlier_filter: true,
-      single_point_spike_filter: true,
-    },
-  };
+  return Math.round(ascent);
 }
 
-function fallbackRoutePayload({ waypoints, profiles, reason, details = [] }) {
-  const points = waypoints.map((point) => ({
-    lat: Number(Number(point.lat).toFixed(6)),
-    lon: Number(Number(point.lon).toFixed(6)),
-    ele: Number.isFinite(Number(point.ele)) ? Number(Number(point.ele).toFixed(1)) : null,
-  }));
-
-  return {
-    ok: true,
-    routed: false,
-    warning: reason || "Routing provider could not snap this route. Using the drawn line as a fallback.",
-    details,
-    profile: profiles?.[0] || null,
-    route_points: {
-      source: "drawn-fallback",
-      profile: profiles?.[0] || null,
-      provider_url: null,
-      waypoints,
-      control_points: waypoints,
-      points,
-      geometry_points: points,
-      point_count: points.length,
-      routed: false,
-      fallback_reason: reason || null,
-      routed_at: new Date().toISOString(),
-    },
-    distance_km: points.length > 1 ? Number((directWaypointDistanceMeters(points) / 1000).toFixed(2)) : null,
-    duration_min: null,
-    elevation_gain_m: 0,
-    elevation_loss_m: 0,
-  };
+function toPoints(coords) {
+  return (Array.isArray(coords) ? coords : [])
+    .map((coord) => ({
+      lon: Number(coord?.[0]),
+      lat: Number(coord?.[1]),
+      ele: Number.isFinite(Number(coord?.[2])) ? Number(coord?.[2]) : null,
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
-function cleanProviderError(text) {
-  const raw = String(text || "");
-
-  if (raw.includes("<html") || raw.includes("<!DOCTYPE") || raw.includes("nginx")) {
-    return "Routing provider returned an HTML error page.";
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed?.error?.message || parsed?.message || raw.slice(0, 600);
-  } catch (_) {
-    return raw.slice(0, 600);
-  }
-}
-
-function providerUrl(base, profile) {
-  return `${String(base).replace(/\/$/, "")}/${profile}/geojson`;
-}
-
-function splitWaypointsForProvider(waypoints) {
-  if (waypoints.length <= MAX_WAYPOINTS_PER_PROVIDER_CALL) return [waypoints];
-
-  const chunks = [];
-  let index = 0;
-
-  while (index < waypoints.length - 1) {
-    const end = Math.min(index + MAX_WAYPOINTS_PER_PROVIDER_CALL, waypoints.length);
-    const chunk = waypoints.slice(index, end);
-
-    if (chunk.length >= 2) chunks.push(chunk);
-
-    if (end >= waypoints.length) break;
-
-    // Keep the last point of this chunk as the first point of the next chunk,
-    // so the final geometry remains continuous.
-    index = end - 1;
-  }
-
-  return chunks;
-}
-
-function summarizeExtra(feature, extraName, labels = {}) {
-  const summary = feature?.properties?.extras?.[extraName]?.summary || [];
+function decodeExtraInfo(values, labels) {
   const result = {};
-
-  for (const item of summary) {
-    const label = labels[item.value] || String(item.value ?? "unknown");
-    result[label] = (result[label] || 0) + Number(item.distance || 0);
+  for (const row of Array.isArray(values) ? values : []) {
+    const value = Array.isArray(row) ? row[2] : null;
+    const amount = Array.isArray(row) ? Math.max(0, Number(row[1]) - Number(row[0])) : 0;
+    const label = labels?.[value] || "unknown";
+    result[label] = (result[label] || 0) + amount;
   }
-
   return result;
 }
 
-function summarizeWayTypes(feature) {
-  return summarizeExtra(feature, "waytypes", WAYTYPE_LABELS);
-}
-
-function summarizeSurfaces(feature) {
-  return summarizeExtra(feature, "surface", SURFACE_LABELS);
-}
-
-function ratioOf(summary, labels, totalDistance) {
-  if (!totalDistance) return 0;
-  return labels.reduce((sum, label) => sum + Number(summary[label] || 0), 0) / totalDistance;
-}
-
-
-function addMeters(summary, label, meters) {
-  const value = Number(meters || 0);
-  if (!label || value <= 0) return;
-  summary[label] = (summary[label] || 0) + value;
-}
-
-
-function isTrailLikeSport(sportId) {
-  return ["trail_running", "trailrunning", "hiking", "mountain_biking", "mtb"].includes(sportKey(sportId));
-}
-
-function isGravelLikeSport(sportId) {
-  return ["gravel", "gravel_cycling"].includes(sportKey(sportId));
-}
-
-function isPavedFirstSport(sportId) {
-  return ["running", "road_cycling", "roadcycling"].includes(sportKey(sportId));
-}
-
-function inferMissingSurfaceFromWaytypes({ surfaces = {}, wayTypes = {}, sportId = "", profile = "" }) {
-  const rawSurfaces = { ...(surfaces || {}) };
-  const enhancedSurfaces = { ...(surfaces || {}) };
-  const unknownSurfaceMeters = Number(enhancedSurfaces.unknown || 0);
-  const wayTypeEntries = Object.entries(wayTypes || {}).map(([label, meters]) => [label, Number(meters || 0)]);
-  const knownWaytypeMeters = wayTypeEntries.reduce((sum, [, meters]) => sum + meters, 0);
-
-  const intelligence = {
-    applied: false,
-    method: "waytype-inference",
-    inferred_meters: 0,
-    unresolved_unknown_meters: unknownSurfaceMeters,
-    raw_unknown_meters: unknownSurfaceMeters,
-    inferred: {},
-    notes: [],
-  };
-
-  if (unknownSurfaceMeters <= 0 || knownWaytypeMeters <= 0) {
-    return { surfaces: enhancedSurfaces, rawSurfaces, intelligence };
-  }
-
-  const key = sportKey(sportId);
-  const remainingByWaytype = {};
-  for (const [label, meters] of wayTypeEntries) {
-    remainingByWaytype[label] = (meters / knownWaytypeMeters) * unknownSurfaceMeters;
-  }
-
-  const assign = (labels, inferredLabel, confidence = 1) => {
-    let assigned = 0;
-    for (const label of labels) {
-      const available = Number(remainingByWaytype[label] || 0);
-      if (available <= 0) continue;
-      const amount = available * confidence;
-      remainingByWaytype[label] = Math.max(0, available - amount);
-      assigned += amount;
-    }
-    if (assigned > 0) {
-      addMeters(enhancedSurfaces, inferredLabel, assigned);
-      addMeters(intelligence.inferred, inferredLabel, assigned);
-      intelligence.inferred_meters += assigned;
-    }
-  };
-
-  // These waytypes are usually paved or deliberately surfaced in OSM/ORS data.
-  assign(["street", "road", "state_road", "cycleway", "pedestrian"], "likely_paved", 0.95);
-
-  // Footways are often paved in running/urban contexts, but less certain in trail contexts.
-  if (isTrailLikeSport(key)) {
-    assign(["footway"], "likely_compacted", 0.65);
-  } else {
-    assign(["footway"], "likely_paved", 0.8);
-  }
-
-  // Paths and tracks are sport-dependent. Running must not silently convert generic
-  // path/track data into a paved result; Trail Running is the off-road sport choice.
-  if (isTrailLikeSport(key)) {
-    assign(["path", "track"], "likely_unpaved", 0.9);
-  } else if (isGravelLikeSport(key)) {
-    assign(["track"], "likely_gravel", 0.9);
-    assign(["path"], "likely_unpaved", 0.65);
-  } else if (key === "running") {
-    assign(["track"], "likely_unpaved", 0.9);
-    assign(["path"], "likely_unpaved", 0.7);
-  } else {
-    assign(["track"], "likely_unpaved", 0.75);
-    assign(["path"], "likely_compacted", 0.45);
-  }
-
-  let inferred = Math.min(unknownSurfaceMeters, intelligence.inferred_meters);
-
-  // ORS sometimes returns surface=unknown while waytype is also too generic to resolve.
-  // For trail/gravel/MTB, a selected foot-hiking/cycling-mountain route through path networks
-  // is still useful route intelligence: mark most of the unresolved part as estimated sport terrain.
-  const unresolvedAfterWaytype = Math.max(0, unknownSurfaceMeters - inferred);
-  if (unresolvedAfterWaytype > 0) {
-    let contextualLabel = null;
-    let contextualConfidence = 0;
-
-    if (isTrailLikeSport(key) || String(profile || "").includes("foot-hiking")) {
-      contextualLabel = "estimated_trail_surface";
-      contextualConfidence = 0.7;
-    } else if (isGravelLikeSport(key)) {
-      contextualLabel = "estimated_gravel_surface";
-      contextualConfidence = 0.6;
-    } else if (isPavedFirstSport(key) && String(profile || "").includes("cycling")) {
-      contextualLabel = "estimated_paved_surface";
-      contextualConfidence = 0.45;
-    }
-
-    if (contextualLabel && contextualConfidence > 0) {
-      const contextualMeters = unresolvedAfterWaytype * contextualConfidence;
-      addMeters(enhancedSurfaces, contextualLabel, contextualMeters);
-      addMeters(intelligence.inferred, contextualLabel, contextualMeters);
-      intelligence.inferred_meters += contextualMeters;
-      inferred += contextualMeters;
-    }
-  }
-
-  if (inferred > 0) {
-    enhancedSurfaces.unknown = Math.max(0, unknownSurfaceMeters - inferred);
-    intelligence.applied = true;
-    intelligence.unresolved_unknown_meters = enhancedSurfaces.unknown;
-    intelligence.notes.push("Missing surface data was partly inferred from route context and OSM/ORS waytypes.");
-  }
-
-  if (enhancedSurfaces.unknown > 0) {
-    intelligence.notes.push("Some surface remains unresolved because the map data is not specific enough.");
-  }
-
-  return { surfaces: enhancedSurfaces, rawSurfaces, intelligence };
-}
-
-function surfaceRulesForSport(sportId) {
-  return surfaceRulesForSportConfig(sportId);
-}
-
-
-function routeRatio(summary, labels) {
-  const total = Object.values(summary || {}).reduce((sum, value) => sum + Number(value || 0), 0);
-  if (!total) return 0;
-  return labels.reduce((sum, label) => sum + Number(summary?.[label] || 0), 0) / total;
-}
-
-function runningCandidatePriority(candidate) {
-  const wayTypes = candidate?.result?.waytypes || candidate?.waytypes || {};
-  const surfaces = candidate?.result?.surfaces || candidate?.surfaces || {};
-  const quality = candidate?.result?.surface_quality || candidate?.surface_quality || {};
-  const profile = String(candidate?.profile || "");
-  const distance = Number(candidate?.result?.distance || candidate?.distance || 0);
-
-  const roadLikeRatio = routeRatio(wayTypes, ["cycleway", "street", "road", "pedestrian"]);
-  const pavedWayRatio = routeRatio(wayTypes, ["cycleway", "street", "road", "pedestrian", "footway"]);
-  const pathTrackRatio = routeRatio(wayTypes, ["path", "track"]);
-  const idealSurfaceRatio = Number(quality.ideal_ratio ?? routeRatio(surfaces, ["asphalt", "paved", "concrete", "paving_stones", "likely_paved", "estimated_paved_surface"]));
-  const avoidSurfaceRatio = Number(quality.avoid_ratio ?? routeRatio(surfaces, ["unpaved", "gravel", "dirt", "ground", "sand", "woodchips", "grass", "likely_unpaved", "likely_gravel", "estimated_trail_surface", "estimated_gravel_surface"]));
-  const unknownRatio = Number(quality.unknown_ratio ?? routeRatio(surfaces, ["unknown"]));
-
-  // Running in Endurance is road-running by default. Trail Running is the sport choice
-  // for path/track-heavy routes. This priority deliberately prefers a slightly longer
-  // paved road/cycleway candidate over a shorter footpath candidate.
-  let priority = 0;
-  priority += roadLikeRatio * 140;
-  priority += pavedWayRatio * 35;
-  priority += idealSurfaceRatio * 90;
-  priority -= pathTrackRatio * 170;
-  priority -= avoidSurfaceRatio * 170;
-  priority -= unknownRatio * 35;
-
-  if (profile.includes("cycling")) priority += 24;
-  if (profile === "foot-walking" && pathTrackRatio > 0.18) priority -= 45;
-  if (roadLikeRatio >= 0.62 && pathTrackRatio <= 0.18) priority += 45;
-  if (idealSurfaceRatio >= 0.72 && avoidSurfaceRatio <= 0.08) priority += 35;
-  if (pathTrackRatio >= 0.28) priority -= 55;
-
-  return {
-    priority,
-    road_like_ratio: Number(roadLikeRatio.toFixed(3)),
-    paved_way_ratio: Number(pavedWayRatio.toFixed(3)),
-    path_track_ratio: Number(pathTrackRatio.toFixed(3)),
-    ideal_surface_ratio: Number(idealSurfaceRatio.toFixed(3)),
-    avoid_surface_ratio: Number(avoidSurfaceRatio.toFixed(3)),
-    unknown_surface_ratio: Number(unknownRatio.toFixed(3)),
-    distance,
-  };
-}
-
-
-function isOffRoadFirstSport(sportId) {
-  return ["gravel", "gravel_cycling", "mountain_biking", "mtb"].includes(sportKey(sportId));
-}
-
-function offRoadCandidatePriority(candidate, sportId) {
-  const wayTypes = candidate?.result?.waytypes || candidate?.waytypes || {};
-  const surfaces = candidate?.result?.surfaces || candidate?.surfaces || {};
-  const quality = candidate?.result?.surface_quality || candidate?.surface_quality || {};
-  const profile = String(candidate?.profile || "");
-  const key = sportKey(sportId);
-
-  const trackRatio = routeRatio(wayTypes, ["track"]);
-  const pathRatio = routeRatio(wayTypes, ["path"]);
-  const pathTrackRatio = trackRatio + pathRatio;
-  const roadLikeRatio = routeRatio(wayTypes, ["state_road", "road", "street"]);
-  const cyclewayRatio = routeRatio(wayTypes, ["cycleway"]);
-  const offRoadSurfaceRatio = Number(
-    quality.ideal_ratio ??
-      routeRatio(surfaces, [
-        "compacted_gravel",
-        "fine_gravel",
-        "gravel",
-        "unpaved",
-        "ground",
-        "dirt",
-        "likely_gravel",
-        "likely_unpaved",
-        "estimated_gravel_surface",
-        "estimated_trail_surface",
-      ])
+function percentMap(counts) {
+  const total = Object.values(counts || {}).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+  return Object.fromEntries(
+    Object.entries(counts || {})
+      .map(([key, value]) => [key, Math.round((Number(value || 0) / total) * 100)])
+      .sort((a, b) => b[1] - a[1])
   );
-  const pavedSurfaceRatio = routeRatio(surfaces, ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"]);
-  const unknownRatio = Number(quality.unknown_ratio ?? routeRatio(surfaces, ["unknown"]));
+}
 
-  let priority = 0;
+function scoreCandidate({ feature, points, sportId, profile, preference }) {
+  const config = getSportRouteProfile(sportId);
+  const geometry = toPoints(feature?.geometry?.coordinates);
+  const distance = Number(feature?.properties?.summary?.distance || routeDistanceMeters(geometry));
+  const duration = Number(feature?.properties?.summary?.duration || 0);
+  const direct = Math.max(1, routeDistanceMeters(points));
+  const detour = distance / direct;
 
-  if (["gravel", "gravel_cycling"].includes(key)) {
-    priority += trackRatio * 170;
-    priority += pathRatio * 80;
-    priority += offRoadSurfaceRatio * 150;
-    priority += cyclewayRatio * 20;
-    priority -= roadLikeRatio * 115;
-    priority -= pavedSurfaceRatio * 55;
-    priority -= unknownRatio * 18;
-    if (profile === "cycling-mountain") priority += 28;
-    if (profile === "cycling-regular" && pathTrackRatio < 0.25) priority -= 25;
-    if (trackRatio >= 0.30 || offRoadSurfaceRatio >= 0.35) priority += 35;
-  } else {
-    // MTB should be even stricter than gravel: roads and cycleways are connectors only.
-    priority += pathTrackRatio * 205;
-    priority += pathRatio * 55;
-    priority += offRoadSurfaceRatio * 175;
-    priority -= roadLikeRatio * 165;
-    priority -= cyclewayRatio * 60;
-    priority -= pavedSurfaceRatio * 80;
-    priority -= unknownRatio * 12;
-    if (profile === "cycling-mountain") priority += 40;
-    if (pathTrackRatio >= 0.38 || offRoadSurfaceRatio >= 0.45) priority += 45;
+  const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
+  const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
+  const surfacePercent = percentMap(surfaceCounts);
+  const wayPercent = percentMap(wayCounts);
+
+  const suitableSurfaces = new Set(config.suitableSurfaces || []);
+  const unsuitableSurfaces = new Set(config.unsuitableSurfaces || []);
+  const suitableWaytypes = new Set(config.suitableWaytypes || []);
+  const unsuitableWaytypes = new Set(config.unsuitableWaytypes || []);
+
+  let suitable = 0;
+  let unsuitable = 0;
+  let unknown = 0;
+
+  for (const [surface, pct] of Object.entries(surfacePercent)) {
+    if (surface === "unknown") unknown += pct;
+    else if (suitableSurfaces.has(surface)) suitable += pct;
+    else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
   }
 
+  for (const [waytype, pct] of Object.entries(wayPercent)) {
+    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.35);
+    if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.45);
+  }
+
+  suitable = Math.min(100, suitable);
+  unsuitable = Math.min(100, unsuitable);
+
+  const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
+  const unknownPenalty = Math.round(unknown * 0.35);
+  const unsuitablePenalty = Math.round(unsuitable * 0.8);
+  const score = Math.max(0, Math.min(100, 70 + suitable * 0.45 - detourPenalty - unknownPenalty - unsuitablePenalty));
+
   return {
-    priority,
-    path_track_ratio: Number(pathTrackRatio.toFixed(3)),
-    road_like_ratio: Number(roadLikeRatio.toFixed(3)),
-    offroad_surface_ratio: Number(offRoadSurfaceRatio.toFixed(3)),
-    paved_surface_ratio: Number(pavedSurfaceRatio.toFixed(3)),
-    unknown_surface_ratio: Number(unknownRatio.toFixed(3)),
+    profile,
+    preference,
+    points: geometry,
+    distance,
+    duration,
+    elevation_gain_m: routeAscentMeters(geometry),
+    score: Math.round(score),
+    detour,
+    surfacePercent,
+    wayPercent,
+    suitable_percent: suitable,
+    unsuitable_percent: unsuitable,
+    unknown_percent: unknown,
   };
 }
 
-function routeSuitabilityScore({ feature, points, directDistance, sportId, profile, preference, baselineDistance, optimizeMode = "balanced" }) {
-  const quality = routeQualityForSport(sportId);
-  const surfaceRules = surfaceRulesForSport(sportId);
-  const optimization = optimizationModeConfig(optimizeMode);
-  const optimizationAdjustments = optimization.scoreAdjustments || {};
-  const distance = Number(feature?.properties?.summary?.distance || 0);
-  const safeDistance = distance > 0 ? distance : directDistance || 1;
-  const wayTypes = summarizeWayTypes(feature);
-  const rawSurfaces = summarizeSurfaces(feature);
-  const surfaceIntelligence = inferMissingSurfaceFromWaytypes({ surfaces: rawSurfaces, wayTypes, sportId, profile });
-  const surfaces = surfaceIntelligence.surfaces;
-
-  let score = 100;
-
-  const detourFactor = directDistance > 0 ? safeDistance / directDistance : 1;
-  score -= Math.max(0, detourFactor - 1) * (35 - Number(optimizationAdjustments.detour || 0));
-
-  if (baselineDistance > 0) {
-    const extraVsBaseline = safeDistance / baselineDistance;
-    score -= Math.max(0, extraVsBaseline - 1) * (25 - Number(optimizationAdjustments.detour || 0));
-  }
-
-  const totalKnownWayTypeDistance = Object.values(wayTypes).reduce((sum, value) => sum + Number(value || 0), 0) || safeDistance;
-  const totalKnownSurfaceDistance = Object.values(surfaces).reduce((sum, value) => sum + Number(value || 0), 0) || safeDistance;
-
-  for (const label of quality.rewardWayTypes || []) {
-    score += ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 30;
-  }
-
-  for (const label of quality.avoidWayTypes || []) {
-    score -= ((wayTypes[label] || 0) / totalKnownWayTypeDistance) * 45;
-  }
-
-  const idealSurfaceRatio = ratioOf(surfaces, surfaceRules.ideal || [], totalKnownSurfaceDistance);
-  const acceptableSurfaceRatio = ratioOf(surfaces, surfaceRules.acceptable || [], totalKnownSurfaceDistance);
-  const avoidedSurfaceRatio = ratioOf(surfaces, surfaceRules.avoid || [], totalKnownSurfaceDistance);
-  const unknownSurfaceRatio = ratioOf(surfaces, ["unknown"], totalKnownSurfaceDistance);
-
-  score += idealSurfaceRatio * (70 + Number(optimizationAdjustments.idealSurface || 0));
-  score += acceptableSurfaceRatio * (28 + Number(optimizationAdjustments.acceptableSurface || 0));
-  score -= avoidedSurfaceRatio * (85 - Number(optimizationAdjustments.avoidedSurface || 0));
-
-  // Unknown surface is not a disaster, but it must prevent unrealistic 100/100 scores.
-  score -= unknownSurfaceRatio * (22 - Number(optimizationAdjustments.unknownSurface || 0));
-
-  if (unknownSurfaceRatio > 0.08) {
-    score = Math.min(score, 96 - unknownSurfaceRatio * 35);
-  }
-
-  if (surfaceRules.pavedFirst) {
-    const unpavedRatio = avoidedSurfaceRatio;
-    const maxUnpavedRatio = Number(surfaceRules.maxUnpavedRatio || 0.15);
-    if (unpavedRatio > maxUnpavedRatio) {
-      score -= (unpavedRatio - maxUnpavedRatio) * 240;
-    }
-
-    const minIdealRatio = Number(surfaceRules.minIdealRatio || 0);
-    if (minIdealRatio > 0 && idealSurfaceRatio < minIdealRatio) {
-      score -= (minIdealRatio - idealSurfaceRatio) * 120;
-    }
-  }
-
-  if (sportKey(sportId) === "running") {
-    const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
-    const pavedWayRatio = ratioOf(wayTypes, ["cycleway", "footway", "pedestrian", "street", "road"], totalKnownWayTypeDistance);
-
-    // Road Running is intentionally much stricter than Walking. A path/track-heavy
-    // route should lose against a reasonable paved road/cycleway alternative, even
-    // when the foot route is slightly shorter.
-    const roadLikeRatio = ratioOf(wayTypes, ["cycleway", "street", "road", "pedestrian"], totalKnownWayTypeDistance);
-    score -= pathTrackRatio * 210;
-    score += pavedWayRatio * 34;
-    score += roadLikeRatio * 60;
-
-    if (avoidedSurfaceRatio > 0.06) {
-      score = Math.min(score, 84 - (avoidedSurfaceRatio - 0.06) * 220);
-    }
-
-    if (pathTrackRatio > 0.18) {
-      score = Math.min(score, 78 - (pathTrackRatio - 0.18) * 150);
-    }
-
-    if (idealSurfaceRatio < 0.68) {
-      score = Math.min(score, 76 - (0.68 - idealSurfaceRatio) * 130);
-    }
-
-    if (roadLikeRatio > 0.62 && idealSurfaceRatio > 0.65 && pathTrackRatio < 0.16) {
-      score += 18;
-    }
-  }
-
-
-  if (isOffRoadFirstSport(sportId)) {
-    const key = sportKey(sportId);
-    const pathTrackRatio = ratioOf(wayTypes, ["path", "track"], totalKnownWayTypeDistance);
-    const trackRatio = ratioOf(wayTypes, ["track"], totalKnownWayTypeDistance);
-    const roadLikeRatio = ratioOf(wayTypes, ["state_road", "road", "street"], totalKnownWayTypeDistance);
-    const cyclewayRatio = ratioOf(wayTypes, ["cycleway"], totalKnownWayTypeDistance);
-    const pavedSurfaceRatio = ratioOf(surfaces, ["asphalt", "paved", "concrete", "likely_paved", "estimated_paved_surface"], totalKnownSurfaceDistance);
-    const offRoadSurfaceRatio = idealSurfaceRatio;
-    const minOffRoadRatio = Number(surfaceRules.minOffRoadRatio || (key.includes("mountain") || key === "mtb" ? 0.45 : 0.35));
-    const maxPavedConnectorRatio = Number(surfaceRules.maxPavedConnectorRatio || (key.includes("mountain") || key === "mtb" ? 0.5 : 0.62));
-
-    score += pathTrackRatio * (key.includes("mountain") || key === "mtb" ? 145 : 85);
-    score += offRoadSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 105 : 75);
-    score += trackRatio * 35;
-
-    score -= roadLikeRatio * (key.includes("mountain") || key === "mtb" ? 115 : 75);
-    score -= pavedSurfaceRatio * (key.includes("mountain") || key === "mtb" ? 75 : 42);
-    score -= cyclewayRatio * (key.includes("mountain") || key === "mtb" ? 45 : 12);
-
-    if (offRoadSurfaceRatio < minOffRoadRatio && pathTrackRatio < minOffRoadRatio) {
-      score = Math.min(score, 72 - (minOffRoadRatio - Math.max(offRoadSurfaceRatio, pathTrackRatio)) * 130);
-    }
-
-    if (pavedSurfaceRatio > maxPavedConnectorRatio && pathTrackRatio < 0.25) {
-      score = Math.min(score, 76 - (pavedSurfaceRatio - maxPavedConnectorRatio) * 110);
-    }
-  }
-
-  if (preference === "recommended") score += 3;
-  if (preference === "shortest" && ["walking", "trail_running", "trailrunning", "hiking"].includes(sportKey(sportId))) {
-    score += 2;
-  }
-  if (preference === "fastest" && ["road_cycling", "roadcycling", "cycling"].includes(sportKey(sportId))) {
-    score += 2;
-  }
-
-  if (profile === "foot-hiking" && ["trail_running", "trailrunning", "hiking"].includes(sportKey(sportId))) score += 5;
-  if (profile === "foot-walking" && ["walking"].includes(sportKey(sportId))) score += 4;
-  if (profile === "foot-walking" && sportKey(sportId) === "running") score -= 8;
-  if (profile === "cycling-regular" && sportKey(sportId) === "running") score += 16;
-  if (profile === "cycling-road" && sportKey(sportId) === "running") score += 10;
-  if (profile === "cycling-road" && ["road_cycling", "roadcycling"].includes(sportKey(sportId))) score += 5;
-  if (profile === "cycling-mountain" && ["gravel", "gravel_cycling"].includes(sportKey(sportId))) score += 10;
-  if (profile === "cycling-mountain" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score += 16;
-  if (profile === "cycling-regular" && ["mountain_biking", "mtb"].includes(sportKey(sportId))) score -= 8;
-
-  const finalScore = Math.max(0, Math.min(100, score));
-  const dataConfidence = Math.max(0, Math.min(100, Math.round((1 - unknownSurfaceRatio) * 100)));
-
-  return {
-    score: finalScore,
-    detourFactor: Number(detourFactor.toFixed(3)),
-    wayTypes,
-    surfaces,
-    raw_surfaces: surfaceIntelligence.rawSurfaces,
-    surface_intelligence: surfaceIntelligence.intelligence,
-    surfaceQuality: {
-      ideal_ratio: Number(idealSurfaceRatio.toFixed(3)),
-      acceptable_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
-      avoid_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
-      unknown_ratio: Number(unknownSurfaceRatio.toFixed(3)),
-    },
-    score_breakdown: {
-      final_score: Number(finalScore.toFixed(2)),
-      data_confidence: dataConfidence,
-      ideal_surface_ratio: Number(idealSurfaceRatio.toFixed(3)),
-      acceptable_surface_ratio: Number(acceptableSurfaceRatio.toFixed(3)),
-      avoid_surface_ratio: Number(avoidedSurfaceRatio.toFixed(3)),
-      unknown_surface_ratio: Number(unknownSurfaceRatio.toFixed(3)),
-      detour_factor: Number(detourFactor.toFixed(3)),
-      profile,
-      preference,
-      optimize_mode: optimizeMode,
-      optimization_label: optimization.label || "Balanced",
-    },
-  };
-}
-
-async function fetchProviderRoute({ url, apiKey, points, preference, sportId, optimizeMode = "balanced" }) {
+async function fetchCandidate({ url, apiKey, points, preference, sportId, profile }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
-    const quality = routeQualityForSport(sportId);
-    const alternativeCount = Math.max(1, Math.min(Number(quality.alternativeCount || 1), 3));
-
     const payload = {
       coordinates: points.map((point) => [point.lon, point.lat]),
       elevation: true,
@@ -810,18 +185,13 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId, op
       preference,
       geometry_simplify: false,
       format: "geojson",
-      extra_info: ["waytype", "surface", "steepness"],
-    };
-
-    // ORS can return alternatives in one request. This is much lighter than doing
-    // expensive pre-snapping or many separate Overpass calls.
-    if (points.length === 2 && alternativeCount > 1) {
-      payload.alternative_routes = {
-        target_count: alternativeCount,
-        weight_factor: 1.6,
+      extra_info: ["waytype", "surface"],
+      alternative_routes: {
+        target_count: 2,
+        weight_factor: 1.4,
         share_factor: 0.6,
-      };
-    }
+      },
+    };
 
     const response = await fetch(url, {
       method: "POST",
@@ -835,404 +205,142 @@ async function fetchProviderRoute({ url, apiKey, points, preference, sportId, op
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`${response.status}: ${cleanProviderError(text)}`);
+      const text = await response.text().catch(() => "");
+      throw new Error(`${response.status} ${text.slice(0, 180)}`);
     }
 
     const data = await response.json();
     const features = Array.isArray(data?.features) ? data.features : [];
-    const directDistance = directWaypointDistanceMeters(points);
-    const firstDistance = Number(features?.[0]?.properties?.summary?.distance || 0);
-
-    const candidates = features
-      .map((feature, index) => {
-        const coords = feature?.geometry?.coordinates || [];
-        const routePoints = toPoints(coords);
-
-        if (routePoints.length < 2) return null;
-
-        const distance = Number(feature?.properties?.summary?.distance || 0);
-        const duration = Number(feature?.properties?.summary?.duration || 0);
-        const elevationStats = calculateSmoothedElevationStats(
-          routePoints,
-          Number(feature?.properties?.ascent || 0),
-          Number(feature?.properties?.descent || 0)
-        );
-        const score = routeSuitabilityScore({
-          feature,
-          points,
-          directDistance,
-          sportId,
-          profile: url.split("/").slice(-2, -1)[0],
-          preference,
-          baselineDistance: firstDistance,
-          optimizeMode,
-        });
-
-        return {
-          coords,
-          distance,
-          duration,
-          ascent: Number.isFinite(Number(elevationStats.ascent)) ? Number(elevationStats.ascent) : Number(feature?.properties?.ascent || 0),
-          descent: Number.isFinite(Number(elevationStats.descent)) ? Number(elevationStats.descent) : Number(feature?.properties?.descent || 0),
-          elevation_quality: elevationStats,
-          suitability_score: Number(score.score.toFixed(2)),
-          detour_factor: score.detourFactor,
-          waytypes: score.wayTypes,
-          surfaces: score.surfaces,
-          raw_surfaces: score.raw_surfaces,
-          surface_intelligence: score.surface_intelligence,
-          surface_quality: score.surfaceQuality,
-          score_breakdown: score.score_breakdown,
-          alternative_index: index,
-        };
-      })
-      .filter(Boolean);
-
-    if (!candidates.length) {
-      throw new Error("no routed geometry returned");
-    }
-
-    return candidates;
+    return features
+      .map((feature) => scoreCandidate({ feature, points, sportId, profile, preference }))
+      .filter((candidate) => candidate.points.length >= 2);
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function routeInChunks({ url, apiKey, waypoints, preference, sportId, optimizeMode = "balanced" }) {
-  const chunks = splitWaypointsForProvider(waypoints);
-  const mergedCoords = [];
-  let distance = 0;
-  let duration = 0;
-  let ascent = 0;
-  let descent = 0;
-  let suitabilityScore = 0;
-  let detourFactor = 1;
-  const selectedAlternatives = [];
-  const waytypes = {};
-  const surfaces = {};
-  const rawSurfaces = {};
-  const surfaceIntelligence = {
-    applied: false,
-    method: "waytype-inference",
-    inferred_meters: 0,
-    unresolved_unknown_meters: 0,
-    raw_unknown_meters: 0,
-    inferred: {},
-    notes: [],
-  };
-  const surfaceQualityTotals = { ideal_ratio: 0, acceptable_ratio: 0, avoid_ratio: 0, unknown_ratio: 0 };
-  const scoreBreakdownTotals = {};
-  const elevationQuality = {
-    method: "smoothed_geometry_elevation",
-    corrected: false,
-    provider_ascent: 0,
-    provider_descent: 0,
-    valid_elevation_points: 0,
-    point_count: 0,
-    chunks: [],
-  };
-
-  for (let index = 0; index < chunks.length; index += 1) {
-    const candidates = await fetchProviderRoute({ url, apiKey, points: chunks[index], preference, sportId, optimizeMode });
-    const directDistance = directWaypointDistanceMeters(chunks[index]);
-    const maxDetourFactor = effectiveMaxDetourFactor(sportId, optimizeMode);
-
-    const withinDetour = candidates.filter((candidate) => {
-      const factor = directDistance > 0 && candidate.distance > 0 ? candidate.distance / directDistance : 1;
-      return factor <= maxDetourFactor;
-    });
-
-    const pool = [...(withinDetour.length ? withinDetour : candidates)];
-    const selected = pool.sort((a, b) => {
-      if (sportKey(sportId) === "running") {
-        const ar = runningCandidatePriority(a);
-        const br = runningCandidatePriority(b);
-        const priorityDiff = br.priority - ar.priority;
-        if (Math.abs(priorityDiff) > 4) return priorityDiff;
-      }
-      if (isOffRoadFirstSport(sportId)) {
-        const ar = offRoadCandidatePriority(a, sportId);
-        const br = offRoadCandidatePriority(b, sportId);
-        const priorityDiff = br.priority - ar.priority;
-        if (Math.abs(priorityDiff) > 4) return priorityDiff;
-      }
-      const scoreDiff = Number(b.suitability_score || 0) - Number(a.suitability_score || 0);
-      if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
-      return Number(a.distance || 0) - Number(b.distance || 0);
-    })[0];
-
-    const coords = index === 0 ? selected.coords : selected.coords.slice(1);
-
-    mergedCoords.push(...coords);
-    distance += selected.distance || 0;
-    duration += selected.duration || 0;
-    ascent += selected.ascent || 0;
-    descent += selected.descent || 0;
-    if (selected.elevation_quality) {
-      const eq = selected.elevation_quality;
-      elevationQuality.corrected = elevationQuality.corrected || Boolean(eq.corrected);
-      elevationQuality.provider_ascent += Number(eq.provider_ascent || 0);
-      elevationQuality.provider_descent += Number(eq.provider_descent || 0);
-      elevationQuality.valid_elevation_points += Number(eq.valid_elevation_points || 0);
-      elevationQuality.point_count += Number(eq.point_count || 0);
-      elevationQuality.chunks.push(eq);
-    }
-    suitabilityScore += selected.suitability_score || 0;
-    detourFactor = Math.max(detourFactor, selected.detour_factor || 1);
-    selectedAlternatives.push(selected.alternative_index || 0);
-
-    for (const [label, value] of Object.entries(selected.waytypes || {})) {
-      waytypes[label] = (waytypes[label] || 0) + Number(value || 0);
-    }
-
-    for (const [label, value] of Object.entries(selected.surfaces || {})) {
-      surfaces[label] = (surfaces[label] || 0) + Number(value || 0);
-    }
-
-    for (const [label, value] of Object.entries(selected.raw_surfaces || {})) {
-      rawSurfaces[label] = (rawSurfaces[label] || 0) + Number(value || 0);
-    }
-
-    const intel = selected.surface_intelligence || {};
-    surfaceIntelligence.applied = surfaceIntelligence.applied || Boolean(intel.applied);
-    surfaceIntelligence.inferred_meters += Number(intel.inferred_meters || 0);
-    surfaceIntelligence.unresolved_unknown_meters += Number(intel.unresolved_unknown_meters || 0);
-    surfaceIntelligence.raw_unknown_meters += Number(intel.raw_unknown_meters || 0);
-    for (const [label, value] of Object.entries(intel.inferred || {})) {
-      surfaceIntelligence.inferred[label] = (surfaceIntelligence.inferred[label] || 0) + Number(value || 0);
-    }
-    for (const note of intel.notes || []) {
-      if (!surfaceIntelligence.notes.includes(note)) surfaceIntelligence.notes.push(note);
-    }
-
-    for (const [label, value] of Object.entries(selected.surface_quality || {})) {
-      surfaceQualityTotals[label] = (surfaceQualityTotals[label] || 0) + Number(value || 0);
-    }
-
-    for (const [label, value] of Object.entries(selected.score_breakdown || {})) {
-      if (typeof value === "number") scoreBreakdownTotals[label] = (scoreBreakdownTotals[label] || 0) + Number(value || 0);
-    }
-  }
-
-  return {
-    coords: mergedCoords,
-    distance,
-    duration,
-    ascent,
-    descent,
-    elevation_quality: {
-      ...elevationQuality,
-      provider_ascent: Number(elevationQuality.provider_ascent.toFixed(1)),
-      provider_descent: Number(elevationQuality.provider_descent.toFixed(1)),
-      smoothed_ascent: Number(ascent.toFixed(1)),
-      smoothed_descent: Number(descent.toFixed(1)),
+function fallbackResponse({ points, reason = "Routing provider could not snap this segment." }) {
+  const distance = routeDistanceMeters(points);
+  const ascent = routeAscentMeters(points);
+  return NextResponse.json({
+    ok: true,
+    routed: false,
+    error: reason,
+    route_points: {
+      source: "drawn-segment-fallback",
+      points,
+      waypoints: points,
+      point_count: points.length,
+      distance_km: Number((distance / 1000).toFixed(3)),
+      elevation_gain_m: ascent,
+      routed: false,
+      fallback_reason: reason,
+      quality: {
+        score: 0,
+        routed: false,
+        message: reason,
+      },
+      routed_at: new Date().toISOString(),
     },
-    chunks: chunks.length,
-    suitability_score: Number((suitabilityScore / chunks.length).toFixed(2)),
-    detour_factor: Number(detourFactor.toFixed(3)),
-    selected_alternatives: selectedAlternatives,
-    waytypes,
-    surfaces,
-    raw_surfaces: rawSurfaces,
-    surface_intelligence: {
-      ...surfaceIntelligence,
-      inferred_meters: Number(surfaceIntelligence.inferred_meters.toFixed(1)),
-      unresolved_unknown_meters: Number(surfaceIntelligence.unresolved_unknown_meters.toFixed(1)),
-      raw_unknown_meters: Number(surfaceIntelligence.raw_unknown_meters.toFixed(1)),
-    },
-    surface_quality: Object.fromEntries(
-      Object.entries(surfaceQualityTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
-    ),
-    score_breakdown: Object.fromEntries(
-      Object.entries(scoreBreakdownTotals).map(([label, value]) => [label, Number((value / chunks.length).toFixed(3))])
-    ),
-  };
+  });
 }
 
 export async function POST(request) {
+  let body;
+
   try {
-    const body = await request.json();
-    const rawWaypoints = normalize(body?.points);
-    const sportId = body?.sport_id || body?.sportId || body?.sport;
-    const optimizeMode = "balanced";
-    const profiles = profilesForSport(sportId, body?.profile, optimizeMode);
-    const preferences = preferencesForSport(sportId, optimizeMode);
+    body = await request.json();
+  } catch (_) {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
+  }
 
-    if (rawWaypoints.length < 2) {
-      return NextResponse.json({ ok: false, error: "At least two route points are required." }, { status: 400 });
-    }
+  const points = normalizePoints(body?.points);
+  const sportId = body?.sport_id || body?.sportId || "running";
 
-    const waypoints = rawWaypoints;
+  if (points.length < 2) {
+    return NextResponse.json({ ok: false, error: "At least two points are required." }, { status: 400 });
+  }
 
-    const apiKey =
-      process.env.OPENROUTE_API_KEY ||
-      process.env.OPENROUTESERVICE_API_KEY ||
-      process.env.ORS_API_KEY ||
-      process.env.NEXT_PUBLIC_OPENROUTE_API_KEY;
+  // This endpoint is intentionally segment-first. Long routes must be sent as A→B calls.
+  const segment = [points[0], points[points.length - 1]];
 
-    if (!apiKey) {
-      return NextResponse.json(
-        fallbackRoutePayload({
-          waypoints,
-          profiles,
-          reason: "Routing key is missing. The route was saved as a drawn fallback route.",
-          details: ["Missing OPENROUTE_API_KEY / OPENROUTESERVICE_API_KEY / ORS_API_KEY"],
-        }),
-        { status: 200 }
-      );
-    }
+  const apiKey =
+    process.env.OPENROUTE_API_KEY ||
+    process.env.OPENROUTESERVICE_API_KEY ||
+    process.env.ORS_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENROUTE_API_KEY;
 
-    const providerErrors = [];
-    const successfulCandidates = [];
+  if (!apiKey) {
+    return fallbackResponse({ points: segment, reason: "Routing key is missing." });
+  }
 
-    for (const profile of profiles) {
-      for (const preference of preferences) {
-        for (const base of ROUTING_BASES) {
+  const profiles = getProviderProfiles(sportId);
+  const preferences = getRoutingPreferences(sportId);
+  const errors = [];
+  const candidates = [];
+
+  for (const profile of profiles) {
+    for (const preference of preferences) {
+      for (const base of ROUTING_BASES) {
+        try {
           const url = providerUrl(base, profile);
-
-          try {
-            const result = await routeInChunks({ url, apiKey, waypoints, preference, sportId, optimizeMode });
-            const points = toPoints(result.coords);
-
-            if (points.length < 2) {
-              providerErrors.push(`${url} (${preference}) -> no usable routed geometry returned`);
-              continue;
-            }
-
-            successfulCandidates.push({
-              result,
-              points,
-              profile,
-              preference,
-              url,
-            });
-          } catch (error) {
-            const reason = error?.name === "AbortError" ? "provider request timed out" : error?.message || "request failed";
-            providerErrors.push(`${url} (${preference}) -> ${reason}`);
-          }
-        }
-
-        // If one base URL works for this profile/preference, do not try mirror URLs
-        // unless nothing usable was returned.
-        if (successfulCandidates.some((candidate) => candidate.profile === profile && candidate.preference === preference)) {
-          break;
+          const result = await fetchCandidate({ url, apiKey, points: segment, preference, sportId, profile });
+          candidates.push(...result);
+        } catch (error) {
+          errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
         }
       }
+
+      // Avoid too many provider calls when we already have a good segment.
+      if (candidates.some((candidate) => candidate.score >= 82)) break;
     }
 
-    if (successfulCandidates.length) {
-      const directDistance = directWaypointDistanceMeters(waypoints);
-      const maxDetourFactor = effectiveMaxDetourFactor(sportId, optimizeMode);
-
-      const eligible = successfulCandidates.filter((candidate) => {
-        const distance = Number(candidate.result.distance || 0);
-        const factor = directDistance > 0 && distance > 0 ? distance / directDistance : 1;
-        return factor <= maxDetourFactor;
-      });
-
-      const finalPool = [...(eligible.length ? eligible : successfulCandidates)];
-      const selected = finalPool.sort((a, b) => {
-        if (sportKey(sportId) === "running") {
-          const ar = runningCandidatePriority(a);
-          const br = runningCandidatePriority(b);
-          const priorityDiff = br.priority - ar.priority;
-          if (Math.abs(priorityDiff) > 4) return priorityDiff;
-        }
-        const scoreDiff = Number(b.result.suitability_score || 0) - Number(a.result.suitability_score || 0);
-        if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
-        return Number(a.result.distance || 0) - Number(b.result.distance || 0);
-      })[0];
-
-      const running_priority = sportKey(sportId) === "running" ? runningCandidatePriority(selected) : null;
-      const offroad_priority = isOffRoadFirstSport(sportId) ? offRoadCandidatePriority(selected, sportId) : null;
-
-      return NextResponse.json({
-        ok: true,
-        routed: true,
-        snapped: false,
-        chunked: selected.result.chunks > 1,
-        chunk_count: selected.result.chunks,
-        profile: selected.profile,
-        preference: selected.preference,
-        provider_url: selected.url,
-        route_quality: {
-          sport_id: sportId || null,
-          profile: selected.profile,
-          preference: selected.preference,
-          optimize_mode: optimizeMode,
-          optimization_label: optimizationModeConfig(optimizeMode).label,
-          max_detour_factor: maxDetourFactor,
-          detour_factor: selected.result.detour_factor,
-          suitability_score: selected.result.suitability_score,
-          selected_alternatives: selected.result.selected_alternatives,
-          waytypes: selected.result.waytypes,
-          surfaces: selected.result.surfaces,
-          raw_surfaces: selected.result.raw_surfaces,
-          surface_intelligence: selected.result.surface_intelligence,
-          surface_quality: selected.result.surface_quality,
-          score_breakdown: selected.result.score_breakdown,
-          elevation_quality: selected.result.elevation_quality,
-          candidates_considered: successfulCandidates.length,
-          eligible_candidates: eligible.length || successfulCandidates.length,
-          running_priority,
-          offroad_priority,
-        },
-        route_points: {
-          source: selected.result.chunks > 1 ? "openrouteservice-sport-aware-chunked" : "openrouteservice-sport-aware",
-          profile: selected.profile,
-          preference: selected.preference,
-          provider_url: selected.url,
-          waypoints,
-          original_waypoints: rawWaypoints,
-          points: selected.points,
-          point_count: selected.points.length,
-          chunked: selected.result.chunks > 1,
-          chunk_count: selected.result.chunks,
-          elevation_gain_m: Number.isFinite(selected.result.ascent) ? Math.round(selected.result.ascent) : null,
-          elevation_loss_m: Number.isFinite(selected.result.descent) ? Math.round(selected.result.descent) : null,
-          elevation_quality: selected.result.elevation_quality,
-          route_quality: {
-            sport_id: sportId || null,
-            profile: selected.profile,
-            preference: selected.preference,
-            optimize_mode: optimizeMode,
-            optimization_label: optimizationModeConfig(optimizeMode).label,
-            max_detour_factor: maxDetourFactor,
-            detour_factor: selected.result.detour_factor,
-            suitability_score: selected.result.suitability_score,
-            selected_alternatives: selected.result.selected_alternatives,
-            waytypes: selected.result.waytypes,
-            surfaces: selected.result.surfaces,
-            raw_surfaces: selected.result.raw_surfaces,
-            surface_intelligence: selected.result.surface_intelligence,
-            surface_quality: selected.result.surface_quality,
-            score_breakdown: selected.result.score_breakdown,
-            elevation_quality: selected.result.elevation_quality,
-            candidates_considered: successfulCandidates.length,
-            eligible_candidates: eligible.length || successfulCandidates.length,
-            running_priority,
-            offroad_priority,
-          },
-          routed_at: new Date().toISOString(),
-        },
-        distance_km: selected.result.distance ? Number((selected.result.distance / 1000).toFixed(2)) : null,
-        duration_min: selected.result.duration ? Math.round(selected.result.duration / 60) : null,
-        elevation_gain_m: Number.isFinite(selected.result.ascent) ? Math.round(selected.result.ascent) : null,
-        elevation_loss_m: Number.isFinite(selected.result.descent) ? Math.round(selected.result.descent) : null,
-      });
-    }
-
-    return NextResponse.json(
-      fallbackRoutePayload({
-        waypoints,
-        profiles,
-        reason: "Routing provider could not snap this route. Using the drawn line as a fallback.",
-        details: providerErrors.slice(-12),
-      }),
-      { status: 200 }
-    );
-  } catch (error) {
-    return NextResponse.json({ ok: false, error: error?.message || "Could not reroute." }, { status: 500 });
+    if (candidates.some((candidate) => candidate.score >= 82)) break;
   }
+
+  if (!candidates.length) {
+    return fallbackResponse({
+      points: segment,
+      reason: errors.slice(0, 2).join(" | ") || "Routing provider could not snap this segment.",
+    });
+  }
+
+  candidates.sort((a, b) => {
+    const scoreDiff = b.score - a.score;
+    if (Math.abs(scoreDiff) > 4) return scoreDiff;
+    return a.distance - b.distance;
+  });
+
+  const best = candidates[0];
+  const distance = routeDistanceMeters(best.points);
+  const ascent = routeAscentMeters(best.points);
+
+  return NextResponse.json({
+    ok: true,
+    routed: true,
+    profile: best.profile,
+    preference: best.preference,
+    route_points: {
+      source: "ors-segment",
+      provider_profile: best.profile,
+      preference: best.preference,
+      points: best.points,
+      waypoints: segment,
+      point_count: best.points.length,
+      distance_km: Number((distance / 1000).toFixed(3)),
+      elevation_gain_m: ascent,
+      routed: true,
+      quality: {
+        score: best.score,
+        suitable_percent: best.suitable_percent,
+        unsuitable_percent: best.unsuitable_percent,
+        unknown_percent: best.unknown_percent,
+        detour: Number(best.detour.toFixed(2)),
+        surfaces: best.surfacePercent,
+        waytypes: best.wayPercent,
+        candidates: candidates.length,
+      },
+      routed_at: new Date().toISOString(),
+    },
+  });
 }
