@@ -11441,3 +11441,84 @@ main {
     max-height: min(64dvh, 620px) !important;
   }
 }
+
+
+/* Routebuilder clean rebuild v1 */
+.route-quality-panel-clean {
+  left: 118px;
+  right: 18px;
+  bottom: 118px;
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  z-index: 900;
+}
+
+.route-quality-panel-clean header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.route-quality-panel-clean header h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.route-quality-panel-clean header button {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.route-quality-good,
+.route-quality-warning {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.route-quality-good {
+  color: #dfff2d;
+  background: rgba(215,255,0,.13);
+  border: 1px solid rgba(215,255,0,.35);
+}
+
+.route-quality-warning {
+  color: #ffd6d6;
+  background: rgba(255,70,70,.16);
+  border: 1px solid rgba(255,90,90,.35);
+}
+
+.route-draw-topbar p {
+  margin: 5px 0 0;
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .route-quality-panel-clean {
+    left: 112px;
+    right: 16px;
+    bottom: 104px;
+    max-height: 54vh;
+  }
+}
+
+@media (max-width: 430px) {
+  .route-quality-panel-clean {
+    left: 106px;
+    right: 12px;
+  }
+
+  .route-quality-panel-clean .route-quality-grid {
+    grid-template-columns: 1fr;
+  }
+}
