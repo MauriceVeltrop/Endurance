@@ -11178,68 +11178,49 @@ main {
   }
 }
 
-/* Routebuilder quality panel position and score debug refinement */
-.route-quality-note,
-.route-quality-explain,
-.route-quality-debug {
+.route-quality-intelligence {
   border-radius: 16px !important;
-  background: rgba(255,255,255,.045) !important;
-  border: 1px solid rgba(255,255,255,.075) !important;
   padding: 10px 12px !important;
-  margin: 8px 0 10px !important;
-  color: rgba(255,255,255,.78) !important;
+  margin: 8px 0 12px !important;
+  background: rgba(255,255,255,.055) !important;
+  border: 1px solid rgba(234,255,0,.18) !important;
+}
+
+.route-quality-intelligence strong {
+  display: block !important;
+  color: #eaff00 !important;
+  font-size: 11px !important;
+  font-weight: 950 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 4px !important;
+}
+
+.route-quality-intelligence > span {
+  display: block !important;
+  color: rgba(255,255,255,.72) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  line-height: 1.35 !important;
+}
+
+.route-quality-inferred-list {
+  display: grid !important;
+  gap: 5px !important;
+  margin-top: 8px !important;
+}
+
+.route-quality-inferred-list p {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  color: rgba(255,255,255,.76) !important;
   font-size: 12px !important;
   font-weight: 750 !important;
 }
 
-.route-quality-explain small,
-.route-quality-debug summary {
-  display: block !important;
-  color: rgba(234,255,0,.92) !important;
-  font-size: 10px !important;
+.route-quality-inferred-list b {
+  color: #fff !important;
   font-weight: 950 !important;
-  letter-spacing: .12em !important;
-  text-transform: uppercase !important;
-  margin-bottom: 7px !important;
-}
-
-.route-quality-explain p,
-.route-quality-debug p {
-  margin: 5px 0 !important;
-  line-height: 1.35 !important;
-}
-
-.route-quality-debug summary {
-  cursor: pointer !important;
-  margin-bottom: 0 !important;
-}
-
-.route-quality-debug[open] summary {
-  margin-bottom: 7px !important;
-}
-
-@media (max-width: 760px) {
-  .route-quality-panel-expanded {
-    left: 112px !important;
-    right: 12px !important;
-    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 82px) !important;
-    max-height: 44dvh !important;
-    padding: 12px !important;
-    border-radius: 24px !important;
-  }
-
-  .route-quality-panel-header strong {
-    font-size: 16px !important;
-  }
-
-  .route-quality-panel-header > b {
-    font-size: 18px !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .route-quality-panel-expanded {
-    left: 104px !important;
-    right: 8px !important;
-  }
 }
