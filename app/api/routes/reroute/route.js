@@ -87,37 +87,106 @@ function median(values) {
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
-function smoothElevationSeries(points) {
-  const elevations = (points || []).map((point) => (Number.isFinite(Number(point.ele)) ? Number(point.ele) : null));
-  const cleaned = elevations.slice();
+function interpolateElevationSeries(values) {
+  const result = values.slice();
 
-  for (let index = 1; index < cleaned.length - 1; index += 1) {
-    const prev = cleaned[index - 1];
-    const current = cleaned[index];
-    const next = cleaned[index + 1];
+  for (let index = 0; index < result.length; index += 1) {
+    if (Number.isFinite(result[index])) continue;
 
-    if (!Number.isFinite(prev) || !Number.isFinite(current) || !Number.isFinite(next)) continue;
+    let prevIndex = index - 1;
+    while (prevIndex >= 0 && !Number.isFinite(result[prevIndex])) prevIndex -= 1;
 
-    const neighborAverage = (prev + next) / 2;
-    const looksLikeSpike = Math.abs(current - prev) > 12 && Math.abs(current - next) > 12 && Math.abs(prev - next) < 6;
+    let nextIndex = index + 1;
+    while (nextIndex < result.length && !Number.isFinite(result[nextIndex])) nextIndex += 1;
 
-    if (looksLikeSpike) cleaned[index] = neighborAverage;
+    const prev = prevIndex >= 0 ? result[prevIndex] : null;
+    const next = nextIndex < result.length ? result[nextIndex] : null;
+
+    if (Number.isFinite(prev) && Number.isFinite(next)) {
+      const ratio = (index - prevIndex) / (nextIndex - prevIndex);
+      result[index] = prev + ((next - prev) * ratio);
+    } else if (Number.isFinite(prev)) {
+      result[index] = prev;
+    } else if (Number.isFinite(next)) {
+      result[index] = next;
+    }
   }
 
-  return cleaned.map((value, index) => {
+  return result;
+}
+
+function cleanElevationSeries(points) {
+  const routePoints = Array.isArray(points) ? points : [];
+  const raw = routePoints.map((point) => (Number.isFinite(Number(point.ele)) ? Number(point.ele) : null));
+  const nonZero = raw.filter((value) => Number.isFinite(value) && value !== 0);
+  const medianElevation = median(nonZero);
+  const cleaned = raw.slice();
+  let zeroOutliers = 0;
+  let spikeOutliers = 0;
+  let interpolated = 0;
+
+  for (let index = 0; index < cleaned.length; index += 1) {
+    const value = cleaned[index];
+    if (!Number.isFinite(value)) continue;
+
+    const prev = index > 0 ? cleaned[index - 1] : null;
+    const next = index < cleaned.length - 1 ? cleaned[index + 1] : null;
+
+    // ORS/GPX can occasionally inject 0 m elevation points. In Limburg this is
+    // usually bogus when neighbouring points are around 50-120 m.
+    const zeroBetweenNormalPoints =
+      value === 0 &&
+      ((Number.isFinite(prev) && prev > 10) || (Number.isFinite(next) && next > 10) || (Number.isFinite(medianElevation) && medianElevation > 10));
+
+    if (zeroBetweenNormalPoints) {
+      cleaned[index] = null;
+      zeroOutliers += 1;
+      continue;
+    }
+
+    if (!Number.isFinite(prev) || !Number.isFinite(next)) continue;
+
+    const neighborAverage = (prev + next) / 2;
+    const spikeThreshold = Math.max(10, Math.abs(prev - next) + 8);
+    const looksLikeSinglePointSpike =
+      Math.abs(value - prev) > spikeThreshold &&
+      Math.abs(value - next) > spikeThreshold &&
+      Math.abs(prev - next) < 10;
+
+    if (looksLikeSinglePointSpike) {
+      cleaned[index] = null;
+      spikeOutliers += 1;
+    }
+  }
+
+  const interpolatedSeries = interpolateElevationSeries(cleaned).map((value, index) => {
+    if (!Number.isFinite(cleaned[index]) && Number.isFinite(value)) interpolated += 1;
+    return value;
+  });
+
+  const smoothed = interpolatedSeries.map((value, index) => {
     if (!Number.isFinite(value)) return null;
     const window = [];
     for (let offset = -2; offset <= 2; offset += 1) {
-      const candidate = cleaned[index + offset];
+      const candidate = interpolatedSeries[index + offset];
       if (Number.isFinite(candidate)) window.push(candidate);
     }
     return median(window) ?? value;
   });
+
+  return {
+    raw,
+    cleaned: smoothed,
+    zero_outliers_removed: zeroOutliers,
+    spike_outliers_removed: spikeOutliers,
+    interpolated_points: interpolated,
+  };
 }
 
 function calculateSmoothedElevationStats(points, providerAscent = null, providerDescent = null) {
   const routePoints = Array.isArray(points) ? points : [];
-  const smoothed = smoothElevationSeries(routePoints);
+  const cleanedSeries = cleanElevationSeries(routePoints);
+  const smoothed = cleanedSeries.cleaned;
   const validCount = smoothed.filter((value) => Number.isFinite(value)).length;
 
   if (routePoints.length < 2 || validCount < Math.max(2, Math.floor(routePoints.length * 0.35))) {
@@ -130,6 +199,9 @@ function calculateSmoothedElevationStats(points, providerAscent = null, provider
       point_count: routePoints.length,
       provider_ascent: Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null,
       provider_descent: Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null,
+      zero_outliers_removed: cleanedSeries.zero_outliers_removed,
+      spike_outliers_removed: cleanedSeries.spike_outliers_removed,
+      interpolated_points: cleanedSeries.interpolated_points,
     };
   }
 
@@ -137,7 +209,7 @@ function calculateSmoothedElevationStats(points, providerAscent = null, provider
   let descent = 0;
   let pendingUp = 0;
   let pendingDown = 0;
-  const minClimbStep = 2.5;
+  const minClimbStep = 3;
 
   for (let index = 1; index < routePoints.length; index += 1) {
     const prevEle = smoothed[index - 1];
@@ -147,9 +219,10 @@ function calculateSmoothedElevationStats(points, providerAscent = null, provider
     const horizontalMeters = haversineMeters(routePoints[index - 1], routePoints[index]);
     const diff = currentEle - prevEle;
 
-    // Reject implausible elevation spikes. This does not prevent MTB climbs;
-    // it only removes jumps that are unrealistic for the segment length.
-    const maxPlausibleStep = Math.max(4, horizontalMeters * 0.35);
+    // Remove impossible vertical jumps without punishing real MTB climbs.
+    // A 35% grade step is already very steep; values above that are usually
+    // elevation noise or provider artefacts for short map segments.
+    const maxPlausibleStep = Math.max(5, horizontalMeters * 0.35);
     if (Math.abs(diff) > maxPlausibleStep) continue;
 
     if (diff > 0) {
@@ -169,22 +242,29 @@ function calculateSmoothedElevationStats(points, providerAscent = null, provider
   const providerA = Number.isFinite(Number(providerAscent)) ? Number(providerAscent) : null;
   const providerD = Number.isFinite(Number(providerDescent)) ? Number(providerDescent) : null;
   const corrected =
-    (providerA !== null && Math.abs(providerA - ascent) > Math.max(25, ascent * 0.35)) ||
-    (providerD !== null && Math.abs(providerD - descent) > Math.max(25, descent * 0.35));
+    cleanedSeries.zero_outliers_removed > 0 ||
+    cleanedSeries.spike_outliers_removed > 0 ||
+    (providerA !== null && Math.abs(providerA - ascent) > Math.max(20, ascent * 0.3)) ||
+    (providerD !== null && Math.abs(providerD - descent) > Math.max(20, descent * 0.3));
 
   return {
     ascent: Number(ascent.toFixed(1)),
     descent: Number(descent.toFixed(1)),
     corrected,
-    method: "smoothed_geometry_elevation",
+    method: "cleaned_smoothed_geometry_elevation",
     valid_elevation_points: validCount,
     point_count: routePoints.length,
     provider_ascent: providerA,
     provider_descent: providerD,
+    zero_outliers_removed: cleanedSeries.zero_outliers_removed,
+    spike_outliers_removed: cleanedSeries.spike_outliers_removed,
+    interpolated_points: cleanedSeries.interpolated_points,
     smoothing: {
       median_window: 5,
       min_climb_step_m: minClimbStep,
       max_grade_step: 0.35,
+      zero_elevation_outlier_filter: true,
+      single_point_spike_filter: true,
     },
   };
 }
@@ -1109,6 +1189,9 @@ export async function POST(request) {
           point_count: selected.points.length,
           chunked: selected.result.chunks > 1,
           chunk_count: selected.result.chunks,
+          elevation_gain_m: Number.isFinite(selected.result.ascent) ? Math.round(selected.result.ascent) : null,
+          elevation_loss_m: Number.isFinite(selected.result.descent) ? Math.round(selected.result.descent) : null,
+          elevation_quality: selected.result.elevation_quality,
           route_quality: {
             sport_id: sportId || null,
             profile: selected.profile,
@@ -1121,7 +1204,11 @@ export async function POST(request) {
             selected_alternatives: selected.result.selected_alternatives,
             waytypes: selected.result.waytypes,
             surfaces: selected.result.surfaces,
+            raw_surfaces: selected.result.raw_surfaces,
+            surface_intelligence: selected.result.surface_intelligence,
             surface_quality: selected.result.surface_quality,
+            score_breakdown: selected.result.score_breakdown,
+            elevation_quality: selected.result.elevation_quality,
             candidates_considered: successfulCandidates.length,
             eligible_candidates: eligible.length || successfulCandidates.length,
             running_priority,
