@@ -103,10 +103,18 @@ function decodeExtraInfo(values, labels) {
   for (const row of Array.isArray(values) ? values : []) {
     const value = Array.isArray(row) ? row[2] : null;
     const amount = Array.isArray(row) ? Math.max(0, Number(row[1]) - Number(row[0])) : 0;
-    const label = labels?.[value] || "unknown";
+    const label = labels?.[value] || String(value ?? "unknown").toLowerCase() || "unknown";
     result[label] = (result[label] || 0) + amount;
   }
   return result;
+}
+
+function getExtraValues(extras, names = []) {
+  for (const name of names) {
+    const values = extras?.[name]?.values;
+    if (Array.isArray(values)) return values;
+  }
+  return [];
 }
 
 
@@ -127,8 +135,9 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
-  const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
-  const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
+  const extras = feature?.properties?.extras || {};
+  const wayCounts = decodeExtraInfo(getExtraValues(extras, ["waytypes", "waytype"]), WAYTYPE_LABELS);
+  const surfaceCounts = decodeExtraInfo(getExtraValues(extras, ["surface", "surfaces"]), SURFACE_LABELS);
   const surfacePercent = percentMap(surfaceCounts);
   const wayPercent = percentMap(wayCounts);
 
@@ -146,7 +155,6 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   for (const [surface, pct] of Object.entries(surfacePercent)) {
     if (surface === "unknown" || surface === "missing") {
       unknown += pct;
-      unsuitable += Math.round(pct * 0.55);
     } else if (suitableSurfaces.has(surface)) suitable += pct;
     else if (acceptableSurfaces.has(surface)) acceptable += pct;
     else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
