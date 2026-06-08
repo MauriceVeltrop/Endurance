@@ -25,6 +25,15 @@ const GRAPHHOPPER_ROUTE_URL =
 
 const PROVIDER_TIMEOUT_MS = 14000;
 
+const GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE = {
+  // Give GraphHopper real room to return a longer but better paved Running route.
+  // max_weight_factor is the actual provider-side detour tolerance; maxDetourFactor
+  // in sportRouteProfiles is only used by our quality scoring.
+  max_paths: 3,
+  max_weight_factor: 2.0,
+  max_share_factor: 0.6,
+};
+
 function normalizePoint(point) {
   const lat = Number(point?.lat ?? point?.latitude);
   const lon = Number(point?.lon ?? point?.lng ?? point?.longitude);
@@ -417,6 +426,10 @@ async function fetchGraphHopperCandidate({
       details: ["road_class", "road_environment", "surface"],
     };
 
+    if (normalizeSportId(sportId) === "running") {
+      payload.alternative_route = GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE;
+    }
+
     if (useCustomModel) {
       payload.custom_model = RUNNING_CUSTOM_MODEL;
     }
@@ -605,6 +618,23 @@ export async function POST(request) {
   }
 
   candidates.sort((a, b) => {
+    const isRunning = normalizedSportId === "running";
+
+    if (isRunning) {
+      // For Running Road, do not let the shortest 1.00x route win when a slightly
+      // longer candidate has clearly better surface/waytype quality.
+      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
+      if (Math.abs(unsuitableDiff) >= 8) return unsuitableDiff;
+
+      const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
+      if (Math.abs(unknownDiff) >= 10) return unknownDiff;
+
+      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+      if (Math.abs(scoreDiff) > 3) return scoreDiff;
+
+      return Number(a.distance || 0) - Number(b.distance || 0);
+    }
+
     const scoreDiff = b.score - a.score;
     if (Math.abs(scoreDiff) > 4) return scoreDiff;
     return a.distance - b.distance;
@@ -640,6 +670,7 @@ export async function POST(request) {
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
         candidates: candidates.length,
+        alternative_route: normalizedSportId === "running" ? GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE : null,
         provider: best.provider || provider,
       },
       routed_at: new Date().toISOString(),
