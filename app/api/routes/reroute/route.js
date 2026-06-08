@@ -333,20 +333,56 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 }
 
 const RUNNING_CUSTOM_MODEL = {
+  // Road-running preset: keep Running routes paved whenever GraphHopper has a reasonable option.
+  // Do not set every unpaved surface to 0, otherwise short connector segments can make routing fail.
+  distance_influence: 110,
   priority: [
     { if: "road_class == MOTORWAY", multiply_by: "0" },
-    { if: "road_class == TRUNK", multiply_by: "0.05" },
-    { if: "road_class == PRIMARY", multiply_by: "0.25" },
-    { if: "road_class == SECONDARY", multiply_by: "0.45" },
-    { if: "road_class == FOOTWAY", multiply_by: "1.35" },
-    { if: "road_class == PATH", multiply_by: "1.25" },
-    { if: "road_class == PEDESTRIAN", multiply_by: "1.25" },
-    { if: "road_environment == PARK", multiply_by: "1.25" },
-    { if: "surface == ASPHALT", multiply_by: "1.12" },
-    { if: "surface == PAVED", multiply_by: "1.08" },
-    { if: "surface == CONCRETE", multiply_by: "1.06" },
-    { if: "surface == SAND", multiply_by: "0.35" },
-    { if: "surface == MUD", multiply_by: "0.35" },
+    { if: "road_class == TRUNK", multiply_by: "0.01" },
+    { if: "road_class == PRIMARY", multiply_by: "0.10" },
+    { if: "road_class == SECONDARY", multiply_by: "0.28" },
+    { if: "road_class == TERTIARY", multiply_by: "0.55" },
+
+    { if: "road_class == FOOTWAY", multiply_by: "1.65" },
+    { if: "road_class == PEDESTRIAN", multiply_by: "1.55" },
+    { if: "road_class == CYCLEWAY", multiply_by: "1.35" },
+    { if: "road_class == RESIDENTIAL", multiply_by: "1.20" },
+    { if: "road_class == SERVICE", multiply_by: "0.80" },
+    { if: "road_class == TRACK", multiply_by: "0.03" },
+    { if: "road_class == STEPS", multiply_by: "0.02" },
+
+    { if: "road_environment == TUNNEL", multiply_by: "0.05" },
+    { if: "road_environment == BRIDGE", multiply_by: "0.85" },
+    { if: "road_environment == PARK", multiply_by: "1.15" },
+
+    { if: "surface == ASPHALT", multiply_by: "1.70" },
+    { if: "surface == CONCRETE", multiply_by: "1.55" },
+    { if: "surface == PAVED", multiply_by: "1.45" },
+    { if: "surface == PAVING_STONES", multiply_by: "1.25" },
+    { if: "surface == COBBLESTONE", multiply_by: "0.45" },
+
+    { if: "surface == COMPACTED", multiply_by: "0.08" },
+    { if: "surface == FINE_GRAVEL", multiply_by: "0.04" },
+    { if: "surface == GRAVEL", multiply_by: "0.02" },
+    { if: "surface == UNPAVED", multiply_by: "0.01" },
+    { if: "surface == GROUND", multiply_by: "0.01" },
+    { if: "surface == DIRT", multiply_by: "0.01" },
+    { if: "surface == GRASS", multiply_by: "0.01" },
+    { if: "surface == SAND", multiply_by: "0.01" },
+    { if: "surface == MUD", multiply_by: "0.01" },
+    { if: "surface == WOODCHIPS", multiply_by: "0.01" },
+  ],
+  speed: [
+    { if: "surface == ASPHALT", limit_to: "13" },
+    { if: "surface == CONCRETE", limit_to: "12" },
+    { if: "surface == PAVED", limit_to: "12" },
+    { if: "surface == COMPACTED", limit_to: "5" },
+    { if: "surface == FINE_GRAVEL", limit_to: "4" },
+    { if: "surface == GRAVEL", limit_to: "3" },
+    { if: "surface == GROUND", limit_to: "2" },
+    { if: "surface == DIRT", limit_to: "2" },
+    { if: "surface == GRASS", limit_to: "2" },
+    { if: "surface == SAND", limit_to: "2" },
   ],
 };
 
