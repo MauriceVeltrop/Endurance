@@ -170,7 +170,7 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
     const acceptableBonus = acceptable * 0.35;
     const unsuitablePenalty = unsuitable * 1.05;
     // Keep unknown almost neutral: it means data is missing, not necessarily bad.
-    const unknownPenalty = unknown * 0.05;
+    const unknownPenalty = unknown * 0.5;
     const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 16) : 10 + (detour - maxDetour) * 90;
 
     score = Math.max(0, Math.min(100, 45 + pavedBonus + acceptableBonus - unsuitablePenalty - unknownPenalty - detourPenalty));
