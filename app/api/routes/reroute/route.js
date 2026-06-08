@@ -98,14 +98,34 @@ function toPoints(coords) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
-function decodeExtraInfo(values, labels) {
+
+function decodeExtraInfo(values, labels, geometryPoints = []) {
   const result = {};
+
   for (const row of Array.isArray(values) ? values : []) {
-    const value = Array.isArray(row) ? row[2] : null;
-    const amount = Array.isArray(row) ? Math.max(0, Number(row[1]) - Number(row[0])) : 0;
+    if (!Array.isArray(row) || row.length < 3) continue;
+
+    const startIndex = Math.max(0, Number(row[0]) || 0);
+    const endIndex = Math.max(startIndex, Number(row[1]) || startIndex);
+    const value = row[2];
+
+    let meters = 0;
+
+    for (
+      let i = startIndex + 1;
+      i <= endIndex && i < geometryPoints.length;
+      i += 1
+    ) {
+      meters += haversineMeters(
+        geometryPoints[i - 1],
+        geometryPoints[i]
+      );
+    }
+
     const label = labels?.[value] || "unknown";
-    result[label] = (result[label] || 0) + amount;
+    result[label] = (result[label] || 0) + meters;
   }
+
   return result;
 }
 
@@ -127,8 +147,8 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
-  const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
-  const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
+  const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS, geometry);
+  const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS, geometry);
   const surfacePercent = percentMap(surfaceCounts);
   const wayPercent = percentMap(wayCounts);
 
