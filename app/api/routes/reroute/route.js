@@ -216,16 +216,23 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       extra_info: ["waytype", "surface"],
     };
 
+    const config = getSportRouteProfile(sportId);
+    const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
+
     if (isRunning) {
+      // Use the sport detour setting in the ORS alternative-route search itself.
+      // Previously Running always used a hard-coded 1.6 here, so changing
+      // maxDetourFactor in sportRouteProfiles only affected the quality score,
+      // not the alternatives ORS was allowed to return.
       payload.alternative_routes = {
-        target_count: 2,
-        weight_factor: 1.6,
-        share_factor: 0.55,
+        target_count: 3,
+        weight_factor: Math.max(1.05, maxDetour),
+        share_factor: 0.5,
       };
     } else {
       payload.alternative_routes = {
         target_count: 2,
-        weight_factor: 1.4,
+        weight_factor: Math.max(1.05, maxDetour),
         share_factor: 0.6,
       };
     }
@@ -370,15 +377,26 @@ export async function POST(request) {
     const isRunning = normalizedSportId === "running";
 
     if (isRunning) {
-      // For Running Road, do not let the shortest 1.00x route win when a slightly
-      // longer candidate has clearly better surface/waytype quality.
+      const config = getSportRouteProfile(normalizedSportId);
+      const maxDetour = Number(config.maxDetourFactor || 1.4);
+      const aWithinDetour = Number(a.detour || 99) <= maxDetour;
+      const bWithinDetour = Number(b.detour || 99) <= maxDetour;
+
+      // Detour is now used as a hard preference boundary: stay within the sport's
+      // configured maxDetourFactor, but do not automatically choose 1.00x if a
+      // slightly longer route has much better Running quality.
+      if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
+
       const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
       if (Math.abs(unsuitableDiff) >= 8) return unsuitableDiff;
 
-      // Unknown surface is common in OSM/ORS data and should not dominate route choice.
+      const suitableDiff = Number(b.suitable_percent || 0) - Number(a.suitable_percent || 0);
+      if (Math.abs(suitableDiff) >= 10) return suitableDiff;
+
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) > 3) return scoreDiff;
 
+      // Final tie-breaker: shorter route.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
