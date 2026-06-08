@@ -25,6 +25,15 @@ const GRAPHHOPPER_ROUTE_URL =
 
 const PROVIDER_TIMEOUT_MS = 14000;
 
+const GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE = {
+  // Give GraphHopper real room to return a longer but better paved Running route.
+  // max_weight_factor is the actual provider-side detour tolerance; maxDetourFactor
+  // in sportRouteProfiles is only used by our quality scoring.
+  max_paths: 3,
+  max_weight_factor: 2.0,
+  max_share_factor: 0.6,
+};
+
 function normalizePoint(point) {
   const lat = Number(point?.lat ?? point?.latitude);
   const lon = Number(point?.lon ?? point?.lng ?? point?.longitude);
@@ -269,7 +278,6 @@ function scoreGraphHopperCandidate({ path, points, sportId, profile, preference 
     points: geometry,
     distance,
     duration,
-    provider_weight: Number.isFinite(Number(path?.weight)) ? Number(path.weight) : null,
     elevation_gain_m: Number.isFinite(Number(path?.ascend)) ? Math.round(Number(path.ascend)) : routeAscentMeters(geometry),
     score: Math.round(score),
     detour,
@@ -337,22 +345,63 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
   }
 }
 
+const RUNNING_CUSTOM_MODEL = {
+  // Minimal GraphHopper-only Running Road model.
+  // Keep this deliberately small: first prove GraphHopper accepts and applies it,
+  // then tune the weights again step by step.
+  distance_influence: 110,
+  priority: [
+    { if: "road_class == motorway", multiply_by: 0 },
+    { if: "road_class == trunk", multiply_by: 0.01 },
+    { if: "road_class == primary", multiply_by: 0.1 },
+    { if: "road_class == secondary", multiply_by: 0.35 },
+    { if: "road_class == tertiary", multiply_by: 0.6 },
+
+    { if: "road_class == footway", multiply_by: 3.0 },
+    { if: "road_class == cycleway", multiply_by: 2.5 },
+    { if: "road_class == residential", multiply_by: 2.0 },
+    { if: "road_class == living_street", multiply_by: 2.0 },
+    { if: "road_class == pedestrian", multiply_by: 1.8 },
+
+    { if: "road_class == service", multiply_by: 0.35 },
+    { if: "road_class == path", multiply_by: 0.05 },
+    { if: "road_class == track", multiply_by: 0.01 },
+    { if: "road_class == steps", multiply_by: 0.01 },
+
+    { if: "surface == asphalt", multiply_by: 1.7 },
+    { if: "surface == concrete", multiply_by: 1.55 },
+    { if: "surface == paved", multiply_by: 1.45 },
+    { if: "surface == paving_stones", multiply_by: 1.25 },
+
+    { if: "surface == missing", multiply_by: 0.08 },
+    { if: "surface == unknown", multiply_by: 0.08 },
+    { if: "surface == compacted", multiply_by: 0.08 },
+    { if: "surface == fine_gravel", multiply_by: 0.04 },
+    { if: "surface == gravel", multiply_by: 0.02 },
+    { if: "surface == unpaved", multiply_by: 0.01 },
+    { if: "surface == ground", multiply_by: 0.01 },
+    { if: "surface == dirt", multiply_by: 0.01 },
+    { if: "surface == grass", multiply_by: 0.01 },
+    { if: "surface == sand", multiply_by: 0.01 },
+    { if: "surface == mud", multiply_by: 0.01 },
+    { if: "surface == woodchips", multiply_by: 0.01 },
+  ],
+};
+
 async function fetchGraphHopperCandidate({
   apiKey,
   points,
   sportId,
   profile = "foot",
   preference = "running",
-  customModel = null,
-  alternativeRoute = null,
+  useCustomModel = true,
 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
-    const hasCustomModel = Boolean(customModel);
     const url = `${GRAPHHOPPER_ROUTE_URL}?key=${encodeURIComponent(apiKey)}${
-      hasCustomModel ? "&ch.disable=true" : ""
+      useCustomModel ? "&ch.disable=true" : ""
     }`;
     const payload = {
       profile,
@@ -364,12 +413,12 @@ async function fetchGraphHopperCandidate({
       details: ["road_class", "road_environment", "surface"],
     };
 
-    if (alternativeRoute) {
-      payload.alternative_route = alternativeRoute;
-    }
+    // Keep alternative routes disabled while validating the custom model.
+    // GraphHopper returned HTTP 400; a single accepted custom-model route is the baseline.
+    // Once this works, we can re-enable alternative_route in a separate patch.
 
-    if (customModel) {
-      payload.custom_model = customModel;
+    if (useCustomModel) {
+      payload.custom_model = RUNNING_CUSTOM_MODEL;
     }
 
     const response = await fetch(url, {
@@ -384,7 +433,13 @@ async function fetchGraphHopperCandidate({
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      throw new Error(`${response.status} ${text.slice(0, 180)}`);
+      console.error("GraphHopper route error", {
+        status: response.status,
+        body: text.slice(0, 800),
+        useCustomModel,
+        profile,
+      });
+      throw new Error(`${response.status} ${text.slice(0, 500)}`);
     }
 
     const data = await response.json();
@@ -442,31 +497,27 @@ async function collectGraphHopperCandidates({ points, sportId }) {
     throw new Error("GraphHopper API key is missing.");
   }
 
-  const config = getSportRouteProfile(sportId);
-
   try {
     return await fetchGraphHopperCandidate({
       apiKey,
       points,
       sportId,
-      profile: config.providerProfiles?.[0] || "foot",
-      preference: "graphhopper-custom",
-      customModel: config.graphhopperCustomModel || null,
-      alternativeRoute: config.graphhopperAlternativeRoute || null,
+      profile: "foot",
+      preference: "running-custom",
+      useCustomModel: true,
     });
   } catch (error) {
-    // No automatic ORS/plain-foot fallback for Running. If GraphHopper rejects the
-    // custom model, we need to see that error instead of silently drawing a route
-    // that ignores all Running Road rules.
+    // Do not silently fall back to plain foot for Running. If the custom model fails,
+    // the route would ignore the paved-running rules and look like GraphHopper is
+    // choosing bad routes. Only allow this fallback explicitly during emergency use.
     if (process.env.ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK === "true") {
       const plainCandidates = await fetchGraphHopperCandidate({
         apiKey,
         points,
         sportId,
-        profile: config.providerProfiles?.[0] || "foot",
-        preference: "graphhopper-foot",
-        customModel: null,
-        alternativeRoute: null,
+        profile: "foot",
+        preference: "running-foot",
+        useCustomModel: false,
       });
 
       if (plainCandidates.length) return plainCandidates;
@@ -541,12 +592,11 @@ export async function POST(request) {
     } catch (error) {
       errors.push(`graphhopper: ${error?.message || "failed"}`);
 
-      if (process.env.ALLOW_ROUTE_PROVIDER_FALLBACK === "true") {
-        try {
-          candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
-        } catch (orsError) {
-          errors.push(`ors-fallback: ${orsError?.message || "failed"}`);
-        }
+      // Keep the routebuilder usable during local setup or if GraphHopper has a temporary outage.
+      try {
+        candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
+      } catch (orsError) {
+        errors.push(`ors-fallback: ${orsError?.message || "failed"}`);
       }
     }
   } else {
@@ -567,15 +617,18 @@ export async function POST(request) {
   candidates.sort((a, b) => {
     const isRunning = normalizedSportId === "running";
 
-    if (isRunning && a.provider === "graphhopper" && b.provider === "graphhopper") {
-      // Provider-first: let GraphHopper's custom_model decide the best Running route.
-      // Endurance quality remains informational and does not steer the selected route.
-      const weightA = Number.isFinite(Number(a.provider_weight)) ? Number(a.provider_weight) : Number(a.distance || 0);
-      const weightB = Number.isFinite(Number(b.provider_weight)) ? Number(b.provider_weight) : Number(b.distance || 0);
-      return weightA - weightB;
-    }
-
     if (isRunning) {
+      // For Running Road, do not let the shortest 1.00x route win when a slightly
+      // longer candidate has clearly better surface/waytype quality.
+      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
+      if (Math.abs(unsuitableDiff) >= 8) return unsuitableDiff;
+
+      const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
+      if (Math.abs(unknownDiff) >= 10) return unknownDiff;
+
+      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+      if (Math.abs(scoreDiff) > 3) return scoreDiff;
+
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
@@ -614,8 +667,7 @@ export async function POST(request) {
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
         candidates: candidates.length,
-        alternative_route: normalizedSportId === "running" ? getSportRouteProfile(normalizedSportId).graphhopperAlternativeRoute || null : null,
-        custom_model_applied: normalizedSportId === "running" ? Boolean(getSportRouteProfile(normalizedSportId).graphhopperCustomModel) : false,
+        alternative_route: normalizedSportId === "running" ? GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE : null,
         provider: best.provider || provider,
       },
       routed_at: new Date().toISOString(),
