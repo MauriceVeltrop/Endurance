@@ -115,13 +115,6 @@ function percentMap(counts) {
   );
 }
 
-function weightedPercentScore(percentMapValue, weights = {}) {
-  return Object.entries(percentMapValue || {}).reduce((total, [label, percent]) => {
-    const weight = Number(weights[label] || 0);
-    return total + (Number(percent || 0) / 100) * weight;
-  }, 0);
-}
-
 function scoreCandidate({ feature, points, sportId, profile, preference }) {
   const config = getSportRouteProfile(sportId);
   const geometry = toPoints(feature?.geometry?.coordinates);
@@ -151,50 +144,17 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
   }
 
   for (const [waytype, pct] of Object.entries(wayPercent)) {
-    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.3);
+    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.35);
     if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.45);
   }
 
   suitable = Math.min(100, suitable);
   unsuitable = Math.min(100, unsuitable);
 
-  const ascent = routeAscentMeters(geometry);
-  const distanceKm = Math.max(0.001, distance / 1000);
-  const ascentPerKm = ascent / distanceKm;
-
-  const surfaceScore = weightedPercentScore(surfacePercent, config.surfaceWeights);
-  const waytypeScore = weightedPercentScore(wayPercent, config.waytypeWeights);
-
-  // A sport route may deliberately be longer when the surface/terrain is better.
-  // We only start punishing strongly after the configured sport-specific detour limit.
-  const freeDetour = Number(config.maxDetourFactor || 1.25);
-  const detourOverFreeLimit = Math.max(0, detour - freeDetour);
-  const mildDetourPenalty = Math.max(0, detour - 1) * Number(config.detourPenaltyScale || 28) * 0.35;
-  const hardDetourPenalty = detourOverFreeLimit * Number(config.detourPenaltyScale || 28) * 2.2;
-  const detourPenalty = mildDetourPenalty + hardDetourPenalty;
-
-  const unknownPenalty = unknown * 0.18;
-  const unsuitablePenalty = unsuitable * 0.45;
-
-  const elevationBonus = Math.min(
-    Number(config.maxElevationBonus || 0),
-    Math.max(0, ascentPerKm - 6) * Number(config.elevationBonusPerKm || 0)
-  );
-
-  const score = Math.max(
-    0,
-    Math.min(
-      100,
-      58 +
-        surfaceScore +
-        waytypeScore +
-        suitable * 0.12 +
-        elevationBonus -
-        detourPenalty -
-        unknownPenalty -
-        unsuitablePenalty
-    )
-  );
+  const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
+  const unknownPenalty = Math.round(unknown * 0.35);
+  const unsuitablePenalty = Math.round(unsuitable * 0.8);
+  const score = Math.max(0, Math.min(100, 70 + suitable * 0.45 - detourPenalty - unknownPenalty - unsuitablePenalty));
 
   return {
     profile,
@@ -202,30 +162,20 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
     points: geometry,
     distance,
     duration,
-    elevation_gain_m: ascent,
+    elevation_gain_m: routeAscentMeters(geometry),
     score: Math.round(score),
     detour,
-    ascent_per_km: Math.round(ascentPerKm * 10) / 10,
     surfacePercent,
     wayPercent,
     suitable_percent: suitable,
     unsuitable_percent: unsuitable,
     unknown_percent: unknown,
-    score_breakdown: {
-      surface_score: Math.round(surfaceScore * 10) / 10,
-      waytype_score: Math.round(waytypeScore * 10) / 10,
-      elevation_bonus: Math.round(elevationBonus * 10) / 10,
-      detour_penalty: Math.round(detourPenalty * 10) / 10,
-      unknown_penalty: Math.round(unknownPenalty * 10) / 10,
-      unsuitable_penalty: Math.round(unsuitablePenalty * 10) / 10,
-    },
   };
 }
 
 async function fetchCandidate({ url, apiKey, points, preference, sportId, profile }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-  const config = getSportRouteProfile(sportId);
 
   try {
     const payload = {
@@ -237,9 +187,9 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
       format: "geojson",
       extra_info: ["waytype", "surface"],
       alternative_routes: {
-        target_count: 3,
-        weight_factor: Number(config.alternativeWeightFactor || 1.5),
-        share_factor: Number(config.alternativeShareFactor || 0.55),
+        target_count: 2,
+        weight_factor: 1.4,
+        share_factor: 0.6,
       },
     };
 
@@ -341,12 +291,11 @@ export async function POST(request) {
         }
       }
 
-      // Avoid too many provider calls when we already have a very good sport-specific segment.
-      const earlyAcceptScore = Number(getSportRouteProfile(sportId).earlyAcceptScore || 92);
-      if (candidates.some((candidate) => candidate.score >= earlyAcceptScore)) break;
+      // Avoid too many provider calls when we already have a good segment.
+      if (candidates.some((candidate) => candidate.score >= 82)) break;
     }
 
-    if (candidates.some((candidate) => candidate.score >= Number(getSportRouteProfile(sportId).earlyAcceptScore || 92))) break;
+    if (candidates.some((candidate) => candidate.score >= 82)) break;
   }
 
   if (!candidates.length) {
@@ -387,10 +336,8 @@ export async function POST(request) {
         unsuitable_percent: best.unsuitable_percent,
         unknown_percent: best.unknown_percent,
         detour: Number(best.detour.toFixed(2)),
-        ascent_per_km: best.ascent_per_km,
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
-        score_breakdown: best.score_breakdown,
         candidates: candidates.length,
       },
       routed_at: new Date().toISOString(),
