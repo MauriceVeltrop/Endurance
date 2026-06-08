@@ -156,8 +156,10 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   let unknown = 0;
 
   for (const [surface, pct] of Object.entries(surfacePercent)) {
-    if (surface === "unknown") unknown += pct;
-    else if (suitableSurfaces.has(surface)) suitable += pct;
+    if (surface === "unknown" || surface === "missing") {
+      unknown += pct;
+      unsuitable += Math.round(pct * 0.55);
+    } else if (suitableSurfaces.has(surface)) suitable += pct;
     else if (acceptableSurfaces.has(surface)) acceptable += pct;
     else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
   }
@@ -223,7 +225,7 @@ function scoreGraphHopperCandidate({ path, points, sportId, profile, preference 
   const suitableSurfaces = new Set(config.suitableSurfaces || []);
   const acceptableSurfaces = new Set(config.acceptableSurfaces || []);
   const unsuitableSurfaces = new Set(config.unsuitableSurfaces || []);
-  const preferredRoadClasses = new Set(["footway", "pedestrian", "living_street", "residential", "cycleway"]);
+  const preferredRoadClasses = new Set(["footway", "cycleway", "pedestrian", "living_street", "residential"]);
   const poorRoadClasses = new Set(["motorway", "trunk", "primary", "secondary", "tertiary", "track", "path", "service", "steps"]);
 
   let suitable = 0;
@@ -232,8 +234,10 @@ function scoreGraphHopperCandidate({ path, points, sportId, profile, preference 
   let unknown = 0;
 
   for (const [surface, pct] of Object.entries(surfacePercent)) {
-    if (surface === "unknown") unknown += pct;
-    else if (suitableSurfaces.has(surface)) suitable += pct;
+    if (surface === "unknown" || surface === "missing") {
+      unknown += pct;
+      unsuitable += Math.round(pct * 0.55);
+    } else if (suitableSurfaces.has(surface)) suitable += pct;
     else if (acceptableSurfaces.has(surface)) acceptable += pct;
     else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
   }
@@ -343,15 +347,15 @@ const RUNNING_CUSTOM_MODEL = {
     { if: "road_class == SECONDARY", multiply_by: "0.28" },
     { if: "road_class == TERTIARY", multiply_by: "0.55" },
 
-    { if: "road_class == FOOTWAY", multiply_by: "1.85" },
-    { if: "road_class == CYCLEWAY", multiply_by: "1.75" },
-    { if: "road_class == PEDESTRIAN", multiply_by: "1.65" },
-    { if: "road_class == LIVING_STREET", multiply_by: "1.55" },
-    { if: "road_class == RESIDENTIAL", multiply_by: "1.45" },
+    { if: "road_class == FOOTWAY", multiply_by: "3.00" },
+    { if: "road_class == CYCLEWAY", multiply_by: "2.50" },
+    { if: "road_class == RESIDENTIAL", multiply_by: "2.00" },
+    { if: "road_class == LIVING_STREET", multiply_by: "2.00" },
+    { if: "road_class == PEDESTRIAN", multiply_by: "1.80" },
     { if: "road_class == SERVICE", multiply_by: "0.35" },
-    { if: "road_class == PATH", multiply_by: "0.15" },
-    { if: "road_class == TRACK", multiply_by: "0.005" },
-    { if: "road_class == STEPS", multiply_by: "0.005" },
+    { if: "road_class == PATH", multiply_by: "0.05" },
+    { if: "road_class == TRACK", multiply_by: "0.01" },
+    { if: "road_class == STEPS", multiply_by: "0.01" },
 
     { if: "road_environment == TUNNEL", multiply_by: "0.05" },
     { if: "road_environment == BRIDGE", multiply_by: "0.85" },
@@ -362,7 +366,7 @@ const RUNNING_CUSTOM_MODEL = {
     { if: "surface == PAVED", multiply_by: "1.45" },
     { if: "surface == PAVING_STONES", multiply_by: "1.25" },
     { if: "surface == COBBLESTONE", multiply_by: "0.45" },
-    { if: "surface == MISSING", multiply_by: "0.15" },
+    { if: "surface == MISSING", multiply_by: "0.03" },
 
     { if: "surface == COMPACTED", multiply_by: "0.08" },
     { if: "surface == FINE_GRAVEL", multiply_by: "0.04" },
@@ -379,12 +383,10 @@ const RUNNING_CUSTOM_MODEL = {
     { if: "surface == ASPHALT", limit_to: "13" },
     { if: "surface == CONCRETE", limit_to: "12" },
     { if: "surface == PAVED", limit_to: "12" },
+    { if: "surface == MISSING", limit_to: "3" },
     { if: "surface == COMPACTED", limit_to: "5" },
     { if: "surface == FINE_GRAVEL", limit_to: "4" },
     { if: "surface == GRAVEL", limit_to: "3" },
-    { if: "road_class == TRACK", limit_to: "1" },
-    { if: "road_class == PATH", limit_to: "3" },
-    { if: "road_class == SERVICE", limit_to: "5" },
     { if: "surface == GROUND", limit_to: "2" },
     { if: "surface == DIRT", limit_to: "2" },
     { if: "surface == GRASS", limit_to: "2" },
