@@ -100,31 +100,31 @@ function recommendedMethodFor(sportId) {
 const SPORT_ROUTE_PROFILES = {
   running: {
     title: "Road running profile",
-    focus: "Paved, safe and fluent.",
+    focus: "Paved & fluent",
     best: "Best with GPX upload or draw mode. Wizard will prefer quiet streets, parks and paved footpaths.",
     avoid: "Avoids traffic-heavy roads and awkward stop-start routes.",
   },
   trail_running: {
     title: "Trail running profile",
-    focus: "Unpaved, forest paths and elevation.",
+    focus: "Forest & elevation",
     best: "Best with GPX upload now. Wizard will later prioritize OSM path/track/surface/sac_scale tags.",
     avoid: "Avoids too much asphalt and overly technical hiking-only terrain.",
   },
   road_cycling: {
     title: "Road cycling profile",
-    focus: "Fast asphalt and safe cycling roads.",
+    focus: "Fast asphalt",
     best: "Best with GPX upload or draw mode. Wizard will later prefer cycling infrastructure and quiet roads.",
     avoid: "Avoids unpaved tracks and footpaths.",
   },
   gravel_cycling: {
     title: "Gravel profile",
-    focus: "Gravel, compacted surfaces and forest roads.",
+    focus: "Gravel & forest roads",
     best: "Best with GPX upload now. Wizard will later use surface=gravel/compacted/fine_gravel.",
     avoid: "Avoids technical MTB-only trails and busy roads.",
   },
   mountain_biking: {
     title: "MTB profile",
-    focus: "Technical trails and MTB networks.",
+    focus: "Singletrack & technical",
     best: "Best with GPX upload now. Wizard will later use mtb:scale, singletrack and official networks.",
     avoid: "Avoids boring road-only routes.",
   },
@@ -170,37 +170,6 @@ function sportIconFor(sportId) {
   };
 
   return map[sportId] || "/training-images/training.svg";
-}
-
-
-function sportImageFor(sportId) {
-  const map = {
-    running: "/sports/running.png",
-    trail_running: "/sports/trail-running.png",
-    road_cycling: "/sports/road-cycling.png",
-    gravel_cycling: "/training-images/routes-hero-map.png",
-    mountain_biking: "/training-images/routes-hero-mobile.png",
-    walking: "/sports/walking.png",
-    kayaking: "/training-images/routes-hero-map.png",
-    swimming: "/training-images/routes-hero-map.png",
-  };
-
-  return map[sportId] || "/training-images/routes-hero-mobile.png";
-}
-
-function sportShortLabelFor(sportId) {
-  const map = {
-    running: "Run",
-    trail_running: "Trail",
-    road_cycling: "Road",
-    gravel_cycling: "Gravel",
-    mountain_biking: "MTB",
-    walking: "Walk",
-    kayaking: "Kayak",
-    swimming: "Swim",
-  };
-
-  return map[sportId] || getSportLabel(sportId);
 }
 
 function routeProfileFor(sportId) {
@@ -760,11 +729,8 @@ export default function NewRoutePage() {
     <main className="endurance-page create-route-v2-page route-step-page">
       <AppHeader active="routes" />
 
-      <section
-        className="endurance-shell training-hero endurance-card create-route-v2-hero route-step-hero route-create-visual-hero"
-        style={{ "--routeHeroImage": `url(${sportImageFor(form.sport_id || availableSports[0]?.id || "running")})` }}
-      >
-        <div className="route-create-hero-overlay">
+      <section className="endurance-shell training-hero endurance-card create-route-v2-hero route-step-hero">
+        <div>
           <p className="eyebrow">Create route</p>
           <h1>
             Build a route
@@ -772,14 +738,8 @@ export default function NewRoutePage() {
             for your sport<span>.</span>
           </h1>
           <p>
-            Choose a sport, then create it by drawing, uploading GPX or using the wizard.
+            Choose a preferred sport first, then choose how you want to create the route.
           </p>
-          {form.sport_id ? (
-            <div className="route-create-hero-selected">
-              <img src={sportIconFor(form.sport_id)} alt="" />
-              <span>{getSportLabel(form.sport_id)}</span>
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -827,28 +787,25 @@ export default function NewRoutePage() {
                 </div>
               </div>
 
-              <div className="create-route-sport-grid compact sport-button-list route-sport-visual-grid">
+              <div className="create-route-sport-grid compact sport-button-list">
                 {availableSports.map((sport) => (
                   <button
                     key={sport.id}
                     type="button"
-                    className={form.sport_id === sport.id ? "route-sport-button route-sport-tile active" : "route-sport-button route-sport-tile"}
-                    style={{ "--sportImage": `url(${sportImageFor(sport.id)})` }}
+                    className={form.sport_id === sport.id ? "route-sport-button active" : "route-sport-button"}
                     onClick={() => {
                       updateForm("sport_id", sport.id);
                       setCurrentStep(2);
                     }}
                   >
-                    <span className="route-sport-tile-bg" aria-hidden="true" />
-                    <span className="route-sport-tile-content">
-                      <span className="route-sport-icon" aria-hidden="true">
-                        <img src={sportIconFor(sport.id)} alt="" />
-                      </span>
-                      <span className="route-sport-copy">
-                        <strong>{sportShortLabelFor(sport.id)}</strong>
-                        <small>{routeProfileFor(sport.id).focus}</small>
-                      </span>
+                    <span className="route-sport-icon" aria-hidden="true">
+                      <img src={sportIconFor(sport.id)} alt="" />
                     </span>
+                    <span className="route-sport-copy">
+                      <strong>{getSportLabel(sport.id)}</strong>
+                      <small>{routeProfileFor(sport.id).focus}</small>
+                    </span>
+                    <span className="route-sport-arrow" aria-hidden="true">›</span>
                   </button>
                 ))}
               </div>
