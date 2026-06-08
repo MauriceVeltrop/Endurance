@@ -172,6 +172,35 @@ function sportIconFor(sportId) {
   return map[sportId] || "/training-images/training.svg";
 }
 
+
+function routeSportImageFor(sportId) {
+  const map = {
+    running: "/route-images/running.jpg",
+    trail_running: "/route-images/trail-running.jpg",
+    road_cycling: "/route-images/road-cycling.jpg",
+    gravel_cycling: "/route-images/gravel-cycling.jpg",
+    mountain_biking: "/route-images/mountain-biking.jpg",
+    walking: "/route-images/walking.jpg",
+    kayaking: "/route-images/kayaking.jpg",
+    swimming: "/route-images/swimming.jpg",
+  };
+
+  return map[sportId] || "/route-images/running.jpg";
+}
+
+function routeSportShortLabel(sportId) {
+  const map = {
+    running: "Run",
+    trail_running: "Trail",
+    road_cycling: "Road",
+    gravel_cycling: "Gravel",
+    mountain_biking: "MTB",
+  };
+
+  return map[sportId] || getSportLabel(sportId);
+}
+
+
 function routeProfileFor(sportId) {
   return (
     SPORT_ROUTE_PROFILES[sportId] || {
@@ -787,27 +816,35 @@ export default function NewRoutePage() {
                 </div>
               </div>
 
-              <div className="create-route-sport-grid compact sport-button-list">
-                {availableSports.map((sport) => (
-                  <button
-                    key={sport.id}
-                    type="button"
-                    className={form.sport_id === sport.id ? "route-sport-button active" : "route-sport-button"}
-                    onClick={() => {
-                      updateForm("sport_id", sport.id);
-                      setCurrentStep(2);
-                    }}
-                  >
-                    <span className="route-sport-icon" aria-hidden="true">
-                      <img src={sportIconFor(sport.id)} alt="" />
-                    </span>
-                    <span className="route-sport-copy">
-                      <strong>{getSportLabel(sport.id)}</strong>
-                      <small>{routeProfileFor(sport.id).focus}</small>
-                    </span>
-                    <span className="route-sport-arrow" aria-hidden="true">›</span>
-                  </button>
-                ))}
+              <div className="route-sport-photo-grid">
+                {availableSports.map((sport) => {
+                  const isSelected = form.sport_id === sport.id;
+                  const sportProfile = routeProfileFor(sport.id);
+
+                  return (
+                    <button
+                      key={sport.id}
+                      type="button"
+                      className={isSelected ? "route-sport-photo-card selected" : "route-sport-photo-card"}
+                      style={{ "--sport-bg": `url(${routeSportImageFor(sport.id)})` }}
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        updateForm("sport_id", sport.id);
+                        setCurrentStep(2);
+                      }}
+                    >
+                      <span className="route-sport-photo-overlay" aria-hidden="true" />
+                      <span className="route-sport-photo-icon" aria-hidden="true">
+                        <img src={sportIconFor(sport.id)} alt="" />
+                      </span>
+                      <span className="route-sport-photo-copy">
+                        <strong>{routeSportShortLabel(sport.id)}</strong>
+                        <small>{sportProfile.focus}</small>
+                      </span>
+                      {isSelected ? <span className="route-sport-selected-check" aria-hidden="true">✓</span> : null}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           ) : null}
