@@ -661,16 +661,29 @@ export default function NewRoutePage() {
     setMessage("");
 
     try {
+      const finalPoints = normalizeRoutePoints(form.route_points);
+      const finalMetrics = calculateRouteMetrics(finalPoints);
+      const finalRoutePoints = form.route_points
+        ? {
+            ...form.route_points,
+            distance_km: finalMetrics.distance_km || form.route_points.distance_km || null,
+            elevation_gain_m: finalMetrics.elevation_gain_m || 0,
+            elevation_loss_m: finalMetrics.elevation_loss_m || 0,
+            max_elevation_m: finalMetrics.max_elevation_m || null,
+            elevation_quality: finalMetrics.elevation_quality || null,
+          }
+        : null;
+
       const payload = {
         creator_id: profile.id,
         sport_id: form.sport_id,
         title: form.title.trim(),
         description: form.description || "",
         visibility: form.visibility || "team",
-        distance_km: form.distance_km ? Number(form.distance_km) : null,
-        elevation_gain_m: form.elevation_gain_m ? Math.round(Number(form.elevation_gain_m)) : null,
+        distance_km: finalMetrics.distance_km || (form.distance_km ? Number(form.distance_km) : null),
+        elevation_gain_m: Number.isFinite(Number(finalMetrics.elevation_gain_m)) ? Math.round(Number(finalMetrics.elevation_gain_m)) : null,
         gpx_file_url: form.gpx_file_url || null,
-        route_points: form.route_points || null,
+        route_points: finalRoutePoints,
       };
 
       const { data, error } = await supabase
