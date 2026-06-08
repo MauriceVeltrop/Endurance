@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   getProviderProfiles,
   getRoutingPreferences,
+  getRoutingProvider,
   getSportRouteProfile,
   normalizeSportId,
   SURFACE_LABELS,
@@ -11,13 +12,16 @@ import {
 
 export const runtime = "nodejs";
 
-const ROUTING_BASES = [
+const ORS_ROUTING_BASES = [
   process.env.ORS_API_BASE_URL,
   process.env.OPENROUTE_API_BASE_URL,
   "https://api.openrouteservice.org/v2/directions",
   "https://api.heigit.org/routing/2/directions",
   "https://api.heigit.org/v2/directions",
 ].filter(Boolean);
+
+const GRAPHHOPPER_ROUTE_URL =
+  process.env.GRAPHHOPPER_ROUTE_URL || "https://graphhopper.com/api/1/route";
 
 const PROVIDER_TIMEOUT_MS = 14000;
 
@@ -33,7 +37,7 @@ function normalizePoints(points) {
   return (Array.isArray(points) ? points : []).map(normalizePoint).filter(Boolean);
 }
 
-function providerUrl(base, profile) {
+function orsProviderUrl(base, profile) {
   const cleanBase = String(base || "").replace(/\/+$/, "");
   return `${cleanBase}/${profile}/geojson`;
 }
@@ -107,6 +111,17 @@ function decodeExtraInfo(values, labels) {
   return result;
 }
 
+function decodeGraphHopperDetails(values) {
+  const result = {};
+  for (const row of Array.isArray(values) ? values : []) {
+    const rawValue = Array.isArray(row) ? row[2] : null;
+    const amount = Array.isArray(row) ? Math.max(0, Number(row[1]) - Number(row[0])) : 0;
+    const label = String(rawValue || "unknown").toLowerCase();
+    result[label] = (result[label] || 0) + amount;
+  }
+  return result;
+}
+
 function percentMap(counts) {
   const total = Object.values(counts || {}).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
   return Object.fromEntries(
@@ -116,7 +131,7 @@ function percentMap(counts) {
   );
 }
 
-function scoreCandidate({ feature, points, sportId, profile, preference }) {
+function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const config = getSportRouteProfile(sportId);
   const geometry = toPoints(feature?.geometry?.coordinates);
   const distance = Number(feature?.properties?.summary?.distance || routeDistanceMeters(geometry));
@@ -175,6 +190,7 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
   }
 
   return {
+    provider: "ors",
     profile,
     preference,
     points: geometry,
@@ -191,7 +207,76 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
   };
 }
 
-async function fetchCandidate({ url, apiKey, points, preference, sportId, profile }) {
+function scoreGraphHopperCandidate({ path, points, sportId, profile, preference }) {
+  const config = getSportRouteProfile(sportId);
+  const geometry = toPoints(path?.points?.coordinates);
+  const distance = Number(path?.distance || routeDistanceMeters(geometry));
+  const duration = Number.isFinite(Number(path?.time)) ? Number(path.time) / 1000 : 0;
+  const direct = Math.max(1, routeDistanceMeters(points));
+  const detour = distance / direct;
+
+  const surfacePercent = percentMap(decodeGraphHopperDetails(path?.details?.surface));
+  const roadClassPercent = percentMap(decodeGraphHopperDetails(path?.details?.road_class));
+  const roadEnvironmentPercent = percentMap(decodeGraphHopperDetails(path?.details?.road_environment));
+  const wayPercent = { ...roadClassPercent, ...roadEnvironmentPercent };
+
+  const suitableSurfaces = new Set(config.suitableSurfaces || []);
+  const acceptableSurfaces = new Set(config.acceptableSurfaces || []);
+  const unsuitableSurfaces = new Set(config.unsuitableSurfaces || []);
+  const preferredRoadClasses = new Set(["footway", "path", "pedestrian", "living_street", "residential", "service", "cycleway"]);
+  const poorRoadClasses = new Set(["motorway", "trunk", "primary", "secondary", "tertiary"]);
+
+  let suitable = 0;
+  let acceptable = 0;
+  let unsuitable = 0;
+  let unknown = 0;
+
+  for (const [surface, pct] of Object.entries(surfacePercent)) {
+    if (surface === "unknown") unknown += pct;
+    else if (suitableSurfaces.has(surface)) suitable += pct;
+    else if (acceptableSurfaces.has(surface)) acceptable += pct;
+    else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
+  }
+
+  for (const [roadClass, pct] of Object.entries(roadClassPercent)) {
+    if (preferredRoadClasses.has(roadClass)) suitable += Math.round(pct * 0.25);
+    if (poorRoadClasses.has(roadClass)) unsuitable += Math.round(pct * 0.7);
+  }
+
+  for (const [environment, pct] of Object.entries(roadEnvironmentPercent)) {
+    if (["park", "forest"].includes(environment)) suitable += Math.round(pct * 0.2);
+  }
+
+  suitable = Math.min(100, suitable);
+  acceptable = Math.min(100, acceptable);
+  unsuitable = Math.min(100, unsuitable);
+
+  const maxDetour = Number(config.maxDetourFactor || 1.6);
+  const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 14) : 10 + (detour - maxDetour) * 85;
+  const score = Math.max(
+    0,
+    Math.min(100, 48 + suitable * 0.9 + acceptable * 0.3 - unsuitable * 0.9 - unknown * 0.15 - detourPenalty)
+  );
+
+  return {
+    provider: "graphhopper",
+    profile,
+    preference,
+    points: geometry,
+    distance,
+    duration,
+    elevation_gain_m: Number.isFinite(Number(path?.ascend)) ? Math.round(Number(path.ascend)) : routeAscentMeters(geometry),
+    score: Math.round(score),
+    detour,
+    surfacePercent,
+    wayPercent,
+    suitable_percent: suitable,
+    unsuitable_percent: unsuitable,
+    unknown_percent: unknown,
+  };
+}
+
+async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
@@ -240,7 +325,77 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
     const data = await response.json();
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
-      .map((feature) => scoreCandidate({ feature, points, sportId, profile, preference }))
+      .map((feature) => scoreOrsCandidate({ feature, points, sportId, profile, preference }))
+      .filter((candidate) => candidate.points.length >= 2);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const RUNNING_CUSTOM_MODEL = {
+  priority: [
+    { if: "road_class == MOTORWAY", multiply_by: "0" },
+    { if: "road_class == TRUNK", multiply_by: "0.05" },
+    { if: "road_class == PRIMARY", multiply_by: "0.25" },
+    { if: "road_class == SECONDARY", multiply_by: "0.45" },
+    { if: "road_class == FOOTWAY", multiply_by: "1.35" },
+    { if: "road_class == PATH", multiply_by: "1.25" },
+    { if: "road_class == PEDESTRIAN", multiply_by: "1.25" },
+    { if: "road_environment == PARK", multiply_by: "1.25" },
+    { if: "surface == ASPHALT", multiply_by: "1.12" },
+    { if: "surface == PAVED", multiply_by: "1.08" },
+    { if: "surface == CONCRETE", multiply_by: "1.06" },
+    { if: "surface == SAND", multiply_by: "0.35" },
+    { if: "surface == MUD", multiply_by: "0.35" },
+  ],
+};
+
+async function fetchGraphHopperCandidate({
+  apiKey,
+  points,
+  sportId,
+  profile = "foot",
+  preference = "running",
+  useCustomModel = true,
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+
+  try {
+    const url = `${GRAPHHOPPER_ROUTE_URL}?key=${encodeURIComponent(apiKey)}`;
+    const payload = {
+      profile,
+      points: points.map((point) => [point.lon, point.lat]),
+      elevation: true,
+      instructions: false,
+      calc_points: true,
+      points_encoded: false,
+      details: ["road_class", "road_environment", "surface"],
+    };
+
+    if (useCustomModel) {
+      payload.custom_model = RUNNING_CUSTOM_MODEL;
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`${response.status} ${text.slice(0, 180)}`);
+    }
+
+    const data = await response.json();
+    const paths = Array.isArray(data?.paths) ? data.paths : [];
+    return paths
+      .map((path) => scoreGraphHopperCandidate({ path, points, sportId, profile, preference }))
       .filter((candidate) => candidate.points.length >= 2);
   } finally {
     clearTimeout(timeout);
@@ -273,6 +428,87 @@ function fallbackResponse({ points, reason = "Routing provider could not snap th
   });
 }
 
+function getOpenRouteServiceApiKey() {
+  return (
+    process.env.OPENROUTE_API_KEY ||
+    process.env.OPENROUTESERVICE_API_KEY ||
+    process.env.ORS_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENROUTE_API_KEY
+  );
+}
+
+function getGraphHopperApiKey() {
+  return process.env.GRAPHHOPPER_API_KEY || process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY;
+}
+
+async function collectGraphHopperCandidates({ points, sportId }) {
+  const apiKey = getGraphHopperApiKey();
+  if (!apiKey) {
+    throw new Error("GraphHopper API key is missing.");
+  }
+
+  try {
+    return await fetchGraphHopperCandidate({
+      apiKey,
+      points,
+      sportId,
+      profile: "foot",
+      preference: "running-custom",
+      useCustomModel: true,
+    });
+  } catch (error) {
+    // Some GraphHopper plans/regions can reject a custom_model field.
+    // Retry the same foot route without the custom model before falling back to ORS.
+    const plainCandidates = await fetchGraphHopperCandidate({
+      apiKey,
+      points,
+      sportId,
+      profile: "foot",
+      preference: "running-foot",
+      useCustomModel: false,
+    });
+
+    if (plainCandidates.length) return plainCandidates;
+    throw error;
+  }
+}
+
+async function collectOrsCandidates({ points, sportId }) {
+  const apiKey = getOpenRouteServiceApiKey();
+  if (!apiKey) {
+    throw new Error("OpenRouteService API key is missing.");
+  }
+
+  const profiles = getProviderProfiles(sportId);
+  const preferences = getRoutingPreferences(sportId);
+  const candidates = [];
+  const errors = [];
+
+  for (const profile of profiles) {
+    for (const preference of preferences) {
+      for (const base of ORS_ROUTING_BASES) {
+        try {
+          const url = orsProviderUrl(base, profile);
+          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
+          candidates.push(...result);
+        } catch (error) {
+          errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
+        }
+      }
+
+      if (candidates.some((candidate) => candidate.score >= 82)) break;
+    }
+
+    if (candidates.some((candidate) => candidate.score >= 82)) break;
+  }
+
+  if (!candidates.length && errors.length) {
+    throw new Error(errors.slice(0, 2).join(" | "));
+  }
+
+  return candidates;
+}
+
 export async function POST(request) {
   let body;
 
@@ -291,46 +527,36 @@ export async function POST(request) {
 
   // This endpoint is intentionally segment-first. Long routes must be sent as A→B calls.
   const segment = [points[0], points[points.length - 1]];
-
-  const apiKey =
-    process.env.OPENROUTE_API_KEY ||
-    process.env.OPENROUTESERVICE_API_KEY ||
-    process.env.ORS_API_KEY ||
-    process.env.NEXT_PUBLIC_OPENROUTE_API_KEY;
-
-  if (!apiKey) {
-    return fallbackResponse({ points: segment, reason: "Routing key is missing." });
-  }
-
   const normalizedSportId = normalizeSportId(sportId);
-  const profiles = normalizedSportId === "running" ? ["foot-walking"] : getProviderProfiles(sportId);
-  const preferences = normalizedSportId === "running" ? ["recommended"] : getRoutingPreferences(sportId);
+  const provider = getRoutingProvider(normalizedSportId);
   const errors = [];
-  const candidates = [];
+  let candidates = [];
 
-  for (const profile of profiles) {
-    for (const preference of preferences) {
-      for (const base of ROUTING_BASES) {
-        try {
-          const url = providerUrl(base, profile);
-          const result = await fetchCandidate({ url, apiKey, points: segment, preference, sportId, profile });
-          candidates.push(...result);
-        } catch (error) {
-          errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
-        }
+  if (provider === "graphhopper") {
+    try {
+      candidates = await collectGraphHopperCandidates({ points: segment, sportId: normalizedSportId });
+    } catch (error) {
+      errors.push(`graphhopper: ${error?.message || "failed"}`);
+
+      // Keep the routebuilder usable during local setup or if GraphHopper has a temporary outage.
+      try {
+        candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
+      } catch (orsError) {
+        errors.push(`ors-fallback: ${orsError?.message || "failed"}`);
       }
-
-      // Avoid too many provider calls when we already have a good segment.
-      if (candidates.some((candidate) => candidate.score >= 82)) break;
     }
-
-    if (candidates.some((candidate) => candidate.score >= 82)) break;
+  } else {
+    try {
+      candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
+    } catch (error) {
+      errors.push(`ors: ${error?.message || "failed"}`);
+    }
   }
 
   if (!candidates.length) {
     return fallbackResponse({
       points: segment,
-      reason: errors.slice(0, 2).join(" | ") || "Routing provider could not snap this segment.",
+      reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
     });
   }
 
@@ -342,15 +568,17 @@ export async function POST(request) {
 
   const best = candidates[0];
   const distance = routeDistanceMeters(best.points);
-  const ascent = routeAscentMeters(best.points);
+  const ascent = Number.isFinite(Number(best.elevation_gain_m)) ? Number(best.elevation_gain_m) : routeAscentMeters(best.points);
 
   return NextResponse.json({
     ok: true,
     routed: true,
+    provider: best.provider || provider,
     profile: best.profile,
     preference: best.preference,
     route_points: {
-      source: "ors-segment",
+      source: `${best.provider || provider}-segment`,
+      provider: best.provider || provider,
       provider_profile: best.profile,
       preference: best.preference,
       points: best.points,
@@ -368,6 +596,7 @@ export async function POST(request) {
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
         candidates: candidates.length,
+        provider: best.provider || provider,
       },
       routed_at: new Date().toISOString(),
     },
