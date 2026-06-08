@@ -99,38 +99,6 @@ function toPoints(coords) {
 }
 
 
-
-function decodeExtraSummary(summary, labels) {
-  const result = {};
-  for (const item of Array.isArray(summary) ? summary : []) {
-    const label = labels?.[item?.value] || "unknown";
-    const meters = Number(item?.distance) || 0;
-    result[label] = (result[label] || 0) + meters;
-  }
-  return result;
-}
-
-function getOrsExtra(extra, keys = []) {
-  for (const key of keys) {
-    if (extra?.[key]) return extra[key];
-  }
-  return null;
-}
-
-function buildOrsExtraBreakdown(extra, labels, geometryPoints = []) {
-  if (!extra) return {};
-
-  const fromSummary = decodeExtraSummary(extra.summary, labels);
-  const summaryTotal = Object.values(fromSummary).reduce((sum, value) => sum + (Number(value) || 0), 0);
-  if (summaryTotal > 0) return fromSummary;
-
-  if (typeof decodeExtraInfo === "function") {
-    return decodeExtraInfo(extra.values, labels, geometryPoints);
-  }
-
-  return {};
-}
-
 function decodeExtraInfo(values, labels, geometryPoints = []) {
   const result = {};
 
@@ -171,6 +139,34 @@ function percentMap(counts) {
   );
 }
 
+
+function decodeExtraSummary(summary, labels) {
+  const result = {};
+  for (const item of Array.isArray(summary) ? summary : []) {
+    const label = labels?.[item?.value] || "unknown";
+    const meters = Number(item?.distance) || 0;
+    result[label] = (result[label] || 0) + meters;
+  }
+  return result;
+}
+
+function getOrsExtra(extra, keys = []) {
+  for (const key of keys) {
+    if (extra?.[key]) return extra[key];
+  }
+  return null;
+}
+
+function buildOrsExtraBreakdown(extra, labels, geometryPoints = []) {
+  if (!extra) return {};
+
+  const fromSummary = decodeExtraSummary(extra.summary, labels);
+  const summaryTotal = Object.values(fromSummary).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  if (summaryTotal > 0) return fromSummary;
+
+  return decodeExtraInfo(extra.values, labels, geometryPoints);
+}
+
 function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const config = getSportRouteProfile(sportId);
   const geometry = toPoints(feature?.geometry?.coordinates);
@@ -179,8 +175,18 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
-  const wayCounts = buildOrsExtraBreakdown(getOrsExtra(feature?.properties?.extras, ["waytype", "waytypes", "way_type", "way_types"]), WAYTYPE_LABELS, geometry);
-  const surfaceCounts = buildOrsExtraBreakdown(getOrsExtra(feature?.properties?.extras, ["surface", "surfaces"]), SURFACE_LABELS, geometry);
+  const extras = feature?.properties?.extras || {};
+  const wayCounts = buildOrsExtraBreakdown(
+    getOrsExtra(extras, ["waytype", "waytypes", "way_type", "way_types"]),
+    WAYTYPE_LABELS,
+    geometry
+  );
+  const surfaceCounts = buildOrsExtraBreakdown(
+    getOrsExtra(extras, ["surface", "surfaces"]),
+    SURFACE_LABELS,
+    geometry
+  );
+
   const surfacePercent = percentMap(surfaceCounts);
   const wayPercent = percentMap(wayCounts);
 
@@ -188,45 +194,79 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const acceptableSurfaces = new Set(config.acceptableSurfaces || []);
   const unsuitableSurfaces = new Set(config.unsuitableSurfaces || []);
   const suitableWaytypes = new Set(config.suitableWaytypes || []);
+  const acceptableWaytypes = new Set(config.acceptableWaytypes || []);
   const unsuitableWaytypes = new Set(config.unsuitableWaytypes || []);
+
+  let surfaceSuitable = 0;
+  let surfaceAcceptable = 0;
+  let surfaceUnsuitable = 0;
+  let surfaceUnknown = 0;
+
+  for (const [surface, pct] of Object.entries(surfacePercent)) {
+    if (surface === "unknown" || surface === "missing") surfaceUnknown += pct;
+    else if (suitableSurfaces.has(surface)) surfaceSuitable += pct;
+    else if (acceptableSurfaces.has(surface)) surfaceAcceptable += pct;
+    else if (unsuitableSurfaces.has(surface)) surfaceUnsuitable += pct;
+  }
+
+  let waySuitable = 0;
+  let wayAcceptable = 0;
+  let wayUnsuitable = 0;
+  let wayUnknown = 0;
+
+  for (const [waytype, pct] of Object.entries(wayPercent)) {
+    if (waytype === "unknown" || waytype === "missing") wayUnknown += pct;
+    else if (suitableWaytypes.has(waytype)) waySuitable += pct;
+    else if (acceptableWaytypes.has(waytype)) wayAcceptable += pct;
+    else if (unsuitableWaytypes.has(waytype)) wayUnsuitable += pct;
+  }
 
   let suitable = 0;
   let acceptable = 0;
   let unsuitable = 0;
   let unknown = 0;
-
-  for (const [surface, pct] of Object.entries(surfacePercent)) {
-    if (surface === "unknown" || surface === "missing") {
-      // Unknown surface is common in OSM/ORS data. Track it separately,
-      // but do not treat it as bad for Running by default.
-      unknown += pct;
-    } else if (suitableSurfaces.has(surface)) suitable += pct;
-    else if (acceptableSurfaces.has(surface)) acceptable += pct;
-    else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
-  }
-
-  for (const [waytype, pct] of Object.entries(wayPercent)) {
-    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.2);
-    if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.35);
-  }
-
-  suitable = Math.min(100, suitable);
-  acceptable = Math.min(100, acceptable);
-  unsuitable = Math.min(100, unsuitable);
-
   let score;
 
   if (normalizeSportId(sportId) === "running") {
-    const maxDetour = Number(config.maxDetourFactor || 1.6);
-    const pavedBonus = suitable * 1.05;
-    const acceptableBonus = acceptable * 0.35;
-    const unsuitablePenalty = unsuitable * 1.05;
-    // Keep unknown almost neutral: it means data is missing, not necessarily bad.
-    const unknownPenalty = unknown * 0.5;
-    const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 16) : 10 + (detour - maxDetour) * 90;
+    const maxDetour = Number(config.maxDetourFactor || 1.4);
 
-    score = Math.max(0, Math.min(100, 45 + pavedBonus + acceptableBonus - unsuitablePenalty - unknownPenalty - detourPenalty));
+    // Running uses waytype as the primary signal.
+    // Surface is only a correction layer when ORS/OSM actually knows the surface.
+    const wayRunnable = Math.min(100, waySuitable + wayAcceptable * 0.65);
+    const surfacePositive = Math.min(100, surfaceSuitable + surfaceAcceptable * 0.5);
+    const surfaceNegative = surfaceUnsuitable;
+
+    suitable = Math.min(100, Math.max(surfacePositive, wayRunnable));
+    acceptable = Math.min(100, wayAcceptable + surfaceAcceptable);
+    unsuitable = Math.min(100, Math.max(surfaceNegative, wayUnsuitable));
+
+    // Raw surface unknown is not route unknown when the waytype is known and runnable.
+    const knownRunnableWay = Math.min(100, waySuitable + wayAcceptable);
+    unknown = Math.max(0, Math.min(100, surfaceUnknown + wayUnknown - knownRunnableWay));
+
+    const detourPenalty = detour <= maxDetour
+      ? Math.max(0, (detour - 1) * 14)
+      : 10 + (detour - maxDetour) * 90;
+
+    score = Math.max(
+      0,
+      Math.min(
+        100,
+        35
+          + suitable * 0.85
+          + acceptable * 0.15
+          + surfacePositive * 0.15
+          - unsuitable * 1.25
+          - unknown * 0.25
+          - detourPenalty
+      )
+    );
   } else {
+    suitable = Math.min(100, surfaceSuitable + Math.round(waySuitable * 0.2));
+    acceptable = Math.min(100, surfaceAcceptable);
+    unsuitable = Math.min(100, surfaceUnsuitable + Math.round(wayUnsuitable * 0.35));
+    unknown = Math.min(100, surfaceUnknown);
+
     const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
     const unknownPenalty = Math.round(unknown * 0.35);
     const unsuitablePenalty = Math.round(unsuitable * 0.8);
@@ -245,11 +285,12 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
     detour,
     surfacePercent,
     wayPercent,
-    suitable_percent: suitable,
-    unsuitable_percent: unsuitable,
-    unknown_percent: unknown,
+    suitable_percent: Math.round(suitable),
+    unsuitable_percent: Math.round(unsuitable),
+    unknown_percent: Math.round(unknown),
   };
 }
+
 
 
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile }) {
