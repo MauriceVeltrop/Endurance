@@ -1,5 +1,6 @@
 // app/api/routes/reroute/route.js
 import { NextResponse } from "next/server";
+import { calculateRouteMetrics } from "../../../../lib/routeMetrics";
 import {
   getProviderProfiles,
   getRoutingPreferences,
@@ -60,32 +61,8 @@ function routeDistanceMeters(points) {
 }
 
 function routeAscentMeters(points) {
-  let ascent = 0;
-  let previous = null;
-
-  for (const point of points) {
-    const ele = Number(point.ele);
-    if (!Number.isFinite(ele) || ele <= 0) continue;
-    if (previous == null) {
-      previous = ele;
-      continue;
-    }
-
-    const diff = ele - previous;
-    if (Math.abs(diff) <= 2.5) {
-      previous = ele;
-      continue;
-    }
-
-    if (Math.abs(diff) > 55) {
-      continue;
-    }
-
-    if (diff > 0) ascent += diff;
-    previous = ele;
-  }
-
-  return Math.round(ascent);
+  const metrics = calculateRouteMetrics(points);
+  return Math.round(Number(metrics.elevation_gain_m || 0));
 }
 
 function toPoints(coords) {
