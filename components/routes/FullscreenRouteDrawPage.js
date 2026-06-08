@@ -7,6 +7,7 @@ import RouteDrawMap from "./RouteDrawMap";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 import { calculateRouteMetrics, estimateTimeText, normalizeRoutePoints, simplifyRoutePoints } from "../../lib/routeMetrics";
+import { buildRoutePayloadFromSegments, getControlSegments } from "../../lib/routes/routeSegmentEngine";
 
 function makeRoutePointPayload(points, source = "draw-fullscreen") {
   const normalized = normalizeRoutePoints(points);
@@ -454,6 +455,8 @@ export default function FullscreenRouteDrawPage() {
   const routeStartLookupRef = useRef("");
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
+  const segmentCacheRef = useRef(new Map());
+  const segmentSyncIdRef = useRef(0);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -467,6 +470,7 @@ export default function FullscreenRouteDrawPage() {
   const [showElevationPanel, setShowElevationPanel] = useState(false);
   const [showQualityPanel, setShowQualityPanel] = useState(false);
   const [routedPayload, setRoutedPayload] = useState(null);
+  const [routeSegments, setRouteSegments] = useState([]);
   const [routingStatus, setRoutingStatus] = useState("idle");
   const [routingError, setRoutingError] = useState("");
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -660,6 +664,159 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
+  function fallbackSegmentPayload(segment, reason = "Routing provider could not snap this segment.") {
+    const fallbackPoints = normalizeRoutePoints(segment?.control || [segment?.from, segment?.to]);
+    return {
+      ...segment,
+      geometry: fallbackPoints,
+      points: fallbackPoints,
+      routed: false,
+      status: "failed",
+      fallback_reason: reason,
+      quality: null,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  async function routeSingleSegment(segment, syncId) {
+    const cached = segmentCacheRef.current.get(segment.key);
+    if (cached?.geometry?.length >= 2) return cached;
+
+    try {
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points: segment.control,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (syncId !== segmentSyncIdRef.current) return null;
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Segment routing failed.");
+      }
+
+      const routed = data.route_points || data;
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+      if (geometry.length < 2) {
+        throw new Error("No segment geometry returned.");
+      }
+
+      const nextSegment = {
+        ...segment,
+        geometry,
+        points: geometry,
+        routed: data?.routed !== false,
+        status: data?.routed === false ? "failed" : "snapped",
+        profile: routed?.provider_profile || routed?.profile || data?.profile || null,
+        preference: routed?.preference || data?.preference || null,
+        quality: routed?.quality || routed?.route_quality || data?.route_quality || null,
+        fallback_reason: data?.routed === false ? routed?.fallback_reason || data?.warning || "Fallback geometry used." : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      segmentCacheRef.current.set(segment.key, nextSegment);
+      return nextSegment;
+    } catch (error) {
+      if (syncId !== segmentSyncIdRef.current) return null;
+      const failed = fallbackSegmentPayload(segment, error?.message || "Segment routing failed.");
+      segmentCacheRef.current.set(segment.key, failed);
+      return failed;
+    }
+  }
+
+  async function syncRouteSegments(controlPoints, { silent = true } = {}) {
+    const controls = compactControlPoints(controlPoints);
+
+    if (controls.length < 2) {
+      segmentSyncIdRef.current += 1;
+      setRouteSegments([]);
+      setRoutedPayload(null);
+      setRoutingStatus("idle");
+      return;
+    }
+
+    const syncId = segmentSyncIdRef.current + 1;
+    segmentSyncIdRef.current = syncId;
+    const definitions = getControlSegments(controls, sportId);
+    const provisional = definitions.map((segment) => segmentCacheRef.current.get(segment.key) || {
+      ...segment,
+      geometry: segment.control,
+      points: segment.control,
+      routed: false,
+      status: "pending",
+    });
+
+    setRouteSegments(provisional);
+    setRoutedPayload(buildRoutePayloadFromSegments({
+      segments: provisional,
+      controlPoints: controls,
+      source: "segmented-routing-provisional",
+      sportId,
+    }));
+    setRoutingStatus("routing");
+
+    try {
+      const routed = [];
+      for (const segment of definitions) {
+        if (syncId !== segmentSyncIdRef.current) return;
+        const result = await routeSingleSegment(segment, syncId);
+        if (!result) return;
+        routed.push(result);
+        setRouteSegments([...routed, ...definitions.slice(routed.length).map((remaining) => segmentCacheRef.current.get(remaining.key) || {
+          ...remaining,
+          geometry: remaining.control,
+          points: remaining.control,
+          routed: false,
+          status: "pending",
+        })]);
+        setRoutedPayload(buildRoutePayloadFromSegments({
+          segments: [...routed, ...definitions.slice(routed.length).map((remaining) => segmentCacheRef.current.get(remaining.key) || {
+            ...remaining,
+            geometry: remaining.control,
+            points: remaining.control,
+            routed: false,
+            status: "pending",
+          })],
+          controlPoints: controls,
+          source: "segmented-routing-progress",
+          sportId,
+        }));
+      }
+
+      if (syncId !== segmentSyncIdRef.current) return;
+
+      const payload = buildRoutePayloadFromSegments({
+        segments: routed,
+        controlPoints: controls,
+        source: "segmented-routing",
+        sportId,
+      });
+
+      setRouteSegments(routed);
+      setRoutedPayload(payload);
+      setRoutingStatus("done");
+      setRoutingError("");
+
+      const failedCount = routed.filter((segment) => segment.routed === false).length;
+      if (!silent && failedCount) {
+        setMessage(`${failedCount} segment${failedCount === 1 ? "" : "s"} could not snap and use a drawn fallback.`);
+      } else if (!silent) {
+        setMessage("");
+      }
+    } catch (error) {
+      if (syncId !== segmentSyncIdRef.current) return;
+      console.error("Segment sync failed", error);
+      setRoutingStatus("error");
+      setRoutingError(error?.message || "Could not update route segments.");
+    }
+  }
+
   async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
     const previous = normalizeRoutePoints(previousControlPoints);
     const next = compactControlPoints(nextControlPoints);
@@ -730,21 +887,21 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function handlePointsChange(nextPoints, meta = {}) {
-    const previousControlPoints = points;
     const safeControlPoints = compactControlPoints(nextPoints);
     loadedDraftRef.current = false;
     setPointsPayload(makeRoutePointPayload(safeControlPoints));
-    setRoutingStatus("idle");
     setRoutingError("");
 
     if (safeControlPoints.length < 2) {
+      segmentSyncIdRef.current += 1;
+      setRouteSegments([]);
       setRoutedPayload(null);
+      setRoutingStatus("idle");
       return;
     }
 
-    // Keep the last routed geometry visible while the debounced route request runs.
-    // Professional routebuilders avoid clearing the route on every tiny edit because
-    // that makes snapping feel slow and jumpy on mobile.
+    // Control points are the only source of truth. Geometry is derived later from
+    // A→B segments and never written back into the editable control point state.
     setRoutingStatus("routing");
   }
 
@@ -1038,8 +1195,8 @@ export default function FullscreenRouteDrawPage() {
     if (points.length < 2 || !routeSignature) return;
 
     const timeout = window.setTimeout(() => {
-      rerouteRoute({ silent: true });
-    }, 450);
+      syncRouteSegments(points, { silent: true });
+    }, 250);
 
     return () => window.clearTimeout(timeout);
   }, [routeSignature, sportId]);
