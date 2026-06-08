@@ -1,17 +1,3 @@
-const WAYTYPE_LABELS = {
-  0: "unknown",
-  1: "state_road",
-  2: "road",
-  3: "street",
-  4: "path",
-  5: "track",
-  6: "cycleway",
-  7: "footway",
-  8: "steps",
-  9: "ferry",
-  10: "construction",
-};
-
 // app/api/routes/reroute/route.js
 import { NextResponse } from "next/server";
 import {
@@ -129,6 +115,20 @@ function getOrsExtra(extra, keys = []) {
     if (extra?.[key]) return extra[key];
   }
   return null;
+}
+
+function buildOrsExtraBreakdown(extra, labels, geometryPoints = []) {
+  if (!extra) return {};
+
+  const fromSummary = decodeExtraSummary(extra.summary, labels);
+  const summaryTotal = Object.values(fromSummary).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  if (summaryTotal > 0) return fromSummary;
+
+  if (typeof decodeExtraInfo === "function") {
+    return decodeExtraInfo(extra.values, labels, geometryPoints);
+  }
+
+  return {};
 }
 
 function decodeExtraInfo(values, labels, geometryPoints = []) {
@@ -391,21 +391,6 @@ async function collectOrsCandidates({ points, sportId }) {
   }
 
   return candidates;
-}
-
-
-function buildOrsExtraBreakdown(extra, labels, geometryPoints = []) {
-  if (!extra) return {};
-
-  const fromSummary = decodeExtraSummary(extra.summary, labels);
-  const summaryTotal = Object.values(fromSummary).reduce((sum, value) => sum + (Number(value) || 0), 0);
-  if (summaryTotal > 0) return fromSummary;
-
-  if (typeof decodeExtraInfo === "function") {
-    return decodeExtraInfo(extra.values, labels, geometryPoints);
-  }
-
-  return {};
 }
 
 export async function POST(request) {
