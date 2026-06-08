@@ -103,18 +103,10 @@ function decodeExtraInfo(values, labels) {
   for (const row of Array.isArray(values) ? values : []) {
     const value = Array.isArray(row) ? row[2] : null;
     const amount = Array.isArray(row) ? Math.max(0, Number(row[1]) - Number(row[0])) : 0;
-    const label = labels?.[value] || String(value ?? "unknown").toLowerCase() || "unknown";
+    const label = labels?.[value] || "unknown";
     result[label] = (result[label] || 0) + amount;
   }
   return result;
-}
-
-function getExtraValues(extras, names = []) {
-  for (const name of names) {
-    const values = extras?.[name]?.values;
-    if (Array.isArray(values)) return values;
-  }
-  return [];
 }
 
 
@@ -135,9 +127,8 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
-  const extras = feature?.properties?.extras || {};
-  const wayCounts = decodeExtraInfo(getExtraValues(extras, ["waytypes", "waytype"]), WAYTYPE_LABELS);
-  const surfaceCounts = decodeExtraInfo(getExtraValues(extras, ["surface", "surfaces"]), SURFACE_LABELS);
+  const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
+  const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
   const surfacePercent = percentMap(surfaceCounts);
   const wayPercent = percentMap(wayCounts);
 
@@ -154,6 +145,8 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
 
   for (const [surface, pct] of Object.entries(surfacePercent)) {
     if (surface === "unknown" || surface === "missing") {
+      // Unknown surface is common in OSM/ORS data. Track it separately,
+      // but do not treat it as bad for Running by default.
       unknown += pct;
     } else if (suitableSurfaces.has(surface)) suitable += pct;
     else if (acceptableSurfaces.has(surface)) acceptable += pct;
@@ -176,7 +169,8 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
     const pavedBonus = suitable * 1.05;
     const acceptableBonus = acceptable * 0.35;
     const unsuitablePenalty = unsuitable * 1.05;
-    const unknownPenalty = unknown * 0.3;
+    // Keep unknown almost neutral: it means data is missing, not necessarily bad.
+    const unknownPenalty = unknown * 0.05;
     const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 16) : 10 + (detour - maxDetour) * 90;
 
     score = Math.max(0, Math.min(100, 45 + pavedBonus + acceptableBonus - unsuitablePenalty - unknownPenalty - detourPenalty));
@@ -381,9 +375,7 @@ export async function POST(request) {
       const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
       if (Math.abs(unsuitableDiff) >= 8) return unsuitableDiff;
 
-      const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
-      if (Math.abs(unknownDiff) >= 10) return unknownDiff;
-
+      // Unknown surface is common in OSM/ORS data and should not dominate route choice.
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) > 3) return scoreDiff;
 
