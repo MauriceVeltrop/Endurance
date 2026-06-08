@@ -25,21 +25,6 @@ const GRAPHHOPPER_ROUTE_URL =
 
 const PROVIDER_TIMEOUT_MS = 14000;
 
-const ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK =
-  String(process.env.ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK || "").toLowerCase() === "true";
-
-const DEBUG_GRAPHHOPPER_ROUTING =
-  String(process.env.DEBUG_GRAPHHOPPER_ROUTING || "").toLowerCase() === "true";
-
-function logGraphHopperDebug(label, data) {
-  if (!DEBUG_GRAPHHOPPER_ROUTING) return;
-  try {
-    console.log(`[graphhopper:${label}]`, JSON.stringify(data, null, 2));
-  } catch (_) {
-    console.log(`[graphhopper:${label}]`, data);
-  }
-}
-
 const GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE = {
   // Give GraphHopper real room to return a longer but better paved Running route.
   // max_weight_factor is the actual provider-side detour tolerance; maxDetourFactor
@@ -233,7 +218,7 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   };
 }
 
-function scoreGraphHopperCandidate({ path, points, sportId, profile, preference, customModelApplied = false }) {
+function scoreGraphHopperCandidate({ path, points, sportId, profile, preference }) {
   const config = getSportRouteProfile(sportId);
   const geometry = toPoints(path?.points?.coordinates);
   const distance = Number(path?.distance || routeDistanceMeters(geometry));
@@ -301,11 +286,6 @@ function scoreGraphHopperCandidate({ path, points, sportId, profile, preference,
     suitable_percent: suitable,
     unsuitable_percent: unsuitable,
     unknown_percent: unknown,
-    provider_meta: {
-      custom_model_applied: Boolean(customModelApplied),
-      graphhopper_weight: Number(path?.weight || 0),
-      graphhopper_transfers: Number(path?.transfers || 0),
-    },
   };
 }
 
@@ -409,17 +389,17 @@ const RUNNING_CUSTOM_MODEL = {
     { if: "surface == WOODCHIPS", multiply_by: "0.01" },
   ],
   speed: [
-    { if: "surface == ASPHALT", limit_to: 13 },
-    { if: "surface == CONCRETE", limit_to: 12 },
-    { if: "surface == PAVED", limit_to: 12 },
-    { if: "surface == MISSING", limit_to: 3 },
-    { if: "surface == COMPACTED", limit_to: 5 },
-    { if: "surface == FINE_GRAVEL", limit_to: 4 },
-    { if: "surface == GRAVEL", limit_to: 3 },
-    { if: "surface == GROUND", limit_to: 2 },
-    { if: "surface == DIRT", limit_to: 2 },
-    { if: "surface == GRASS", limit_to: 2 },
-    { if: "surface == SAND", limit_to: 2 },
+    { if: "surface == ASPHALT", limit_to: "13" },
+    { if: "surface == CONCRETE", limit_to: "12" },
+    { if: "surface == PAVED", limit_to: "12" },
+    { if: "surface == MISSING", limit_to: "3" },
+    { if: "surface == COMPACTED", limit_to: "5" },
+    { if: "surface == FINE_GRAVEL", limit_to: "4" },
+    { if: "surface == GRAVEL", limit_to: "3" },
+    { if: "surface == GROUND", limit_to: "2" },
+    { if: "surface == DIRT", limit_to: "2" },
+    { if: "surface == GRASS", limit_to: "2" },
+    { if: "surface == SAND", limit_to: "2" },
   ],
 };
 
@@ -435,7 +415,9 @@ async function fetchGraphHopperCandidate({
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
-    const url = `${GRAPHHOPPER_ROUTE_URL}?key=${encodeURIComponent(apiKey)}`;
+    const url = `${GRAPHHOPPER_ROUTE_URL}?key=${encodeURIComponent(apiKey)}${
+      useCustomModel ? "&ch.disable=true" : ""
+    }`;
     const payload = {
       profile,
       points: points.map((point) => [point.lon, point.lat]),
@@ -454,17 +436,6 @@ async function fetchGraphHopperCandidate({
       payload.custom_model = RUNNING_CUSTOM_MODEL;
     }
 
-    logGraphHopperDebug("request", {
-      profile,
-      sportId,
-      preference,
-      useCustomModel,
-      pointCount: payload.points.length,
-      alternative_route: payload.alternative_route || null,
-      details: payload.details,
-      custom_model: useCustomModel ? payload.custom_model : null,
-    });
-
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -477,30 +448,13 @@ async function fetchGraphHopperCandidate({
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      logGraphHopperDebug("error", { status: response.status, body: text.slice(0, 1200), useCustomModel });
-      throw new Error(`${response.status} ${text.slice(0, 350)}`);
+      throw new Error(`${response.status} ${text.slice(0, 180)}`);
     }
 
     const data = await response.json();
     const paths = Array.isArray(data?.paths) ? data.paths : [];
-    logGraphHopperDebug("response", {
-      useCustomModel,
-      pathCount: paths.length,
-      hints: data?.hints || null,
-      firstPath: paths[0]
-        ? {
-            distance: paths[0].distance,
-            time: paths[0].time,
-            weight: paths[0].weight,
-            details: Object.keys(paths[0].details || {}),
-          }
-        : null,
-    });
-
     return paths
-      .map((path) =>
-        scoreGraphHopperCandidate({ path, points, sportId, profile, preference, customModelApplied: useCustomModel })
-      )
+      .map((path) => scoreGraphHopperCandidate({ path, points, sportId, profile, preference }))
       .filter((candidate) => candidate.points.length >= 2);
   } finally {
     clearTimeout(timeout);
@@ -562,23 +516,22 @@ async function collectGraphHopperCandidates({ points, sportId }) {
       useCustomModel: true,
     });
   } catch (error) {
-    // Important: do NOT silently continue with plain foot routing, because then the UI
-    // looks like GraphHopper is active while all Running Road conditions are ignored.
-    // Enable ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK=true only for emergency testing.
-    if (!ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK) {
-      throw new Error(`GraphHopper custom Running model failed: ${error?.message || "unknown error"}`);
+    // Do not silently fall back to plain foot for Running. If the custom model fails,
+    // the route would ignore the paved-running rules and look like GraphHopper is
+    // choosing bad routes. Only allow this fallback explicitly during emergency use.
+    if (process.env.ALLOW_GRAPHHOPPER_PLAIN_FOOT_FALLBACK === "true") {
+      const plainCandidates = await fetchGraphHopperCandidate({
+        apiKey,
+        points,
+        sportId,
+        profile: "foot",
+        preference: "running-foot",
+        useCustomModel: false,
+      });
+
+      if (plainCandidates.length) return plainCandidates;
     }
 
-    const plainCandidates = await fetchGraphHopperCandidate({
-      apiKey,
-      points,
-      sportId,
-      profile: "foot",
-      preference: "running-foot-plain-fallback",
-      useCustomModel: false,
-    });
-
-    if (plainCandidates.length) return plainCandidates;
     throw error;
   }
 }
@@ -725,8 +678,6 @@ export async function POST(request) {
         candidates: candidates.length,
         alternative_route: normalizedSportId === "running" ? GRAPHHOPPER_RUNNING_ALTERNATIVE_ROUTE : null,
         provider: best.provider || provider,
-        provider_meta: best.provider_meta || null,
-        custom_model_applied: Boolean(best.provider_meta?.custom_model_applied),
       },
       routed_at: new Date().toISOString(),
     },
