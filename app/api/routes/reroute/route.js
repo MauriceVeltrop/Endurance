@@ -124,56 +124,55 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
-  if (normalizeSportId(sportId) === "running") {
-    return {
-      profile,
-      preference,
-      points: geometry,
-      distance,
-      duration,
-      elevation_gain_m: routeAscentMeters(geometry),
-      score: 100,
-      detour,
-      surfacePercent: {},
-      wayPercent: {},
-      suitable_percent: 0,
-      unsuitable_percent: 0,
-      unknown_percent: 0,
-    };
-  }
-
   const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
   const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
   const surfacePercent = percentMap(surfaceCounts);
   const wayPercent = percentMap(wayCounts);
 
   const suitableSurfaces = new Set(config.suitableSurfaces || []);
+  const acceptableSurfaces = new Set(config.acceptableSurfaces || []);
   const unsuitableSurfaces = new Set(config.unsuitableSurfaces || []);
   const suitableWaytypes = new Set(config.suitableWaytypes || []);
   const unsuitableWaytypes = new Set(config.unsuitableWaytypes || []);
 
   let suitable = 0;
+  let acceptable = 0;
   let unsuitable = 0;
   let unknown = 0;
 
   for (const [surface, pct] of Object.entries(surfacePercent)) {
     if (surface === "unknown") unknown += pct;
     else if (suitableSurfaces.has(surface)) suitable += pct;
+    else if (acceptableSurfaces.has(surface)) acceptable += pct;
     else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
   }
 
   for (const [waytype, pct] of Object.entries(wayPercent)) {
-    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.35);
-    if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.45);
+    if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.2);
+    if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.35);
   }
 
   suitable = Math.min(100, suitable);
+  acceptable = Math.min(100, acceptable);
   unsuitable = Math.min(100, unsuitable);
 
-  const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
-  const unknownPenalty = Math.round(unknown * 0.35);
-  const unsuitablePenalty = Math.round(unsuitable * 0.8);
-  const score = Math.max(0, Math.min(100, 70 + suitable * 0.45 - detourPenalty - unknownPenalty - unsuitablePenalty));
+  let score;
+
+  if (normalizeSportId(sportId) === "running") {
+    const maxDetour = Number(config.maxDetourFactor || 1.6);
+    const pavedBonus = suitable * 1.05;
+    const acceptableBonus = acceptable * 0.35;
+    const unsuitablePenalty = unsuitable * 1.05;
+    const unknownPenalty = unknown * 0.3;
+    const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 16) : 10 + (detour - maxDetour) * 90;
+
+    score = Math.max(0, Math.min(100, 45 + pavedBonus + acceptableBonus - unsuitablePenalty - unknownPenalty - detourPenalty));
+  } else {
+    const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
+    const unknownPenalty = Math.round(unknown * 0.35);
+    const unsuitablePenalty = Math.round(unsuitable * 0.8);
+    score = Math.max(0, Math.min(100, 70 + suitable * 0.45 - detourPenalty - unknownPenalty - unsuitablePenalty));
+  }
 
   return {
     profile,
@@ -197,7 +196,7 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
-    const plainRunning = normalizeSportId(sportId) === "running";
+    const isRunning = normalizeSportId(sportId) === "running";
     const payload = {
       coordinates: points.map((point) => [point.lon, point.lat]),
       elevation: true,
@@ -205,10 +204,16 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
       preference,
       geometry_simplify: false,
       format: "geojson",
+      extra_info: ["waytype", "surface"],
     };
 
-    if (!plainRunning) {
-      payload.extra_info = ["waytype", "surface"];
+    if (isRunning) {
+      payload.alternative_routes = {
+        target_count: 2,
+        weight_factor: 1.6,
+        share_factor: 0.55,
+      };
+    } else {
       payload.alternative_routes = {
         target_count: 2,
         weight_factor: 1.4,
