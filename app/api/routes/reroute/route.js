@@ -227,7 +227,9 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       payload.alternative_routes = {
         target_count: 3,
         weight_factor: Math.max(1.05, maxDetour),
-        share_factor: 0.5,
+        // Allow ORS to return alternatives that partially overlap. A too-strict
+        // share factor can hide obvious paved alternatives in dense urban areas.
+        share_factor: 0.8,
       };
     } else {
       payload.alternative_routes = {
@@ -324,10 +326,10 @@ async function collectOrsCandidates({ points, sportId }) {
         }
       }
 
-      if (candidates.some((candidate) => candidate.score >= 82)) break;
+      // Do not stop early for Running. A high-scoring first candidate can still
+      // hide a much better paved alternative from another preference/base.
+      // Collect all candidates first, then sort by quality inside the detour limit.
     }
-
-    if (candidates.some((candidate) => candidate.score >= 82)) break;
   }
 
   if (!candidates.length && errors.length) {
@@ -382,21 +384,23 @@ export async function POST(request) {
       const aWithinDetour = Number(a.detour || 99) <= maxDetour;
       const bWithinDetour = Number(b.detour || 99) <= maxDetour;
 
-      // Detour is now used as a hard preference boundary: stay within the sport's
-      // configured maxDetourFactor, but do not automatically choose 1.00x if a
-      // slightly longer route has much better Running quality.
+      // Detour is a boundary, not the primary sort key. Inside the allowed
+      // detour window, choose the best Running quality even when it is longer.
       if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
 
-      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
-      if (Math.abs(unsuitableDiff) >= 8) return unsuitableDiff;
+      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+      if (Math.abs(scoreDiff) >= 2) return scoreDiff;
 
       const suitableDiff = Number(b.suitable_percent || 0) - Number(a.suitable_percent || 0);
-      if (Math.abs(suitableDiff) >= 10) return suitableDiff;
+      if (Math.abs(suitableDiff) >= 3) return suitableDiff;
 
-      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
-      if (Math.abs(scoreDiff) > 3) return scoreDiff;
+      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
+      if (Math.abs(unsuitableDiff) >= 2) return unsuitableDiff;
 
-      // Final tie-breaker: shorter route.
+      const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
+      if (Math.abs(unknownDiff) >= 10) return unknownDiff;
+
+      // Final tie-breaker only: shorter route.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
@@ -406,6 +410,24 @@ export async function POST(request) {
   });
 
   const best = candidates[0];
+  const candidateSummary = candidates.slice(0, 8).map((candidate) => ({
+    provider: candidate.provider || provider,
+    profile: candidate.profile,
+    preference: candidate.preference,
+    score: candidate.score,
+    distance_km: Number((Number(candidate.distance || 0) / 1000).toFixed(3)),
+    detour: Number(Number(candidate.detour || 0).toFixed(2)),
+    suitable_percent: candidate.suitable_percent,
+    unsuitable_percent: candidate.unsuitable_percent,
+    unknown_percent: candidate.unknown_percent,
+    surfaces: candidate.surfacePercent,
+    waytypes: candidate.wayPercent,
+  }));
+
+  if (process.env.DEBUG_ORS_ROUTING === "true") {
+    console.log("ORS route candidates", { sportId: normalizedSportId, candidateSummary });
+  }
+
   const distance = routeDistanceMeters(best.points);
   const ascent = Number.isFinite(Number(best.elevation_gain_m)) ? Number(best.elevation_gain_m) : routeAscentMeters(best.points);
 
@@ -435,6 +457,7 @@ export async function POST(request) {
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
         candidates: candidates.length,
+        candidate_summary: candidateSummary,
         provider: best.provider || provider,
       },
       routed_at: new Date().toISOString(),
