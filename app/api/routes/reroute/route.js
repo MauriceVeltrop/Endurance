@@ -332,7 +332,8 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      throw new Error(`${response.status} ${text.slice(0, 180)}`);
+      console.error("GraphHopper route error", { status: response.status, body: text.slice(0, 800), useCustomModel, profile });
+      throw new Error(`${response.status} ${text.slice(0, 300)}`);
     }
 
     const data = await response.json();
@@ -346,45 +347,43 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 }
 
 const RUNNING_CUSTOM_MODEL = {
-  // Minimal GraphHopper-only Running Road model.
-  // Keep this deliberately small: first prove GraphHopper accepts and applies it,
-  // then tune the weights again step by step.
+  // Minimal Road Running model for GraphHopper.
+  // Keep only values GraphHopper accepts for the foot profile.
+  // Important: GraphHopper enum values are uppercase in custom_model expressions.
   distance_influence: 110,
   priority: [
-    { if: "road_class == motorway", multiply_by: 0 },
-    { if: "road_class == trunk", multiply_by: 0.01 },
-    { if: "road_class == primary", multiply_by: 0.1 },
-    { if: "road_class == secondary", multiply_by: 0.35 },
-    { if: "road_class == tertiary", multiply_by: 0.6 },
+    // Prefer paved / urban running-friendly ways.
+    { if: "road_class == FOOTWAY", multiply_by: "3.00" },
+    { if: "road_class == CYCLEWAY", multiply_by: "2.50" },
+    { if: "road_class == RESIDENTIAL", multiply_by: "2.00" },
+    { if: "road_class == LIVING_STREET", multiply_by: "2.00" },
+    { if: "road_class == PEDESTRIAN", multiply_by: "1.80" },
 
-    { if: "road_class == footway", multiply_by: 3.0 },
-    { if: "road_class == cycleway", multiply_by: 2.5 },
-    { if: "road_class == residential", multiply_by: 2.0 },
-    { if: "road_class == living_street", multiply_by: 2.0 },
-    { if: "road_class == pedestrian", multiply_by: 1.8 },
+    // Strongly discourage off-road / rough way classes.
+    { if: "road_class == TRACK", multiply_by: "0.01" },
+    { if: "road_class == PATH", multiply_by: "0.05" },
+    { if: "road_class == STEPS", multiply_by: "0.01" },
+    { if: "road_class == SERVICE", multiply_by: "0.35" },
 
-    { if: "road_class == service", multiply_by: 0.35 },
-    { if: "road_class == path", multiply_by: 0.05 },
-    { if: "road_class == track", multiply_by: 0.01 },
-    { if: "road_class == steps", multiply_by: 0.01 },
+    // Prefer known paved surfaces.
+    { if: "surface == ASPHALT", multiply_by: "1.70" },
+    { if: "surface == CONCRETE", multiply_by: "1.55" },
+    { if: "surface == PAVED", multiply_by: "1.45" },
+    { if: "surface == PAVING_STONES", multiply_by: "1.25" },
 
-    { if: "surface == asphalt", multiply_by: 1.7 },
-    { if: "surface == concrete", multiply_by: 1.55 },
-    { if: "surface == paved", multiply_by: 1.45 },
-    { if: "surface == paving_stones", multiply_by: 1.25 },
-
-    { if: "surface == missing", multiply_by: 0.08 },
-    { if: "surface == unknown", multiply_by: 0.08 },
-    { if: "surface == compacted", multiply_by: 0.08 },
-    { if: "surface == fine_gravel", multiply_by: 0.04 },
-    { if: "surface == gravel", multiply_by: 0.02 },
-    { if: "surface == unpaved", multiply_by: 0.01 },
-    { if: "surface == ground", multiply_by: 0.01 },
-    { if: "surface == dirt", multiply_by: 0.01 },
-    { if: "surface == grass", multiply_by: 0.01 },
-    { if: "surface == sand", multiply_by: 0.01 },
-    { if: "surface == mud", multiply_by: 0.01 },
-    { if: "surface == woodchips", multiply_by: 0.01 },
+    // Avoid unknown/missing and unpaved surfaces as much as possible, without
+    // making routing impossible when OSM data is incomplete.
+    { if: "surface == MISSING", multiply_by: "0.08" },
+    { if: "surface == COMPACTED", multiply_by: "0.10" },
+    { if: "surface == FINE_GRAVEL", multiply_by: "0.06" },
+    { if: "surface == GRAVEL", multiply_by: "0.04" },
+    { if: "surface == UNPAVED", multiply_by: "0.02" },
+    { if: "surface == GROUND", multiply_by: "0.02" },
+    { if: "surface == DIRT", multiply_by: "0.02" },
+    { if: "surface == GRASS", multiply_by: "0.02" },
+    { if: "surface == SAND", multiply_by: "0.01" },
+    { if: "surface == MUD", multiply_by: "0.01" },
+    { if: "surface == WOODCHIPS", multiply_by: "0.02" },
   ],
 };
 
@@ -413,9 +412,8 @@ async function fetchGraphHopperCandidate({
       details: ["road_class", "road_environment", "surface"],
     };
 
-    // Keep alternative routes disabled while validating the custom model.
-    // GraphHopper returned HTTP 400; a single accepted custom-model route is the baseline.
-    // Once this works, we can re-enable alternative_route in a separate patch.
+    // Keep alternative_route disabled while validating the GraphHopper custom_model.
+    // Re-enable after the route returns a real geometry again.
 
     if (useCustomModel) {
       payload.custom_model = RUNNING_CUSTOM_MODEL;
@@ -433,13 +431,8 @@ async function fetchGraphHopperCandidate({
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      console.error("GraphHopper route error", {
-        status: response.status,
-        body: text.slice(0, 800),
-        useCustomModel,
-        profile,
-      });
-      throw new Error(`${response.status} ${text.slice(0, 500)}`);
+      console.error("GraphHopper route error", { status: response.status, body: text.slice(0, 800), useCustomModel, profile });
+      throw new Error(`${response.status} ${text.slice(0, 300)}`);
     }
 
     const data = await response.json();
