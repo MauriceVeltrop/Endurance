@@ -11523,144 +11523,160 @@ main {
   }
 }
 
-/* ===== ENDURANCE ROUTE CREATE VISUAL SPORT PICKER PATCH ===== */
-.route-step-page .route-create-visual-hero {
-  position: relative !important;
-  min-height: 230px !important;
-  padding: 0 !important;
-  isolation: isolate !important;
-  background-image:
-    linear-gradient(90deg, rgba(4,8,7,.94) 0%, rgba(4,8,7,.74) 44%, rgba(4,8,7,.20) 100%),
-    radial-gradient(circle at 78% 22%, rgba(223,255,0,.22), transparent 32%),
-    var(--routeHeroImage) !important;
-  background-size: cover !important;
-  background-position: center !important;
+
+/* Route create compact visual sport picker update */
+.route-create-stepper,
+.route-stepper,
+.create-route-stepper {
+  gap: 10px;
+  margin: 18px 0 18px;
 }
 
-.route-step-page .route-create-visual-hero::after {
-  content: "";
+.route-create-step,
+.route-step-pill,
+.create-route-step {
+  min-height: 58px !important;
+  padding: 10px 14px !important;
+  border-radius: 22px !important;
+}
+
+.route-create-step .step-number,
+.route-step-pill .step-number,
+.create-route-step .step-number {
+  width: 34px !important;
+  height: 34px !important;
+  font-size: 16px !important;
+}
+
+.route-sport-grid,
+.sport-picker-grid,
+.create-route-sport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.route-sport-card,
+.sport-picker-card,
+.create-route-sport-card {
+  min-height: 142px !important;
+  height: 142px !important;
+  padding: 14px !important;
+  border-radius: 24px !important;
+  overflow: hidden;
+}
+
+.route-sport-card .sport-icon,
+.sport-picker-card .sport-icon,
+.create-route-sport-card .sport-icon {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 14px !important;
+}
+
+.route-sport-card h3,
+.sport-picker-card h3,
+.create-route-sport-card h3 {
+  font-size: clamp(24px, 6vw, 34px) !important;
+  line-height: 0.95 !important;
+  margin-bottom: 4px !important;
+}
+
+.route-sport-card p,
+.sport-picker-card p,
+.create-route-sport-card p {
+  font-size: 14px !important;
+  line-height: 1.12 !important;
+  max-width: 95%;
+}
+
+.route-sport-card.is-selected,
+.route-sport-card.selected,
+.sport-picker-card.is-selected,
+.sport-picker-card.selected,
+.create-route-sport-card.is-selected,
+.create-route-sport-card.selected,
+[aria-pressed="true"].route-sport-card,
+[aria-pressed="true"].sport-picker-card,
+[aria-pressed="true"].create-route-sport-card {
+  border: 2px solid var(--accent, #d7ff00) !important;
+  box-shadow:
+    0 0 0 1px rgba(215, 255, 0, 0.35),
+    0 0 28px rgba(215, 255, 0, 0.25),
+    inset 0 0 24px rgba(215, 255, 0, 0.08) !important;
+}
+
+.route-sport-card.is-selected::after,
+.route-sport-card.selected::after,
+.sport-picker-card.is-selected::after,
+.sport-picker-card.selected::after,
+.create-route-sport-card.is-selected::after,
+.create-route-sport-card.selected::after,
+[aria-pressed="true"].route-sport-card::after,
+[aria-pressed="true"].sport-picker-card::after,
+[aria-pressed="true"].create-route-sport-card::after {
+  content: "✓";
   position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.50)),
-    radial-gradient(circle at 15% 88%, rgba(223,255,0,.14), transparent 35%);
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #d7ff00;
+  color: #071003;
+  font-weight: 950;
+  font-size: 18px;
+  box-shadow: 0 0 18px rgba(215, 255, 0, 0.45);
+  z-index: 4;
 }
 
-.route-step-page .route-create-hero-overlay {
-  min-height: 230px !important;
-  padding: 22px 20px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: flex-end !important;
+.route-create-hero,
+.create-route-hero {
+  min-height: 150px !important;
+  padding: 22px !important;
+  border-radius: 30px !important;
 }
 
-.route-step-page .route-create-hero-selected {
-  width: max-content !important;
-  max-width: 100% !important;
-  margin-top: 10px !important;
-  padding: 7px 11px 7px 8px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  border-radius: 999px !important;
-  background: rgba(6,12,11,.68) !important;
-  border: 1px solid rgba(223,255,0,.26) !important;
-  color: #fff !important;
-  font-size: 13px !important;
-  font-weight: 1000 !important;
-  box-shadow: 0 12px 32px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.08) !important;
+.route-create-hero h1,
+.create-route-hero h1 {
+  font-size: clamp(38px, 10vw, 58px) !important;
+  line-height: 0.92 !important;
 }
 
-.route-step-page .route-create-hero-selected img {
-  width: 26px !important;
-  height: 26px !important;
-  border-radius: 999px !important;
-  object-fit: cover !important;
+.route-create-hero p,
+.create-route-hero p {
+  font-size: 15px !important;
+  line-height: 1.35 !important;
+  max-width: 92%;
 }
 
-.route-step-page .route-sport-visual-grid {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 12px !important;
-}
+@media (max-width: 420px) {
+  .route-sport-grid,
+  .sport-picker-grid,
+  .create-route-sport-grid {
+    gap: 10px;
+  }
 
-.route-step-page .route-sport-tile {
-  position: relative !important;
-  min-height: 142px !important;
-  padding: 0 !important;
-  display: block !important;
-  overflow: hidden !important;
-  border-radius: 28px !important;
-  isolation: isolate !important;
-  background: #08100e !important;
-}
+  .route-sport-card,
+  .sport-picker-card,
+  .create-route-sport-card {
+    min-height: 132px !important;
+    height: 132px !important;
+    padding: 12px !important;
+    border-radius: 22px !important;
+  }
 
-.route-step-page .route-sport-tile-bg {
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: -2 !important;
-  background-image: var(--sportImage) !important;
-  background-size: cover !important;
-  background-position: center !important;
-  transform: scale(1.04) !important;
-  filter: saturate(1.02) contrast(1.08) brightness(.86) !important;
-}
+  .route-sport-card h3,
+  .sport-picker-card h3,
+  .create-route-sport-card h3 {
+    font-size: 26px !important;
+  }
 
-.route-step-page .route-sport-tile::before {
-  content: "" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: -1 !important;
-  background:
-    linear-gradient(180deg, rgba(2,4,4,.12), rgba(2,4,4,.88)),
-    radial-gradient(circle at 82% 18%, rgba(223,255,0,.16), transparent 32%) !important;
-}
-
-.route-step-page .route-sport-tile.active {
-  border-color: rgba(223,255,0,.65) !important;
-  box-shadow: 0 0 0 1px rgba(223,255,0,.18), 0 22px 50px rgba(0,0,0,.34), 0 0 38px rgba(223,255,0,.12) !important;
-}
-
-.route-step-page .route-sport-tile-content {
-  min-height: 142px !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
-  align-items: flex-start !important;
-}
-
-.route-step-page .route-sport-tile .route-sport-icon {
-  width: 42px !important;
-  height: 42px !important;
-  border-radius: 16px !important;
-  background: rgba(6,12,11,.56) !important;
-  backdrop-filter: blur(10px) !important;
-}
-
-.route-step-page .route-sport-tile .route-sport-copy {
-  gap: 4px !important;
-}
-
-.route-step-page .route-sport-tile .route-sport-copy strong {
-  font-size: 23px !important;
-  line-height: .95 !important;
-  text-shadow: 0 3px 18px rgba(0,0,0,.44) !important;
-}
-
-.route-step-page .route-sport-tile .route-sport-copy small {
-  max-width: 12rem !important;
-  display: -webkit-box !important;
-  -webkit-line-clamp: 2 !important;
-  -webkit-box-orient: vertical !important;
-  overflow: hidden !important;
-  color: rgba(255,255,255,.76) !important;
-  text-shadow: 0 2px 14px rgba(0,0,0,.44) !important;
-}
-
-@media (max-width: 370px) {
-  .route-step-page .route-sport-visual-grid {
-    grid-template-columns: 1fr !important;
+  .route-sport-card p,
+  .sport-picker-card p,
+  .create-route-sport-card p {
+    font-size: 13px !important;
   }
 }
