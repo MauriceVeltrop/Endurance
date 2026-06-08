@@ -4,6 +4,7 @@ import {
   getProviderProfiles,
   getRoutingPreferences,
   getSportRouteProfile,
+  normalizeSportId,
   SURFACE_LABELS,
   WAYTYPE_LABELS,
 } from "../../../../lib/routes/sportRouteProfiles";
@@ -123,6 +124,24 @@ function scoreCandidate({ feature, points, sportId, profile, preference }) {
   const direct = Math.max(1, routeDistanceMeters(points));
   const detour = distance / direct;
 
+  if (normalizeSportId(sportId) === "running") {
+    return {
+      profile,
+      preference,
+      points: geometry,
+      distance,
+      duration,
+      elevation_gain_m: routeAscentMeters(geometry),
+      score: 100,
+      detour,
+      surfacePercent: {},
+      wayPercent: {},
+      suitable_percent: 0,
+      unsuitable_percent: 0,
+      unknown_percent: 0,
+    };
+  }
+
   const wayCounts = decodeExtraInfo(feature?.properties?.extras?.waytypes?.values, WAYTYPE_LABELS);
   const surfaceCounts = decodeExtraInfo(feature?.properties?.extras?.surface?.values, SURFACE_LABELS);
   const surfacePercent = percentMap(surfaceCounts);
@@ -178,6 +197,7 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
+    const plainRunning = normalizeSportId(sportId) === "running";
     const payload = {
       coordinates: points.map((point) => [point.lon, point.lat]),
       elevation: true,
@@ -185,13 +205,16 @@ async function fetchCandidate({ url, apiKey, points, preference, sportId, profil
       preference,
       geometry_simplify: false,
       format: "geojson",
-      extra_info: ["waytype", "surface"],
-      alternative_routes: {
+    };
+
+    if (!plainRunning) {
+      payload.extra_info = ["waytype", "surface"];
+      payload.alternative_routes = {
         target_count: 2,
         weight_factor: 1.4,
         share_factor: 0.6,
-      },
-    };
+      };
+    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -274,8 +297,9 @@ export async function POST(request) {
     return fallbackResponse({ points: segment, reason: "Routing key is missing." });
   }
 
-  const profiles = getProviderProfiles(sportId);
-  const preferences = getRoutingPreferences(sportId);
+  const normalizedSportId = normalizeSportId(sportId);
+  const profiles = normalizedSportId === "running" ? ["foot-walking"] : getProviderProfiles(sportId);
+  const preferences = normalizedSportId === "running" ? ["recommended"] : getRoutingPreferences(sportId);
   const errors = [];
   const candidates = [];
 
