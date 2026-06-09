@@ -181,10 +181,7 @@ function routeSportImageFor(sportId) {
     gravel_cycling: "/route-images/gravel-cycling.jpg",
     mountain_biking: "/route-images/mountain-biking.jpg",
     walking: "/route-images/walking.jpg",
-    kayaking: "/route-images/kayaking.jpg",
-    swimming: "/route-images/swimming.jpg",
   };
-
   return map[sportId] || "/route-images/running.jpg";
 }
 
@@ -195,11 +192,10 @@ function routeSportShortLabel(sportId) {
     road_cycling: "Road",
     gravel_cycling: "Gravel",
     mountain_biking: "MTB",
+    walking: "Walk",
   };
-
   return map[sportId] || getSportLabel(sportId);
 }
-
 
 function routeProfileFor(sportId) {
   return (
@@ -833,10 +829,6 @@ export default function NewRoutePage() {
                         setCurrentStep(2);
                       }}
                     >
-                      <span className="route-sport-photo-overlay" aria-hidden="true" />
-                      <span className="route-sport-photo-icon" aria-hidden="true">
-                        <img src={sportIconFor(sport.id)} alt="" />
-                      </span>
                       <span className="route-sport-photo-copy">
                         <strong>{routeSportShortLabel(sport.id)}</strong>
                         <small>{sportProfile.focus}</small>
