@@ -758,12 +758,10 @@ export default function NewRoutePage() {
         <div>
           <p className="eyebrow">Create route</p>
           <h1>
-            Build a route
-            <br />
-            for your sport<span>.</span>
+            Create routes<span>.</span>
           </h1>
           <p>
-            Choose a preferred sport first, then choose how you want to create the route.
+            Choose sport, method and details.
           </p>
         </div>
       </section>
@@ -808,7 +806,7 @@ export default function NewRoutePage() {
                 <span>1</span>
                 <div>
                   <p className="eyebrow">Sport first</p>
-                  <h2>Choose route sport</h2>
+                  <h2>Choose sport</h2>
                 </div>
               </div>
 
