@@ -761,7 +761,7 @@ export default function NewRoutePage() {
             Create routes<span>.</span>
           </h1>
           <p>
-            Sport • Method • Details
+            Choose sport, method and details.
           </p>
         </div>
       </section>
@@ -802,13 +802,7 @@ export default function NewRoutePage() {
         <>
           {currentStep === 1 ? (
             <section className="endurance-shell create-route-v2-section route-step-section">
-              <div className="route-builder-step compact">
-                <span>1</span>
-                <div>
-                  <p className="eyebrow">Sport first</p>
-                  <h2>Choose sport</h2>
-                </div>
-              </div>
+              <div className="route-builder-step route-builder-step-minimal"><h2>Choose sport</h2></div>
 
               <div className="route-sport-photo-grid">
                 {availableSports.map((sport) => {
