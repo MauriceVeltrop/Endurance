@@ -227,7 +227,15 @@ function CreateTrainingPageContent() {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
 
-  const showSportStep = visibleSports.length > 1;
+  const skipSportStep = Boolean(prefilledWorkout || prefilledRoute);
+  const showSportStep = !skipSportStep && visibleSports.length > 1;
+
+  useEffect(() => {
+    if (skipSportStep && activeStep === "sport") {
+      setActiveStep("basics");
+    }
+  }, [skipSportStep, activeStep]);
+
 
   useEffect(() => {
     if (loading) return;
@@ -238,7 +246,7 @@ function CreateTrainingPageContent() {
       return;
     }
 
-    if (visibleSports.length > 1 && !form.sport_id) {
+    if (!skipSportStep && visibleSports.length > 1 && !form.sport_id) {
       setActiveStep("sport");
     }
   }, [loading, visibleSports, form.sport_id]);
@@ -1048,7 +1056,7 @@ function CreateTrainingPageContent() {
   ].filter(Boolean);
 
   const createSteps = [
-    showSportStep ? { id: "sport", label: "Sport" } : null,
+    !skipSportStep && showSportStep ? { id: "sport", label: "Sport" } : null,
     { id: "basics", label: "Basics" },
     { id: "time", label: "Time" },
     { id: "details", label: "Details" },
@@ -1120,7 +1128,7 @@ function CreateTrainingPageContent() {
           </section>
         ) : (
           <form onSubmit={createTraining} style={styles.form}>
-            {showSportStep && activeStep === "sport" ? (
+            {!skipSportStep && showSportStep && activeStep === "sport" ? (
             <section style={styles.cardHot}>
               <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Choose sport</h2>
