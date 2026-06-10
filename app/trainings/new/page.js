@@ -1092,7 +1092,10 @@ function CreateTrainingPageContent() {
               <button
                 key={step.id}
                 type="button"
-                onClick={() => setActiveStep(step.id)}
+                onClick={() => {
+                if (skipSportStep && step.id === "sport") return;
+                setActiveStep(step.id);
+              }}
                 style={activeStep === step.id ? styles.stepRailItemActive : styles.stepRailItem}
               >
                 <span>{index + 1}</span>
