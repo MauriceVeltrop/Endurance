@@ -12200,3 +12200,155 @@ main {
   font-weight: 950 !important;
   box-shadow: 0 0 14px rgba(215,255,0,0.46) !important;
 }
+
+
+/* FINAL OVERRIDE: route create layout specificity fix
+   Older .route-step-page rules were overriding previous patches. */
+.route-step-page .create-route-v2-hero,
+.route-step-page .route-step-hero {
+  min-height: 118px !important;
+  height: auto !important;
+  padding: 18px 22px !important;
+  border-radius: 26px !important;
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 12px !important;
+}
+
+.route-step-page .create-route-v2-hero > div,
+.route-step-page .route-step-hero > div {
+  width: 100% !important;
+}
+
+.route-step-page .create-route-v2-hero .eyebrow,
+.route-step-page .route-step-hero .eyebrow {
+  font-size: 11px !important;
+  letter-spacing: .26em !important;
+  margin: 0 0 8px !important;
+}
+
+.route-step-page .create-route-v2-hero h1,
+.route-step-page .route-step-hero h1 {
+  font-size: clamp(34px, 8.5vw, 50px) !important;
+  line-height: .9 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+  position: static !important;
+  transform: none !important;
+}
+
+.route-step-page .create-route-v2-hero p:not(.eyebrow),
+.route-step-page .route-step-hero p:not(.eyebrow) {
+  display: none !important;
+}
+
+.route-step-page .route-stepper {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 auto 16px !important;
+  padding: 0 !important;
+  position: static !important;
+  transform: none !important;
+  z-index: 1 !important;
+}
+
+.route-step-page .route-stepper button {
+  min-height: 46px !important;
+  height: 46px !important;
+  padding: 6px 8px !important;
+  border-radius: 16px !important;
+  font-size: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 22px rgba(0,0,0,.16) !important;
+}
+
+.route-step-page .route-stepper button span {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 12px !important;
+}
+
+.route-step-page .route-step-section {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+.route-step-page .route-builder-step-minimal,
+.route-step-page .route-builder-step.compact {
+  display: block !important;
+  margin: 0 0 10px !important;
+}
+
+.route-step-page .route-builder-step-minimal > span,
+.route-step-page .route-builder-step-minimal .eyebrow {
+  display: none !important;
+}
+
+.route-step-page .route-builder-step-minimal h2,
+.route-step-page .route-builder-step.compact h2 {
+  font-size: clamp(26px, 6.5vw, 36px) !important;
+  line-height: 1 !important;
+  letter-spacing: -0.07em !important;
+  margin: 0 !important;
+}
+
+.route-step-page .route-sport-photo-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+.route-step-page .route-sport-photo-card {
+  min-height: 108px !important;
+  height: 108px !important;
+  padding: 8px !important;
+  border-radius: 17px !important;
+}
+
+.route-step-page .route-sport-photo-copy {
+  left: 8px !important;
+  right: 6px !important;
+  bottom: 7px !important;
+}
+
+.route-step-page .route-sport-photo-copy strong {
+  font-size: clamp(20px, 4.8vw, 26px) !important;
+  line-height: .88 !important;
+}
+
+.route-step-page .route-sport-photo-copy small {
+  font-size: 8.8px !important;
+  line-height: 1.05 !important;
+}
+
+.route-step-page .route-sport-selected-check {
+  width: 23px !important;
+  height: 23px !important;
+  top: 7px !important;
+  right: 7px !important;
+  font-size: 13px !important;
+}
+
+@media (max-width: 390px) {
+  .route-step-page .route-sport-photo-card {
+    min-height: 100px !important;
+    height: 100px !important;
+  }
+
+  .route-step-page .route-sport-photo-copy strong {
+    font-size: 20px !important;
+  }
+
+  .route-step-page .route-sport-photo-copy small {
+    font-size: 8px !important;
+  }
+}
