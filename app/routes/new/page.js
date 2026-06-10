@@ -760,9 +760,7 @@ export default function NewRoutePage() {
           <h1>
             Create routes<span>.</span>
           </h1>
-          <p>
-            
-          </p>
+          
         </div>
       </section>
 
