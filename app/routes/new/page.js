@@ -100,31 +100,31 @@ function recommendedMethodFor(sportId) {
 const SPORT_ROUTE_PROFILES = {
   running: {
     title: "Road running profile",
-    focus: "Paved & fluent",
+    focus: "Road",
     best: "Best with GPX upload or draw mode. Wizard will prefer quiet streets, parks and paved footpaths.",
     avoid: "Avoids traffic-heavy roads and awkward stop-start routes.",
   },
   trail_running: {
     title: "Trail running profile",
-    focus: "Forest & elevation",
+    focus: "Trail",
     best: "Best with GPX upload now. Wizard will later prioritize OSM path/track/surface/sac_scale tags.",
     avoid: "Avoids too much asphalt and overly technical hiking-only terrain.",
   },
   road_cycling: {
     title: "Road cycling profile",
-    focus: "Fast asphalt",
+    focus: "Fast",
     best: "Best with GPX upload or draw mode. Wizard will later prefer cycling infrastructure and quiet roads.",
     avoid: "Avoids unpaved tracks and footpaths.",
   },
   gravel_cycling: {
     title: "Gravel profile",
-    focus: "Gravel & forest roads",
+    focus: "Adventure",
     best: "Best with GPX upload now. Wizard will later use surface=gravel/compacted/fine_gravel.",
     avoid: "Avoids technical MTB-only trails and busy roads.",
   },
   mountain_biking: {
     title: "MTB profile",
-    focus: "Singletrack & technical",
+    focus: "Technical",
     best: "Best with GPX upload now. Wizard will later use mtb:scale, singletrack and official networks.",
     avoid: "Avoids boring road-only routes.",
   },
@@ -761,7 +761,7 @@ export default function NewRoutePage() {
             Create routes<span>.</span>
           </h1>
           <p>
-            Choose sport, method and details.
+            Sport • Method • Details
           </p>
         </div>
       </section>
