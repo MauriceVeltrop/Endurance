@@ -227,7 +227,14 @@ function CreateTrainingPageContent() {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
 
-  const showSportStep = visibleSports.length > 1;
+  const showSportStep = !prefilledWorkout && visibleSports.length > 1;
+
+  useEffect(() => {
+    if (prefilledWorkout && activeStep === "sport") {
+      setActiveStep("basics");
+    }
+  }, [prefilledWorkout, activeStep]);
+
 
   useEffect(() => {
     if (loading) return;
@@ -238,7 +245,7 @@ function CreateTrainingPageContent() {
       return;
     }
 
-    if (visibleSports.length > 1 && !form.sport_id) {
+    if (!prefilledWorkout && visibleSports.length > 1 && !form.sport_id) {
       setActiveStep("sport");
     }
   }, [loading, visibleSports, form.sport_id]);
@@ -1092,10 +1099,7 @@ function CreateTrainingPageContent() {
               <button
                 key={step.id}
                 type="button"
-                onClick={() => {
-                if (skipSportStep && step.id === "sport") return;
-                setActiveStep(step.id);
-              }}
+                onClick={() => setActiveStep(step.id)}
                 style={activeStep === step.id ? styles.stepRailItemActive : styles.stepRailItem}
               >
                 <span>{index + 1}</span>
