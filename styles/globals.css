@@ -12352,3 +12352,30 @@ main {
     font-size: 8px !important;
   }
 }
+
+
+/* routes/new use same topo background feeling as routes overview */
+.route-step-page{
+background:
+linear-gradient(180deg,rgba(4,8,6,.72),rgba(4,8,6,.9)),
+url('/images/routes-hero-bg.jpg') center/cover fixed no-repeat !important;
+}
+
+.route-step-page::after{
+content:"";
+position:fixed;
+inset:0;
+pointer-events:none;
+opacity:.10;
+background-image:
+linear-gradient(rgba(180,255,0,.18) 1px, transparent 1px),
+linear-gradient(90deg, rgba(180,255,0,.18) 1px, transparent 1px);
+background-size:120px 120px;
+mask-image: radial-gradient(circle at center, black, transparent 85%);
+}
+
+.route-step-page .create-route-v2-hero{
+min-height:110px !important;
+padding:18px 22px !important;
+}
+
