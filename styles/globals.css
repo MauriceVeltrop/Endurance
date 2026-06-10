@@ -12354,28 +12354,57 @@ main {
 }
 
 
-/* routes/new use same topo background feeling as routes overview */
-.route-step-page{
-background:
-linear-gradient(180deg,rgba(4,8,6,.72),rgba(4,8,6,.9)),
-url('/images/routes-hero-bg.jpg') center/cover fixed no-repeat !important;
+/* Route create visible topographic background lines */
+.route-step-page {
+  position: relative !important;
+  overflow-x: hidden !important;
+  background:
+    radial-gradient(circle at 74% 8%, rgba(215,255,0,.13), transparent 34%),
+    radial-gradient(circle at 20% 78%, rgba(31,120,68,.16), transparent 38%),
+    linear-gradient(180deg, #020605 0%, #04100d 44%, #020605 100%) !important;
 }
 
-.route-step-page::after{
-content:"";
-position:fixed;
-inset:0;
-pointer-events:none;
-opacity:.10;
-background-image:
-linear-gradient(rgba(180,255,0,.18) 1px, transparent 1px),
-linear-gradient(90deg, rgba(180,255,0,.18) 1px, transparent 1px);
-background-size:120px 120px;
-mask-image: radial-gradient(circle at center, black, transparent 85%);
+.route-step-page::before {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  opacity: .34 !important;
+  background-image:
+    repeating-radial-gradient(
+      ellipse at 68% 22%,
+      rgba(215,255,0,.22) 0 1px,
+      transparent 1px 18px
+    ),
+    repeating-radial-gradient(
+      ellipse at 22% 72%,
+      rgba(60,160,92,.16) 0 1px,
+      transparent 1px 22px
+    ),
+    linear-gradient(rgba(215,255,0,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(215,255,0,.045) 1px, transparent 1px);
+  background-size:
+    760px 520px,
+    680px 460px,
+    120px 120px,
+    120px 120px;
+  background-position:
+    right -170px top -90px,
+    left -180px bottom -120px,
+    center,
+    center;
+  mix-blend-mode: screen;
 }
 
-.route-step-page .create-route-v2-hero{
-min-height:110px !important;
-padding:18px 22px !important;
+.route-step-page > * {
+  position: relative;
+  z-index: 1;
 }
 
+.route-step-page .create-route-v2-hero,
+.route-step-page .route-step-hero,
+.route-step-page .route-stepper,
+.route-step-page .route-sport-photo-card {
+  backdrop-filter: blur(10px);
+}
