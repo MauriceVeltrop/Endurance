@@ -761,7 +761,7 @@ export default function NewRoutePage() {
             Create routes<span>.</span>
           </h1>
           <p>
-            Choose sport, method and details.
+            
           </p>
         </div>
       </section>
