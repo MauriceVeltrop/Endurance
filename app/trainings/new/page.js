@@ -537,6 +537,7 @@ function CreateTrainingPageContent() {
           intensity_label: current.intensity_label || "Moderate",
         }));
         setMessage(`Workout attached: ${workoutToPrefill.title}`);
+        setActiveStep("basics");
       }
 
 
