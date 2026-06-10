@@ -12037,3 +12037,166 @@ main {
   font-weight: 950;
   box-shadow: 0 0 16px rgba(215,255,0,0.46);
 }
+
+
+/* Route create layout cleanup */
+.create-route-v2-hero,
+.route-step-hero {
+  min-height: 132px !important;
+  padding: 20px 22px !important;
+  border-radius: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.create-route-v2-hero h1,
+.route-step-hero h1 {
+  font-size: clamp(38px, 9vw, 56px) !important;
+  line-height: 0.9 !important;
+  margin: 0 !important;
+}
+
+.create-route-v2-hero p,
+.route-step-hero p {
+  display: none !important;
+}
+
+.route-stepper {
+  margin: 14px auto 20px !important;
+  padding: 0 !important;
+  position: static !important;
+  z-index: auto !important;
+  gap: 9px !important;
+}
+
+.route-stepper button {
+  min-height: 52px !important;
+  padding: 8px 10px !important;
+  border-radius: 18px !important;
+  font-size: 12.5px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+}
+
+.route-stepper button span {
+  width: 28px !important;
+  height: 28px !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+  font-size: 13px !important;
+}
+
+.route-step-section {
+  padding-top: 0 !important;
+}
+
+.route-builder-step-minimal,
+.route-builder-step.compact {
+  display: block !important;
+  margin: 0 0 12px !important;
+}
+
+.route-builder-step-minimal h2,
+.route-builder-step.compact h2 {
+  font-size: clamp(28px, 7vw, 38px) !important;
+  line-height: 1 !important;
+  letter-spacing: -0.07em !important;
+  margin: 0 !important;
+}
+
+.route-builder-step-minimal > span,
+.route-builder-step-minimal .eyebrow {
+  display: none !important;
+}
+
+.route-sport-photo-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  align-items: stretch !important;
+}
+
+.route-sport-photo-card {
+  position: relative !important;
+  min-height: 112px !important;
+  height: 112px !important;
+  padding: 8px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(215, 255, 0, 0.18) !important;
+  overflow: hidden !important;
+  background-image:
+    linear-gradient(180deg, rgba(4,8,6,0.02) 0%, rgba(4,8,6,0.08) 42%, rgba(0,0,0,0.82) 100%),
+    var(--sport-bg) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.26) !important;
+}
+
+.route-sport-photo-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 60%;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,0.84));
+  z-index: 1;
+}
+
+.route-sport-photo-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+.route-sport-photo-card.selected,
+.route-sport-photo-card[aria-pressed="true"] {
+  border: 2px solid #d7ff00 !important;
+  box-shadow:
+    0 0 0 1px rgba(215,255,0,0.22),
+    0 0 18px rgba(215,255,0,0.25),
+    0 12px 28px rgba(0,0,0,0.32) !important;
+}
+
+.route-sport-photo-copy {
+  position: absolute !important;
+  left: 8px !important;
+  right: 6px !important;
+  bottom: 8px !important;
+  display: grid !important;
+  gap: 1px !important;
+}
+
+.route-sport-photo-copy strong {
+  font-size: clamp(20px, 5vw, 27px) !important;
+  line-height: 0.88 !important;
+  letter-spacing: -0.075em !important;
+  font-weight: 950 !important;
+  text-shadow: 0 3px 16px rgba(0,0,0,0.9) !important;
+}
+
+.route-sport-photo-copy small {
+  font-size: 9px !important;
+  line-height: 1.05 !important;
+  font-weight: 850 !important;
+  color: rgba(255,255,255,0.90) !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.9) !important;
+}
+
+.route-sport-selected-check {
+  position: absolute !important;
+  top: 7px !important;
+  right: 7px !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  background: #d7ff00 !important;
+  color: #071003 !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  box-shadow: 0 0 14px rgba(215,255,0,0.46) !important;
+}
