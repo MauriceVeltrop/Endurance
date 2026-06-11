@@ -12145,3 +12145,126 @@ button.route-sport-card > * {
     border-radius: 14px !important;
   }
 }
+
+
+/* ROUTES_NEW_PHOTO_SPORT_CARDS_RESTORE_V3
+   The /routes/new sport cards use background-image via --sport-bg.
+   This restores the actual classes: route-sport-photo-grid/card/copy. */
+.route-sport-photo-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  align-items: stretch !important;
+}
+
+.route-sport-photo-card {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  display: grid !important;
+  align-content: end !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 96px !important;
+  aspect-ratio: 16 / 9 !important;
+  padding: 10px !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(220,255,0,0.24) !important;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.82) 88%),
+    var(--sport-bg) center / cover no-repeat !important;
+  color: #fff !important;
+  text-align: left !important;
+  box-shadow: 0 16px 36px rgba(0,0,0,0.35) !important;
+  cursor: pointer !important;
+}
+
+.route-sport-photo-card.selected {
+  border-color: #dfff00 !important;
+  box-shadow:
+    0 0 0 2px rgba(223,255,0,0.76),
+    0 0 34px rgba(223,255,0,0.22),
+    0 16px 36px rgba(0,0,0,0.35) !important;
+}
+
+.route-sport-photo-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(223,255,0,0.16), transparent 42%),
+    linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.78)) !important;
+  pointer-events: none !important;
+}
+
+.route-sport-photo-copy {
+  position: relative !important;
+  z-index: 2 !important;
+  display: grid !important;
+  gap: 2px !important;
+}
+
+.route-sport-photo-copy strong {
+  display: block !important;
+  font-size: clamp(18px, 4.4vw, 28px) !important;
+  line-height: 0.92 !important;
+  font-weight: 1000 !important;
+  letter-spacing: -0.065em !important;
+  color: #fff !important;
+}
+
+.route-sport-photo-copy small {
+  display: block !important;
+  max-width: 100% !important;
+  font-size: 10.5px !important;
+  line-height: 1.05 !important;
+  font-weight: 850 !important;
+  color: rgba(255,255,255,0.86) !important;
+  white-space: normal !important;
+}
+
+.route-sport-selected-check {
+  position: absolute !important;
+  right: 9px !important;
+  top: 9px !important;
+  z-index: 3 !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: #dfff00 !important;
+  color: #071003 !important;
+  font-weight: 1000 !important;
+  box-shadow: 0 0 24px rgba(223,255,0,0.45) !important;
+}
+
+@media (max-width: 430px) {
+  .route-sport-photo-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .route-sport-photo-card {
+    min-height: 82px !important;
+    padding: 8px !important;
+    border-radius: 14px !important;
+  }
+
+  .route-sport-photo-copy strong {
+    font-size: 17px !important;
+  }
+
+  .route-sport-photo-copy small {
+    font-size: 9.5px !important;
+  }
+}
+
+@media (max-width: 370px) {
+  .route-sport-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
