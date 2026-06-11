@@ -1096,9 +1096,6 @@ function CreateTrainingPageContent() {
           <div style={styles.heroText}>
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
-            <p style={styles.subtitle}>
-              Build the essentials step by step. Only the active section stays open, so the form stays fast on mobile.
-            </p>
           </div>
 
           <div style={styles.stepRail}>
@@ -1121,7 +1118,11 @@ function CreateTrainingPageContent() {
           </div>
         </header>
 
-        {message ? <section style={styles.message}>{message}</section> : null}
+        {message ? (
+          <section style={activeStep === "basics" ? styles.message : styles.attachedBadge}>
+            {message}
+          </section>
+        ) : null}
 
         {loading ? (
           <section style={styles.card}>Loading create flow...</section>
@@ -1708,6 +1709,24 @@ function CreateTrainingPageContent() {
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
+  attachedBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: "calc(100vw - 48px)",
+    margin: "4px 0 14px",
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(220,255,0,0.22)",
+    background: "rgba(220,255,0,0.075)",
+    color: "#dfff00",
+    fontWeight: 900,
+    fontSize: 12,
+    lineHeight: 1.2,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+
   inlinePhotoBlock: {
     display: "grid",
     gap: 12,
@@ -1850,7 +1869,20 @@ const styles = {
     gap: 7,
     overflowX: "auto",
     paddingBottom: 2,
-  },
+  
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "auto",
+    overflowY: "hidden",
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
+    display: "flex",
+    flexWrap: "nowrap",
+    justifyContent: "flex-start",
+    gap: 10,
+    paddingRight: 56,
+    paddingBottom: 8,
+},
   stepRailItem: {
     flex: "0 0 auto",
     scrollSnapAlign: "start",
@@ -1866,7 +1898,12 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: 7,
-  },
+  
+    flex: "0 0 auto",
+    minWidth: 116,
+    maxWidth: 136,
+    whiteSpace: "nowrap",
+},
   stepRailItemActive: {
     flex: "0 0 auto",
     scrollSnapAlign: "start",
@@ -1882,7 +1919,12 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: 7,
-  },
+  
+    flex: "0 0 auto",
+    minWidth: 116,
+    maxWidth: 136,
+    whiteSpace: "nowrap",
+},
   stepActions: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1.2fr)",
