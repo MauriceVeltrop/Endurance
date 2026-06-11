@@ -1096,6 +1096,9 @@ function CreateTrainingPageContent() {
           <div style={styles.heroText}>
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
+            <p style={styles.subtitle}>
+              Build the essentials step by step. Only the active section stays open, so the form stays fast on mobile.
+            </p>
           </div>
 
           <div style={styles.stepRail}>
@@ -1118,11 +1121,7 @@ function CreateTrainingPageContent() {
           </div>
         </header>
 
-        {message ? (
-          <section style={activeStep === "basics" ? styles.message : styles.attachedBadge}>
-            {message}
-          </section>
-        ) : null}
+        {message ? <section style={styles.message}>{message}</section> : null}
 
         {loading ? (
           <section style={styles.card}>Loading create flow...</section>
@@ -1348,18 +1347,6 @@ function CreateTrainingPageContent() {
             <section style={styles.card}>
               <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Training details</h2>
-
-              <label style={styles.label}>
-                Description
-                <textarea
-                  value={form.description}
-                  onChange={(event) => updateForm("description", event.target.value)}
-                  placeholder="Describe the training, goals, requirements or notes..."
-                  rows={5}
-                  style={styles.textarea}
-                />
-              </label>
-
 
               <div style={styles.compactGrid}>
                 {selectedSport?.distance ? (
@@ -1721,21 +1708,6 @@ function CreateTrainingPageContent() {
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
-  attachedBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    maxWidth: "100%",
-    margin: "4px 0 14px",
-    padding: "9px 13px",
-    borderRadius: 999,
-    border: "1px solid rgba(220,255,0,0.20)",
-    background: "rgba(220,255,0,0.075)",
-    color: "#dfff00",
-    fontWeight: 900,
-    fontSize: 13,
-    lineHeight: 1.2,
-  },
-
   inlinePhotoBlock: {
     display: "grid",
     gap: 12,
@@ -1865,12 +1837,24 @@ const styles = {
     fontWeight: 850,
   },
   stepRail: {
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "auto",
+    overflowY: "hidden",
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
+    scrollSnapType: "x proximity",
+    paddingBottom: 6,
+    paddingRight: 24,
     display: "flex",
     gap: 7,
     overflowX: "auto",
     paddingBottom: 2,
   },
   stepRailItem: {
+    flex: "0 0 auto",
+    scrollSnapAlign: "start",
+    whiteSpace: "nowrap",
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.07)",
     color: "rgba(255,255,255,0.72)",
@@ -1884,6 +1868,9 @@ const styles = {
     gap: 7,
   },
   stepRailItemActive: {
+    flex: "0 0 auto",
+    scrollSnapAlign: "start",
+    whiteSpace: "nowrap",
     border: "1px solid rgba(228,239,22,0.30)",
     background: "#e4ef16",
     color: "#101406",
