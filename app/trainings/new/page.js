@@ -195,7 +195,6 @@ function CreateTrainingPageContent() {
   const [prefilledRoute, setPrefilledRoute] = useState(null);
   const [prefilledWorkout, setPrefilledWorkout] = useState(null);
   const [activeStep, setActiveStep] = useState("sport");
-  const formRef = useRef(null);
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -1089,9 +1088,9 @@ function CreateTrainingPageContent() {
       return;
     }
 
-    if (formRef.current?.requestSubmit) {
-      formRef.current.requestSubmit();
-    }
+    createTraining({
+      preventDefault() {},
+    });
   }
 
   function goToPreviousStep() {
@@ -1152,7 +1151,7 @@ function CreateTrainingPageContent() {
             </button>
           </section>
         ) : (
-          <form ref={formRef} onSubmit={createTraining} style={styles.form}>
+          <form onSubmit={createTraining} style={styles.form}>
             {!skipSportStep && showSportStep && activeStep === "sport" ? (
             <section style={styles.cardHot}>
               <div style={styles.cardKicker}>Step {activeStepNumber}</div>
