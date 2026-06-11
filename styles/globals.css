@@ -11861,3 +11861,161 @@ main {
     max-height: 70px !important;
   }
 }
+
+
+/* ENDURANCE_CARD_16X9_SPECIFIC_FIX_V3
+   Fixes the real training feed selectors that were still forcing portrait thumbnails.
+   This must stay after older .training-feed-compact-final rules. */
+
+.training-feed-compact-final .visual-training-card.compact-training-card,
+.training-feed-compact-final .training-card.visual-training-card.compact-training-card,
+.training-card.visual-training-card.compact-training-card.training-card-compact-row {
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 14px !important;
+  min-height: 0 !important;
+  padding: 14px !important;
+}
+
+.training-feed-compact-final .visual-training-media.compact-training-media,
+.training-feed-compact-final .training-card-media.visual-training-media.compact-training-media,
+.training-card-media.visual-training-media.compact-training-media.training-card-media-16x9 {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+  height: 84px !important;
+  min-height: 84px !important;
+  max-height: 84px !important;
+  aspect-ratio: 16 / 9 !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  align-self: start !important;
+}
+
+.training-feed-compact-final .visual-training-media.compact-training-media img,
+.training-feed-compact-final .training-card-media.visual-training-media.compact-training-media img,
+.training-card-media.visual-training-media.compact-training-media.training-card-media-16x9 img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+.training-feed-compact-final .visual-training-media::after,
+.training-card-media.visual-training-media.compact-training-media.training-card-media-16x9::after {
+  border-radius: 18px !important;
+}
+
+.training-feed-compact-final .compact-training-body,
+.training-feed-compact-final .visual-training-body.compact-training-body,
+.training-card.visual-training-card.compact-training-card .training-card-body {
+  min-width: 0 !important;
+  padding: 0 !important;
+  gap: 5px !important;
+  align-content: start !important;
+}
+
+.training-feed-compact-final .visual-training-title,
+.training-card.visual-training-card.compact-training-card .visual-training-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+.training-feed-compact-final .compact-card-bottom,
+.training-card.visual-training-card.compact-training-card .compact-card-bottom {
+  margin-top: auto !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: flex-end !important;
+}
+
+/* Workouts and Routes: same compact 16:9 media standard */
+.workout-card,
+.route-card {
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr) !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.workout-card-media,
+.route-card-media,
+.route-preview.endurance-card-media-16x9 {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+  height: 84px !important;
+  min-height: 84px !important;
+  max-height: 84px !important;
+  aspect-ratio: 16 / 9 !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+.workout-card-media img,
+.workout-card-image,
+.route-card-media img,
+.route-card-image,
+.route-preview-image,
+.route-preview img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+@media (max-width: 430px) {
+  .training-feed-compact-final .visual-training-card.compact-training-card,
+  .training-feed-compact-final .training-card.visual-training-card.compact-training-card,
+  .training-card.visual-training-card.compact-training-card.training-card-compact-row,
+  .workout-card,
+  .route-card {
+    grid-template-columns: 138px minmax(0, 1fr) !important;
+    gap: 13px !important;
+    padding: 13px !important;
+  }
+
+  .training-feed-compact-final .visual-training-media.compact-training-media,
+  .training-feed-compact-final .training-card-media.visual-training-media.compact-training-media,
+  .training-card-media.visual-training-media.compact-training-media.training-card-media-16x9,
+  .workout-card-media,
+  .route-card-media,
+  .route-preview.endurance-card-media-16x9 {
+    width: 138px !important;
+    min-width: 138px !important;
+    max-width: 138px !important;
+    height: 78px !important;
+    min-height: 78px !important;
+    max-height: 78px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .training-feed-compact-final .visual-training-card.compact-training-card,
+  .training-feed-compact-final .training-card.visual-training-card.compact-training-card,
+  .training-card.visual-training-card.compact-training-card.training-card-compact-row,
+  .workout-card,
+  .route-card {
+    grid-template-columns: 124px minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .training-feed-compact-final .visual-training-media.compact-training-media,
+  .training-feed-compact-final .training-card-media.visual-training-media.compact-training-media,
+  .training-card-media.visual-training-media.compact-training-media.training-card-media-16x9,
+  .workout-card-media,
+  .route-card-media,
+  .route-preview.endurance-card-media-16x9 {
+    width: 124px !important;
+    min-width: 124px !important;
+    max-width: 124px !important;
+    height: 70px !important;
+    min-height: 70px !important;
+    max-height: 70px !important;
+  }
+}
