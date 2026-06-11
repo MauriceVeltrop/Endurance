@@ -45,7 +45,7 @@ export default function ImageCropperModal({
 
   const [imageUrl, setImageUrl] = useState("");
   const [ready, setReady] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.72);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [busy, setBusy] = useState(false);
 
@@ -205,7 +205,7 @@ export default function ImageCropperModal({
             <p style={styles.kicker}>{aspectLabel}</p>
             <h2 style={styles.title}>{title || preset.label}</h2>
           </div>
-          <button type="button" onClick={onCancel} style={styles.iconButton} aria-label="Close">
+          <button type="button" onClick={onCancel} style={styles.cropperCancelButton} aria-label="Close">
             ×
           </button>
         </div>
@@ -259,7 +259,7 @@ export default function ImageCropperModal({
           Zoom
           <input
             type="range"
-            min="1"
+            min="0.5"
             max="3"
             step="0.01"
             value={zoom}
@@ -268,7 +268,7 @@ export default function ImageCropperModal({
           />
         </label>
 
-        <p style={styles.help}>Drag the image itself to position it. Use zoom to frame the subject.</p>
+        <p style={styles.help}>Drag the image itself to position it. Use zoom to crop less or more.</p>
 
         {mode === "trainingHero" ? (
           <div style={styles.cardPreview}>
@@ -290,8 +290,8 @@ export default function ImageCropperModal({
           </div>
         ) : null}
 
-        <div style={styles.actions}>
-          <button type="button" onClick={onCancel} style={styles.secondaryButton}>
+        <div style={styles.cropperActionBar}>
+          <button type="button" onClick={onCancel} style={styles.cropperCancelButton}>
             Cancel
           </button>
           <button type="button" onClick={confirmCrop} disabled={busy || !ready} style={styles.primaryButton}>
@@ -304,6 +304,36 @@ export default function ImageCropperModal({
 }
 
 const styles = {
+  cropperActionBar: {
+    position: "sticky",
+    bottom: 0,
+    zIndex: 30,
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    padding: "16px 0 0",
+    marginTop: 16,
+    background: "linear-gradient(180deg, rgba(5,8,8,0), rgba(5,8,8,0.98) 32%)",
+  },
+  cropperCancelButton: {
+    minHeight: 54,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(255,255,255,0.08)",
+    color: "#fff",
+    fontWeight: 900,
+    fontSize: 16,
+  },
+  cropperSaveButton: {
+    minHeight: 54,
+    borderRadius: 999,
+    border: "none",
+    background: "#dfff00",
+    color: "#071003",
+    fontWeight: 950,
+    fontSize: 16,
+  },
+
   backdrop: {
     position: "fixed",
     inset: 0,
