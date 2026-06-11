@@ -295,7 +295,7 @@ export default function ImageCropperModal({
             Cancel
           </button>
           <button type="button" onClick={confirmCrop} disabled={busy || !ready} style={styles.primaryButton}>
-            {busy ? "Cropping..." : "Use cropped image"}
+            {busy ? "Saving..." : "Save photo"}
           </button>
         </div>
       </div>
@@ -303,7 +303,7 @@ export default function ImageCropperModal({
         <button type="button" onClick={onCancel} style={styles.cropperCancelButton}>
           Cancel
         </button>
-        <button type="button" onClick=confirmCrop style={styles.cropperSaveButton}>
+        <button type="button" onClick={confirmCrop} style={styles.cropperSaveButton}>
           Save photo
         </button>
       </div>
