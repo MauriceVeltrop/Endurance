@@ -50,7 +50,7 @@ export default function ImageCropperModal({
   const [busy, setBusy] = useState(false);
 
   const aspectLabel = useMemo(
-    () => (mode === "avatar" ? "Square avatar" : "Portrait training photo"),
+    () => (mode === "avatar" ? "Square avatar" : "16:9 training photo"),
     [mode]
   );
 
@@ -58,7 +58,7 @@ export default function ImageCropperModal({
     const url = createObjectUrl(file);
     setImageUrl(url);
     setReady(false);
-    setZoom(1);
+    setZoom(0.85);
     setPan({ x: 0, y: 0 });
 
     return () => revokeObjectUrl(url);
@@ -66,7 +66,7 @@ export default function ImageCropperModal({
 
   function setupImage() {
     setReady(true);
-    setZoom(1);
+    setZoom(0.85);
     setPan({ x: 0, y: 0 });
   }
 
@@ -268,7 +268,7 @@ export default function ImageCropperModal({
           />
         </label>
 
-        <p style={styles.help}>Drag the image itself to position it. Use zoom to frame the subject.</p>
+        <p style={styles.help}>Drag the image to position it. Use zoom to crop less or more.</p>
 
         {mode === "trainingHero" ? (
           <div style={styles.cardPreview}>
@@ -283,9 +283,9 @@ export default function ImageCropperModal({
               ) : null}
             </div>
             <div style={styles.cardPreviewText}>
-              <span style={styles.cardPreviewKicker}>Feed preview</span>
+              <span style={styles.cardPreviewKicker}>Content preview</span>
               <strong>Training photo</strong>
-              <small>9:16 portrait card</small>
+              <small>16:9 landscape card</small>
             </div>
           </div>
         ) : null}
