@@ -195,6 +195,7 @@ function CreateTrainingPageContent() {
   const [prefilledRoute, setPrefilledRoute] = useState(null);
   const [prefilledWorkout, setPrefilledWorkout] = useState(null);
   const [activeStep, setActiveStep] = useState("sport");
+  const formRef = useRef(null);
 
   const [form, setForm] = useState({
     sport_id: "",
@@ -1076,14 +1077,30 @@ function CreateTrainingPageContent() {
   const activeStepDef = createSteps[activeStepIndex] || createSteps[0];
   const nextStepDef = createSteps[activeStepIndex + 1] || null;
   const previousStepDef = createSteps[activeStepIndex - 1] || null;
+  const isFinalVisibleStep = !nextStepDef;
   const partnerOptions = partners.filter((partner) => partner.id !== profile?.id);
 
   function goToNextStep() {
-    if (nextStepDef) setActiveStep(nextStepDef.id);
+    const currentIndex = createSteps.findIndex((step) => step.id === activeStep);
+    const nextStep = createSteps[currentIndex + 1];
+
+    if (nextStep) {
+      setActiveStep(nextStep.id);
+      return;
+    }
+
+    if (formRef.current?.requestSubmit) {
+      formRef.current.requestSubmit();
+    }
   }
 
   function goToPreviousStep() {
-    if (previousStepDef) setActiveStep(previousStepDef.id);
+    const currentIndex = createSteps.findIndex((step) => step.id === activeStep);
+    const previousStep = createSteps[currentIndex - 1];
+
+    if (previousStep) {
+      setActiveStep(previousStep.id);
+    }
   }
 
   return (
@@ -1135,7 +1152,7 @@ function CreateTrainingPageContent() {
             </button>
           </section>
         ) : (
-          <form onSubmit={createTraining} style={styles.form}>
+          <form ref={formRef} onSubmit={createTraining} style={styles.form}>
             {!skipSportStep && showSportStep && activeStep === "sport" ? (
             <section style={styles.cardHot}>
               <div style={styles.cardKicker}>Step {activeStepNumber}</div>
@@ -1210,7 +1227,7 @@ function CreateTrainingPageContent() {
 
               <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
               </div>
             </section>
             ) : null}
@@ -1339,7 +1356,7 @@ function CreateTrainingPageContent() {
 
               <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
               </div>
             </section>
             ) : null}
@@ -1447,7 +1464,7 @@ function CreateTrainingPageContent() {
 
 <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
               </div>
             </section>
             ) : null}
@@ -1515,7 +1532,7 @@ function CreateTrainingPageContent() {
                 )}
                 <div style={styles.stepActions}>
                   {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
                 </div>
               </section>
             ) : null}
@@ -1570,7 +1587,7 @@ function CreateTrainingPageContent() {
                 )}
                 <div style={styles.stepActions}>
                   {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                  <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
                 </div>
               </section>
             ) : null}
@@ -1601,7 +1618,7 @@ function CreateTrainingPageContent() {
 
               <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
               </div>
             </section>
             ) : null}
@@ -1638,7 +1655,7 @@ function CreateTrainingPageContent() {
 
               <div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
-                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
+                <button type="button" onClick={goToNextStep} style={styles.primaryButton}>{isFinalVisibleStep ? "Create training" : "Continue"}</button>
               </div>
             </section>
             ) : null}
