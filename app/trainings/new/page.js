@@ -226,7 +226,6 @@ function CreateTrainingPageContent() {
   const visibleSports = useMemo(() => {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
-
   const skipSportStep = Boolean(prefilledWorkout || prefilledRoute);
   const skipRouteStep = Boolean(prefilledRoute);
   const skipWorkoutStep = Boolean(prefilledWorkout);
@@ -1068,11 +1067,8 @@ function CreateTrainingPageContent() {
     { id: "basics", label: "Basics" },
     { id: "time", label: "Time" },
     { id: "details", label: "Details" },
-    selectedSport?.routes && !skipRouteStep ? { id: "route", label: "Route" } : null,
-    selectedSport?.workouts && !skipWorkoutStep ? { id: "workout", label: "Workout" } : null,
     { id: "visibility", label: "Visibility" },
-    { id: "invites", label: "Invites" },
-    { id: "photo", label: "Photo" },
+    form.visibility === "selected" ? { id: "invites", label: "Invites" } : null,
   ].filter(Boolean);
 
   const activeStepIndex = Math.max(0, createSteps.findIndex((step) => step.id === activeStep));
@@ -1420,14 +1416,42 @@ function CreateTrainingPageContent() {
                 </label>
               ) : null}
 
-              <div style={styles.stepActions}>
+              
+              <div data-section="DetailsPhotoInline" style={styles.inlinePhotoBlock}>
+                <div>
+                  <h3 style={styles.inlinePhotoTitle}>Photo</h3>
+                  <p style={styles.muted}>Optional hero image for this training.</p>
+                </div>
+
+                <label style={styles.photoDropCompact}>
+                  {trainingPhotoPreview ? (
+                    <img src={trainingPhotoPreview} alt="Training preview" style={styles.inlinePhotoPreview} />
+                  ) : (
+                    <span>Add training photo</span>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => chooseTrainingPhoto(event.target.files?.[0])}
+                    style={styles.hiddenFileInput}
+                  />
+                </label>
+
+                {trainingPhotoPreview ? (
+                  <button type="button" onClick={removeTrainingPhoto} style={styles.tinyButton}>
+                    Remove photo
+                  </button>
+                ) : null}
+              </div>
+
+<div style={styles.stepActions}>
                 {previousStepDef ? <button type="button" onClick={goToPreviousStep} style={styles.secondaryButton}>Back</button> : <span />}
                 <button type="button" onClick={goToNextStep} style={styles.primaryButton}>Continue</button>
               </div>
             </section>
             ) : null}
 
-            {selectedSport?.routes && activeStep === "route" ? (
+            {false && selectedSport?.routes && activeStep === "route" ? (
               <section style={styles.card}>
                 <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                 <h2 style={styles.cardTitle}>Attached route</h2>
@@ -1495,7 +1519,7 @@ function CreateTrainingPageContent() {
               </section>
             ) : null}
 
-            {selectedSport?.workouts && activeStep === "workout" ? (
+            {false && selectedSport?.workouts && activeStep === "workout" ? (
               <section style={styles.card}>
                 <div style={styles.cardKicker}>Step {activeStepNumber}</div>
                 <h2 style={styles.cardTitle}>Attach workout</h2>
@@ -1618,7 +1642,7 @@ function CreateTrainingPageContent() {
             </section>
             ) : null}
 
-            {activeStep === "photo" ? (
+            {false && activeStep === "photo" ? (
             <section style={styles.card}>
               <div style={styles.sectionHeader}>
                 <div>
@@ -1684,6 +1708,41 @@ function CreateTrainingPageContent() {
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
+  inlinePhotoBlock: {
+    display: "grid",
+    gap: 12,
+    marginTop: 18,
+    padding: 18,
+    borderRadius: 24,
+    border: "1px solid rgba(220,255,0,0.18)",
+    background: "rgba(255,255,255,0.045)",
+  },
+  inlinePhotoTitle: {
+    margin: 0,
+    fontSize: 22,
+    fontWeight: 950,
+    color: "#fff",
+  },
+  inlinePhotoPreview: {
+    width: "100%",
+    maxHeight: 180,
+    objectFit: "cover",
+    borderRadius: 20,
+    border: "1px solid rgba(255,255,255,0.12)",
+  },
+  photoDropCompact: {
+    display: "grid",
+    placeItems: "center",
+    minHeight: 84,
+    borderRadius: 20,
+    border: "1px dashed rgba(220,255,0,0.45)",
+    color: "#dfff00",
+    fontWeight: 950,
+    background: "rgba(220,255,0,0.06)",
+    cursor: "pointer",
+    overflow: "hidden",
+  },
+
   trainingCreateTopoLayer: {
     position: "fixed",
     inset: 0,
