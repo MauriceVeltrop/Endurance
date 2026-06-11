@@ -227,23 +227,7 @@ function CreateTrainingPageContent() {
     return sportOptions.filter((sport) => allowedSportIds.includes(sport.id));
   }, [allowedSportIds]);
 
-  const skipSportStep = Boolean(prefilledWorkout || prefilledRoute);
-  const skipRouteStep = Boolean(prefilledRoute);
-  const skipWorkoutStep = Boolean(prefilledWorkout);
-  const showSportStep = !skipSportStep && visibleSports.length > 1;
-
-  useEffect(() => {
-    if (skipSportStep && activeStep === "sport") {
-      setActiveStep("basics");
-    }
-    if (skipRouteStep && activeStep === "route") {
-      setActiveStep("basics");
-    }
-    if (skipWorkoutStep && activeStep === "workout") {
-      setActiveStep("basics");
-    }
-  }, [skipSportStep, skipRouteStep, skipWorkoutStep, activeStep]);
-
+  const showSportStep = visibleSports.length > 1;
 
   useEffect(() => {
     if (loading) return;
@@ -1068,8 +1052,8 @@ function CreateTrainingPageContent() {
     { id: "basics", label: "Basics" },
     { id: "time", label: "Time" },
     { id: "details", label: "Details" },
-    selectedSport?.routes && !skipRouteStep ? { id: "route", label: "Route" } : null,
-    selectedSport?.workouts && !skipWorkoutStep ? { id: "workout", label: "Workout" } : null,
+    selectedSport?.routes ? { id: "route", label: "Route" } : null,
+    selectedSport?.workouts ? { id: "workout", label: "Workout" } : null,
     { id: "visibility", label: "Visibility" },
     { id: "invites", label: "Invites" },
     { id: "photo", label: "Photo" },
@@ -1092,6 +1076,7 @@ function CreateTrainingPageContent() {
 
   return (
     <main style={styles.page}>
+      <div style={styles.trainingCreateTopoLayer} aria-hidden="true" />
       <section style={styles.shell}>
         <AppHeader profile={profile} compact />
 
@@ -1681,6 +1666,31 @@ function CreateTrainingPageContent() {
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
+  trainingCreateTopoLayer: {
+    position: "fixed",
+    inset: 0,
+    pointerEvents: "none",
+    zIndex: 0,
+    opacity: 0.34,
+    backgroundImage: `
+      repeating-radial-gradient(
+        ellipse at 70% 18%,
+        rgba(215,255,0,0.18) 0 1px,
+        transparent 1px 18px
+      ),
+      repeating-radial-gradient(
+        ellipse at 22% 78%,
+        rgba(70,160,95,0.12) 0 1px,
+        transparent 1px 22px
+      ),
+      linear-gradient(rgba(215,255,0,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(215,255,0,0.03) 1px, transparent 1px)
+    `,
+    backgroundSize: "760px 520px, 680px 460px, 120px 120px, 120px 120px",
+    backgroundPosition: "right -170px top -90px, left -180px bottom -120px, center, center",
+    mixBlendMode: "screen",
+  },
+
   page: {
     minHeight: "100vh",
     background: "radial-gradient(circle at top right, rgba(228,239,22,0.12), transparent 30%), linear-gradient(180deg, #07100b 0%, #050505 65%, #020202 100%)",
@@ -1690,6 +1700,8 @@ const styles = {
     overflowX: "hidden",
   },
   shell: {
+    position: "relative",
+    zIndex: 1,
     width: "100%",
     maxWidth: 920,
     margin: "0 auto",
