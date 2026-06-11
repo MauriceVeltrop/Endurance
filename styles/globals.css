@@ -11731,3 +11731,133 @@ main {
     font-size: clamp(24px, 7vw, 34px);
   }
 }
+
+
+/* ENDURANCE_ALL_CARDS_16X9_LANDSCAPE_V1
+   Trainingcards, Workoutcards and Routecards:
+   compact row layout with a real 16:9 landscape thumbnail on the left.
+   Avatars are intentionally not targeted. */
+
+.endurance-card-row-16x9,
+.training-card.visual-training-card.compact-training-card,
+.training-card-compact-row,
+.workout-card,
+.workout-card-compact-row,
+.route-card,
+.route-card-compact-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+}
+
+.endurance-card-media-16x9,
+.training-card-media.visual-training-media,
+.training-card-media.compact-training-media,
+.workout-card-media,
+.route-card-media,
+.route-preview.endurance-card-media-16x9 {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+  flex: 0 0 150px !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
+  max-height: 86px !important;
+  align-self: flex-start !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+.endurance-card-media-16x9 > img,
+.endurance-card-img-16x9,
+.training-card-media.visual-training-media img,
+.training-card-media.compact-training-media img,
+.workout-card-media img,
+.workout-card-image,
+.route-card-media img,
+.route-card-image,
+.route-preview-image,
+.route-preview img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: inherit;
+}
+
+.training-card.visual-training-card.compact-training-card .training-card-body,
+.training-card-compact-row .training-card-body,
+.workout-card .workout-card-body,
+.workout-card-compact-row .workout-card-body,
+.route-card .route-card-body,
+.route-card-compact-row .route-card-body {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.training-card.visual-training-card.compact-training-card .training-card-title,
+.training-card-compact-row .training-card-title,
+.workout-card .workout-card-title,
+.workout-card-compact-row .workout-card-title,
+.route-card .route-card-title,
+.route-card-compact-row .route-card-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden !important;
+  overflow-wrap: anywhere;
+}
+
+.training-card.visual-training-card.compact-training-card .training-card-actions,
+.training-card-compact-row .training-card-actions,
+.workout-card .workout-card-actions,
+.workout-card-compact-row .workout-card-actions,
+.route-card .route-card-actions,
+.route-card-compact-row .route-card-actions {
+  margin-top: auto !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: flex-end !important;
+}
+
+@media (max-width: 430px) {
+  .endurance-card-media-16x9,
+  .training-card-media.visual-training-media,
+  .training-card-media.compact-training-media,
+  .workout-card-media,
+  .route-card-media,
+  .route-preview.endurance-card-media-16x9 {
+    width: 138px !important;
+    min-width: 138px !important;
+    max-width: 138px !important;
+    max-height: 78px !important;
+  }
+
+  .endurance-card-row-16x9,
+  .training-card.visual-training-card.compact-training-card,
+  .training-card-compact-row,
+  .workout-card,
+  .workout-card-compact-row,
+  .route-card,
+  .route-card-compact-row {
+    gap: 14px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .endurance-card-media-16x9,
+  .training-card-media.visual-training-media,
+  .training-card-media.compact-training-media,
+  .workout-card-media,
+  .route-card-media,
+  .route-preview.endurance-card-media-16x9 {
+    width: 124px !important;
+    min-width: 124px !important;
+    max-width: 124px !important;
+    max-height: 70px !important;
+  }
+}
