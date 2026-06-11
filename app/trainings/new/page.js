@@ -1096,9 +1096,6 @@ function CreateTrainingPageContent() {
           <div style={styles.heroText}>
             <div style={styles.kicker}>Create training</div>
             <h1 style={styles.title}>Plan the session.</h1>
-            <p style={styles.subtitle}>
-              Build the essentials step by step. Only the active section stays open, so the form stays fast on mobile.
-            </p>
           </div>
 
           <div style={styles.stepRail}>
@@ -1121,7 +1118,11 @@ function CreateTrainingPageContent() {
           </div>
         </header>
 
-        {message ? <section style={styles.message}>{message}</section> : null}
+        {message ? (
+          <section style={activeStep === "basics" ? styles.message : styles.attachedBadge}>
+            {message}
+          </section>
+        ) : null}
 
         {loading ? (
           <section style={styles.card}>Loading create flow...</section>
@@ -1720,6 +1721,21 @@ function CreateTrainingPageContent() {
 const glass = "linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.045))";
 
 const styles = {
+  attachedBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: "100%",
+    margin: "4px 0 14px",
+    padding: "9px 13px",
+    borderRadius: 999,
+    border: "1px solid rgba(220,255,0,0.20)",
+    background: "rgba(220,255,0,0.075)",
+    color: "#dfff00",
+    fontWeight: 900,
+    fontSize: 13,
+    lineHeight: 1.2,
+  },
+
   inlinePhotoBlock: {
     display: "grid",
     gap: 12,
