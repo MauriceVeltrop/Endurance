@@ -1348,6 +1348,18 @@ function CreateTrainingPageContent() {
               <div style={styles.cardKicker}>Step {activeStepNumber}</div>
               <h2 style={styles.cardTitle}>Training details</h2>
 
+              <label style={styles.label}>
+                Description
+                <textarea
+                  value={form.description}
+                  onChange={(event) => updateForm("description", event.target.value)}
+                  placeholder="Describe the training, goals, requirements or notes..."
+                  rows={5}
+                  style={styles.textarea}
+                />
+              </label>
+
+
               <div style={styles.compactGrid}>
                 {selectedSport?.distance ? (
                   <label style={styles.label}>
