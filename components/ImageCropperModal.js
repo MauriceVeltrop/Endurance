@@ -205,7 +205,7 @@ export default function ImageCropperModal({
             <p style={styles.kicker}>{aspectLabel}</p>
             <h2 style={styles.title}>{title || preset.label}</h2>
           </div>
-          <button type="button" onClick={onCancel} style={styles.cropperCancelButton} aria-label="Close">
+          <button type="button" onClick={onCancel} style={styles.iconButton} aria-label="Close">
             ×
           </button>
         </div>
@@ -268,7 +268,7 @@ export default function ImageCropperModal({
           />
         </label>
 
-        <p style={styles.help}>Drag the image itself to position it. Use zoom to crop less or more.</p>
+        <p style={styles.help}>Drag the image itself to position it. Use zoom to frame the subject.</p>
 
         {mode === "trainingHero" ? (
           <div style={styles.cardPreview}>
@@ -290,8 +290,8 @@ export default function ImageCropperModal({
           </div>
         ) : null}
 
-        <div style={styles.cropperActionBar}>
-          <button type="button" onClick={onCancel} style={styles.cropperCancelButton}>
+        <div style={styles.actions}>
+          <button type="button" onClick={onCancel} style={styles.secondaryButton}>
             Cancel
           </button>
           <button type="button" onClick={confirmCrop} disabled={busy || !ready} style={styles.primaryButton}>
@@ -299,26 +299,40 @@ export default function ImageCropperModal({
           </button>
         </div>
       </div>
+      <div data-cropper-fixed-actions="true" style={styles.cropperFixedActions}>
+        <button type="button" onClick={onCancel} style={styles.cropperCancelButton}>
+          Cancel
+        </button>
+        <button type="button" onClick=confirmCrop style={styles.cropperSaveButton}>
+          Save photo
+        </button>
+      </div>
+
     </div>
   );
 }
 
 const styles = {
-  cropperActionBar: {
-    position: "sticky",
-    bottom: 0,
-    zIndex: 30,
+  cropperFixedActions: {
+    position: "fixed",
+    left: 20,
+    right: 20,
+    bottom: 92,
+    zIndex: 9999,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 12,
-    padding: "16px 0 0",
-    marginTop: 16,
-    background: "linear-gradient(180deg, rgba(5,8,8,0), rgba(5,8,8,0.98) 32%)",
+    padding: 12,
+    borderRadius: 28,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(5,8,8,0.94)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.65)",
+    backdropFilter: "blur(18px)",
   },
   cropperCancelButton: {
     minHeight: 54,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.16)",
+    border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.08)",
     color: "#fff",
     fontWeight: 900,
@@ -357,7 +371,8 @@ const styles = {
     padding: 16,
     boxShadow: "0 32px 110px rgba(0,0,0,0.65)",
     boxSizing: "border-box",
-  },
+  
+    paddingBottom: 180,},
   header: {
     display: "flex",
     justifyContent: "space-between",
