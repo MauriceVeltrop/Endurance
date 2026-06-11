@@ -12408,3 +12408,38 @@ main {
 .route-step-page .route-sport-photo-card {
   backdrop-filter: blur(10px);
 }
+
+
+/* Endurance image standard:
+   Avatars remain 1:1. All non-avatar content images use 16:9. */
+.training-card-image,
+.training-hero-image,
+.training-photo,
+.training-preview-image,
+.workout-card-image,
+.workout-hero-image,
+.workout-preview-image,
+.route-card-image,
+.route-hero-image,
+.route-preview-image,
+.route-map-preview,
+.content-card-image,
+.content-hero-image,
+[class*="training"][class*="image"]:not([class*="avatar"]),
+[class*="workout"][class*="image"]:not([class*="avatar"]),
+[class*="route"][class*="image"]:not([class*="avatar"]) {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* Route preview/map containers should reserve consistent 16:9 space. */
+.route-preview,
+.route-card-preview,
+.training-route-preview,
+.workout-preview,
+.training-image-frame,
+.workout-image-frame,
+.route-image-frame {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
