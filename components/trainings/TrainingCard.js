@@ -80,8 +80,8 @@ export default function TrainingCard({ training, participants = [] }) {
     training.max_participants && participants.length >= Math.max(1, training.max_participants - 2);
 
   return (
-    <article className="training-card visual-training-card compact-training-card training-card-full-hero">
-      <Link href={href} className="training-card-media visual-training-media compact-training-media training-card-full-hero-media" aria-label={training.title}>
+    <article className="training-card visual-training-card compact-training-card endurance-list-card endurance-training-card training-card-portrait-left">
+      <Link href={href} className="training-card-media visual-training-media compact-training-media endurance-list-card-media endurance-card-media-portrait" aria-label={training.title}>
         {image ? (
           <img
             src={image}
