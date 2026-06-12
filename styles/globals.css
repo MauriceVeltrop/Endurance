@@ -12454,3 +12454,365 @@ button.route-sport-card > * {
     font-size: clamp(26px, 7.2vw, 36px) !important;
   }
 }
+
+
+
+/* ENDURANCE_LIST_CARDS_9X16_LEFT_FINAL_V2
+   Carefully scoped final layout for the actual current card components:
+   - TrainingCard: .endurance-list-card / .training-card-portrait-left
+   - WorkoutCard: .workout-card-v2
+   - RouteCard: .route-osm-card
+   The /routes/new sport picker is NOT targeted.
+*/
+
+/* ---------- Training cards ---------- */
+.endurance-list-card.training-card-portrait-left,
+.training-card-portrait-left {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+  padding: 14px !important;
+  min-height: 210px !important;
+  border-radius: 28px !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(223,255,0,0.08), transparent 36%),
+    linear-gradient(135deg, rgba(16,23,29,0.96), rgba(4,9,13,0.96)) !important;
+  border: 1px solid rgba(223,255,0,0.20) !important;
+  box-shadow: 0 22px 70px rgba(0,0,0,0.24) !important;
+}
+
+.training-card-portrait-left .endurance-list-card-media,
+.training-card-portrait-left .endurance-card-media-portrait {
+  position: relative !important;
+  display: block !important;
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: 9 / 16 !important;
+  align-self: stretch !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  background: rgba(223,255,0,0.08) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.08),
+    0 14px 38px rgba(0,0,0,0.26) !important;
+}
+
+.training-card-portrait-left .endurance-list-card-media img,
+.training-card-portrait-left .endurance-card-media-portrait img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 9 / 16 !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: inherit !important;
+}
+
+/* ---------- Workout cards, current component uses workout-card-v2 ---------- */
+.workout-card-v2 {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) auto !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+  padding: 14px !important;
+  min-height: 210px !important;
+  border-radius: 28px !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(223,255,0,0.08), transparent 36%),
+    linear-gradient(135deg, rgba(16,23,29,0.96), rgba(4,9,13,0.96)) !important;
+  border: 1px solid rgba(223,255,0,0.20) !important;
+  box-shadow: 0 22px 70px rgba(0,0,0,0.24) !important;
+}
+
+.workout-card-v2-hero {
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  height: auto !important;
+  aspect-ratio: 9 / 16 !important;
+  align-self: stretch !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  background-size: cover !important;
+  background-position: center !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.08),
+    0 14px 38px rgba(0,0,0,0.26) !important;
+}
+
+.workout-card-v2-body {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-self: stretch !important;
+  padding: 2px 0 !important;
+}
+
+.workout-card-v2-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  font-size: clamp(24px, 6vw, 36px) !important;
+  line-height: 0.96 !important;
+  letter-spacing: -0.075em !important;
+  margin: 0 !important;
+}
+
+.workout-card-v2-meta,
+.workout-card-v2-muscles {
+  font-size: 13.5px !important;
+  line-height: 1.2 !important;
+}
+
+/* ---------- Route cards, current component uses route-osm-card ---------- */
+.route-osm-card {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+  padding: 14px !important;
+  min-height: 210px !important;
+  border-radius: 28px !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(223,255,0,0.08), transparent 36%),
+    linear-gradient(135deg, rgba(16,23,29,0.96), rgba(4,9,13,0.96)) !important;
+  border: 1px solid rgba(223,255,0,0.20) !important;
+  box-shadow: 0 22px 70px rgba(0,0,0,0.24) !important;
+}
+
+.route-osm-card-map {
+  position: relative !important;
+  display: block !important;
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  height: auto !important;
+  aspect-ratio: 9 / 16 !important;
+  align-self: stretch !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.08),
+    0 14px 38px rgba(0,0,0,0.26) !important;
+}
+
+/* force map internals to fill portrait preview */
+.route-osm-card-map > *,
+.route-osm-card-map .leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.route-osm-card-body {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-self: stretch !important;
+  padding: 2px 0 !important;
+}
+
+.route-osm-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  font-size: clamp(24px, 6vw, 36px) !important;
+  line-height: 0.96 !important;
+  letter-spacing: -0.075em !important;
+  margin: 0 !important;
+}
+
+/* ---------- Shared right-side training text and buttons ---------- */
+.training-card-portrait-left .training-card-body,
+.training-card-portrait-left .visual-training-body,
+.training-card-portrait-left .compact-training-body {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  padding: 2px 0 !important;
+  gap: 8px !important;
+}
+
+.training-card-portrait-left .visual-card-topline {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  min-height: 22px !important;
+}
+
+.training-card-portrait-left .visual-sport-icon {
+  color: #dfff00 !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+/* Hide small avatar stacks on training cards only; keep text participant count */
+.training-card-portrait-left .training-participants,
+.training-card-portrait-left .participant-avatars,
+.training-card-portrait-left .participant-avatar {
+  display: none !important;
+}
+
+.training-card-portrait-left .participant-count-pill,
+.training-card-portrait-left .visual-status.participant-count-pill {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: #3aa7ff !important;
+  font-size: 14px !important;
+  font-weight: 1000 !important;
+}
+
+.training-card-portrait-left .training-card-title,
+.training-card-portrait-left .visual-training-title {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  color: #fff !important;
+  text-decoration: none !important;
+  font-size: clamp(24px, 6vw, 36px) !important;
+  line-height: 0.96 !important;
+  letter-spacing: -0.075em !important;
+  font-weight: 1000 !important;
+  margin: 0 !important;
+}
+
+.training-card-portrait-left .visual-distance-line {
+  align-self: flex-start !important;
+  color: #dfff00 !important;
+  background: rgba(223,255,0,0.10) !important;
+  border: 1px solid rgba(223,255,0,0.24) !important;
+  border-radius: 999px !important;
+  padding: 4px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.1 !important;
+  font-weight: 950 !important;
+  margin: 0 !important;
+}
+
+.training-card-portrait-left .training-card-meta,
+.training-card-portrait-left .visual-training-meta,
+.training-card-portrait-left .compact-training-meta,
+.route-osm-meta-row,
+.route-osm-submeta {
+  display: grid !important;
+  gap: 5px !important;
+  color: rgba(255,255,255,0.70) !important;
+  font-size: 13.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 850 !important;
+}
+
+.training-card-portrait-left .training-location-link,
+.training-card-portrait-left .training-card-meta span,
+.route-osm-submeta span,
+.workout-card-v2-meta span {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.training-card-portrait-left .visual-card-bottom,
+.training-card-portrait-left .compact-card-bottom {
+  margin-top: auto !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+}
+
+.training-card-portrait-left .primary-action,
+.training-card-portrait-left .visual-join-button,
+.training-card-portrait-left .compact-join-button {
+  min-width: 96px !important;
+  min-height: 42px !important;
+  padding: 0 20px !important;
+  border-radius: 999px !important;
+  font-size: 15px !important;
+  font-weight: 1000 !important;
+  margin-left: auto !important;
+  box-shadow: 0 18px 44px rgba(223,255,0,0.22) !important;
+}
+
+/* Mobile tuning */
+@media (max-width: 430px) {
+  .training-card-portrait-left,
+  .workout-card-v2,
+  .route-osm-card {
+    grid-template-columns: 104px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    padding: 14px !important;
+    min-height: 190px !important;
+    border-radius: 26px !important;
+  }
+
+  .training-card-portrait-left .endurance-list-card-media,
+  .training-card-portrait-left .endurance-card-media-portrait,
+  .workout-card-v2-hero,
+  .route-osm-card-map {
+    width: 104px !important;
+    min-width: 104px !important;
+    max-width: 104px !important;
+    border-radius: 20px !important;
+  }
+
+  .training-card-portrait-left .training-card-title,
+  .training-card-portrait-left .visual-training-title,
+  .workout-card-v2-title,
+  .route-osm-title {
+    font-size: clamp(22px, 6.2vw, 31px) !important;
+  }
+
+  .training-card-portrait-left .training-card-meta,
+  .training-card-portrait-left .visual-training-meta,
+  .training-card-portrait-left .compact-training-meta,
+  .route-osm-meta-row,
+  .route-osm-submeta,
+  .workout-card-v2-meta,
+  .workout-card-v2-muscles {
+    font-size: 12.5px !important;
+  }
+
+  .training-card-portrait-left .primary-action,
+  .training-card-portrait-left .visual-join-button,
+  .training-card-portrait-left .compact-join-button {
+    min-width: 84px !important;
+    min-height: 38px !important;
+    padding: 0 16px !important;
+    font-size: 14px !important;
+  }
+}
+
+@media (max-width: 370px) {
+  .training-card-portrait-left,
+  .workout-card-v2,
+  .route-osm-card {
+    grid-template-columns: 94px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    min-height: 174px !important;
+  }
+
+  .training-card-portrait-left .endurance-list-card-media,
+  .training-card-portrait-left .endurance-card-media-portrait,
+  .workout-card-v2-hero,
+  .route-osm-card-map {
+    width: 94px !important;
+    min-width: 94px !important;
+    max-width: 94px !important;
+  }
+}
