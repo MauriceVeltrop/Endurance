@@ -1071,20 +1071,39 @@ export default function TrainingDetailPage() {
 
         {!loading && training ? (
           <>
-            <article
-              style={{
-                ...styles.heroImageCard,
-                backgroundImage: heroImage?.src
-                  ? `linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.50) 42%, rgba(0,0,0,0.92) 100%), url(${heroImage.src})`
-                  : styles.heroImageCard.backgroundImage,
-                backgroundPosition: heroImage?.position || "center center",
-              }}
-            >
-              <div style={styles.heroTopActionsV3}>
-                <Link href="/trainings" style={styles.backLinkV3}>← Back to trainings</Link>
+            <article style={styles.hero916}>
+              <div style={styles.hero916ImageFrame}>
+                {heroImage?.src ? (
+                  <img
+                    src={heroImage.src}
+                    alt=""
+                    style={{
+                      ...styles.hero916Image,
+                      objectPosition: heroImage?.position || "center center",
+                    }}
+                  />
+                ) : (
+                  <div style={styles.hero916Fallback}>ENDURANCE</div>
+                )}
               </div>
 
-              <div style={styles.heroContentV3}>
+              <div style={styles.hero916Gradient} />
+
+              <div style={styles.hero916TopBar}>
+                <Link href="/trainings" style={styles.hero916RoundButton}>←</Link>
+                <div style={styles.hero916TopActions}>
+                  <button type="button" onClick={shareTraining} style={styles.hero916RoundButton} aria-label="Share training">
+                    ↗
+                  </button>
+                  {canManage ? (
+                    <Link href={`/trainings/${training.id}/edit`} style={styles.hero916RoundButton} aria-label="Edit training">
+                      ⋯
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+
+              <div style={styles.hero916Content}>
                 <div style={styles.badgeRow}>
                   <span style={styles.sportBadge}>🥾 {sportLabel}</span>
                   <span style={styles.visibilityBadge}>{training.visibility}</span>
@@ -1097,13 +1116,29 @@ export default function TrainingDetailPage() {
                 <div style={styles.heroMetaStackV3}>
                   <span>▣ {formatTime(training)}</span>
                   <span>⌖ {training.start_location || "Location not set"}</span>
+                  <span>
+                    {participantCount} {participantCount === 1 ? "participant" : "participants"}
+                    <span style={styles.liveDotV3}> ● </span>
+                    Live
+                  </span>
                 </div>
 
-                <div style={styles.liveRowV3}>
-                  <span>{participantCount} {participantCount === 1 ? "participant" : "participants"}</span>
-                  <span style={styles.liveDotV3}>●</span>
-                  <span>Live</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={canManage ? undefined : toggleJoin}
+                  disabled={busy || isFull}
+                  style={
+                    canManage
+                      ? styles.hero916PrimaryDisabled
+                      : joined
+                        ? styles.hero916SecondaryCta
+                        : isFull
+                          ? styles.hero916PrimaryDisabled
+                          : styles.hero916PrimaryCta
+                  }
+                >
+                  {canManage ? "You organize this" : busy ? "..." : joined ? "Joined" : isFull ? "Full" : "Join training"}
+                </button>
               </div>
             </article>
 
@@ -1988,6 +2023,124 @@ const styles = {
     margin: "0 auto",
     display: "grid",
     gap: 14,
+  },
+  hero916: {
+    position: "relative",
+    minHeight: "calc(100svh - 24px)",
+    margin: "0 -14px 0",
+    overflow: "hidden",
+    background: "#000",
+    display: "grid",
+    alignItems: "stretch",
+  },
+  hero916ImageFrame: {
+    position: "absolute",
+    inset: 0,
+    display: "grid",
+    placeItems: "center",
+    background: "#000",
+    overflow: "hidden",
+  },
+  hero916Image: {
+    width: "100%",
+    height: "100%",
+    objectFit: "contain",
+    display: "block",
+  },
+  hero916Fallback: {
+    width: "100%",
+    height: "100%",
+    display: "grid",
+    placeItems: "center",
+    color: "rgba(255,255,255,0.44)",
+    fontSize: 28,
+    fontWeight: 950,
+    letterSpacing: "0.16em",
+    background: "radial-gradient(circle at center, rgba(228,239,22,0.16), transparent 36%), #030303",
+  },
+  hero916Gradient: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    background:
+      "linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.20) 34%, rgba(0,0,0,0.62) 70%, rgba(0,0,0,0.94) 100%)",
+  },
+  hero916TopBar: {
+    position: "relative",
+    zIndex: 2,
+    minHeight: 72,
+    padding: "24px 22px 0",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  hero916TopActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  hero916RoundButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(0,0,0,0.48)",
+    backdropFilter: "blur(16px)",
+    color: "#e4ef16",
+    textDecoration: "none",
+    display: "grid",
+    placeItems: "center",
+    fontSize: 22,
+    fontWeight: 1000,
+    cursor: "pointer",
+  },
+  hero916Content: {
+    position: "relative",
+    zIndex: 2,
+    alignSelf: "end",
+    padding: "0 22px 28px",
+    display: "grid",
+    gap: 13,
+  },
+  hero916PrimaryCta: {
+    minHeight: 54,
+    width: "100%",
+    borderRadius: 999,
+    border: 0,
+    background: "#e4ef16",
+    color: "#071003",
+    fontSize: 17,
+    fontWeight: 1000,
+    boxShadow: "0 18px 48px rgba(228,239,22,0.28)",
+    cursor: "pointer",
+    marginTop: 8,
+  },
+  hero916SecondaryCta: {
+    minHeight: 54,
+    width: "100%",
+    borderRadius: 999,
+    border: "1px solid rgba(228,239,22,0.28)",
+    background: "rgba(0,0,0,0.48)",
+    color: "#e4ef16",
+    fontSize: 17,
+    fontWeight: 1000,
+    backdropFilter: "blur(16px)",
+    cursor: "pointer",
+    marginTop: 8,
+  },
+  hero916PrimaryDisabled: {
+    minHeight: 54,
+    width: "100%",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 17,
+    fontWeight: 1000,
+    backdropFilter: "blur(16px)",
+    cursor: "not-allowed",
+    marginTop: 8,
   },
   heroImageCard: {
     minHeight: "min(390px, 54vh)",
