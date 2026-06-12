@@ -2,7 +2,6 @@
 "use client";
 
 import Link from "next/link";
-import TrainingParticipants from "./TrainingParticipants";
 import { getTrainingHeroImage } from "../../lib/sportImages";
 
 function formatDate(training) {
@@ -32,12 +31,6 @@ function firstSport(training) {
   return Array.isArray(training?.sports) ? training.sports[0] : training?.sports;
 }
 
-function sportLabel(training) {
-  const sport = firstSport(training);
-  if (!sport) return "Training";
-  return String(sport).replaceAll("_", " ");
-}
-
 function sportIcon(training) {
   const sport = String(firstSport(training) || "running");
   if (sport === "running") return "🏃";
@@ -46,6 +39,9 @@ function sportIcon(training) {
   if (sport === "mountain_biking") return "🚵";
   if (sport === "walking") return "🚶";
   if (sport === "strength_training") return "🏋";
+  if (sport === "hyrox") return "🏆";
+  if (sport === "crossfit") return "✦";
+  if (sport === "bootcamp") return "◈";
   return "✦";
 }
 
@@ -76,12 +72,12 @@ export default function TrainingCard({ training, participants = [] }) {
   const heroImage = getTrainingHeroImage(training, sportId);
   const image = heroImage.src;
   const flexible = training.planning_type === "flexible";
-  const limited =
-    training.max_participants && participants.length >= Math.max(1, training.max_participants - 2);
+  const summary = distanceLine(training);
+  const participantText = `${participants.length}${training.max_participants ? `/${training.max_participants}` : ""}`;
 
   return (
-    <article className="training-card visual-training-card compact-training-card endurance-list-card endurance-training-card training-card-portrait-left">
-      <Link href={href} className="training-card-media visual-training-media compact-training-media endurance-list-card-media endurance-card-media-portrait" aria-label={training.title}>
+    <article className="endurance-training-card-v3">
+      <Link href={href} className="endurance-training-card-v3-photo" aria-label={training.title || "Open training"}>
         {image ? (
           <img
             src={image}
@@ -89,34 +85,31 @@ export default function TrainingCard({ training, participants = [] }) {
             style={{ objectPosition: heroImage.position || "center center" }}
           />
         ) : (
-          <div className="training-card-fallback visual-route-fallback">ENDURANCE</div>
+          <div className="endurance-training-card-v3-fallback">ENDURANCE</div>
         )}
-        
       </Link>
 
-      <div className="training-card-body visual-training-body compact-training-body">
-        <div className="visual-card-topline">
-          <span className="visual-sport-icon">{sportIcon(training)}</span>
-          <span className={limited ? "visual-status limited participant-count-pill" : "visual-status participant-count-pill"}>
-            👥 {participants.length}{training.max_participants ? `/${training.max_participants}` : ""}
-          </span>
+      <div className="endurance-training-card-v3-content">
+        <div className="endurance-training-card-v3-top">
+          <span className="endurance-training-card-v3-icon">{sportIcon(training)}</span>
+          <span className="endurance-training-card-v3-count">👥 {participantText}</span>
         </div>
 
-        <Link href={href} className="training-card-title visual-training-title">
+        <Link href={href} className="endurance-training-card-v3-title">
           {training.title || "Training Session"}
         </Link>
 
-        {distanceLine(training) ? (
-          <div className="visual-distance-line">{distanceLine(training)}</div>
+        {summary ? (
+          <div className="endurance-training-card-v3-badge">{summary}</div>
         ) : null}
 
-        <div className="training-card-meta visual-training-meta compact-training-meta">
+        <div className="endurance-training-card-v3-meta">
           {training.start_location && (
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(training.start_location)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="training-location-link"
+              className="endurance-training-card-v3-location"
               onClick={(event) => event.stopPropagation()}
             >
               ⌖ {training.start_location}
@@ -125,9 +118,8 @@ export default function TrainingCard({ training, participants = [] }) {
           <span>◷ {formatDate(training)}{participants.length ? ` • ${participants.length}${training.max_participants ? ` / ${training.max_participants}` : ""} deelnemers` : ""}</span>
         </div>
 
-        <div className="visual-card-bottom compact-card-bottom">
-          <TrainingParticipants participants={participants} maxParticipants={training.max_participants} />
-          <Link href={href} className="primary-action visual-join-button compact-join-button compacter">
+        <div className="endurance-training-card-v3-actions">
+          <Link href={href} className="endurance-training-card-v3-button">
             {flexible ? "Respond" : "Join"}
           </Link>
         </div>
