@@ -13319,3 +13319,24 @@ button.route-sport-card > * {
 .route-detail-916-round-button {
   pointer-events: auto !important;
 }
+
+
+/* ROUTE_DETAIL_DRAW_EDITOR_OVERWRITE_V2
+   Route detail fullscreen behavior:
+   - Makers use the real /routes/draw full Draw/Edit editor.
+   - Viewers keep OSMRouteMap fullscreen view-only.
+   - Route hero overlays no longer block the fullscreen/edit button. */
+.route-detail-916-map-frame button {
+  pointer-events: auto !important;
+  z-index: 90 !important;
+}
+
+.route-detail-916-topbar {
+  pointer-events: none !important;
+}
+
+.route-detail-916-topbar a,
+.route-detail-916-topbar button,
+.route-detail-916-round-button {
+  pointer-events: auto !important;
+}
