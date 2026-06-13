@@ -370,9 +370,9 @@ export default function RouteDetailPage() {
               showLayerControl={false}
               defaultLayer="osm"
               sportId={route.sport_id}
-              editable={editable}
+              editable={Boolean(editable)}
               saving={busy}
-              onSaveRoutePoints={saveRoutePointChanges}
+              onSaveRoutePoints={editable ? saveRoutePointChanges : null}
               className="route-detail-916-map"
             />
           </div>
