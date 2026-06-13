@@ -273,6 +273,49 @@ export default function RouteDetailPage() {
     downloadTextFile(`${safeName}.gpx`, routePointsToGpx(route));
   }
 
+  function openRouteDrawEditor() {
+    if (!route || !editable) return;
+
+    try {
+      const routePoints =
+        route.route_points && typeof route.route_points === "object"
+          ? route.route_points
+          : { points: getRoutePoints(route.route_points) };
+
+      const points = getRoutePoints(routePoints);
+      const controlPoints = getRoutePoints(
+        routePoints.control_points || routePoints.waypoints || routePoints.controlPoints
+      );
+
+      window.sessionStorage.setItem(
+        "endurance_route_edit_draft",
+        JSON.stringify({
+          edit_route_id: route.id,
+          return_to: `/routes/${route.id}`,
+          sport_id: route.sport_id,
+          title: route.title,
+          description: route.description || "",
+          visibility: route.visibility,
+          distance_km: route.distance_km || "",
+          elevation_gain_m: route.elevation_gain_m || "",
+          route_points: {
+            ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
+            points,
+            waypoints: controlPoints.length >= 2 ? controlPoints : routePoints.waypoints,
+            control_points: controlPoints.length >= 2 ? controlPoints : routePoints.control_points,
+            point_count: points.length,
+          },
+          saved_at: new Date().toISOString(),
+        })
+      );
+
+      router.push(`/routes/draw?editDraft=1&routeId=${route.id}&returnTo=${encodeURIComponent(`/routes/${route.id}`)}`);
+    } catch (error) {
+      console.error("Could not open route draw editor", error);
+      setMessage("Could not open the route editor.");
+    }
+  }
+
   async function saveRoutePointChanges(nextPoints, nextControlPoints = null) {
     if (!route || !editable) return;
 
@@ -370,9 +413,11 @@ export default function RouteDetailPage() {
               showLayerControl={false}
               defaultLayer="osm"
               sportId={route.sport_id}
-              editable={Boolean(editable)}
+              editable={false}
               saving={busy}
-              onSaveRoutePoints={editable ? saveRoutePointChanges : null}
+              onSaveRoutePoints={null}
+              fullscreenLabel={editable ? "Edit route" : "Fullscreen"}
+              onFullscreenClick={editable ? openRouteDrawEditor : null}
               className="route-detail-916-map"
             />
           </div>
