@@ -481,6 +481,8 @@ export default function FullscreenRouteDrawPage() {
   const [searching, setSearching] = useState(false);
   const [targetLocation, setTargetLocation] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [editRouteId, setEditRouteId] = useState("");
+  const [editReturnTo, setEditReturnTo] = useState("");
 
   const controlPoints = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -539,6 +541,10 @@ export default function FullscreenRouteDrawPage() {
       try {
         const params = new URLSearchParams(window.location.search);
         const editDraft = safeReadEditDraft();
+        const draftRouteId = editDraft?.edit_route_id || params.get("routeId") || "";
+        const draftReturnTo = editDraft?.return_to || params.get("returnTo") || (draftRouteId ? `/routes/${draftRouteId}` : "");
+        setEditRouteId(draftRouteId);
+        setEditReturnTo(draftReturnTo);
         const initialSport = params.get("sport_id") || editDraft?.sport_id;
 
         if (!initialSport) {
@@ -1114,7 +1120,7 @@ export default function FullscreenRouteDrawPage() {
     downloadTextFile({ filename: `${safeTitle}.gpx`, text: gpx });
   }
 
-  function continueToDetails() {
+  async function continueToDetails() {
     if (!canContinue) {
       setMessage("Add at least two routepoints before continuing.");
       return;
@@ -1127,6 +1133,46 @@ export default function FullscreenRouteDrawPage() {
 
     if (points.length >= 2 && !routedPayload?.points?.length) {
       setRoutedPayload(routePayloadFromGeometry(points, points, "drawn-fallback"));
+    }
+
+    if (editRouteId) {
+      try {
+        setMessage("Saving route...");
+        const draft = buildCurrentDraft();
+        const safeRoutePoints = draft.route_points;
+        const metrics = calculateRouteMetrics(normalizeRoutePoints(safeRoutePoints?.points));
+
+        const payload = {
+          title: draft.title,
+          route_points: {
+            ...(safeRoutePoints && typeof safeRoutePoints === "object" && !Array.isArray(safeRoutePoints) ? safeRoutePoints : {}),
+            source: safeRoutePoints?.source || "draw-fullscreen-edit",
+            points: normalizeRoutePoints(safeRoutePoints?.points),
+            waypoints: normalizeRoutePoints(safeRoutePoints?.waypoints || safeRoutePoints?.control_points),
+            control_points: normalizeRoutePoints(safeRoutePoints?.control_points || safeRoutePoints?.waypoints),
+            point_count: normalizeRoutePoints(safeRoutePoints?.points).length,
+            edited_at: new Date().toISOString(),
+          },
+          distance_km: metrics.distance_km || draft.distance_km || null,
+          elevation_gain_m: metrics.elevation_gain_m || draft.elevation_gain_m || 0,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from("routes")
+          .update(payload)
+          .eq("id", editRouteId);
+
+        if (error) throw error;
+
+        window.sessionStorage.removeItem("endurance_route_edit_draft");
+        router.push(editReturnTo || `/routes/${editRouteId}`);
+        return;
+      } catch (error) {
+        console.error("Could not save edited route", error);
+        setMessage(error?.message || "Could not save route.");
+        return;
+      }
     }
 
     try {
@@ -1243,7 +1289,12 @@ export default function FullscreenRouteDrawPage() {
   return (
     <main className="route-draw-fullscreen route-draw-polished route-draw-immersive">
       <section className="route-draw-topbar">
-        <button type="button" className="route-draw-round-btn" onClick={() => router.push("/routes/new")} aria-label="Close draw editor">
+        <button
+          type="button"
+          className="route-draw-round-btn"
+          onClick={() => router.push(editReturnTo || "/routes/new")}
+          aria-label="Close draw editor"
+        >
           ←
         </button>
 
@@ -1265,7 +1316,7 @@ export default function FullscreenRouteDrawPage() {
           onClick={continueToDetails}
           disabled={!canContinue}
         >
-          Save & continue
+          {editRouteId ? "Save route" : "Save & continue"}
         </button>
       </section>
 
