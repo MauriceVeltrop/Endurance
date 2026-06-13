@@ -219,6 +219,8 @@ export default function OSMRouteMap({
   showFullscreen = false,
   showLayerControl = false,
   defaultLayer = "dark",
+  fullscreenLabel = "Fullscreen",
+  onFullscreenClick = null,
   editable = false,
   saving = false,
   onSaveRoutePoints = null,
@@ -637,10 +639,17 @@ export default function OSMRouteMap({
       {showFullscreen ? (
         <button
           type="button"
-          onClick={() => setFullscreen((value) => !value)}
+          onClick={() => {
+            if (!fullscreen && typeof onFullscreenClick === "function") {
+              onFullscreenClick();
+              return;
+            }
+
+            setFullscreen((value) => !value);
+          }}
           style={fullscreen ? styles.closeFullscreenButton : styles.fullscreenButton}
         >
-          {fullscreen ? "Close map" : editable ? "Edit fullscreen" : "Fullscreen"}
+          {fullscreen ? "Close map" : fullscreenLabel}
         </button>
       ) : null}
 
