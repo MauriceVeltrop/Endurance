@@ -13032,3 +13032,250 @@ button.route-sport-card > * {
     min-width: 94px;
   }
 }
+
+
+
+/* ROUTE_DETAIL_916_MAP_HERO_COMPLETE_OVERWRITE_V1
+   Complete route detail hero overwrite:
+   - 9:16 route map at the top
+   - overlay content/components on the map
+   - fullscreen button remains provided by OSMRouteMap
+   - old separate hero/action/map section is replaced in the component
+*/
+.route-detail-916-shell {
+  margin-top: 0;
+}
+
+.route-detail-916-hero {
+  position: relative;
+  min-height: min(920px, calc(100svh - 18px));
+  aspect-ratio: 9 / 16;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 0 0 34px 34px;
+  background: #050806;
+  border: 1px solid rgba(230,255,0,0.16);
+  box-shadow: 0 28px 90px rgba(0,0,0,0.36);
+}
+
+.route-detail-916-map-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #10150f;
+}
+
+.route-detail-916-map,
+.route-detail-916-map > div,
+.route-detail-916-map .leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  border-radius: 0 !important;
+}
+
+.route-detail-916-map-frame .leaflet-control-container {
+  opacity: 0.72;
+}
+
+.route-detail-916-map-frame .leaflet-control-attribution {
+  display: none !important;
+}
+
+.route-detail-916-gradient {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.06) 34%, rgba(0,0,0,0.58) 68%, rgba(0,0,0,0.96) 100%),
+    radial-gradient(circle at 20% 8%, rgba(230,255,0,0.10), transparent 34%);
+}
+
+.route-detail-916-topbar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 20px 0;
+}
+
+.route-detail-916-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.route-detail-916-round-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.58);
+  backdrop-filter: blur(16px);
+  color: var(--endurance-lime);
+  text-decoration: none;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 1000;
+  cursor: pointer;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.30);
+}
+
+.route-detail-916-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 0 20px 24px;
+  display: grid;
+  gap: 13px;
+}
+
+.route-detail-916-content .route-detail-badges {
+  margin: 0;
+}
+
+.route-detail-916-content h1 {
+  margin: 0;
+  color: white;
+  font-size: clamp(40px, 12vw, 70px);
+  line-height: 0.91;
+  letter-spacing: -0.085em;
+  font-weight: 1000;
+  text-shadow: 0 14px 48px rgba(0,0,0,0.72);
+}
+
+.route-detail-916-metrics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: rgba(255,255,255,0.86);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.route-detail-916-creator {
+  margin-top: 0;
+}
+
+.route-detail-916-content p {
+  margin: 0;
+  color: rgba(255,255,255,0.72);
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 800;
+}
+
+.route-detail-916-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.route-detail-916-primary,
+.route-detail-916-secondary {
+  min-height: 52px;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-weight: 1000;
+  white-space: nowrap;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.route-detail-916-primary {
+  grid-column: 1 / -1;
+  border: 0;
+  background: var(--endurance-lime);
+  color: #05070a;
+  box-shadow: 0 18px 50px rgba(230,255,0,0.24);
+}
+
+.route-detail-916-secondary {
+  border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(0,0,0,0.52);
+  color: rgba(255,255,255,0.88);
+  backdrop-filter: blur(16px);
+}
+
+.route-detail-916-map .leaflet-container {
+  filter: saturate(1.08) contrast(1.02);
+}
+
+/* OSMRouteMap fullscreen button inside 9:16 hero */
+.route-detail-916-map-frame button {
+  z-index: 10;
+}
+
+/* Route overview now follows the map hero */
+.route-detail-grid,
+.route-elevation-panel,
+.route-linked-trainings {
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .route-detail-916-shell {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  .route-detail-916-hero {
+    max-width: none;
+    width: calc(100% + 28px);
+    margin-left: -14px;
+    margin-right: -14px;
+    min-height: calc(100svh - 12px);
+    border-radius: 0 0 32px 32px;
+    border-left: 0;
+    border-right: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .route-detail-916-topbar {
+    padding: 20px 18px 0;
+  }
+
+  .route-detail-916-content {
+    padding: 0 18px 22px;
+    gap: 12px;
+  }
+
+  .route-detail-916-content h1 {
+    font-size: clamp(38px, 12.2vw, 58px);
+  }
+
+  .route-detail-916-content p {
+    font-size: 15px;
+  }
+
+  .route-detail-916-metrics {
+    gap: 12px;
+    font-size: 13px;
+  }
+
+  .route-detail-916-actions {
+    gap: 9px;
+  }
+
+  .route-detail-916-primary,
+  .route-detail-916-secondary {
+    min-height: 50px;
+    font-size: 14px;
+    padding: 0 14px;
+  }
+}
