@@ -640,7 +640,7 @@ export default function OSMRouteMap({
           onClick={() => setFullscreen((value) => !value)}
           style={fullscreen ? styles.closeFullscreenButton : styles.fullscreenButton}
         >
-          {fullscreen ? "Close map" : "Fullscreen"}
+          {fullscreen ? "Close map" : editable ? "Edit fullscreen" : "Fullscreen"}
         </button>
       ) : null}
 
