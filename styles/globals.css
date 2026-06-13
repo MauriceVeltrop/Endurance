@@ -13279,3 +13279,24 @@ button.route-sport-card > * {
     padding: 0 14px;
   }
 }
+
+
+/* ROUTE_DETAIL_FULLSCREEN_CLICK_FIX_V1
+   The route hero topbar spans the full width and was intercepting taps
+   on the OSMRouteMap fullscreen button. Only the actual round buttons
+   should receive pointer events; empty topbar space must not. */
+.route-detail-916-topbar {
+  pointer-events: none !important;
+}
+
+.route-detail-916-topbar .route-detail-916-round-button,
+.route-detail-916-topbar a,
+.route-detail-916-topbar button {
+  pointer-events: auto !important;
+}
+
+/* Keep the map fullscreen button above the map itself and clickable. */
+.route-detail-916-map-frame button {
+  pointer-events: auto !important;
+  z-index: 50 !important;
+}
