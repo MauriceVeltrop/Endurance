@@ -381,13 +381,7 @@ export default function RouteDetailPage() {
 
           <div className="route-detail-916-topbar">
             <Link href="/routes" className="route-detail-916-round-button" aria-label="Back to routes">←</Link>
-            <div className="route-detail-916-top-actions">
-              <button type="button" className="route-detail-916-round-button" onClick={downloadRouteGpx} aria-label="Download GPX">⇩</button>
-              {editable ? (
-                <button type="button" className="route-detail-916-round-button" onClick={() => router.push(`/routes/${route.id}/edit`)} aria-label="Edit route">⋯</button>
-              ) : null}
             </div>
-          </div>
 
           <div className="route-detail-916-content">
             <div className="route-detail-badges">
@@ -397,14 +391,7 @@ export default function RouteDetailPage() {
             </div>
 
             <h1>{route.title}</h1>
-
-            <div className="route-detail-916-metrics">
-              <span>▣ {distanceText(route)}</span>
-              <span>△ {elevationStats.available ? `${elevationStats.gain} m` : elevationGainText(route)}</span>
-              <span>◎ {points.length ? `${points.length} route points` : "No route points"}</span>
-            </div>
-
-            <div className="route-detail-creator route-detail-916-creator">
+<div className="route-detail-creator route-detail-916-creator">
               <span className="route-detail-avatar">
                 {creator?.avatar_url ? <img src={creator.avatar_url} alt="" /> : displayName(creator).slice(0, 1)}
               </span>
