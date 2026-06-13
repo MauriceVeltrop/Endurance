@@ -357,84 +357,86 @@ export default function RouteDetailPage() {
     <main className="endurance-page route-detail-page">
       <AppHeader active="routes" />
 
-      <section className="endurance-shell route-detail-hero endurance-card">
-        <div className="route-detail-hero-copy">
-          <div className="route-detail-badges">
-            <span className="sport-badge">{sportLabel}</span>
-            <span className="status-badge">{route.visibility}</span>
-            <span className="status-badge">{pointStats.qualityLabel || "Route"}</span>
+      <section className="endurance-shell route-detail-916-shell">
+        <article className="route-detail-916-hero">
+          <div className="route-detail-916-map-frame">
+            <OSMRouteMap
+              routePoints={route.route_points}
+              title={route.title}
+              height="100%"
+              interactive={false}
+              showLegend={false}
+              showFullscreen
+              showLayerControl={false}
+              defaultLayer="osm"
+              sportId={route.sport_id}
+              editable={editable}
+              saving={busy}
+              onSaveRoutePoints={saveRoutePointChanges}
+              className="route-detail-916-map"
+            />
           </div>
 
-          <h1>{route.title}</h1>
+          <div className="route-detail-916-gradient" />
 
-          <p>
-            {route.description ||
-              "A saved Endurance route. Open the map, inspect the elevation and plan a training with your team."}
-          </p>
-
-          <div className="route-detail-creator">
-            <span className="route-detail-avatar">
-              {creator?.avatar_url ? <img src={creator.avatar_url} alt="" /> : displayName(creator).slice(0, 1)}
-            </span>
-            <span>
-              <b>{displayName(creator)}</b>
-              <small>Created {formatDate(route.created_at)}</small>
-            </span>
-          </div>
-        </div>
-
-        <div className="route-detail-hero-stats">
-          <div>
-            <span>Distance</span>
-            <strong>{distanceText(route)}</strong>
-          </div>
-          <div>
-            <span>Elevation</span>
-            <strong>{elevationStats.available ? `${elevationStats.gain} m` : elevationGainText(route)}</strong>
+          <div className="route-detail-916-topbar">
+            <Link href="/routes" className="route-detail-916-round-button" aria-label="Back to routes">←</Link>
+            <div className="route-detail-916-top-actions">
+              <button type="button" className="route-detail-916-round-button" onClick={downloadRouteGpx} aria-label="Download GPX">⇩</button>
+              {editable ? (
+                <button type="button" className="route-detail-916-round-button" onClick={() => router.push(`/routes/${route.id}/edit`)} aria-label="Edit route">⋯</button>
+              ) : null}
+            </div>
           </div>
 
-        </div>
+          <div className="route-detail-916-content">
+            <div className="route-detail-badges">
+              <span className="sport-badge">{sportLabel}</span>
+              <span className="status-badge">{route.visibility}</span>
+              <span className="status-badge">{pointStats.qualityLabel || "Route"}</span>
+            </div>
+
+            <h1>{route.title}</h1>
+
+            <div className="route-detail-916-metrics">
+              <span>▣ {distanceText(route)}</span>
+              <span>△ {elevationStats.available ? `${elevationStats.gain} m` : elevationGainText(route)}</span>
+              <span>◎ {points.length ? `${points.length} route points` : "No route points"}</span>
+            </div>
+
+            <div className="route-detail-creator route-detail-916-creator">
+              <span className="route-detail-avatar">
+                {creator?.avatar_url ? <img src={creator.avatar_url} alt="" /> : displayName(creator).slice(0, 1)}
+              </span>
+              <span>
+                <b>{displayName(creator)}</b>
+                <small>Created {formatDate(route.created_at)}</small>
+              </span>
+            </div>
+
+            <p>
+              {route.description ||
+                "A saved Endurance route. Open the map, inspect the elevation and plan a training with your team."}
+            </p>
+
+            <div className="route-detail-916-actions">
+              <button type="button" className="route-detail-916-primary" onClick={createTrainingFromRoute}>
+                Plan training with this route
+              </button>
+              <button type="button" className="route-detail-916-secondary" onClick={downloadRouteGpx}>
+                ⇩ Download GPX
+              </button>
+              {editable ? (
+                <button type="button" className="route-detail-916-secondary" onClick={() => router.push(`/routes/${route.id}/edit`)}>
+                  ✓ Saved
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </article>
       </section>
 
       {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
-
-      <section className="endurance-shell route-detail-action-bar">
-        <button type="button" className="route-detail-primary" onClick={createTrainingFromRoute}>
-          Plan training with this route
-        </button>
-        <button type="button" className="route-detail-secondary" onClick={downloadRouteGpx}>Download GPX</button>
-        {editable ? (
-          <button type="button" className="route-detail-secondary" onClick={() => router.push(`/routes/${route.id}/edit`)}>
-            Edit details
-          </button>
-        ) : null}
-      </section>
-
-      <section className="endurance-shell route-map-panel route-map-panel-premium endurance-card">
-        <div className="route-section-title">
-          <div>
-            <p className="eyebrow">Interactive map</p>
-            <h2>Route on OpenStreetMap</h2>
-          </div>
-          <span>{points.length ? `${points.length} route points` : "No route points"}</span>
-        </div>
-
-        <OSMRouteMap
-          routePoints={route.route_points}
-          title={route.title}
-          height={460}
-          interactive={false}
-          showLegend
-          showFullscreen
-          showLayerControl={false}
-          defaultLayer="osm"
-          sportId={route.sport_id}
-          editable={editable}
-          saving={busy}
-          onSaveRoutePoints={saveRoutePointChanges}
-          className="route-detail-map"
-        />
-      </section>
 
       <section className="endurance-shell route-detail-grid">
         <article className="route-detail-panel endurance-card">
