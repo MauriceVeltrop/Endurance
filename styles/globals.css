@@ -13300,3 +13300,22 @@ button.route-sport-card > * {
   pointer-events: auto !important;
   z-index: 50 !important;
 }
+
+
+/* ROUTE_FULLSCREEN_DRAW_OWNER_ONLY_V1
+   Fullscreen map opens edit/draw controls only for route editors.
+   Viewers keep a view-only fullscreen map. */
+.route-detail-916-map-frame button {
+  pointer-events: auto !important;
+  z-index: 80 !important;
+}
+
+.route-detail-916-topbar {
+  pointer-events: none !important;
+}
+
+.route-detail-916-topbar a,
+.route-detail-916-topbar button,
+.route-detail-916-round-button {
+  pointer-events: auto !important;
+}
