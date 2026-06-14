@@ -156,7 +156,7 @@ export default function RoutesPage() {
 
       const { data, error } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at,creator:profiles!routes_creator_id_fkey(id,name,first_name,last_name,avatar_url)")
         .or(`visibility.eq.public,creator_id.eq.${user.id}${teamCreatorFilter}`)
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
