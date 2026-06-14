@@ -31,20 +31,6 @@ function firstSport(training) {
   return Array.isArray(training?.sports) ? training.sports[0] : training?.sports;
 }
 
-function sportIcon(training) {
-  const sport = String(firstSport(training) || "running");
-  if (sport === "running") return "🏃";
-  if (sport === "trail_running") return "△";
-  if (sport.includes("cycling")) return "🚴";
-  if (sport === "mountain_biking") return "🚵";
-  if (sport === "walking") return "🚶";
-  if (sport === "strength_training") return "🏋";
-  if (sport === "hyrox") return "🏆";
-  if (sport === "crossfit") return "✦";
-  if (sport === "bootcamp") return "◈";
-  return "✦";
-}
-
 function distanceLine(training) {
   const parts = [];
 
@@ -64,6 +50,21 @@ function distanceLine(training) {
   return parts.join(" • ");
 }
 
+function creatorName(training) {
+  const creator = training?.creator || training?.profiles || training?.profile || {};
+  const name =
+    creator.name ||
+    [creator.first_name, creator.last_name].filter(Boolean).join(" ") ||
+    training?.creator_name ||
+    "Endurance athlete";
+
+  return name;
+}
+
+function creatorId(training) {
+  return training?.creator?.id || training?.profiles?.id || training?.creator_id || null;
+}
+
 export default function TrainingCard({ training, participants = [] }) {
   if (!training) return null;
 
@@ -74,6 +75,8 @@ export default function TrainingCard({ training, participants = [] }) {
   const flexible = training.planning_type === "flexible";
   const summary = distanceLine(training);
   const participantText = `${participants.length}${training.max_participants ? `/${training.max_participants}` : ""}`;
+  const makerName = creatorName(training);
+  const makerId = creatorId(training);
 
   return (
     <article className="endurance-training-card-v3">
@@ -91,7 +94,17 @@ export default function TrainingCard({ training, participants = [] }) {
 
       <div className="endurance-training-card-v3-content">
         <div className="endurance-training-card-v3-top">
-          <span className="endurance-training-card-v3-icon">{sportIcon(training)}</span>
+          {makerId ? (
+            <Link
+              href={`/profile/${makerId}`}
+              className="card-creator-link"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {makerName}
+            </Link>
+          ) : (
+            <span className="card-creator-link">{makerName}</span>
+          )}
           <span className="endurance-training-card-v3-count">👥 {participantText}</span>
         </div>
 
