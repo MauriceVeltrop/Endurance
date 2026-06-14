@@ -1,6 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 120">
-<defs><radialGradient id="bg" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#283520"/><stop offset="1" stop-color="#071013"/></radialGradient></defs>
-<rect width="180" height="120" rx="22" fill="url(#bg)"/>
-<g opacity=".98"><path d="M55 85c10-37 32-55 61-43 20 8 29 25 25 45" fill="none" stroke="#f5f5de" stroke-opacity=".55" stroke-width="17" stroke-linecap="round"/><path d="M70 92c27 15 56 9 76-13" fill="none" stroke="#f5f5de" stroke-opacity=".55" stroke-width="17" stroke-linecap="round"/><path d="M62 84c10-32 30-47 54-37 15 6 22 19 20 36" fill="none" stroke="#d09b71" stroke-width="14" stroke-linecap="round" opacity=".58"/><path d="M74 88c23 10 44 6 62-12" fill="none" stroke="#ffb56f" stroke-width="15" stroke-linecap="round" opacity=".72"/></g>
-<g opacity=".9"><path d="M63 84c11-34 31-49 56-38M76 88c24 10 45 6 63-13" fill="none" stroke="#e4ef16" stroke-width="4" stroke-linecap="round"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">
+<defs><radialGradient id="bg" cx="50%" cy="42%" r="72%"><stop offset="0" stop-color="#314022"/><stop offset=".55" stop-color="#111a13"/><stop offset="1" stop-color="#050809"/></radialGradient><filter id="g"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect width="240" height="160" rx="30" fill="url(#bg)"/>
+<circle cx="120" cy="80" r="68" fill="rgba(228,239,22,.055)" stroke="#e4ef16" stroke-opacity=".20" stroke-width="2"/>
+<text x="120" y="146" fill="#e4ef16" fill-opacity=".55" font-family="Arial, sans-serif" font-size="13" font-weight="900" text-anchor="middle" letter-spacing="2">BICEPS</text>
+<path d="M76 113c14-53 46-78 88-60 27 11 40 36 34 65" fill="none" stroke="#f5f5dc" stroke-opacity=".55" stroke-width="22" stroke-linecap="round"/>
+<path d="M94 125c39 22 80 13 109-18" fill="none" stroke="#f5f5dc" stroke-opacity=".55" stroke-width="22" stroke-linecap="round"/>
+<path d="M85 111c14-45 43-67 77-52 21 9 31 27 27 52" fill="none" stroke="#c78c62" stroke-width="18" stroke-linecap="round" opacity=".66"/>
+<path d="M101 121c33 15 64 8 90-18" fill="none" stroke="#f4ae70" stroke-width="20" stroke-linecap="round" opacity=".78"/>
+<g filter="url(#g)"><path d="M85 111c15-47 44-69 79-53M102 121c34 15 64 8 90-18" fill="none" stroke="#e4ef16" stroke-width="5" stroke-linecap="round"/></g>
 </svg>

@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 120">
-<defs><radialGradient id="bg" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#283520"/><stop offset="1" stop-color="#071013"/></radialGradient></defs>
-<rect width="180" height="120" rx="22" fill="url(#bg)"/>
-<g opacity=".98"><path d="M67 24c33 21 51 48 60 82M111 26c-27 27-44 53-54 80" fill="none" stroke="#f5f5de" stroke-opacity=".55" stroke-width="16" stroke-linecap="round"/><path d="M72 31c28 20 45 44 54 73M106 32c-24 27-39 51-47 72" fill="none" stroke="#d09b71" stroke-width="13" stroke-linecap="round" opacity=".6"/><path d="M78 38c18 20 32 42 42 66" fill="none" stroke="#ffb56f" stroke-width="12" stroke-linecap="round" opacity=".7"/></g>
-<g opacity=".9"><path d="M72 31c28 20 45 44 54 73M106 32c-24 27-39 51-47 72" fill="none" stroke="#e4ef16" stroke-width="4" stroke-linecap="round"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">
+<defs><radialGradient id="bg" cx="50%" cy="42%" r="72%"><stop offset="0" stop-color="#314022"/><stop offset=".55" stop-color="#111a13"/><stop offset="1" stop-color="#050809"/></radialGradient><filter id="g"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect width="240" height="160" rx="30" fill="url(#bg)"/>
+<circle cx="120" cy="80" r="68" fill="rgba(228,239,22,.055)" stroke="#e4ef16" stroke-opacity=".20" stroke-width="2"/>
+<text x="120" y="146" fill="#e4ef16" fill-opacity=".55" font-family="Arial, sans-serif" font-size="13" font-weight="900" text-anchor="middle" letter-spacing="2">TRICEPS</text>
+<path d="M88 32c48 31 74 70 87 118M151 35c-39 39-64 77-78 115" fill="none" stroke="#f5f5dc" stroke-opacity=".55" stroke-width="21" stroke-linecap="round"/>
+<path d="M96 42c41 29 65 64 78 106M144 42c-34 38-56 74-68 106" fill="none" stroke="#c78c62" stroke-width="17" stroke-linecap="round" opacity=".68"/>
+<path d="M107 52c27 29 47 62 61 96" fill="none" stroke="#f4ae70" stroke-width="16" stroke-linecap="round" opacity=".76"/>
+<g filter="url(#g)"><path d="M96 42c41 29 65 64 78 106M144 42c-34 38-56 74-68 106" fill="none" stroke="#e4ef16" stroke-width="5" stroke-linecap="round"/></g>
 </svg>
