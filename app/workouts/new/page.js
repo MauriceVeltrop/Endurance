@@ -24,7 +24,9 @@ function cleanNumber(value) { if (value === "" || value === null || value === un
 function firstName(profile) { return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice"; }
 function normalizeExercise(row, source) { return { id: row.id, source, name: row.name, primary_muscle_group: row.primary_muscle_group, equipment: row.equipment || "", image_url: row.image_url || "" }; }
 function defaultSets() { return [1,2,3].map((setNumber) => ({ id: makeId("set"), set_number: setNumber, reps: "10", weight_kg: "", rest_seconds: "90" })); }
-function muscleIcon(group) { return `/illustrations/workout-builder/${String(group || "chest").toLowerCase()}.svg`; }
+function muscleIcon(group) {
+  return `/illustrations/workout-builder/${String(group || "chest").toLowerCase()}.png`;
+}.svg`; }
 function exerciseKey(exercise) { return `${exercise.source}-${exercise.id}`; }
 function summarizeSets(sets = []) { if (!sets.length) return "No sets"; const first = sets[0]; return `${sets.length} sets • ${first.reps || "?"} reps • ${first.weight_kg ? `${first.weight_kg} kg` : "open"}`; }
 
