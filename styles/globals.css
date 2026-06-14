@@ -13402,3 +13402,48 @@ button.route-sport-card > * {
     font-size: 12.5px;
   }
 }
+
+
+/* WORKOUT_BUILDER_COMPLETE_OVERWRITE_V3 */
+label {
+  color: rgba(255,255,255,.76);
+  font-size: 13px;
+  font-weight: 1000;
+  display: grid;
+  gap: 7px;
+}
+
+label input,
+label select,
+label textarea,
+.workout-builder-field {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.055);
+  color: #fff;
+  padding: 0 16px;
+  font-size: 16px;
+  font-weight: 800;
+  outline: none;
+}
+
+label textarea {
+  min-height: 96px;
+  padding: 14px 16px;
+  resize: vertical;
+}
+
+button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 520px) {
+  .workout-builder-hide-mobile {
+    display: none !important;
+  }
+}
