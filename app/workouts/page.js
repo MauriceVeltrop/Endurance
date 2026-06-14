@@ -172,7 +172,7 @@ export default function WorkoutsPage() {
 
       const { data, error } = await supabase
         .from("workouts")
-        .select("id,creator_id,sport_id,title,description,workout_type,level,duration_min,structure,visibility,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,description,workout_type,level,duration_min,structure,visibility,created_at,updated_at,creator:profiles!workouts_creator_id_fkey(id,name,first_name,last_name,avatar_url)")
         .or(`visibility.eq.public,creator_id.eq.${user.id}${teamCreatorFilter}`)
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
