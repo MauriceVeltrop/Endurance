@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-<rect width="128" height="128" rx="28" fill="#071013"/>
-<circle cx="64" cy="64" r="52" fill="rgba(228,239,22,.08)" stroke="#e4ef16" stroke-opacity=".35" stroke-width="2"/>
-<path d="M43 34c20 14 33 33 41 59M78 34c-17 17-28 36-34 59M50 52c9 13 17 27 24 43" fill="none" stroke="#f4f4d7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M56 41c12 15 22 33 30 53" fill="none" stroke="#e4ef16" stroke-opacity=".45" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 120">
+<defs><radialGradient id="bg" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#283520"/><stop offset="1" stop-color="#071013"/></radialGradient></defs>
+<rect width="180" height="120" rx="22" fill="url(#bg)"/>
+<g opacity=".98"><path d="M67 24c33 21 51 48 60 82M111 26c-27 27-44 53-54 80" fill="none" stroke="#f5f5de" stroke-opacity=".55" stroke-width="16" stroke-linecap="round"/><path d="M72 31c28 20 45 44 54 73M106 32c-24 27-39 51-47 72" fill="none" stroke="#d09b71" stroke-width="13" stroke-linecap="round" opacity=".6"/><path d="M78 38c18 20 32 42 42 66" fill="none" stroke="#ffb56f" stroke-width="12" stroke-linecap="round" opacity=".7"/></g>
+<g opacity=".9"><path d="M72 31c28 20 45 44 54 73M106 32c-24 27-39 51-47 72" fill="none" stroke="#e4ef16" stroke-width="4" stroke-linecap="round"/></g>
 </svg>

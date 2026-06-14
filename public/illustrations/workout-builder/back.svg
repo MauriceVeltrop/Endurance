@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-<rect width="128" height="128" rx="28" fill="#071013"/>
-<circle cx="64" cy="64" r="52" fill="rgba(228,239,22,.08)" stroke="#e4ef16" stroke-opacity=".35" stroke-width="2"/>
-<path d="M64 24v82M41 38c-9 16-14 34-14 52M87 38c9 16 14 34 14 52M39 54c13 7 37 7 50 0M36 69c15 7 41 7 56 0M34 88c18-10 42-10 60 0" fill="none" stroke="#f4f4d7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M51 43c2 21 7 39 13 55M77 43c-2 21-7 39-13 55" fill="none" stroke="#e4ef16" stroke-opacity=".45" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 120">
+<defs><radialGradient id="bg" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#283520"/><stop offset="1" stop-color="#071013"/></radialGradient></defs>
+<rect width="180" height="120" rx="22" fill="url(#bg)"/>
+<g opacity=".98"><path d="M90 14c-10 0-18 8-18 18v8c-24 9-40 30-46 66h128c-6-36-22-57-46-66v-8c0-10-8-18-18-18z" fill="#202923" stroke="#f5f5de" stroke-opacity=".45" stroke-width="3"/><path d="M48 98c12-40 27-58 42-58s30 18 42 58H48z" fill="#d09b71" opacity=".45"/><path d="M58 92c15-19 25-36 32-51 7 15 17 32 32 51-19-8-45-8-64 0z" fill="#ffb56f" opacity=".68"/><path d="M90 39v66M52 58c21 10 55 10 76 0M48 76c25 10 59 10 84 0M45 96c30-12 60-12 90 0" fill="none" stroke="#f5f5de" stroke-width="3" stroke-linecap="round" opacity=".72"/></g>
+<g opacity=".9"><path d="M66 48c3 21 11 38 24 55M114 48c-3 21-11 38-24 55" fill="none" stroke="#e4ef16" stroke-width="4" stroke-linecap="round"/></g>
 </svg>
