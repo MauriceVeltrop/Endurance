@@ -136,7 +136,7 @@ export default function TrainingsPage() {
 
     const { data: sessions } = await supabase
       .from("training_sessions")
-      .select("*")
+      .select("*,creator:profiles!training_sessions_creator_id_fkey(id,name,first_name,last_name,avatar_url)")
       .order("starts_at", { ascending: true, nullsFirst: false })
       .limit(80);
 
