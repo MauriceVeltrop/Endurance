@@ -17,6 +17,44 @@ import {
   getElevationStats,
 } from "../../../lib/routePreview";
 
+
+async function getAcceptedTeamPartnerIds(userId) {
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from("training_partners")
+    .select("requester_id,addressee_id,status")
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+    .eq("status", "accepted");
+
+  if (error || !Array.isArray(data)) {
+    console.warn("Could not load accepted team partners", error);
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      data
+        .map((row) => (row.requester_id === userId ? row.addressee_id : row.requester_id))
+        .filter(Boolean)
+    )
+  );
+}
+
+function canViewTeamItem(item, userId, teamPartnerIds = [], profile = null) {
+  if (!item || !userId) return false;
+
+  if (item.creator_id === userId) return true;
+  if (item.visibility === "public") return true;
+  if (profile?.role === "admin" || profile?.role === "moderator") return true;
+
+  if (item.visibility === "team") {
+    return teamPartnerIds.includes(item.creator_id);
+  }
+
+  return false;
+}
+
 function displayName(profile) {
   return profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Endurance athlete";
 }
@@ -196,11 +234,8 @@ export default function RouteDetailPage() {
         return;
       }
 
-      const allowed =
-        routeRow.visibility === "public" ||
-        routeRow.creator_id === user.id ||
-        profileRow?.role === "admin" ||
-        profileRow?.role === "moderator";
+      const teamPartnerIds = await getAcceptedTeamPartnerIds(user.id);
+      const allowed = canViewTeamItem(routeRow, user.id, teamPartnerIds, profileRow);
 
       if (!allowed) {
         setRoute(null);
