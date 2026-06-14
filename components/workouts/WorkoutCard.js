@@ -29,6 +29,20 @@ function getWorkoutImageClass(workout) {
   return "strength";
 }
 
+function creatorName(workout) {
+  const creator = workout?.creator || workout?.profiles || workout?.profile || {};
+  return (
+    creator.name ||
+    [creator.first_name, creator.last_name].filter(Boolean).join(" ") ||
+    workout?.creator_name ||
+    "Endurance athlete"
+  );
+}
+
+function creatorId(workout) {
+  return workout?.creator?.id || workout?.profiles?.id || workout?.creator_id || null;
+}
+
 export default function WorkoutCard({ workout }) {
   if (!workout) return null;
 
@@ -36,24 +50,35 @@ export default function WorkoutCard({ workout }) {
   const summary = summarizeWorkout(workout);
   const title = workout.title || "Workout";
   const sportLabel = workout.sport_id === "strength_training" ? "Strength" : getSportLabel(workout.sport_id);
+  const makerName = creatorName(workout);
+  const makerId = creatorId(workout);
 
   return (
-    <Link href={href} className="workout-card-v2 workout-card-clickable" aria-label={`Open ${title}`}>
-      <div className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-hidden="true" />
+    <article className="workout-card-v2 workout-card-clickable">
+      <Link href={href} className={`workout-card-v2-hero ${getWorkoutImageClass(workout)}`} aria-label={`Open ${title}`} />
 
       <div className="workout-card-v2-body">
-        <div className="workout-card-v2-topline">
-          <span className="sport-badge">{sportLabel}</span>
-          <span className="status-badge">{workout.visibility || "team"}</span>
-        </div>
+        {makerId ? (
+          <Link href={`/profile/${makerId}`} className="card-creator-link">
+            {makerName}
+          </Link>
+        ) : (
+          <span className="card-creator-link">{makerName}</span>
+        )}
 
-        <h2 className="workout-card-v2-title">{title}</h2>
+        <Link href={href} className="workout-card-v2-title">
+          {title}
+        </Link>
 
         <div className="workout-card-v2-meta">
           <span>{summary.exerciseCount || 0} exercises</span>
           <i />
           <span>{summary.setCount || 0} sets</span>
+        </div>
 
+        <div className="workout-card-v2-topline">
+          <span className="sport-badge">{sportLabel}</span>
+          <span className="status-badge">{workout.visibility || "team"}</span>
         </div>
 
         {summary.muscleLabels.length ? (
@@ -65,7 +90,7 @@ export default function WorkoutCard({ workout }) {
         ) : null}
       </div>
 
-      <span className="workout-card-v2-arrow" aria-hidden="true">→</span>
-    </Link>
+      <Link href={href} className="workout-card-v2-arrow" aria-label={`Open ${title}`}>→</Link>
+    </article>
   );
 }
