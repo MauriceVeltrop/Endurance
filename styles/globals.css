@@ -13444,3 +13444,45 @@ button.route-sport-card > * {
     height: 58px !important;
   }
 }
+
+
+/* WORKOUT_BUILDER_ANATOMICAL_ASSETS_V6 */
+.wb-real-muscle img,
+.muscle-picker-card img,
+.exercise-select-row img,
+.wb-real-exercise img {
+  object-fit: cover !important;
+  background: #071013 !important;
+}
+
+.wb-real-muscle img,
+.muscle-picker-card img {
+  width: 92px !important;
+  height: 62px !important;
+  border-radius: 18px !important;
+}
+
+.wb-real-muscle,
+.muscle-picker-card {
+  grid-template-columns: 96px 1fr 34px !important;
+}
+
+.wb-real-exercise img,
+.exercise-select-row img {
+  width: 72px !important;
+  height: 48px !important;
+  border-radius: 14px !important;
+}
+
+@media (max-width: 520px) {
+  .wb-real-muscle img,
+  .muscle-picker-card img {
+    width: 76px !important;
+    height: 52px !important;
+  }
+
+  .wb-real-muscle,
+  .muscle-picker-card {
+    grid-template-columns: 78px 1fr 30px !important;
+  }
+}
