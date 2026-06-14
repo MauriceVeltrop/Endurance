@@ -13421,3 +13421,26 @@ button.route-sport-card > * {
 .builder-two-fields,.builder-finish-fields{display:grid;gap:10px}.builder-two-fields{grid-template-columns:1fr 120px}.workout-builder-card label{color:rgba(255,255,255,.76);font-size:13px;font-weight:1000;display:grid;gap:7px}.workout-builder-card input,.workout-builder-card select,.workout-builder-card textarea{width:100%;min-height:52px;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.055);color:#fff;padding:0 16px;font-size:16px;font-weight:800;outline:none}.workout-builder-card textarea{min-height:96px;padding:14px 16px}
 .exercise-group-block{display:grid;gap:10px}.exercise-group-block h3{margin:10px 0 0;font-size:20px}.exercise-select-row{width:100%;display:grid;grid-template-columns:50px 1fr 34px;gap:12px;align-items:center;padding:10px;border-radius:18px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24);color:#fff;text-align:left}.exercise-select-row.selected{border-color:rgba(228,239,22,.70);background:rgba(228,239,22,.08)}.exercise-select-row img{width:50px;height:50px;border-radius:16px}.exercise-select-row span{display:grid;gap:3px}.exercise-select-row small{color:rgba(255,255,255,.62);font-weight:750}.exercise-select-row i{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.08);color:#e4ef16;font-style:normal;font-weight:1000}.builder-dashed{border:1px dashed rgba(228,239,22,.46);background:rgba(228,239,22,.055);color:#e4ef16}.builder-dashed.small{min-height:44px;padding:0 16px;width:fit-content}.custom-exercise-box,.selected-exercise-card{display:grid;gap:10px;border-radius:22px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.26);padding:14px}.builder-actions{display:grid;grid-template-columns:1fr 1.35fr;gap:12px}.selected-exercise-stack{display:grid;gap:12px}.selected-exercise-card header{display:flex;justify-content:space-between;gap:12px}.selected-exercise-card header span{display:grid;gap:3px}.selected-exercise-card header small{color:rgba(255,255,255,.62);font-weight:750}.selected-exercise-card header button{border:0;color:#e4ef16;background:transparent;font-weight:1000}.sets-table{display:grid;gap:8px}.set-row{display:grid;grid-template-columns:56px 1fr 1fr 1fr 34px;gap:7px;align-items:center}.set-row span{color:rgba(255,255,255,.68);font-size:12px;font-weight:1000}.set-row button{height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:#fff;font-weight:1000}
 @media(max-width:520px){.workout-builder-shell{padding:0 18px 36px}.workout-builder-card{padding:20px;border-radius:28px}.muscle-picker-grid{gap:10px}.muscle-picker-card{min-height:96px;grid-template-columns:58px 1fr 30px;gap:10px;padding:10px;font-size:16px}.muscle-picker-card img{width:56px;height:56px;border-radius:18px}.builder-two-fields{grid-template-columns:1fr}.set-row{grid-template-columns:52px 1fr 1fr}.set-row input:nth-of-type(3),.set-row button{grid-column:span 1}}
+
+
+/* WORKOUT_BUILDER_REAL_MUSCLE_IMAGES_FIX_V1 */
+.wb-real-muscle img,
+.muscle-picker-card img,
+.exercise-select-row img,
+.wb-real-exercise img {
+  object-fit: cover !important;
+  background: #071013 !important;
+}
+.wb-real-muscle img,
+.muscle-picker-card img {
+  width: 88px !important;
+  height: 72px !important;
+  border-radius: 18px !important;
+}
+@media (max-width: 520px) {
+  .wb-real-muscle img,
+  .muscle-picker-card img {
+    width: 68px !important;
+    height: 58px !important;
+  }
+}
