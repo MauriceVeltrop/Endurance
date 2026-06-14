@@ -10,6 +10,44 @@ import RouteCard from "../../components/routes/RouteCard";
 import { supabase } from "../../lib/supabase";
 import { getSportLabel } from "../../lib/trainingHelpers";
 
+
+async function getAcceptedTeamPartnerIds(userId) {
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from("training_partners")
+    .select("requester_id,addressee_id,status")
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+    .eq("status", "accepted");
+
+  if (error || !Array.isArray(data)) {
+    console.warn("Could not load accepted team partners", error);
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      data
+        .map((row) => (row.requester_id === userId ? row.addressee_id : row.requester_id))
+        .filter(Boolean)
+    )
+  );
+}
+
+function canViewTeamItem(item, userId, teamPartnerIds = [], profile = null) {
+  if (!item || !userId) return false;
+
+  if (item.creator_id === userId) return true;
+  if (item.visibility === "public") return true;
+  if (profile?.role === "admin" || profile?.role === "moderator") return true;
+
+  if (item.visibility === "team") {
+    return teamPartnerIds.includes(item.creator_id);
+  }
+
+  return false;
+}
+
 function matchesSearch(route, search) {
   if (!search) return true;
 
@@ -111,25 +149,34 @@ export default function RoutesPage() {
       const allowedSports = (sportRows || []).map((row) => row.sport_id).filter(Boolean);
       setPreferredSportIds(allowedSports);
 
+      const teamPartnerIds = await getAcceptedTeamPartnerIds(user.id);
+      const teamCreatorFilter = teamPartnerIds.length
+        ? `,and(visibility.eq.team,creator_id.in.(${teamPartnerIds.join(",")}))`
+        : "";
+
       const { data, error } = await supabase
         .from("routes")
         .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
-        .or(`visibility.eq.public,creator_id.eq.${user.id}`)
+        .or(`visibility.eq.public,creator_id.eq.${user.id}${teamCreatorFilter}`)
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(80);
+        .limit(120);
 
       if (error) throw error;
 
-      const visibleRoutes =
-        profileRow?.role === "admin" || profileRow?.role === "moderator"
-          ? data || []
-          : (data || []).filter((route) => allowedSports.includes(route.sport_id) || route.creator_id === user.id);
+      const visibleRoutes = (data || []).filter((route) => {
+        if (!canViewTeamItem(route, user.id, teamPartnerIds, profileRow)) return false;
+
+        // Preferred sports should not hide accessible team/eigen routes completely.
+        // Sport filtering remains available through the UI.
+        return true;
+      });
 
       setRoutes(
         visibleRoutes.map((route) => ({
           ...route,
           _isOwnRoute: route.creator_id === user.id,
+          _isTeamRoute: route.visibility === "team" && teamPartnerIds.includes(route.creator_id),
         }))
       );
 
