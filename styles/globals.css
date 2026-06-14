@@ -13340,3 +13340,65 @@ button.route-sport-card > * {
 .route-detail-916-round-button {
   pointer-events: auto !important;
 }
+
+
+/* CARD_CREATOR_NAMES_CLICKABLE_OVERWRITE_V1
+   Creator name above card title for Training, Workout and Route cards.
+   Lime, compact, clickable to profile. Training sport icon above title removed in component.
+*/
+.card-creator-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--endurance-lime, #e4ef16) !important;
+  font-size: 13px;
+  line-height: 1.1;
+  font-weight: 1000;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  text-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-creator-link:hover,
+.card-creator-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.endurance-training-card-v3-top {
+  align-items: flex-start !important;
+}
+
+.endurance-training-card-v3-count {
+  margin-left: auto;
+}
+
+.workout-card-v2-title,
+.route-osm-title {
+  color: #fff;
+  text-decoration: none;
+}
+
+.workout-card-v2-title:hover,
+.route-osm-title:hover {
+  text-decoration: none;
+}
+
+.workout-card-v2-body,
+.route-osm-card-body {
+  min-width: 0;
+}
+
+.route-osm-card-body {
+  text-decoration: none;
+}
+
+@media (max-width: 430px) {
+  .card-creator-link {
+    font-size: 12.5px;
+  }
+}
