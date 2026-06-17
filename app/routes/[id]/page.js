@@ -256,6 +256,9 @@ export default function RouteDetailPage() {
   const [message, setMessage] = useState("");
   const [locationDraft, setLocationDraft] = useState({ start: "", finish: "" });
   const [locationSaving, setLocationSaving] = useState(false);
+  const [routeSettingsDraft, setRouteSettingsDraft] = useState({ title: "", visibility: "team" });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [deletingRoute, setDeletingRoute] = useState(false);
 
   async function loadRoute() {
     if (!id) return;
@@ -354,6 +357,14 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (!route) return;
+    setRouteSettingsDraft({
+      title: route.title || "",
+      visibility: route.visibility || "team",
+    });
+  }, [route?.id, route?.title, route?.visibility]);
+
+  useEffect(() => {
+    if (!route) return;
 
     let cancelled = false;
 
@@ -431,6 +442,81 @@ export default function RouteDetailPage() {
       setMessage(error?.message || "Could not update route locations.");
     } finally {
       setLocationSaving(false);
+    }
+  }
+
+  async function saveRouteSettings() {
+    if (!route || !editable) return;
+
+    const nextTitle = String(routeSettingsDraft.title || "").trim();
+    const nextVisibility = String(routeSettingsDraft.visibility || "team");
+
+    if (!nextTitle) {
+      setMessage("Route name is required.");
+      return;
+    }
+
+    try {
+      setSettingsSaving(true);
+      setMessage("");
+
+      const payload = {
+        title: nextTitle,
+        visibility: nextVisibility,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("routes")
+        .update(payload)
+        .eq("id", route.id)
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setRoute(data || { ...route, ...payload });
+      setMessage("Route settings updated.");
+    } catch (error) {
+      console.error("Could not update route settings", error);
+      setMessage(error?.message || "Could not update route settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function deleteCurrentRoute() {
+    if (!route || !editable || deletingRoute) return;
+
+    const confirmed = window.confirm(
+      "Delete this route? Linked training sessions will keep existing, but the route will be detached."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingRoute(true);
+      setMessage("");
+
+      const { error: detachError } = await supabase
+        .from("training_sessions")
+        .update({ route_id: null, updated_at: new Date().toISOString() })
+        .eq("route_id", route.id);
+
+      if (detachError) throw detachError;
+
+      const { error: deleteError } = await supabase
+        .from("routes")
+        .delete()
+        .eq("id", route.id);
+
+      if (deleteError) throw deleteError;
+
+      router.replace("/routes");
+    } catch (error) {
+      console.error("Could not delete route", error);
+      setMessage(error?.message || "Could not delete route.");
+      setDeletingRoute(false);
     }
   }
 
@@ -663,6 +749,55 @@ export default function RouteDetailPage() {
             <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
             <div><span>Visibility</span><strong>{route.visibility}</strong></div>
           </div>
+
+          {editable ? (
+            <div className="route-settings-editor">
+              <label className="route-settings-field">
+                <span>Route name</span>
+                <input
+                  type="text"
+                  value={routeSettingsDraft.title}
+                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, title: event.target.value }))}
+                  disabled={settingsSaving || deletingRoute}
+                  placeholder="Route name"
+                />
+              </label>
+
+              <label className="route-settings-field">
+                <span>Visibility</span>
+                <select
+                  value={routeSettingsDraft.visibility}
+                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, visibility: event.target.value }))}
+                  disabled={settingsSaving || deletingRoute}
+                >
+                  <option value="private">Private · Only you</option>
+                  <option value="team">Team · Training partners</option>
+                  <option value="selected">Selected · Invited athletes</option>
+                  <option value="group">Group</option>
+                  <option value="public">Public · Community</option>
+                </select>
+              </label>
+
+              <div className="route-settings-actions">
+                <button
+                  type="button"
+                  className="route-location-save-button"
+                  onClick={saveRouteSettings}
+                  disabled={settingsSaving || deletingRoute}
+                >
+                  {settingsSaving ? "Saving..." : "Save route details"}
+                </button>
+                <button
+                  type="button"
+                  className="route-delete-button"
+                  onClick={deleteCurrentRoute}
+                  disabled={settingsSaving || deletingRoute}
+                >
+                  {deletingRoute ? "Deleting..." : "Delete route"}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="route-location-editor">
             <label className="route-location-field">
