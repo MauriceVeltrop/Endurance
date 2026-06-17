@@ -247,11 +247,11 @@ function downloadTextFile({ filename, text, type = "application/gpx+xml" }) {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
-function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload }) {
+function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload, titleIsAuto = true }) {
   return {
     sport_id: sportId,
     title: title?.trim() || defaultTitle(sportId),
-    title_is_auto: !titleEditedManually,
+    title_is_auto: titleIsAuto !== false,
     description: "",
     method,
     distance_km: metrics.distance_km || routePayload.distance_km || "",
@@ -1084,6 +1084,7 @@ export default function FullscreenRouteDrawPage() {
       profileId: profile?.id,
       metrics,
       routePayload: safePayload,
+      titleIsAuto: !titleEditedManually,
     });
   }
 
@@ -1255,9 +1256,14 @@ export default function FullscreenRouteDrawPage() {
     if (titleEditedManually) return;
 
     const distanceKm = metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0;
+    const cleanStartLocation = cleanRouteLocationName(routeStartLocation);
+
+    // Do not generate/save a "Locatie bepalen" title while reverse geocoding is still pending.
+    // Once the start location resolves, this effect runs again and updates the auto title.
+    if (!cleanStartLocation && points.length >= 2) return;
 
     setTitle(buildAutomaticRouteTitle({
-      startLocation: routeStartLocation,
+      startLocation: cleanStartLocation || routeStartLocation,
       distanceKm,
       sportId,
     }));
@@ -1268,6 +1274,7 @@ export default function FullscreenRouteDrawPage() {
     routedPayload?.distance_km,
     pointsPayload?.distance_km,
     sportId,
+    points.length,
   ]);
 
 
