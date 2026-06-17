@@ -13612,19 +13612,63 @@ button.route-sport-card > * {
   }
 }
 
-.route-stats-grid .route-stats-wide {
-  grid-column: 1 / -1;
+/* Route detail location labels */
+.route-detail-grid-single {
+  grid-template-columns: 1fr;
 }
 
-.route-stats-grid .route-stats-wide strong {
-  display: block;
-  font-size: 20px;
-  line-height: 1.15;
-  word-break: break-word;
+.route-location-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
 }
 
-@media (max-width: 420px) {
-  .route-stats-grid .route-stats-wide strong {
-    font-size: 18px;
-  }
+.route-location-field {
+  display: grid;
+  gap: 8px;
+}
+
+.route-location-field span {
+  color: rgba(255,255,255,0.52);
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.route-location-field input {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.28);
+  color: #fff;
+  border-radius: 20px;
+  padding: 16px 18px;
+  font-size: 18px;
+  font-weight: 850;
+  outline: none;
+}
+
+.route-location-field input:focus {
+  border-color: rgba(230,255,0,0.45);
+  box-shadow: 0 0 0 3px rgba(230,255,0,0.08);
+}
+
+.route-location-field input:disabled {
+  opacity: 0.70;
+}
+
+.route-location-save-button {
+  border: 0;
+  border-radius: 999px;
+  background: #e6ff00;
+  color: #050703;
+  padding: 16px 20px;
+  font-size: 17px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.route-location-save-button:disabled {
+  opacity: 0.65;
+  cursor: default;
 }
