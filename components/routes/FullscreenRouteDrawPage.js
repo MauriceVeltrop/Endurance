@@ -907,13 +907,18 @@ export default function FullscreenRouteDrawPage() {
   function handlePointsChange(nextPoints, meta = {}) {
     const safeControlPoints = compactControlPoints(nextPoints);
     loadedDraftRef.current = false;
+
+    // Important for Edit Route:
+    // the previously saved routed geometry belongs to the old route shape.
+    // Clear it immediately so distance, elevation and automatic title are based
+    // on the newly edited control points while fresh routed geometry is being rebuilt.
+    setRoutedPayload(null);
     setPointsPayload(makeRoutePointPayload(safeControlPoints));
     setRoutingError("");
 
     if (safeControlPoints.length < 2) {
       segmentSyncIdRef.current += 1;
       setRouteSegments([]);
-      setRoutedPayload(null);
       setRoutingStatus("idle");
       return;
     }
