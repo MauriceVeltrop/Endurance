@@ -113,65 +113,23 @@ function canEditRoute(route, profile) {
   return route.creator_id === profile.id || profile.role === "admin" || profile.role === "moderator";
 }
 
-function makeRouteStartLocation(route) {
+function coordinateLabel(point) {
+  if (!point?.lat || !point?.lon) return "";
+  return `${Number(point.lat).toFixed(5)}, ${Number(point.lon).toFixed(5)}`;
+}
+
+function getRouteLocationLabels(route) {
   const points = getRoutePoints(route?.route_points);
   const first = points?.[0];
-  if (first?.lat && first?.lon) return `${Number(first.lat).toFixed(5)}, ${Number(first.lon).toFixed(5)}`;
-  return routeArea(route);
-}
+  const last = points?.[points.length - 1];
+  const meta = route?.route_points && typeof route.route_points === "object" && !Array.isArray(route.route_points)
+    ? route.route_points
+    : {};
 
-function getRouteEndpointPoints(routePoints) {
-  const points = getRoutePoints(routePoints);
-  const start = points?.[0] || null;
-  const finish = points?.length ? points[points.length - 1] : null;
-  return { start, finish };
-}
-
-function coordinateFallback(point) {
-  const lat = Number(point?.lat);
-  const lon = Number(point?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
-  return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-}
-
-function cleanAddressLabel(value) {
-  return String(value || "")
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((part) => !/^(netherlands|nederland)$/i.test(part))
-    .join(", ");
-}
-
-async function resolveAddressFromPoint(point) {
-  const lat = Number(point?.lat);
-  const lon = Number(point?.lon);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
-
-  try {
-    const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
-    const response = await fetch(`/api/geocode/reverse?${params.toString()}`);
-
-    if (!response.ok) return "";
-
-    const data = await response.json();
-    return cleanAddressLabel(
-      data?.label ||
-      data?.name ||
-      data?.place ||
-      data?.city ||
-      data?.town ||
-      data?.village ||
-      data?.municipality ||
-      data?.locality ||
-      data?.county ||
-      ""
-    );
-  } catch (error) {
-    console.warn("Could not resolve route endpoint address", error);
-    return "";
-  }
+  return {
+    start: meta.start_location_label || meta.start_address || meta.start_location || coordinateLabel(first) || routeArea(route),
+    finish: meta.finish_location_label || meta.finish_address || meta.finish_location || coordinateLabel(last) || routeArea(route),
+  };
 }
 
 function routePointsToGpx(route) {
@@ -243,7 +201,8 @@ export default function RouteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [endpointAddresses, setEndpointAddresses] = useState({ start: "", finish: "" });
+  const [locationDraft, setLocationDraft] = useState({ start: "", finish: "" });
+  const [locationSaving, setLocationSaving] = useState(false);
 
   async function loadRoute() {
     if (!id) return;
@@ -340,43 +299,57 @@ export default function RouteDetailPage() {
     loadRoute();
   }, [id]);
 
-  const endpointPoints = useMemo(() => getRouteEndpointPoints(route?.route_points), [route?.route_points]);
+  useEffect(() => {
+    if (!route) return;
+    setLocationDraft(getRouteLocationLabels(route));
+  }, [route?.id, route?.route_points]);
+
+  const points = useMemo(() => getRoutePoints(route?.route_points), [route?.route_points]);
   const pointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const sportLabel = getSportLabel(route?.sport_id);
   const editable = canEditRoute(route, profile);
 
-  useEffect(() => {
-    let cancelled = false;
+  async function saveRouteLocationLabels() {
+    if (!route || !editable) return;
 
-    async function loadEndpointAddresses() {
-      if (!route?.route_points) {
-        setEndpointAddresses({ start: "", finish: "" });
-        return;
-      }
+    try {
+      setLocationSaving(true);
+      setMessage("");
 
-      const { start, finish } = getRouteEndpointPoints(route.route_points);
-      setEndpointAddresses({ start: "", finish: "" });
+      const currentRoutePoints =
+        route.route_points && typeof route.route_points === "object" && !Array.isArray(route.route_points)
+          ? route.route_points
+          : { points: getRoutePoints(route.route_points) };
 
-      const [startAddress, finishAddress] = await Promise.all([
-        resolveAddressFromPoint(start),
-        resolveAddressFromPoint(finish),
-      ]);
+      const nextRoutePoints = {
+        ...currentRoutePoints,
+        start_location_label: String(locationDraft.start || "").trim(),
+        finish_location_label: String(locationDraft.finish || "").trim(),
+        location_labels_updated_at: new Date().toISOString(),
+      };
 
-      if (!cancelled) {
-        setEndpointAddresses({
-          start: startAddress,
-          finish: finishAddress,
-        });
-      }
+      const { data, error } = await supabase
+        .from("routes")
+        .update({
+          route_points: nextRoutePoints,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", route.id)
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setRoute(data || { ...route, route_points: nextRoutePoints });
+      setMessage("Start and finish location updated. The route geometry was not changed.");
+    } catch (error) {
+      console.error("Could not update route locations", error);
+      setMessage(error?.message || "Could not update route locations.");
+    } finally {
+      setLocationSaving(false);
     }
-
-    loadEndpointAddresses();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [route?.route_points]);
+  }
 
   function createTrainingFromRoute() {
     if (!route) return;
@@ -592,7 +565,7 @@ export default function RouteDetailPage() {
 
       {message ? <section className="endurance-shell route-detail-message">{message}</section> : null}
 
-      <section className="endurance-shell route-detail-grid">
+      <section className="endurance-shell route-detail-grid route-detail-grid-single">
         <article className="route-detail-panel endurance-card">
           <div className="route-section-title">
             <div>
@@ -605,32 +578,40 @@ export default function RouteDetailPage() {
             <div><span>Sport</span><strong>{sportLabel}</strong></div>
             <div><span>Distance</span><strong>{distanceText(route)}</strong></div>
             <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
-            <div><span>Estimated time</span><strong>{estimateDuration(route)}</strong></div>
-            <div className="route-stats-wide">
+            <div><span>Visibility</span><strong>{route.visibility}</strong></div>
+          </div>
+
+          <div className="route-location-editor">
+            <label className="route-location-field">
               <span>Start location</span>
-              <strong>{endpointAddresses.start || coordinateFallback(endpointPoints.start)}</strong>
-            </div>
-            <div className="route-stats-wide">
+              <input
+                value={locationDraft.start}
+                onChange={(event) => setLocationDraft((current) => ({ ...current, start: event.target.value }))}
+                disabled={!editable || locationSaving}
+                placeholder="Start location"
+              />
+            </label>
+
+            <label className="route-location-field">
               <span>Finish location</span>
-              <strong>{endpointAddresses.finish || coordinateFallback(endpointPoints.finish)}</strong>
-            </div>
-          </div>
-        </article>
+              <input
+                value={locationDraft.finish}
+                onChange={(event) => setLocationDraft((current) => ({ ...current, finish: event.target.value }))}
+                disabled={!editable || locationSaving}
+                placeholder="Finish location"
+              />
+            </label>
 
-        <article className="route-detail-panel endurance-card">
-          <div className="route-section-title">
-            <div>
-              <p className="eyebrow">Metadata</p>
-              <h2>Route quality</h2>
-            </div>
-          </div>
-
-          <div className="route-metadata-list">
-            <span><b>Surface intelligence</b><small>Prepared for sport-specific scoring.</small></span>
-            <span><b>Route architecture</b><small>{pointStats.controlPointCount ? "Control points + geometry" : "Geometry only"}</small></span>
-            <span><b>Route source</b><small>{route.gpx_file_url ? "GPX imported" : "Manual / saved points"}</small></span>
-            <span><b>Visibility</b><small>{route.visibility}</small></span>
-            <span><b>Updated</b><small>{formatDate(route.updated_at || route.created_at)}</small></span>
+            {editable ? (
+              <button
+                type="button"
+                className="route-location-save-button"
+                onClick={saveRouteLocationLabels}
+                disabled={locationSaving}
+              >
+                {locationSaving ? "Saving..." : "Save locations"}
+              </button>
+            ) : null}
           </div>
         </article>
       </section>
