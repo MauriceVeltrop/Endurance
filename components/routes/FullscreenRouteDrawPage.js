@@ -56,9 +56,19 @@ function formatRouteDistanceLabel(value) {
 }
 
 function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
-  const location = cleanRouteLocationName(startLocation) || "Locatie bepalen";
+  const location = cleanRouteLocationName(startLocation);
+  const distance = Number(distanceKm);
 
-  return `${location} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+  if (!location || !Number.isFinite(distance) || distance <= 0) {
+    return "";
+  }
+
+  return `${location} - ${formatRouteDistanceLabel(distance)} - ${getSportLabel(sportId || "running")}`;
+}
+
+function isPlaceholderRouteTitle(value) {
+  const raw = String(value || "").trim();
+  return !raw || /^locatie bepalen\s*-/i.test(raw) || /^route\s*-\s*0(?:\.0)?\s*km\s*-/i.test(raw);
 }
 
 
@@ -247,11 +257,11 @@ function downloadTextFile({ filename, text, type = "application/gpx+xml" }) {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
-function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload, titleIsAuto = true }) {
+function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, routePayload, titleEditedManually = false }) {
   return {
     sport_id: sportId,
     title: title?.trim() || defaultTitle(sportId),
-    title_is_auto: titleIsAuto !== false,
+    title_is_auto: !titleEditedManually,
     description: "",
     method,
     distance_km: metrics.distance_km || routePayload.distance_km || "",
@@ -1066,7 +1076,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
 
-  function buildCurrentDraft() {
+  function buildCurrentDraft(titleOverride) {
     const safePayload = buildSafeDraftRoutePayload(
       routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
       points
@@ -1079,23 +1089,59 @@ export default function FullscreenRouteDrawPage() {
 
     return makeRouteDraft({
       sportId,
-      title,
+      title: titleOverride || title,
       method: "draw",
       profileId: profile?.id,
       metrics,
       routePayload: safePayload,
-      titleIsAuto: !titleEditedManually,
+      titleEditedManually,
     });
   }
 
-  function saveDraftLocally() {
+  async function getStableTitleForSave() {
+    if (titleEditedManually) return title?.trim() || defaultTitle(sportId);
+
+    const safePayload = buildSafeDraftRoutePayload(
+      routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
+      points
+    );
+    const safePoints = normalizeRoutePoints(safePayload?.points);
+    const safeMetrics = calculateRouteMetrics(safePoints);
+    const distanceKm = safeMetrics.distance_km || metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0;
+
+    let place = cleanRouteLocationName(routeStartLocation);
+
+    if (!place) {
+      const firstPoint = safePoints[0] || points[0] || routedPoints[0];
+      if (firstPoint) {
+        place = await resolvePlaceNameFromCoordinates({ lat: firstPoint.lat, lon: firstPoint.lon });
+        if (place) setRouteStartLocation(place);
+      }
+    }
+
+    const generatedTitle = buildAutomaticRouteTitle({
+      startLocation: place,
+      distanceKm,
+      sportId,
+    });
+
+    if (generatedTitle) {
+      setTitle(generatedTitle);
+      return generatedTitle;
+    }
+
+    return isPlaceholderRouteTitle(title) ? defaultTitle(sportId) : title;
+  }
+
+  async function saveDraftLocally() {
     if (!canContinue) {
       setMessage("Add at least two routepoints before saving a draft.");
       return;
     }
 
     try {
-      const draft = buildCurrentDraft();
+      const stableTitle = await getStableTitleForSave();
+      const draft = buildCurrentDraft(stableTitle);
       window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
       window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
       setMessage("Draft saved.");
@@ -1141,7 +1187,8 @@ export default function FullscreenRouteDrawPage() {
     if (editRouteId) {
       try {
         setMessage("Saving route...");
-        const draft = buildCurrentDraft();
+        const stableTitle = await getStableTitleForSave();
+        const draft = buildCurrentDraft(stableTitle);
         const safeRoutePoints = draft.route_points;
         const metrics = calculateRouteMetrics(normalizeRoutePoints(safeRoutePoints?.points));
 
@@ -1180,7 +1227,8 @@ export default function FullscreenRouteDrawPage() {
     }
 
     try {
-      const draft = buildCurrentDraft();
+      const stableTitle = await getStableTitleForSave();
+      const draft = buildCurrentDraft(stableTitle);
       window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
       window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
 
@@ -1256,17 +1304,16 @@ export default function FullscreenRouteDrawPage() {
     if (titleEditedManually) return;
 
     const distanceKm = metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0;
-    const cleanStartLocation = cleanRouteLocationName(routeStartLocation);
 
-    // Do not generate/save a "Locatie bepalen" title while reverse geocoding is still pending.
-    // Once the start location resolves, this effect runs again and updates the auto title.
-    if (!cleanStartLocation && points.length >= 2) return;
-
-    setTitle(buildAutomaticRouteTitle({
-      startLocation: cleanStartLocation || routeStartLocation,
+    const generatedTitle = buildAutomaticRouteTitle({
+      startLocation: routeStartLocation,
       distanceKm,
       sportId,
-    }));
+    });
+
+    if (generatedTitle) {
+      setTitle(generatedTitle);
+    }
   }, [
     titleEditedManually,
     routeStartLocation,
@@ -1274,7 +1321,6 @@ export default function FullscreenRouteDrawPage() {
     routedPayload?.distance_km,
     pointsPayload?.distance_km,
     sportId,
-    points.length,
   ]);
 
 
