@@ -305,6 +305,58 @@ function buildAutomaticRouteTitle({ startLocation, distanceKm, sportId }) {
   return `${location} - ${formatRouteDistanceLabel(distanceKm)} - ${getSportLabel(sportId || "running")}`;
 }
 
+function isGenericRouteTitle(value, sportId) {
+  const title = String(value || "").trim();
+  const sportLabel = getSportLabel(sportId || "running");
+
+  if (!title) return true;
+
+  return [
+    "Draw Route",
+    "New route",
+    "Route",
+    `${sportLabel} Route`,
+    `${sportLabel} route`,
+  ].some((genericTitle) => title.toLowerCase() === genericTitle.toLowerCase()) || /^locatie bepalen\s*-/i.test(title);
+}
+
+function pickReverseGeocodePlace(data = {}) {
+  return cleanRouteLocationName(
+    data.place ||
+      data.city ||
+      data.town ||
+      data.village ||
+      data.municipality ||
+      data.locality ||
+      data.county ||
+      data.label ||
+      data.name ||
+      ""
+  );
+}
+
+async function resolveStartPlaceName(routePayload) {
+  const points = normalizeRoutePoints(routePayload);
+  const first = points?.[0];
+
+  if (!first?.lat || !first?.lon) return "";
+
+  try {
+    const params = new URLSearchParams({
+      lat: String(first.lat),
+      lon: String(first.lon),
+    });
+
+    const response = await fetch(`/api/geocode/reverse?${params.toString()}`);
+    const data = await response.json();
+
+    return pickReverseGeocodePlace(data);
+  } catch (error) {
+    console.warn("Could not resolve route start location", error);
+    return "";
+  }
+}
+
 export default function NewRoutePage() {
   const router = useRouter();
 
@@ -389,69 +441,92 @@ export default function NewRoutePage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const params = new URLSearchParams(window.location.search);
-    const shouldLoadDraft = params.get("routeDraft") === "1";
+    let cancelled = false;
 
-    if (!shouldLoadDraft) return;
+    async function loadRouteDraft() {
+      const params = new URLSearchParams(window.location.search);
+      const shouldLoadDraft = params.get("routeDraft") === "1";
 
-    const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
+      if (!shouldLoadDraft) return;
 
-    if (!rawDraft) {
-      window.history.replaceState({}, "", "/routes/new");
-      return;
-    }
+      const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
 
-    try {
-      const draft = JSON.parse(rawDraft);
-
-      const rawRoutePoints = draft?.route_points;
-      const safePoints = Array.isArray(rawRoutePoints)
-        ? rawRoutePoints
-        : Array.isArray(rawRoutePoints?.points)
-          ? rawRoutePoints.points
-          : [];
-
-      const safePayload = {
-        source: rawRoutePoints?.source || "draw-fullscreen",
-        profile: rawRoutePoints?.profile || null,
-        provider_url: rawRoutePoints?.provider_url || null,
-        waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
-        points: safePoints,
-        point_count: safePoints.length,
-        routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
-      };
-
-      if (!safePoints.length) {
-        throw new Error("Route draft has no valid route points.");
+      if (!rawDraft) {
+        window.history.replaceState({}, "", "/routes/new");
+        return;
       }
 
-      setForm((current) => ({
-        ...current,
-        sport_id: draft.sport_id || current.sport_id,
-        method: "draw",
-        title: draft.title || current.title || `${getSportLabel(draft.sport_id)} Route`,
-        description: draft.description || current.description,
-        distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
-        elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
-        route_points: safePayload,
-      }));
+      try {
+        const draft = JSON.parse(rawDraft);
 
-      setRoutedPayload(safePayload);
-      setCurrentStep(3);
-      setMessage("Drawn route loaded. Review the details and save your route.");
-      window.sessionStorage.removeItem("endurance_route_draft");
-      const keepParams = new URLSearchParams();
-      const returnTo = params.get("returnTo");
-      const step = params.get("step");
-      if (returnTo) keepParams.set("returnTo", returnTo);
-      if (step) keepParams.set("step", step);
-      window.history.replaceState({}, "", `/routes/new${keepParams.toString() ? `?${keepParams.toString()}` : ""}`);
-    } catch (error) {
-      console.error("Could not safely load route draft", error);
-      window.sessionStorage.removeItem("endurance_route_draft");
-      window.history.replaceState({}, "", "/routes/new");
-      setMessage("Could not load the drawn route. Please draw the route again.");
+        const rawRoutePoints = draft?.route_points;
+        const safePoints = Array.isArray(rawRoutePoints)
+          ? rawRoutePoints
+          : Array.isArray(rawRoutePoints?.points)
+            ? rawRoutePoints.points
+            : [];
+
+        const safePayload = {
+          source: rawRoutePoints?.source || "draw-fullscreen",
+          profile: rawRoutePoints?.profile || null,
+          provider_url: rawRoutePoints?.provider_url || null,
+          waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+          points: safePoints,
+          point_count: safePoints.length,
+          routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
+        };
+
+        if (!safePoints.length) {
+          throw new Error("Route draft has no valid route points.");
+        }
+
+        const sportId = draft.sport_id || "running";
+        const startPlaceName = await resolveStartPlaceName(safePayload);
+        const shouldAutoName = isGenericRouteTitle(draft.title, sportId);
+        const title = shouldAutoName
+          ? buildAutomaticRouteTitle({
+              startLocation: startPlaceName,
+              distanceKm: draft.distance_km || safePayload.distance_km,
+              sportId,
+            })
+          : draft.title;
+
+        if (cancelled) return;
+
+        setForm((current) => ({
+          ...current,
+          sport_id: draft.sport_id || current.sport_id,
+          method: "draw",
+          title: title || current.title || `${getSportLabel(draft.sport_id)} Route`,
+          description: draft.description || current.description,
+          distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
+          elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
+          route_points: safePayload,
+        }));
+
+        setRoutedPayload(safePayload);
+        setCurrentStep(3);
+        setMessage(startPlaceName ? "Drawn route loaded. Start location resolved." : "Drawn route loaded. Review the details and save your route.");
+        window.sessionStorage.removeItem("endurance_route_draft");
+        const keepParams = new URLSearchParams();
+        const returnTo = params.get("returnTo");
+        const step = params.get("step");
+        if (returnTo) keepParams.set("returnTo", returnTo);
+        if (step) keepParams.set("step", step);
+        window.history.replaceState({}, "", `/routes/new${keepParams.toString() ? `?${keepParams.toString()}` : ""}`);
+      } catch (error) {
+        console.error("Could not safely load route draft", error);
+        window.sessionStorage.removeItem("endurance_route_draft");
+        window.history.replaceState({}, "", "/routes/new");
+        setMessage("Could not load the drawn route. Please draw the route again.");
+      }
     }
+
+    loadRouteDraft();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
 
