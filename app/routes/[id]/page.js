@@ -127,6 +127,47 @@ function mapsSearchUrl(label, fallbackPoint) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
+function isCoordinateOnlyLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /^-?\d{1,3}(?:\.\d+)?\s*,\s*-?\d{1,3}(?:\.\d+)?$/.test(text);
+}
+
+function cleanHumanLocationLabel(value) {
+  const text = String(value || "").trim();
+  if (!text || isCoordinateOnlyLabel(text)) return "";
+
+  return text
+    .replace(/,?\s*(Nederland|Netherlands)\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function pickReverseLocationLabel(data) {
+  const raw = data?.label || data?.name || data?.place || data?.city || data?.town || data?.village || data?.municipality || data?.locality || data?.county || "";
+  return cleanHumanLocationLabel(raw);
+}
+
+async function reverseGeocodeRoutePoint(point) {
+  if (!point?.lat || !point?.lon) return "";
+
+  try {
+    const params = new URLSearchParams({
+      lat: String(point.lat),
+      lon: String(point.lon),
+    });
+
+    const response = await fetch(`/api/geocode/reverse?${params.toString()}`);
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    return pickReverseLocationLabel(data);
+  } catch (error) {
+    console.warn("Could not reverse geocode route point", error);
+    return "";
+  }
+}
+
 function getRouteLocationLabels(route) {
   const points = getRoutePoints(route?.route_points);
   const first = points?.[0];
@@ -135,9 +176,12 @@ function getRouteLocationLabels(route) {
     ? route.route_points
     : {};
 
+  const startStored = cleanHumanLocationLabel(meta.start_location_label || meta.start_address || meta.start_location);
+  const finishStored = cleanHumanLocationLabel(meta.finish_location_label || meta.finish_address || meta.finish_location);
+
   return {
-    start: meta.start_location_label || meta.start_address || meta.start_location || coordinateLabel(first) || routeArea(route),
-    finish: meta.finish_location_label || meta.finish_address || meta.finish_location || coordinateLabel(last) || routeArea(route),
+    start: startStored || coordinateLabel(first) || routeArea(route),
+    finish: finishStored || coordinateLabel(last) || routeArea(route),
   };
 }
 
@@ -310,7 +354,33 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (!route) return;
-    setLocationDraft(getRouteLocationLabels(route));
+
+    let cancelled = false;
+
+    async function hydrateRouteLocationLabels() {
+      const labels = getRouteLocationLabels(route);
+      const routePoints = getRoutePoints(route?.route_points);
+      const first = routePoints?.[0];
+      const last = routePoints?.[routePoints.length - 1];
+
+      const [resolvedStart, resolvedFinish] = await Promise.all([
+        isCoordinateOnlyLabel(labels.start) ? reverseGeocodeRoutePoint(first) : Promise.resolve(""),
+        isCoordinateOnlyLabel(labels.finish) ? reverseGeocodeRoutePoint(last) : Promise.resolve(""),
+      ]);
+
+      if (cancelled) return;
+
+      setLocationDraft({
+        start: resolvedStart || labels.start,
+        finish: resolvedFinish || labels.finish,
+      });
+    }
+
+    hydrateRouteLocationLabels();
+
+    return () => {
+      cancelled = true;
+    };
   }, [route?.id, route?.route_points]);
 
   const points = useMemo(() => getRoutePoints(route?.route_points), [route?.route_points]);
