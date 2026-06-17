@@ -752,36 +752,44 @@ export default function RouteDetailPage() {
 
           {editable ? (
             <div className="route-settings-editor">
-              <label className="route-settings-field">
-                <span>Route name</span>
-                <input
-                  type="text"
-                  value={routeSettingsDraft.title}
-                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, title: event.target.value }))}
-                  disabled={settingsSaving || deletingRoute}
-                  placeholder="Route name"
-                />
-              </label>
+              <div className="route-settings-header">
+                <p className="eyebrow">Manage route</p>
+                <h3>Name & visibility</h3>
+                <small>These details can be changed without changing the route geometry.</small>
+              </div>
 
-              <label className="route-settings-field">
-                <span>Visibility</span>
-                <select
-                  value={routeSettingsDraft.visibility}
-                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, visibility: event.target.value }))}
-                  disabled={settingsSaving || deletingRoute}
-                >
-                  <option value="private">Private · Only you</option>
-                  <option value="team">Team · Training partners</option>
-                  <option value="selected">Selected · Invited athletes</option>
-                  <option value="group">Group</option>
-                  <option value="public">Public · Community</option>
-                </select>
-              </label>
+              <div className="route-settings-form">
+                <label className="route-settings-field">
+                  <span>Route name</span>
+                  <input
+                    type="text"
+                    value={routeSettingsDraft.title}
+                    onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, title: event.target.value }))}
+                    disabled={settingsSaving || deletingRoute}
+                    placeholder="Route name"
+                  />
+                </label>
+
+                <label className="route-settings-field">
+                  <span>Visibility</span>
+                  <select
+                    value={routeSettingsDraft.visibility}
+                    onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, visibility: event.target.value }))}
+                    disabled={settingsSaving || deletingRoute}
+                  >
+                    <option value="private">Private · Only you</option>
+                    <option value="team">Team · Training partners</option>
+                    <option value="selected">Selected · Invited athletes</option>
+                    <option value="group">Group</option>
+                    <option value="public">Public · Community</option>
+                  </select>
+                </label>
+              </div>
 
               <div className="route-settings-actions">
                 <button
                   type="button"
-                  className="route-location-save-button"
+                  className="route-settings-save-button"
                   onClick={saveRouteSettings}
                   disabled={settingsSaving || deletingRoute}
                 >
