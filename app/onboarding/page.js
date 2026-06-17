@@ -358,7 +358,7 @@ export default function OnboardingPage() {
               <input
                 value={form.location}
                 onChange={(event) => update("location", event.target.value)}
-                placeholder="Landgraaf"
+                placeholder="City / region"
                 required
                 style={styles.input}
               />
