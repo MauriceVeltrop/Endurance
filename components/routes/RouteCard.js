@@ -14,18 +14,6 @@ function elevationGainText(route) {
   return route?.elevation_gain_m ? `+${Math.round(Number(route.elevation_gain_m))} m` : "Elevation not set";
 }
 
-function routeArea(route) {
-  const title = String(route?.title || "").trim();
-  const description = String(route?.description || "").trim();
-  const haystack = `${title} ${description}`;
-
-  if (/landgraaf/i.test(haystack)) return "Landgraaf";
-  if (/heerlen/i.test(haystack)) return "Heerlen";
-  if (/brunssum/i.test(haystack)) return "Brunssum";
-
-  return "Saved route";
-}
-
 function creatorName(route) {
   const creator = route?.creator || route?.profiles || route?.profile || {};
   return (
@@ -92,13 +80,8 @@ export default function RouteCard({ route }) {
 
         <div className="route-osm-submeta">
           <span>{elevationRange}</span>
-          <span>⌖ {routeArea(route)}</span>
         </div>
       </div>
-
-      <Link href={href} className="route-osm-arrow" aria-label={`Open ${route.title || "route"}`}>
-        →
-      </Link>
     </article>
   );
 }
