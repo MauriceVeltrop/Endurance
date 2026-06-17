@@ -251,6 +251,7 @@ function makeRouteDraft({ sportId, title, method = "draw", profileId, metrics, r
   return {
     sport_id: sportId,
     title: title?.trim() || defaultTitle(sportId),
+    title_is_auto: !titleEditedManually,
     description: "",
     method,
     distance_km: metrics.distance_km || routePayload.distance_km || "",
@@ -551,6 +552,9 @@ export default function FullscreenRouteDrawPage() {
           router.replace("/routes/new");
           return;
         }
+
+        const draftTitleIsAuto = editDraft?.title_is_auto !== false;
+        setTitleEditedManually(!draftTitleIsAuto);
 
         setSportId(initialSport);
         setDrawLayer((current) => current || defaultMapStyleForSport(initialSport));
@@ -1142,6 +1146,7 @@ export default function FullscreenRouteDrawPage() {
 
         const payload = {
           title: draft.title,
+          title_is_auto: draft.title_is_auto !== false,
           route_points: {
             ...(safeRoutePoints && typeof safeRoutePoints === "object" && !Array.isArray(safeRoutePoints) ? safeRoutePoints : {}),
             source: safeRoutePoints?.source || "draw-fullscreen-edit",
