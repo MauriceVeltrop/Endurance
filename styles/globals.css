@@ -13636,7 +13636,7 @@ button.route-sport-card > * {
   letter-spacing: 0.08em;
 }
 
-.route-location-field input {
+.route-location-field textarea {
   width: 100%;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(0,0,0,0.28);
@@ -13646,15 +13646,36 @@ button.route-sport-card > * {
   font-size: 18px;
   font-weight: 850;
   outline: none;
+  line-height: 1.25;
+  min-height: 74px;
+  resize: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.route-location-field input:focus {
+.route-location-field textarea:focus {
   border-color: rgba(230,255,0,0.45);
   box-shadow: 0 0 0 3px rgba(230,255,0,0.08);
 }
 
-.route-location-field input:disabled {
+.route-location-field textarea:disabled {
   opacity: 0.70;
+}
+
+.route-location-map-link {
+  color: #e6ff00;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: fit-content;
+  font-size: 14px;
+  font-weight: 950;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+
+.route-location-map-link:hover {
+  text-decoration: underline;
 }
 
 .route-location-save-button {
