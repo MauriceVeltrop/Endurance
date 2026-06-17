@@ -292,6 +292,7 @@ const styles = {
     color: "#fff",
     overflowX: "hidden",
     padding: 16,
+    paddingBottom: "max(156px, calc(132px + env(safe-area-inset-bottom)))",
     boxSizing: "border-box",
   },
   shell: {
@@ -474,5 +475,6 @@ const styles = {
     fontSize: 17,
     fontWeight: 950,
     minHeight: 56,
+    marginBottom: 8,
   },
 };
