@@ -13611,3 +13611,20 @@ button.route-sport-card > * {
     min-height: 32px !important;
   }
 }
+
+.route-stats-grid .route-stats-wide {
+  grid-column: 1 / -1;
+}
+
+.route-stats-grid .route-stats-wide strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.15;
+  word-break: break-word;
+}
+
+@media (max-width: 420px) {
+  .route-stats-grid .route-stats-wide strong {
+    font-size: 18px;
+  }
+}
