@@ -113,6 +113,23 @@ function canEditRoute(route, profile) {
   return route.creator_id === profile.id || profile.role === "admin" || profile.role === "moderator";
 }
 
+function buildEditableControlPoints(points, maxPoints = 80) {
+  const safePoints = getRoutePoints(points);
+  if (safePoints.length <= maxPoints) return safePoints;
+
+  const step = Math.max(1, Math.ceil((safePoints.length - 1) / (maxPoints - 1)));
+  const compacted = [];
+
+  for (let index = 0; index < safePoints.length; index += step) {
+    compacted.push(safePoints[index]);
+  }
+
+  const last = safePoints[safePoints.length - 1];
+  if (last && compacted[compacted.length - 1] !== last) compacted.push(last);
+
+  return compacted;
+}
+
 function makeRouteStartLocation(route) {
   const points = getRoutePoints(route?.route_points);
   const first = points?.[0];
@@ -321,6 +338,7 @@ export default function RouteDetailPage() {
       const controlPoints = getRoutePoints(
         routePoints.control_points || routePoints.waypoints || routePoints.controlPoints
       );
+      const editableControlPoints = controlPoints.length >= 2 ? controlPoints : buildEditableControlPoints(points, 80);
 
       window.sessionStorage.setItem(
         "endurance_route_edit_draft",
@@ -336,9 +354,10 @@ export default function RouteDetailPage() {
           route_points: {
             ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
             points,
-            waypoints: controlPoints.length >= 2 ? controlPoints : routePoints.waypoints,
-            control_points: controlPoints.length >= 2 ? controlPoints : routePoints.control_points,
+            waypoints: editableControlPoints,
+            control_points: editableControlPoints,
             point_count: points.length,
+            control_point_count: editableControlPoints.length,
           },
           saved_at: new Date().toISOString(),
         })
