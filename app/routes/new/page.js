@@ -147,6 +147,7 @@ function initialForm() {
     sport_id: "",
     method: "",
     title: "",
+    title_is_auto: true,
     description: "",
     visibility: "team",
     distance_km: "",
@@ -239,6 +240,7 @@ function buildEditableRouteDraft(form, profileId) {
   return {
     sport_id: form?.sport_id || "",
     title: form?.title || "",
+    title_is_auto: form?.title_is_auto !== false,
     description: form?.description || "",
     method: "draw",
     distance_km: form?.distance_km || metrics.distance_km || "",
@@ -498,6 +500,7 @@ export default function NewRoutePage() {
           sport_id: draft.sport_id || current.sport_id,
           method: "draw",
           title: title || current.title || `${getSportLabel(draft.sport_id)} Route`,
+          title_is_auto: shouldAutoName,
           description: draft.description || current.description,
           distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
           elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
@@ -614,8 +617,13 @@ export default function NewRoutePage() {
     setForm((current) => {
       const next = { ...current, [key]: value };
 
+      if (key === "title") {
+        next.title_is_auto = false;
+      }
+
       if (key === "sport_id") {
         next.title = `${getSportLabel(value)} Route`;
+        next.title_is_auto = true;
         next.method = "";
         next.description = "";
         next.distance_km = "";
@@ -642,14 +650,31 @@ export default function NewRoutePage() {
       const text = await file.text();
       const parsed = parseGpxText(text);
 
-      setForm((current) => ({
-        ...current,
-        method: "upload",
-        title: current.title?.trim() ? current.title : file.name.replace(/\.gpx$/i, ""),
-        distance_km: parsed.distance_km ? String(parsed.distance_km) : current.distance_km,
-        elevation_gain_m: parsed.elevation_gain_m ? String(parsed.elevation_gain_m) : current.elevation_gain_m,
-        route_points: parsed,
-      }));
+      const startPlaceName = await resolveStartPlaceName(parsed);
+
+      setForm((current) => {
+        const shouldAutoName = current.title_is_auto !== false || isGenericRouteTitle(current.title, current.sport_id);
+        const nextTitle = shouldAutoName
+          ? buildAutomaticRouteTitle({
+              startLocation: startPlaceName,
+              distanceKm: parsed.distance_km || current.distance_km,
+              sportId: current.sport_id,
+            })
+          : current.title;
+
+        return {
+          ...current,
+          method: "upload",
+          title: nextTitle || file.name.replace(/\.gpx$/i, ""),
+          title_is_auto: shouldAutoName,
+          distance_km: parsed.distance_km ? String(parsed.distance_km) : current.distance_km,
+          elevation_gain_m: parsed.elevation_gain_m ? String(parsed.elevation_gain_m) : current.elevation_gain_m,
+          route_points: {
+            ...parsed,
+            start_location: startPlaceName || parsed.start_location || null,
+          },
+        };
+      });
 
       setMessage(`GPX imported: ${formatRoutePointSummary(parsed)}.`);
     } catch (error) {
@@ -765,6 +790,7 @@ export default function NewRoutePage() {
         creator_id: profile.id,
         sport_id: form.sport_id,
         title: form.title.trim(),
+        title_is_auto: form.title_is_auto !== false,
         description: form.description || "",
         visibility: form.visibility || "team",
         distance_km: form.distance_km ? Number(form.distance_km) : null,
