@@ -13693,3 +13693,161 @@ button.route-sport-card > * {
   opacity: 0.65;
   cursor: default;
 }
+
+
+/* Route detail management editor */
+.route-settings-editor {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(230,255,0,0.10), transparent 38%),
+    rgba(0,0,0,0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.route-settings-header {
+  display: grid;
+  gap: 4px;
+}
+
+.route-settings-header .eyebrow {
+  margin: 0;
+  color: #e6ff00;
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.route-settings-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(24px, 6vw, 34px);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.route-settings-header small {
+  display: block;
+  color: rgba(255,255,255,0.55);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.route-settings-form {
+  display: grid;
+  gap: 12px;
+}
+
+.route-settings-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.route-settings-field span {
+  color: rgba(255,255,255,0.52);
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.route-settings-field input,
+.route-settings-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+  background: rgba(0,0,0,0.34);
+  color: #fff;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.15;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.route-settings-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 44px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.82) 50%),
+    linear-gradient(135deg, rgba(255,255,255,0.82) 50%, transparent 50%);
+  background-position:
+    calc(100% - 24px) 27px,
+    calc(100% - 17px) 27px;
+  background-size: 7px 7px, 7px 7px;
+  background-repeat: no-repeat;
+}
+
+.route-settings-field input:focus,
+.route-settings-field select:focus {
+  border-color: rgba(230,255,0,0.45);
+  box-shadow: 0 0 0 3px rgba(230,255,0,0.08);
+}
+
+.route-settings-field input:disabled,
+.route-settings-field select:disabled {
+  opacity: 0.70;
+}
+
+.route-settings-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.route-settings-save-button,
+.route-delete-button {
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 17px 18px;
+  font-size: 17px;
+  font-weight: 1000;
+  cursor: pointer;
+  min-height: 58px;
+}
+
+.route-settings-save-button {
+  background: #e6ff00;
+  color: #050703;
+  box-shadow: 0 18px 44px rgba(230,255,0,0.16);
+}
+
+.route-delete-button {
+  background: rgba(255,69,69,0.12);
+  color: #ff7676;
+  border: 1px solid rgba(255,96,96,0.22);
+}
+
+.route-settings-save-button:disabled,
+.route-delete-button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+@media (min-width: 720px) {
+  .route-settings-form {
+    grid-template-columns: 1.35fr 0.85fr;
+  }
+
+  .route-settings-actions {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .route-delete-button {
+    min-width: 180px;
+  }
+}
