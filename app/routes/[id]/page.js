@@ -222,23 +222,30 @@ function downloadTextFile(filename, text, type = "application/gpx+xml") {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 400);
 }
 
+function formatAutoRouteDistance(value) {
+  const distance = Number(value);
+  if (!Number.isFinite(distance) || distance <= 0) return "0.0 km";
+  return `${distance.toFixed(1)} km`;
+}
+
+function buildAutoRouteTitle({ place, distanceKm, sportId }) {
+  const safePlace = String(place || "").trim() || "Locatie bepalen";
+  return `${safePlace} - ${formatAutoRouteDistance(distanceKm)} - ${getSportLabel(sportId || "running")}`;
+}
+
 function makeDistanceSyncedRouteTitle(route, distanceKm) {
-  const distance = Number(distanceKm || 0);
-  if (!Number.isFinite(distance) || distance <= 0) return route?.title || "";
+  if (route?.title_is_auto === false) return route?.title || "";
 
-  const distanceText = `${distance.toFixed(1).replace(".0", "")} km`;
-  const currentTitle = String(route?.title || "").trim();
-  const sportLabel = getSportLabel(route?.sport_id);
+  const startLocation =
+    cleanHumanLocationLabel(route?.route_points?.start_location_label) ||
+    cleanHumanLocationLabel(route?.route_points?.start_location) ||
+    routeArea(route);
 
-  if (/\d+(?:[.,]\d+)?\s*km/i.test(currentTitle)) {
-    return currentTitle.replace(/\d+(?:[.,]\d+)?\s*km/i, distanceText);
-  }
-
-  const locationPart = currentTitle
-    .replace(new RegExp(`\\s*-?\\s*${sportLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "")
-    .trim();
-
-  return `${locationPart || routeArea(route)} - ${distanceText} - ${sportLabel}`;
+  return buildAutoRouteTitle({
+    place: startLocation,
+    distanceKm,
+    sportId: route?.sport_id,
+  });
 }
 
 export default function RouteDetailPage() {
@@ -292,7 +299,7 @@ export default function RouteDetailPage() {
 
       const { data: routeRow, error: routeError } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
         .eq("id", id)
         .maybeSingle();
 
@@ -430,7 +437,7 @@ export default function RouteDetailPage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", route.id)
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
         .maybeSingle();
 
       if (error) throw error;
@@ -460,8 +467,10 @@ export default function RouteDetailPage() {
       setSettingsSaving(true);
       setMessage("");
 
+      const titleChanged = nextTitle !== String(route.title || "").trim();
       const payload = {
         title: nextTitle,
+        title_is_auto: titleChanged ? false : route.title_is_auto !== false,
         visibility: nextVisibility,
         updated_at: new Date().toISOString(),
       };
@@ -470,7 +479,7 @@ export default function RouteDetailPage() {
         .from("routes")
         .update(payload)
         .eq("id", route.id)
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
         .maybeSingle();
 
       if (error) throw error;
@@ -558,6 +567,7 @@ export default function RouteDetailPage() {
           return_to: `/routes/${route.id}`,
           sport_id: route.sport_id,
           title: route.title,
+          title_is_auto: route.title_is_auto !== false,
           description: route.description || "",
           visibility: route.visibility,
           distance_km: route.distance_km || "",
@@ -618,7 +628,7 @@ export default function RouteDetailPage() {
         .from("routes")
         .update(payload)
         .eq("id", route.id)
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
         .maybeSingle();
 
       if (error) throw error;
@@ -752,44 +762,36 @@ export default function RouteDetailPage() {
 
           {editable ? (
             <div className="route-settings-editor">
-              <div className="route-settings-header">
-                <p className="eyebrow">Manage route</p>
-                <h3>Name & visibility</h3>
-                <small>These details can be changed without changing the route geometry.</small>
-              </div>
+              <label className="route-settings-field">
+                <span>Route name</span>
+                <input
+                  type="text"
+                  value={routeSettingsDraft.title}
+                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, title: event.target.value }))}
+                  disabled={settingsSaving || deletingRoute}
+                  placeholder="Route name"
+                />
+              </label>
 
-              <div className="route-settings-form">
-                <label className="route-settings-field">
-                  <span>Route name</span>
-                  <input
-                    type="text"
-                    value={routeSettingsDraft.title}
-                    onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, title: event.target.value }))}
-                    disabled={settingsSaving || deletingRoute}
-                    placeholder="Route name"
-                  />
-                </label>
-
-                <label className="route-settings-field">
-                  <span>Visibility</span>
-                  <select
-                    value={routeSettingsDraft.visibility}
-                    onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, visibility: event.target.value }))}
-                    disabled={settingsSaving || deletingRoute}
-                  >
-                    <option value="private">Private · Only you</option>
-                    <option value="team">Team · Training partners</option>
-                    <option value="selected">Selected · Invited athletes</option>
-                    <option value="group">Group</option>
-                    <option value="public">Public · Community</option>
-                  </select>
-                </label>
-              </div>
+              <label className="route-settings-field">
+                <span>Visibility</span>
+                <select
+                  value={routeSettingsDraft.visibility}
+                  onChange={(event) => setRouteSettingsDraft((current) => ({ ...current, visibility: event.target.value }))}
+                  disabled={settingsSaving || deletingRoute}
+                >
+                  <option value="private">Private · Only you</option>
+                  <option value="team">Team · Training partners</option>
+                  <option value="selected">Selected · Invited athletes</option>
+                  <option value="group">Group</option>
+                  <option value="public">Public · Community</option>
+                </select>
+              </label>
 
               <div className="route-settings-actions">
                 <button
                   type="button"
-                  className="route-settings-save-button"
+                  className="route-location-save-button"
                   onClick={saveRouteSettings}
                   disabled={settingsSaving || deletingRoute}
                 >
