@@ -118,6 +118,15 @@ function coordinateLabel(point) {
   return `${Number(point.lat).toFixed(5)}, ${Number(point.lon).toFixed(5)}`;
 }
 
+
+function mapsSearchUrl(label, fallbackPoint) {
+  const text = String(label || "").trim();
+  const fallback = coordinateLabel(fallbackPoint);
+  const query = text || fallback;
+  if (!query) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 function getRouteLocationLabels(route) {
   const points = getRoutePoints(route?.route_points);
   const first = points?.[0];
@@ -305,6 +314,10 @@ export default function RouteDetailPage() {
   }, [route?.id, route?.route_points]);
 
   const points = useMemo(() => getRoutePoints(route?.route_points), [route?.route_points]);
+  const startPoint = points?.[0];
+  const finishPoint = points?.[points.length - 1];
+  const startMapsUrl = mapsSearchUrl(locationDraft.start, startPoint);
+  const finishMapsUrl = mapsSearchUrl(locationDraft.finish, finishPoint);
   const pointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const sportLabel = getSportLabel(route?.sport_id);
@@ -584,22 +597,34 @@ export default function RouteDetailPage() {
           <div className="route-location-editor">
             <label className="route-location-field">
               <span>Start location</span>
-              <input
+              <textarea
+                rows={2}
                 value={locationDraft.start}
                 onChange={(event) => setLocationDraft((current) => ({ ...current, start: event.target.value }))}
                 disabled={!editable || locationSaving}
                 placeholder="Start location"
               />
+              {startMapsUrl ? (
+                <a className="route-location-map-link" href={startMapsUrl} target="_blank" rel="noreferrer">
+                  Open start in Maps ↗
+                </a>
+              ) : null}
             </label>
 
             <label className="route-location-field">
               <span>Finish location</span>
-              <input
+              <textarea
+                rows={2}
                 value={locationDraft.finish}
                 onChange={(event) => setLocationDraft((current) => ({ ...current, finish: event.target.value }))}
                 disabled={!editable || locationSaving}
                 placeholder="Finish location"
               />
+              {finishMapsUrl ? (
+                <a className="route-location-map-link" href={finishMapsUrl} target="_blank" rel="noreferrer">
+                  Open finish in Maps ↗
+                </a>
+              ) : null}
             </label>
 
             {editable ? (
