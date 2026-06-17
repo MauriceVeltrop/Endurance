@@ -113,28 +113,65 @@ function canEditRoute(route, profile) {
   return route.creator_id === profile.id || profile.role === "admin" || profile.role === "moderator";
 }
 
-function buildEditableControlPoints(points, maxPoints = 80) {
-  const safePoints = getRoutePoints(points);
-  if (safePoints.length <= maxPoints) return safePoints;
-
-  const step = Math.max(1, Math.ceil((safePoints.length - 1) / (maxPoints - 1)));
-  const compacted = [];
-
-  for (let index = 0; index < safePoints.length; index += step) {
-    compacted.push(safePoints[index]);
-  }
-
-  const last = safePoints[safePoints.length - 1];
-  if (last && compacted[compacted.length - 1] !== last) compacted.push(last);
-
-  return compacted;
-}
-
 function makeRouteStartLocation(route) {
   const points = getRoutePoints(route?.route_points);
   const first = points?.[0];
   if (first?.lat && first?.lon) return `${Number(first.lat).toFixed(5)}, ${Number(first.lon).toFixed(5)}`;
   return routeArea(route);
+}
+
+function getRouteEndpointPoints(routePoints) {
+  const points = getRoutePoints(routePoints);
+  const start = points?.[0] || null;
+  const finish = points?.length ? points[points.length - 1] : null;
+  return { start, finish };
+}
+
+function coordinateFallback(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+}
+
+function cleanAddressLabel(value) {
+  return String(value || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !/^(netherlands|nederland)$/i.test(part))
+    .join(", ");
+}
+
+async function resolveAddressFromPoint(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+
+  try {
+    const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
+    const response = await fetch(`/api/geocode/reverse?${params.toString()}`);
+
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    return cleanAddressLabel(
+      data?.label ||
+      data?.name ||
+      data?.place ||
+      data?.city ||
+      data?.town ||
+      data?.village ||
+      data?.municipality ||
+      data?.locality ||
+      data?.county ||
+      ""
+    );
+  } catch (error) {
+    console.warn("Could not resolve route endpoint address", error);
+    return "";
+  }
 }
 
 function routePointsToGpx(route) {
@@ -206,6 +243,7 @@ export default function RouteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [endpointAddresses, setEndpointAddresses] = useState({ start: "", finish: "" });
 
   async function loadRoute() {
     if (!id) return;
@@ -302,11 +340,43 @@ export default function RouteDetailPage() {
     loadRoute();
   }, [id]);
 
-  const points = useMemo(() => getRoutePoints(route?.route_points), [route?.route_points]);
+  const endpointPoints = useMemo(() => getRouteEndpointPoints(route?.route_points), [route?.route_points]);
   const pointStats = useMemo(() => getRoutePreviewStats(route?.route_points), [route?.route_points]);
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const sportLabel = getSportLabel(route?.sport_id);
   const editable = canEditRoute(route, profile);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadEndpointAddresses() {
+      if (!route?.route_points) {
+        setEndpointAddresses({ start: "", finish: "" });
+        return;
+      }
+
+      const { start, finish } = getRouteEndpointPoints(route.route_points);
+      setEndpointAddresses({ start: "", finish: "" });
+
+      const [startAddress, finishAddress] = await Promise.all([
+        resolveAddressFromPoint(start),
+        resolveAddressFromPoint(finish),
+      ]);
+
+      if (!cancelled) {
+        setEndpointAddresses({
+          start: startAddress,
+          finish: finishAddress,
+        });
+      }
+    }
+
+    loadEndpointAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route?.route_points]);
 
   function createTrainingFromRoute() {
     if (!route) return;
@@ -338,7 +408,6 @@ export default function RouteDetailPage() {
       const controlPoints = getRoutePoints(
         routePoints.control_points || routePoints.waypoints || routePoints.controlPoints
       );
-      const editableControlPoints = controlPoints.length >= 2 ? controlPoints : buildEditableControlPoints(points, 80);
 
       window.sessionStorage.setItem(
         "endurance_route_edit_draft",
@@ -354,10 +423,9 @@ export default function RouteDetailPage() {
           route_points: {
             ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
             points,
-            waypoints: editableControlPoints,
-            control_points: editableControlPoints,
+            waypoints: controlPoints.length >= 2 ? controlPoints : routePoints.waypoints,
+            control_points: controlPoints.length >= 2 ? controlPoints : routePoints.control_points,
             point_count: points.length,
-            control_point_count: editableControlPoints.length,
           },
           saved_at: new Date().toISOString(),
         })
@@ -537,11 +605,15 @@ export default function RouteDetailPage() {
             <div><span>Sport</span><strong>{sportLabel}</strong></div>
             <div><span>Distance</span><strong>{distanceText(route)}</strong></div>
             <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
-
-            <div><span>Control points</span><strong>{pointStats.controlPointCount || "—"}</strong></div>
-            <div><span>Geometry points</span><strong>{pointStats.pointCount || 0}</strong></div>
-            <div><span>Point density</span><strong>{pointStats.pointDensity ? `${pointStats.pointDensity}/km` : "—"}</strong></div>
-            <div><span>Elevation data</span><strong>{pointStats.hasElevation ? `${elevationStats.sampleCount} samples` : "No"}</strong></div>
+            <div><span>Estimated time</span><strong>{estimateDuration(route)}</strong></div>
+            <div className="route-stats-wide">
+              <span>Start location</span>
+              <strong>{endpointAddresses.start || coordinateFallback(endpointPoints.start)}</strong>
+            </div>
+            <div className="route-stats-wide">
+              <span>Finish location</span>
+              <strong>{endpointAddresses.finish || coordinateFallback(endpointPoints.finish)}</strong>
+            </div>
           </div>
         </article>
 
