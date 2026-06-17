@@ -562,12 +562,10 @@ export default function FullscreenRouteDrawPage() {
         if (editDraft?.route_points?.points?.length) {
           loadedDraftRef.current = true;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
-          const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints);
+          const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
           const editableControlPoints = savedWaypoints.length >= 2
             ? savedWaypoints
-            : geometry.length >= 2
-              ? [geometry[0], geometry[geometry.length - 1]]
-              : geometry;
+            : compactControlPoints(geometry);
 
           setPointsPayload(makeRoutePointPayload(editableControlPoints, "draw-edit-control-points"));
           setRoutedPayload({
