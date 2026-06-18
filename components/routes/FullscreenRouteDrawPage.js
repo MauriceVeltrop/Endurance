@@ -185,6 +185,8 @@ export default function FullscreenRouteDrawPage() {
   const loadedDraftRef = useRef(false);
   const currentLocationRequestedRef = useRef(false);
   const routeStartLookupRef = useRef("");
+  const routingAbortRef = useRef(null);
+  const routingRequestIdRef = useRef(0);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -201,6 +203,7 @@ export default function FullscreenRouteDrawPage() {
   const [editReturnTo, setEditReturnTo] = useState("");
   const [isImportedEditRoute, setIsImportedEditRoute] = useState(false);
   const [gpxGeometryLocked, setGpxGeometryLocked] = useState(false);
+  const [routingStatus, setRoutingStatus] = useState("idle");
 
   const points = useMemo(() => normalizeRoutePoints(pointsPayload), [pointsPayload]);
   const routedPoints = useMemo(() => normalizeRoutePoints(routedPayload), [routedPayload]);
@@ -208,6 +211,10 @@ export default function FullscreenRouteDrawPage() {
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2 || routedPoints.length >= 2;
   const mapPerformanceMode = isImportedEditRoute && gpxGeometryLocked ? "gpx-edit" : "normal";
+  const routeSignature = useMemo(
+    () => points.map((point) => `${Number(point.lat).toFixed(6)},${Number(point.lon).toFixed(6)}`).join("|"),
+    [points]
+  );
 
   useEffect(() => {
     async function bootstrap() {
@@ -329,6 +336,16 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation({ focus: true, quiet: true });
   }, [checking]);
 
+  useEffect(() => {
+    if (checking || gpxGeometryLocked || points.length < 2 || !routeSignature || loadedDraftRef.current) return;
+
+    const timeout = window.setTimeout(() => {
+      rerouteControlPoints(points, { silent: true });
+    }, 450);
+
+    return () => window.clearTimeout(timeout);
+  }, [checking, gpxGeometryLocked, routeSignature, sportId]);
+
   function requestCurrentLocation({ focus = true, quiet = false } = {}) {
     if (!navigator.geolocation) {
       if (!quiet) setMessage("Geolocation is not available on this device.");
@@ -356,6 +373,94 @@ export default function FullscreenRouteDrawPage() {
     );
   }
 
+  async function rerouteControlPoints(controlPoints, { silent = false } = {}) {
+    const control = compactControlPoints(controlPoints);
+    if (control.length < 2 || !sportId) return;
+
+    const requestId = routingRequestIdRef.current + 1;
+    routingRequestIdRef.current = requestId;
+
+    if (routingAbortRef.current) {
+      routingAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    routingAbortRef.current = controller;
+
+    try {
+      setRoutingStatus("routing");
+      if (!silent) setMessage("Snapping route to roads and paths...");
+
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sport_id: sportId, points: control }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (requestId !== routingRequestIdRef.current) return;
+
+      if (!response.ok || !data?.ok) {
+        const fallback = makeRoutePointPayload(control, "drawn-fallback");
+        setRoutedPayload({
+          ...fallback,
+          routed: false,
+          waypoints: control,
+          control_points: control,
+          fallback_reason: data?.error || "Routing failed.",
+          routed_at: new Date().toISOString(),
+        });
+        setRoutingStatus("done");
+        if (!silent) setMessage("Could not snap this route. Using the drawn line as fallback.");
+        return;
+      }
+
+      const routed = data.route_points || data;
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+      const routeMetrics = calculateRouteMetrics(geometry.length >= 2 ? geometry : control);
+
+      setRoutedPayload({
+        ...(routed && typeof routed === "object" && !Array.isArray(routed) ? routed : {}),
+        source: data?.routed === false ? "drawn-fallback" : "controlpoint-reroute",
+        points: geometry.length >= 2 ? compactRoutePoints(geometry, 900) : control,
+        waypoints: control,
+        control_points: control,
+        point_count: geometry.length >= 2 ? compactRoutePoints(geometry, 900).length : control.length,
+        distance_km: data.distance_km || routeMetrics.distance_km || null,
+        elevation_gain_m: data.elevation_gain_m || routeMetrics.elevation_gain_m || 0,
+        routed: data?.routed !== false,
+        profile: routed?.profile || data?.profile || null,
+        provider_url: routed?.provider_url || data?.provider_url || null,
+        route_quality: routed?.route_quality || data?.route_quality || null,
+        fallback_reason: data?.routed === false ? data?.warning || "Routing provider used fallback geometry." : null,
+        routed_at: new Date().toISOString(),
+      });
+      setRoutingStatus("done");
+      if (!silent) setMessage(data?.routed === false ? data?.warning || "No snapped path found. Using fallback." : "Route snapped to roads and paths.");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (requestId !== routingRequestIdRef.current) return;
+
+      console.error("Routing failed", error);
+      const fallback = makeRoutePointPayload(control, "drawn-fallback");
+      setRoutedPayload({
+        ...fallback,
+        routed: false,
+        waypoints: control,
+        control_points: control,
+        fallback_reason: error?.message || "Routing failed.",
+        routed_at: new Date().toISOString(),
+      });
+      setRoutingStatus("done");
+      if (!silent) setMessage("Could not snap this route. Using the drawn line as fallback.");
+    } finally {
+      if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
+        routingAbortRef.current = null;
+      }
+    }
+  }
+
   function handlePointsChange(nextPoints) {
     if (isImportedEditRoute && gpxGeometryLocked) {
       setMessage("GPX route is shown in lightweight mode. Tap Convert to editable before changing the geometry.");
@@ -366,6 +471,7 @@ export default function FullscreenRouteDrawPage() {
     loadedDraftRef.current = false;
     setPointsPayload(makeRoutePointPayload(controls));
     setRoutedPayload(null);
+    setRoutingStatus(controls.length >= 2 ? "routing" : "idle");
     setMessage("");
   }
 
@@ -390,6 +496,7 @@ export default function FullscreenRouteDrawPage() {
       source: "gpx-converted-edit",
       edited_at: new Date().toISOString(),
     });
+    setRoutingStatus("idle");
     setMessage("GPX converted to an editable route. Move the control points to reshape it.");
   }
 
@@ -402,6 +509,7 @@ export default function FullscreenRouteDrawPage() {
     setRoutedPayload(null);
     setGpxGeometryLocked(false);
     setIsImportedEditRoute(false);
+    setRoutingStatus("idle");
     loadedDraftRef.current = false;
     setMessage("");
   }
@@ -563,8 +671,8 @@ export default function FullscreenRouteDrawPage() {
           />
         </div>
 
-        <button type="button" className="route-draw-save-btn" onClick={continueToDetails} disabled={!canContinue}>
-          {editRouteId ? "Save route" : "Save & continue"}
+        <button type="button" className="route-draw-save-btn" onClick={continueToDetails} disabled={!canContinue || routingStatus === "routing"}>
+          {routingStatus === "routing" ? "Snapping..." : editRouteId ? "Save route" : "Save & continue"}
         </button>
       </section>
 
@@ -606,7 +714,7 @@ export default function FullscreenRouteDrawPage() {
       </section>
 
       <section className="route-draw-tip">
-        {isImportedEditRoute && gpxGeometryLocked ? "GPX lightweight mode · convert only if you want to reshape the route" : "Tap map to add points · drag points to reshape"}
+        {isImportedEditRoute && gpxGeometryLocked ? "GPX lightweight mode · convert only if you want to reshape the route" : routingStatus === "routing" ? "Snapping route to roads and paths..." : "Tap map to add points · drag points to reshape"}
       </section>
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
