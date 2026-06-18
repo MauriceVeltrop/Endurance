@@ -98,34 +98,29 @@ function norm(input) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
-function thinLinePoints(points, maxPoints = 450) {
-  const source = Array.isArray(points) ? points : [];
+function evenlySamplePoints(points, maxPoints = 550) {
+  if (!Array.isArray(points) || points.length <= maxPoints) return points || [];
 
-  if (source.length <= maxPoints) return source;
-  if (maxPoints <= 2) return [source[0], source[source.length - 1]].filter(Boolean);
-
-  const thinned = [];
-  const lastIndex = source.length - 1;
+  const sampled = [];
+  const lastIndex = points.length - 1;
 
   for (let index = 0; index < maxPoints; index += 1) {
     const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
-    const point = source[sourceIndex];
+    const point = points[sourceIndex];
+    const previous = sampled[sampled.length - 1];
 
-    if (!point) continue;
-
-    const previous = thinned[thinned.length - 1];
-    if (!previous || previous.lat !== point.lat || previous.lon !== point.lon) {
-      thinned.push(point);
+    if (point && (!previous || previous.lat !== point.lat || previous.lon !== point.lon)) {
+      sampled.push(point);
     }
   }
 
-  const first = source[0];
-  const last = source[lastIndex];
+  const first = points[0];
+  const last = points[lastIndex];
 
-  if (first && thinned[0] !== first) thinned.unshift(first);
-  if (last && thinned[thinned.length - 1] !== last) thinned.push(last);
+  if (first && (sampled[0]?.lat !== first.lat || sampled[0]?.lon !== first.lon)) sampled.unshift(first);
+  if (last && (sampled[sampled.length - 1]?.lat !== last.lat || sampled[sampled.length - 1]?.lon !== last.lon)) sampled.push(last);
 
-  return thinned;
+  return sampled;
 }
 
 function distSeg(p, a, b) {
@@ -296,13 +291,15 @@ export default function RouteDrawMap({
   const waypoints = useMemo(() => norm(points), [points]);
   const linePoints = useMemo(() => {
     const routed = norm(routedPoints);
-    const source = routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
-
-    // GPX uploads can contain hundreds or thousands of samples. Rendering every
-    // sample in Leaflet on mobile makes edit mode feel frozen. The full route is
-    // still preserved in route_points; this only thins the visual polyline.
-    return thinLinePoints(source, 450);
+    return routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
   }, [routedPoints, waypoints, routeMode]);
+
+  const displayLinePoints = useMemo(() => {
+    const maxPoints = typeof window !== "undefined" && window.innerWidth < 760 ? 420 : 650;
+    return evenlySamplePoints(linePoints, maxPoints);
+  }, [linePoints]);
+
+  const isHeavyRoute = linePoints.length > 650 || waypoints.length > 24;
 
   useEffect(() => {
     pointsRef.current = waypoints;
@@ -471,7 +468,7 @@ export default function RouteDrawMap({
       markerRefs.current = [];
 
       const group = L.layerGroup();
-      const routeLatLngs = linePoints.map((point) => [point.lat, point.lon]);
+      const routeLatLngs = displayLinePoints.map((point) => [point.lat, point.lon]);
       const waypointLatLngs = waypoints.map((point) => [point.lat, point.lon]);
 
       if (routeLatLngs.length >= 2) {
@@ -493,13 +490,15 @@ export default function RouteDrawMap({
           interactive: false,
         }).addTo(group);
 
-        const routeLine = L.polyline(routeLatLngs, {
-          color: "#e6ff00",
-          weight: 20,
-          opacity: 0,
-          lineJoin: "round",
-          lineCap: "round",
-        }).addTo(group);
+        const routeLine = !isHeavyRoute
+          ? L.polyline(routeLatLngs, {
+              color: "#e6ff00",
+              weight: 20,
+              opacity: 0,
+              lineJoin: "round",
+              lineCap: "round",
+            }).addTo(group)
+          : null;
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
@@ -519,7 +518,7 @@ export default function RouteDrawMap({
           interactive: false,
         }).addTo(group);
 
-        routeLine.on("click", (event) => {
+        routeLine?.on("click", (event) => {
           if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
           if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
 
@@ -539,9 +538,9 @@ export default function RouteDrawMap({
         });
       }
 
+      const shapeHandles = !isHeavyRoute ? buildShapeHandles(waypoints, displayLinePoints) : [];
       const currentZoom = Number(mapRef.current?.getZoom?.() || 13);
-      const showShapeHandles = routeLatLngs.length >= 2 && waypoints.length >= 2 && waypoints.length <= 24 && currentZoom >= 14;
-      const shapeHandles = showShapeHandles ? buildShapeHandles(waypoints, linePoints) : [];
+      const showShapeHandles = !isHeavyRoute && routeLatLngs.length >= 2 && waypoints.length >= 2 && currentZoom >= 13;
 
       if (showShapeHandles) {
         shapeHandles.forEach((handle) => {
@@ -608,9 +607,11 @@ export default function RouteDrawMap({
           zIndexOffset: 650,
         })
           .on("dragstart", () => {
+            if (waypoints.length > 24) return;
             isDraggingRef.current = true;
           })
           .on("dragend", (event) => {
+            if (waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const promoted = {
               lat: Number(latLng.lat.toFixed(6)),
@@ -637,13 +638,11 @@ export default function RouteDrawMap({
           .addTo(group);
       }
 
-      const displayedWaypoints = waypoints.length > 30 ? thinLinePoints(waypoints, 30) : waypoints;
+      const editableWaypoints = waypoints.length > 24 ? evenlySamplePoints(waypoints, 14) : waypoints;
 
-      displayedWaypoints.forEach((point, index) => {
+      editableWaypoints.forEach((point, index) => {
         const isStart = index === 0;
-        const isFinish = index === displayedWaypoints.length - 1 && displayedWaypoints.length > 1;
-        const sourceIndex = waypoints.findIndex((candidate) => candidate.lat === point.lat && candidate.lon === point.lon);
-        const editIndex = sourceIndex >= 0 ? sourceIndex : index;
+        const isFinish = index === waypoints.length - 1 && waypoints.length > 1;
 
         const icon = L.divIcon({
           className: isStart
@@ -658,16 +657,18 @@ export default function RouteDrawMap({
 
         L.marker([point.lat, point.lon], {
           icon,
-          draggable: true,
+          draggable: waypoints.length <= 24,
         })
           .on("dragstart", () => {
+            if (waypoints.length > 24) return;
             isDraggingRef.current = true;
             mapRef.current?.dragging?.disable?.();
           })
           .on("dragend", (event) => {
+            if (waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
-              pointIndex === editIndex
+              pointIndex === index
                 ? {
                     ...existing,
                     lat: Number(latLng.lat.toFixed(6)),
@@ -681,12 +682,13 @@ export default function RouteDrawMap({
             lastManualFocusRef.current = Date.now();
             onChange?.(next, {
               type: "move_control_point",
-              index: editIndex,
+              index,
             });
           })
           .on("click", () => {
+            if (waypoints.length > 24) return;
             if (isDraggingRef.current) return;
-            const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== editIndex);
+            const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
             lastManualFocusRef.current = Date.now();
             onChange?.(next);
           })
@@ -734,7 +736,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom]);
+  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute]);
 
 
 

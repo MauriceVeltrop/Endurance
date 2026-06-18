@@ -177,13 +177,12 @@ function compactRoutePoints(points, maxPoints = 900) {
   return compacted;
 }
 
-function evenlySampleRoutePoints(points, maxPoints = 18) {
+function compactControlPoints(points, maxPoints = 14) {
   const normalized = normalizeRoutePoints(points);
 
   if (normalized.length <= maxPoints) return normalized;
-  if (maxPoints <= 2) return [normalized[0], normalized[normalized.length - 1]].filter(Boolean);
 
-  const sampled = [];
+  const result = [];
   const lastIndex = normalized.length - 1;
 
   for (let index = 0; index < maxPoints; index += 1) {
@@ -191,28 +190,25 @@ function evenlySampleRoutePoints(points, maxPoints = 18) {
     const point = normalized[sourceIndex];
 
     if (!point) continue;
+    const previous = result[result.length - 1];
 
-    const previous = sampled[sampled.length - 1];
     if (!previous || previous.lat !== point.lat || previous.lon !== point.lon) {
-      sampled.push(point);
+      result.push(point);
     }
   }
 
   const first = normalized[0];
   const last = normalized[lastIndex];
 
-  if (first && sampled[0] !== first) sampled.unshift(first);
-  if (last && sampled[sampled.length - 1] !== last) sampled.push(last);
+  if (first && (result[0]?.lat !== first.lat || result[0]?.lon !== first.lon)) {
+    result.unshift(first);
+  }
 
-  return sampled;
-}
+  if (last && (result[result.length - 1]?.lat !== last.lat || result[result.length - 1]?.lon !== last.lon)) {
+    result.push(last);
+  }
 
-function compactControlPoints(points, maxPoints = 18) {
-  // Do not use slice(0, n) for GPX routes: that only takes the first few
-  // consecutive GPX samples and makes edit mode look like a stuck straight line.
-  // Use evenly distributed editable handles instead, while the full geometry stays
-  // in routedPayload.points for display and GPX export.
-  return evenlySampleRoutePoints(points, maxPoints);
+  return result;
 }
 
 function buildSafeDraftRoutePayload(payload, fallbackPoints) {
@@ -224,7 +220,7 @@ function buildSafeDraftRoutePayload(payload, fallbackPoints) {
     source: payload?.source || "draw-fullscreen",
     profile: payload?.profile || null,
     provider_url: payload?.provider_url || null,
-    waypoints: Array.isArray(payload?.waypoints) ? compactControlPoints(payload.waypoints) : [],
+    waypoints: Array.isArray(payload?.waypoints) ? compactRoutePoints(payload.waypoints, 80) : [],
     points,
     point_count: points.length,
     distance_km: payload?.distance_km || null,
@@ -666,10 +662,11 @@ export default function FullscreenRouteDrawPage() {
           loadedDraftRef.current = true;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
           const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
-          const editableControlPoints = compactControlPoints(
-            savedWaypoints.length >= 2 ? savedWaypoints : geometry,
-            geometry.length > 80 ? 18 : 32
-          );
+          const routeSource = String(editDraft.route_points?.source || "").toLowerCase();
+          const isImportedGpxRoute = routeSource.includes("gpx") || Boolean(editDraft.gpx_file_url);
+          const editableControlPoints = savedWaypoints.length >= 2 && !isImportedGpxRoute && savedWaypoints.length <= 24
+            ? savedWaypoints
+            : compactControlPoints(geometry, isImportedGpxRoute ? 10 : 14);
 
           setPointsPayload(makeRoutePointPayload(editableControlPoints, "draw-edit-control-points"));
           setRoutedPayload({
