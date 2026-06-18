@@ -268,6 +268,7 @@ export default function RouteDrawMap({
   focusCurrentLocation = false,
   targetLocation = null,
   onTargetLocationHandled,
+  performanceMode = "normal",
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -294,12 +295,15 @@ export default function RouteDrawMap({
     return routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
   }, [routedPoints, waypoints, routeMode]);
 
-  const displayLinePoints = useMemo(() => {
-    const maxPoints = typeof window !== "undefined" && window.innerWidth < 760 ? 420 : 650;
-    return evenlySamplePoints(linePoints, maxPoints);
-  }, [linePoints]);
+  const isGpxEditPerformanceMode = performanceMode === "gpx-edit";
 
-  const isHeavyRoute = linePoints.length > 650 || waypoints.length > 24;
+  const displayLinePoints = useMemo(() => {
+    const mobile = typeof window !== "undefined" && window.innerWidth < 760;
+    const maxPoints = isGpxEditPerformanceMode ? (mobile ? 180 : 280) : (mobile ? 420 : 650);
+    return evenlySamplePoints(linePoints, maxPoints);
+  }, [linePoints, isGpxEditPerformanceMode]);
+
+  const isHeavyRoute = isGpxEditPerformanceMode || linePoints.length > 650 || waypoints.length > 24;
 
   useEffect(() => {
     pointsRef.current = waypoints;
@@ -638,11 +642,17 @@ export default function RouteDrawMap({
           .addTo(group);
       }
 
-      const editableWaypoints = waypoints.length > 24 ? evenlySamplePoints(waypoints, 14) : waypoints;
+      const editableWaypoints = isGpxEditPerformanceMode
+        ? waypoints.filter((_, index) => index === 0 || index === waypoints.length - 1)
+        : waypoints.length > 24
+          ? evenlySamplePoints(waypoints, 14)
+          : waypoints;
 
       editableWaypoints.forEach((point, index) => {
         const isStart = index === 0;
-        const isFinish = index === waypoints.length - 1 && waypoints.length > 1;
+        const isFinish = isGpxEditPerformanceMode
+          ? index === editableWaypoints.length - 1 && editableWaypoints.length > 1
+          : index === waypoints.length - 1 && waypoints.length > 1;
 
         const icon = L.divIcon({
           className: isStart
@@ -657,7 +667,7 @@ export default function RouteDrawMap({
 
         L.marker([point.lat, point.lon], {
           icon,
-          draggable: waypoints.length <= 24,
+          draggable: !isGpxEditPerformanceMode && waypoints.length <= 24,
         })
           .on("dragstart", () => {
             if (waypoints.length > 24) return;
@@ -736,7 +746,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute]);
+  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute, isGpxEditPerformanceMode]);
 
 
 
