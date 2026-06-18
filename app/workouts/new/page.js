@@ -86,21 +86,26 @@ export default function NewWorkoutPage() {
       if (profileRow?.blocked) { await supabase.auth.signOut(); return router.replace("/login?blocked=1"); }
       if (!profileRow?.onboarding_completed) return router.replace("/onboarding");
       setProfile(profileRow || null);
-      const [globalResult, customResult, notificationResult, inviteResult] = await Promise.all([
-        supabase.from("strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").neq("active", false).order("primary_muscle_group", { ascending: true }).order("name", { ascending: true }),
-        supabase.from("user_strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").eq("user_id", user.id).eq("active", true).order("primary_muscle_group").order("name"),
+      const [exerciseResponse, customResult, notificationResult, inviteResult] = await Promise.all([
+        fetch("/api/workouts/strength-exercises", { cache: "no-store" }),
+        supabase.from("user_strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").eq("user_id", user.id).eq("active", true).order("primary_muscle_group", { ascending: true }).order("name", { ascending: true }),
         supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
         supabase.from("training_invites").select("id", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending"),
       ]);
 
-      if (globalResult.error) throw globalResult.error;
+      if (!exerciseResponse.ok) {
+        const payload = await exerciseResponse.json().catch(() => ({}));
+        throw new Error(payload?.error || "Could not load strength exercises from the database.");
+      }
       if (customResult.error) throw customResult.error;
 
-      const catalog = buildExerciseCatalog(globalResult.data || [], customResult.data || []);
+      const exercisePayload = await exerciseResponse.json();
+      const globalExercises = Array.isArray(exercisePayload?.exercises) ? exercisePayload.exercises : [];
+      const catalog = buildExerciseCatalog(globalExercises, customResult.data || []);
       setExerciseCatalog(catalog);
-      setExerciseLoadInfo(`${globalResult.data?.length || 0} global exercises loaded from strength_exercises`);
+      setExerciseLoadInfo(`${globalExercises.length} global exercises loaded from strength_exercises`);
       if (!catalog.length) {
-        setMessage("No strength exercises found in the database. Check RLS SELECT policies for strength_exercises.");
+        setMessage("No active exercises found in strength_exercises.");
       }
       const notificationCount = notificationResult.count || 0;
       const inviteCount = inviteResult.count || 0;
