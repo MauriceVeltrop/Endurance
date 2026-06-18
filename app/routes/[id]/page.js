@@ -264,7 +264,9 @@ export default function RouteDetailPage() {
   const [locationDraft, setLocationDraft] = useState({ start: "", finish: "" });
   const [locationSaving, setLocationSaving] = useState(false);
   const [routeSettingsDraft, setRouteSettingsDraft] = useState({ title: "", visibility: "team" });
+  const [descriptionDraft, setDescriptionDraft] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
   const [deletingRoute, setDeletingRoute] = useState(false);
 
   async function loadRoute() {
@@ -372,6 +374,11 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (!route) return;
+    setDescriptionDraft(route.description || "");
+  }, [route?.id, route?.description]);
+
+  useEffect(() => {
+    if (!route) return;
 
     let cancelled = false;
 
@@ -410,6 +417,7 @@ export default function RouteDetailPage() {
   const elevationStats = useMemo(() => getElevationStats(route?.route_points), [route?.route_points]);
   const sportLabel = getSportLabel(route?.sport_id);
   const editable = canEditRoute(route, profile);
+  const creatorEditable = Boolean(route && profile && route.creator_id === profile.id);
 
   async function saveRouteLocationLabels() {
     if (!route || !editable) return;
@@ -493,6 +501,40 @@ export default function RouteDetailPage() {
       setSettingsSaving(false);
     }
   }
+
+  async function saveRouteDescription() {
+    if (!route || !creatorEditable) return;
+
+    const nextDescription = String(descriptionDraft || "").trim();
+
+    try {
+      setDescriptionSaving(true);
+      setMessage("");
+
+      const payload = {
+        description: nextDescription,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("routes")
+        .update(payload)
+        .eq("id", route.id)
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setRoute(data || { ...route, ...payload });
+      setMessage("Description updated.");
+    } catch (error) {
+      console.error("Could not update route description", error);
+      setMessage(error?.message || "Could not update route description.");
+    } finally {
+      setDescriptionSaving(false);
+    }
+  }
+
 
   async function deleteCurrentRoute() {
     if (!route || !editable || deletingRoute) return;
@@ -753,11 +795,21 @@ export default function RouteDetailPage() {
             </div>
           </div>
 
-          <div className="route-stats-grid">
+          <div className="route-stats-grid route-stats-grid-clean">
             <div><span>Sport</span><strong>{sportLabel}</strong></div>
             <div><span>Distance</span><strong>{distanceText(route)}</strong></div>
-            <div><span>Elevation gain</span><strong>{elevationGainText(route)}</strong></div>
-            <div><span>Visibility</span><strong>{route.visibility}</strong></div>
+          </div>
+
+          <div className="route-elevation-inline-panel">
+            <div className="route-section-title">
+              <div>
+                <p className="eyebrow">Elevation profile</p>
+                <h2>Climbs & terrain</h2>
+              </div>
+              {elevationStats.available ? <span>{elevationStats.gain} m up / {elevationStats.loss} m down</span> : null}
+            </div>
+
+            <RouteElevationProfile routePoints={route.route_points} />
           </div>
 
           {editable ? (
@@ -791,7 +843,7 @@ export default function RouteDetailPage() {
               <div className="route-settings-actions">
                 <button
                   type="button"
-                  className="route-location-save-button"
+                  className="route-settings-save-button"
                   onClick={saveRouteSettings}
                   disabled={settingsSaving || deletingRoute}
                 >
@@ -856,18 +908,6 @@ export default function RouteDetailPage() {
         </article>
       </section>
 
-      <section className="endurance-shell route-elevation-panel endurance-card">
-        <div className="route-section-title">
-          <div>
-            <p className="eyebrow">Elevation profile</p>
-            <h2>Climbs & terrain</h2>
-          </div>
-          {elevationStats.available ? <span>{elevationStats.gain} m up / {elevationStats.loss} m down</span> : null}
-        </div>
-
-        <RouteElevationProfile routePoints={route.route_points} />
-      </section>
-
       <section className="endurance-shell route-linked-trainings endurance-card">
         <div className="route-section-title">
           <div>
@@ -887,6 +927,39 @@ export default function RouteDetailPage() {
           </div>
         ) : (
           <p className="route-detail-muted">No training session uses this route yet. Start one now and invite your team.</p>
+        )}
+      </section>
+
+      <section className="endurance-shell route-description-panel endurance-card">
+        <div className="route-section-title">
+          <div>
+            <p className="eyebrow">Description</p>
+            <h2>Route notes</h2>
+          </div>
+        </div>
+
+        {creatorEditable ? (
+          <div className="route-description-editor">
+            <textarea
+              rows={5}
+              value={descriptionDraft}
+              onChange={(event) => setDescriptionDraft(event.target.value)}
+              disabled={descriptionSaving}
+              placeholder="Add a short route description, meeting note or terrain details..."
+            />
+            <button
+              type="button"
+              className="route-settings-save-button"
+              onClick={saveRouteDescription}
+              disabled={descriptionSaving}
+            >
+              {descriptionSaving ? "Saving..." : "Save description"}
+            </button>
+          </div>
+        ) : (
+          <p className="route-description-readonly">
+            {route.description || "No description has been added yet."}
+          </p>
         )}
       </section>
 
