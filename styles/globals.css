@@ -13981,3 +13981,30 @@ button.route-sport-card > * {
 .route-detail-916-actions {
   grid-template-columns: 1fr;
 }
+
+/* ROUTE_DETAIL_SINGLE_SAVE_OVERWRITE_V1
+   Route detail uses one primary Save changes action for route name,
+   visibility, start/finish location labels and description.
+*/
+.route-unified-actions-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.route-unified-actions-panel .route-settings-save-button,
+.route-unified-actions-panel .route-delete-button {
+  width: 100%;
+}
+
+@media (min-width: 720px) {
+  .route-unified-actions-panel {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .route-unified-actions-panel .route-delete-button {
+    min-width: 190px;
+  }
+}
