@@ -774,11 +774,6 @@ export default function RouteDetailPage() {
               <button type="button" className="route-detail-916-secondary" onClick={downloadRouteGpx}>
                 ⇩ Download GPX
               </button>
-              {editable ? (
-                <button type="button" className="route-detail-916-secondary" onClick={() => router.push(`/routes/${route.id}/edit`)}>
-                  ✓ Saved
-                </button>
-              ) : null}
             </div>
           </div>
         </article>
@@ -908,28 +903,6 @@ export default function RouteDetailPage() {
         </article>
       </section>
 
-      <section className="endurance-shell route-linked-trainings endurance-card">
-        <div className="route-section-title">
-          <div>
-            <p className="eyebrow">Training usage</p>
-            <h2>Sessions with this route</h2>
-          </div>
-        </div>
-
-        {linkedTrainings.length ? (
-          <div className="route-linked-list">
-            {linkedTrainings.map((training) => (
-              <Link href={`/trainings/${training.id}`} key={training.id}>
-                <strong>{training.title}</strong>
-                <span>{formatDate(training.final_starts_at || training.starts_at) || training.planning_type}</span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="route-detail-muted">No training session uses this route yet. Start one now and invite your team.</p>
-        )}
-      </section>
-
       <section className="endurance-shell route-description-panel endurance-card">
         <div className="route-section-title">
           <div>
@@ -960,6 +933,28 @@ export default function RouteDetailPage() {
           <p className="route-description-readonly">
             {route.description || "No description has been added yet."}
           </p>
+        )}
+      </section>
+
+      <section className="endurance-shell route-linked-trainings endurance-card">
+        <div className="route-section-title">
+          <div>
+            <p className="eyebrow">Training usage</p>
+            <h2>Sessions with this route</h2>
+          </div>
+        </div>
+
+        {linkedTrainings.length ? (
+          <div className="route-linked-list">
+            {linkedTrainings.map((training) => (
+              <Link href={`/trainings/${training.id}`} key={training.id}>
+                <strong>{training.title}</strong>
+                <span>{formatDate(training.final_starts_at || training.starts_at) || training.planning_type}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="route-detail-muted">No training session uses this route yet. Start one now and invite your team.</p>
         )}
       </section>
 
