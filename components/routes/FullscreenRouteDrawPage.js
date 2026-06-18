@@ -207,6 +207,7 @@ export default function FullscreenRouteDrawPage() {
   const activeRoutePayload = routedPayload || pointsPayload;
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2 || routedPoints.length >= 2;
+  const mapPerformanceMode = isImportedEditRoute && gpxGeometryLocked ? "gpx-edit" : "normal";
 
   useEffect(() => {
     async function bootstrap() {
@@ -378,6 +379,7 @@ export default function FullscreenRouteDrawPage() {
     }
 
     loadedDraftRef.current = false;
+    setIsImportedEditRoute(false);
     setGpxGeometryLocked(false);
     setPointsPayload(makeRoutePointPayload(controls, "gpx-converted-edit-control-points"));
     setRoutedPayload({
@@ -579,7 +581,7 @@ export default function FullscreenRouteDrawPage() {
       <RouteDrawMap
         points={points}
         routedPoints={routedPoints.length ? routedPoints : points}
-        performanceMode={isImportedEditRoute ? "gpx-edit" : "normal"}
+        performanceMode={mapPerformanceMode}
         readOnlyGeometry={isImportedEditRoute && gpxGeometryLocked}
         onChange={handlePointsChange}
         height="100vh"
