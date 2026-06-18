@@ -97,11 +97,19 @@ export default function NewWorkoutPage() {
         const payload = await exerciseResponse.json().catch(() => ({}));
         throw new Error(payload?.error || "Could not load strength exercises from the database.");
       }
-      if (customResult.error) throw customResult.error;
+
+      // Global exercises are the source of truth and must keep working even if
+      // user-specific custom exercises are temporarily blocked by RLS.
+      // Previously, a permission error on user_strength_exercises stopped the
+      // whole builder and made it look as if strength_exercises was empty.
+      const customExercises = customResult.error ? [] : customResult.data || [];
+      if (customResult.error) {
+        console.warn("Custom strength exercises could not be loaded", customResult.error);
+      }
 
       const exercisePayload = await exerciseResponse.json();
       const globalExercises = Array.isArray(exercisePayload?.exercises) ? exercisePayload.exercises : [];
-      const catalog = buildExerciseCatalog(globalExercises, customResult.data || []);
+      const catalog = buildExerciseCatalog(globalExercises, customExercises);
       setExerciseCatalog(catalog);
       setExerciseLoadInfo(`${globalExercises.length} global exercises loaded from strength_exercises`);
       if (!catalog.length) {
