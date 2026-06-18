@@ -269,6 +269,7 @@ export default function RouteDrawMap({
   targetLocation = null,
   onTargetLocationHandled,
   performanceMode = "normal",
+  readOnlyGeometry = false,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -276,6 +277,7 @@ export default function RouteDrawMap({
   const routeRef = useRef(null);
   const locationRef = useRef(null);
   const pointsRef = useRef(points);
+  const readOnlyGeometryRef = useRef(readOnlyGeometry);
   const hasFocusedLocationRef = useRef(false);
   const lastManualFocusRef = useRef(0);
   const userOwnsCameraRef = useRef(false);
@@ -299,15 +301,19 @@ export default function RouteDrawMap({
 
   const displayLinePoints = useMemo(() => {
     const mobile = typeof window !== "undefined" && window.innerWidth < 760;
-    const maxPoints = isGpxEditPerformanceMode ? (mobile ? 180 : 280) : (mobile ? 420 : 650);
+    const maxPoints = readOnlyGeometry ? (mobile ? 90 : 140) : isGpxEditPerformanceMode ? (mobile ? 120 : 180) : (mobile ? 420 : 650);
     return evenlySamplePoints(linePoints, maxPoints);
-  }, [linePoints, isGpxEditPerformanceMode]);
+  }, [linePoints, isGpxEditPerformanceMode, readOnlyGeometry]);
 
-  const isHeavyRoute = isGpxEditPerformanceMode || linePoints.length > 650 || waypoints.length > 24;
+  const isHeavyRoute = readOnlyGeometry || isGpxEditPerformanceMode || linePoints.length > 650 || waypoints.length > 24;
 
   useEffect(() => {
     pointsRef.current = waypoints;
   }, [waypoints]);
+
+  useEffect(() => {
+    readOnlyGeometryRef.current = readOnlyGeometry;
+  }, [readOnlyGeometry]);
 
   useEffect(() => {
     if (waypoints.length < 2 && linePoints.length < 2) {
@@ -386,6 +392,7 @@ export default function RouteDrawMap({
           };
 
           mapRef.current.on("click", (event) => {
+            if (readOnlyGeometryRef.current) return;
             if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
             const point = {
               lat: Number(event.latlng.lat.toFixed(6)),
@@ -476,6 +483,29 @@ export default function RouteDrawMap({
       const waypointLatLngs = waypoints.map((point) => [point.lat, point.lon]);
 
       if (routeLatLngs.length >= 2) {
+        if (readOnlyGeometry) {
+          const canvasRenderer = L.canvas ? L.canvas({ padding: 0.35 }) : undefined;
+          L.polyline(routeLatLngs, {
+            renderer: canvasRenderer,
+            color: "#031006",
+            weight: 5.8,
+            opacity: 0.58,
+            lineJoin: "round",
+            lineCap: "round",
+            smoothFactor: 2.5,
+            interactive: false,
+          }).addTo(group);
+          L.polyline(routeLatLngs, {
+            renderer: canvasRenderer,
+            color: "#e6ff00",
+            weight: 2.8,
+            opacity: 1,
+            lineJoin: "round",
+            lineCap: "round",
+            smoothFactor: 2.5,
+            interactive: false,
+          }).addTo(group);
+        } else {
         L.polyline(routeLatLngs, {
           color: "#031006",
           weight: routeMode === "routed" ? 7 : 5.5,
@@ -540,6 +570,9 @@ export default function RouteDrawMap({
             createdAt: Date.now(),
           });
         });
+      }
+
+        }
       }
 
       const shapeHandles = !isHeavyRoute ? buildShapeHandles(waypoints, displayLinePoints) : [];
@@ -611,11 +644,11 @@ export default function RouteDrawMap({
           zIndexOffset: 650,
         })
           .on("dragstart", () => {
-            if (waypoints.length > 24) return;
+            if (readOnlyGeometry || waypoints.length > 24) return;
             isDraggingRef.current = true;
           })
           .on("dragend", (event) => {
-            if (waypoints.length > 24) return;
+            if (readOnlyGeometry || waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const promoted = {
               lat: Number(latLng.lat.toFixed(6)),
@@ -642,9 +675,11 @@ export default function RouteDrawMap({
           .addTo(group);
       }
 
-      const editableWaypoints = isGpxEditPerformanceMode
+      const editableWaypoints = readOnlyGeometry
         ? waypoints.filter((_, index) => index === 0 || index === waypoints.length - 1)
-        : waypoints.length > 24
+        : isGpxEditPerformanceMode
+          ? waypoints.filter((_, index) => index === 0 || index === waypoints.length - 1)
+          : waypoints.length > 24
           ? evenlySamplePoints(waypoints, 14)
           : waypoints;
 
@@ -667,15 +702,15 @@ export default function RouteDrawMap({
 
         L.marker([point.lat, point.lon], {
           icon,
-          draggable: !isGpxEditPerformanceMode && waypoints.length <= 24,
+          draggable: !readOnlyGeometry && !isGpxEditPerformanceMode && waypoints.length <= 24,
         })
           .on("dragstart", () => {
-            if (waypoints.length > 24) return;
+            if (readOnlyGeometry || waypoints.length > 24) return;
             isDraggingRef.current = true;
             mapRef.current?.dragging?.disable?.();
           })
           .on("dragend", (event) => {
-            if (waypoints.length > 24) return;
+            if (readOnlyGeometry || waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
               pointIndex === index
@@ -696,7 +731,7 @@ export default function RouteDrawMap({
             });
           })
           .on("click", () => {
-            if (waypoints.length > 24) return;
+            if (readOnlyGeometry || waypoints.length > 24) return;
             if (isDraggingRef.current) return;
             const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
             lastManualFocusRef.current = Date.now();
@@ -746,7 +781,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute, isGpxEditPerformanceMode]);
+  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute, isGpxEditPerformanceMode, readOnlyGeometry]);
 
 
 
