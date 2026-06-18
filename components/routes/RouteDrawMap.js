@@ -98,6 +98,36 @@ function norm(input) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
+function thinLinePoints(points, maxPoints = 450) {
+  const source = Array.isArray(points) ? points : [];
+
+  if (source.length <= maxPoints) return source;
+  if (maxPoints <= 2) return [source[0], source[source.length - 1]].filter(Boolean);
+
+  const thinned = [];
+  const lastIndex = source.length - 1;
+
+  for (let index = 0; index < maxPoints; index += 1) {
+    const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+    const point = source[sourceIndex];
+
+    if (!point) continue;
+
+    const previous = thinned[thinned.length - 1];
+    if (!previous || previous.lat !== point.lat || previous.lon !== point.lon) {
+      thinned.push(point);
+    }
+  }
+
+  const first = source[0];
+  const last = source[lastIndex];
+
+  if (first && thinned[0] !== first) thinned.unshift(first);
+  if (last && thinned[thinned.length - 1] !== last) thinned.push(last);
+
+  return thinned;
+}
+
 function distSeg(p, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -266,7 +296,12 @@ export default function RouteDrawMap({
   const waypoints = useMemo(() => norm(points), [points]);
   const linePoints = useMemo(() => {
     const routed = norm(routedPoints);
-    return routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
+    const source = routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
+
+    // GPX uploads can contain hundreds or thousands of samples. Rendering every
+    // sample in Leaflet on mobile makes edit mode feel frozen. The full route is
+    // still preserved in route_points; this only thins the visual polyline.
+    return thinLinePoints(source, 450);
   }, [routedPoints, waypoints, routeMode]);
 
   useEffect(() => {
@@ -504,9 +539,9 @@ export default function RouteDrawMap({
         });
       }
 
-      const shapeHandles = buildShapeHandles(waypoints, linePoints);
       const currentZoom = Number(mapRef.current?.getZoom?.() || 13);
-      const showShapeHandles = routeLatLngs.length >= 2 && waypoints.length >= 2 && currentZoom >= 13;
+      const showShapeHandles = routeLatLngs.length >= 2 && waypoints.length >= 2 && waypoints.length <= 24 && currentZoom >= 14;
+      const shapeHandles = showShapeHandles ? buildShapeHandles(waypoints, linePoints) : [];
 
       if (showShapeHandles) {
         shapeHandles.forEach((handle) => {
@@ -602,9 +637,13 @@ export default function RouteDrawMap({
           .addTo(group);
       }
 
-      waypoints.forEach((point, index) => {
+      const displayedWaypoints = waypoints.length > 30 ? thinLinePoints(waypoints, 30) : waypoints;
+
+      displayedWaypoints.forEach((point, index) => {
         const isStart = index === 0;
-        const isFinish = index === waypoints.length - 1 && waypoints.length > 1;
+        const isFinish = index === displayedWaypoints.length - 1 && displayedWaypoints.length > 1;
+        const sourceIndex = waypoints.findIndex((candidate) => candidate.lat === point.lat && candidate.lon === point.lon);
+        const editIndex = sourceIndex >= 0 ? sourceIndex : index;
 
         const icon = L.divIcon({
           className: isStart
@@ -628,7 +667,7 @@ export default function RouteDrawMap({
           .on("dragend", (event) => {
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
-              pointIndex === index
+              pointIndex === editIndex
                 ? {
                     ...existing,
                     lat: Number(latLng.lat.toFixed(6)),
@@ -642,12 +681,12 @@ export default function RouteDrawMap({
             lastManualFocusRef.current = Date.now();
             onChange?.(next, {
               type: "move_control_point",
-              index,
+              index: editIndex,
             });
           })
           .on("click", () => {
             if (isDraggingRef.current) return;
-            const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
+            const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== editIndex);
             lastManualFocusRef.current = Date.now();
             onChange?.(next);
           })
