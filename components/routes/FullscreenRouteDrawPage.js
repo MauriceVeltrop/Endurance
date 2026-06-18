@@ -187,6 +187,7 @@ export default function FullscreenRouteDrawPage() {
   const routeStartLookupRef = useRef("");
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
+  const skipNextAutoRerouteRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -339,9 +340,14 @@ export default function FullscreenRouteDrawPage() {
   useEffect(() => {
     if (checking || gpxGeometryLocked || points.length < 2 || !routeSignature || loadedDraftRef.current) return;
 
+    if (skipNextAutoRerouteRef.current) {
+      skipNextAutoRerouteRef.current = false;
+      return;
+    }
+
     const timeout = window.setTimeout(() => {
       rerouteControlPoints(points, { silent: true });
-    }, 450);
+    }, 650);
 
     return () => window.clearTimeout(timeout);
   }, [checking, gpxGeometryLocked, routeSignature, sportId]);
@@ -377,6 +383,7 @@ export default function FullscreenRouteDrawPage() {
     const control = compactControlPoints(controlPoints);
     if (control.length < 2 || !sportId) return;
 
+    const previousPayload = routedPayload?.points?.length ? routedPayload : null;
     const requestId = routingRequestIdRef.current + 1;
     routingRequestIdRef.current = requestId;
 
@@ -386,6 +393,7 @@ export default function FullscreenRouteDrawPage() {
 
     const controller = new AbortController();
     routingAbortRef.current = controller;
+    const timeoutId = window.setTimeout(() => controller.abort(), 12000);
 
     try {
       setRoutingStatus("routing");
@@ -402,31 +410,46 @@ export default function FullscreenRouteDrawPage() {
       if (requestId !== routingRequestIdRef.current) return;
 
       if (!response.ok || !data?.ok) {
-        const fallback = makeRoutePointPayload(control, "drawn-fallback");
-        setRoutedPayload({
-          ...fallback,
-          routed: false,
-          waypoints: control,
-          control_points: control,
-          fallback_reason: data?.error || "Routing failed.",
-          routed_at: new Date().toISOString(),
-        });
+        if (previousPayload) {
+          setRoutedPayload({
+            ...previousPayload,
+            waypoints: control,
+            control_points: control,
+            fallback_reason: data?.error || "Routing failed. Previous route kept.",
+          });
+        }
         setRoutingStatus("done");
-        if (!silent) setMessage("Could not snap this route. Using the drawn line as fallback.");
+        if (!silent) setMessage("Could not snap this route. Previous route kept.");
         return;
       }
 
       const routed = data.route_points || data;
       const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
-      const routeMetrics = calculateRouteMetrics(geometry.length >= 2 ? geometry : control);
+
+      if (geometry.length < 2) {
+        if (previousPayload) {
+          setRoutedPayload({
+            ...previousPayload,
+            waypoints: control,
+            control_points: control,
+            fallback_reason: "No snapped geometry returned. Previous route kept.",
+          });
+        }
+        setRoutingStatus("done");
+        if (!silent) setMessage("No snapped route returned. Previous route kept.");
+        return;
+      }
+
+      const compactedGeometry = compactRoutePoints(geometry, 900);
+      const routeMetrics = calculateRouteMetrics(compactedGeometry);
 
       setRoutedPayload({
         ...(routed && typeof routed === "object" && !Array.isArray(routed) ? routed : {}),
         source: data?.routed === false ? "drawn-fallback" : "controlpoint-reroute",
-        points: geometry.length >= 2 ? compactRoutePoints(geometry, 900) : control,
+        points: compactedGeometry,
         waypoints: control,
         control_points: control,
-        point_count: geometry.length >= 2 ? compactRoutePoints(geometry, 900).length : control.length,
+        point_count: compactedGeometry.length,
         distance_km: data.distance_km || routeMetrics.distance_km || null,
         elevation_gain_m: data.elevation_gain_m || routeMetrics.elevation_gain_m || 0,
         routed: data?.routed !== false,
@@ -439,22 +462,20 @@ export default function FullscreenRouteDrawPage() {
       setRoutingStatus("done");
       if (!silent) setMessage(data?.routed === false ? data?.warning || "No snapped path found. Using fallback." : "Route snapped to roads and paths.");
     } catch (error) {
-      if (error?.name === "AbortError") return;
       if (requestId !== routingRequestIdRef.current) return;
-
-      console.error("Routing failed", error);
-      const fallback = makeRoutePointPayload(control, "drawn-fallback");
-      setRoutedPayload({
-        ...fallback,
-        routed: false,
-        waypoints: control,
-        control_points: control,
-        fallback_reason: error?.message || "Routing failed.",
-        routed_at: new Date().toISOString(),
-      });
+      if (error?.name !== "AbortError") console.error("Routing failed", error);
+      if (previousPayload) {
+        setRoutedPayload({
+          ...previousPayload,
+          waypoints: control,
+          control_points: control,
+          fallback_reason: error?.name === "AbortError" ? "Routing timed out. Previous route kept." : error?.message || "Routing failed. Previous route kept.",
+        });
+      }
       setRoutingStatus("done");
-      if (!silent) setMessage("Could not snap this route. Using the drawn line as fallback.");
+      if (!silent) setMessage(error?.name === "AbortError" ? "Snapping timed out. Previous route kept." : "Could not snap this route. Previous route kept.");
     } finally {
+      window.clearTimeout(timeoutId);
       if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
         routingAbortRef.current = null;
       }
@@ -470,7 +491,6 @@ export default function FullscreenRouteDrawPage() {
     const controls = compactControlPoints(nextPoints);
     loadedDraftRef.current = false;
     setPointsPayload(makeRoutePointPayload(controls));
-    setRoutedPayload(null);
     setRoutingStatus(controls.length >= 2 ? "routing" : "idle");
     setMessage("");
   }
@@ -485,6 +505,7 @@ export default function FullscreenRouteDrawPage() {
     }
 
     loadedDraftRef.current = false;
+    skipNextAutoRerouteRef.current = true;
     setIsImportedEditRoute(false);
     setGpxGeometryLocked(false);
     setPointsPayload(makeRoutePointPayload(controls, "gpx-converted-edit-control-points"));
