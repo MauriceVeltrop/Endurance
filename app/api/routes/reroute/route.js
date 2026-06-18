@@ -20,9 +20,7 @@ const ORS_ROUTING_BASES = [
   "https://api.heigit.org/v2/directions",
 ].filter(Boolean);
 
-
 const PROVIDER_TIMEOUT_MS = 14000;
-
 
 function normalizePoint(point) {
   const lat = Number(point?.lat ?? point?.latitude);
@@ -75,7 +73,6 @@ function toPoints(coords) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
-
 function decodeExtraInfo(values, labels, geometryPoints = []) {
   const result = {};
 
@@ -88,15 +85,8 @@ function decodeExtraInfo(values, labels, geometryPoints = []) {
 
     let meters = 0;
 
-    for (
-      let i = startIndex + 1;
-      i <= endIndex && i < geometryPoints.length;
-      i += 1
-    ) {
-      meters += haversineMeters(
-        geometryPoints[i - 1],
-        geometryPoints[i]
-      );
+    for (let i = startIndex + 1; i <= endIndex && i < geometryPoints.length; i += 1) {
+      meters += haversineMeters(geometryPoints[i - 1], geometryPoints[i]);
     }
 
     const label = labels?.[value] || "unknown";
@@ -106,7 +96,6 @@ function decodeExtraInfo(values, labels, geometryPoints = []) {
   return result;
 }
 
-
 function percentMap(counts) {
   const total = Object.values(counts || {}).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
   return Object.fromEntries(
@@ -115,7 +104,6 @@ function percentMap(counts) {
       .sort((a, b) => b[1] - a[1])
   );
 }
-
 
 function decodeExtraSummary(summary, labels) {
   const result = {};
@@ -207,8 +195,6 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   if (normalizeSportId(sportId) === "running") {
     const maxDetour = Number(config.maxDetourFactor || 1.4);
 
-    // Running uses waytype as the primary signal.
-    // Surface is only a correction layer when ORS/OSM actually knows the surface.
     const wayRunnable = Math.min(100, waySuitable + wayAcceptable * 0.65);
     const surfacePositive = Math.min(100, surfaceSuitable + surfaceAcceptable * 0.5);
     const surfaceNegative = surfaceUnsuitable;
@@ -217,25 +203,16 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
     acceptable = Math.min(100, wayAcceptable + surfaceAcceptable);
     unsuitable = Math.min(100, Math.max(surfaceNegative, wayUnsuitable));
 
-    // Raw surface unknown is not route unknown when the waytype is known and runnable.
     const knownRunnableWay = Math.min(100, waySuitable + wayAcceptable);
     unknown = Math.max(0, Math.min(100, surfaceUnknown + wayUnknown - knownRunnableWay));
 
-    const detourPenalty = detour <= maxDetour
-      ? Math.max(0, (detour - 1) * 14)
-      : 10 + (detour - maxDetour) * 90;
+    const detourPenalty = detour <= maxDetour ? Math.max(0, (detour - 1) * 14) : 10 + (detour - maxDetour) * 90;
 
     score = Math.max(
       0,
       Math.min(
         100,
-        35
-          + suitable * 0.85
-          + acceptable * 0.15
-          + surfacePositive * 0.15
-          - unsuitable * 1.25
-          - unknown * 0.25
-          - detourPenalty
+        35 + suitable * 0.85 + acceptable * 0.15 + surfacePositive * 0.15 - unsuitable * 1.25 - unknown * 0.25 - detourPenalty
       )
     );
   } else {
@@ -268,8 +245,6 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   };
 }
 
-
-
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
@@ -290,15 +265,9 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      // Use the sport detour setting in the ORS alternative-route search itself.
-      // Previously Running always used a hard-coded 1.6 here, so changing
-      // maxDetourFactor in sportRouteProfiles only affected the quality score,
-      // not the alternatives ORS was allowed to return.
       payload.alternative_routes = {
         target_count: 3,
         weight_factor: Math.max(1.05, maxDetour),
-        // Allow ORS to return alternatives that partially overlap. A too-strict
-        // share factor can hide obvious paved alternatives in dense urban areas.
         share_factor: 0.8,
       };
     } else {
@@ -327,8 +296,6 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     }
 
     const data = await response.json();
-
-console.log("ORS extras debug:", JSON.stringify(data?.features?.[0]?.properties?.extras, null, 2));
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
       .map((feature) => scoreOrsCandidate({ feature, points, sportId, profile, preference }))
@@ -337,7 +304,6 @@ console.log("ORS extras debug:", JSON.stringify(data?.features?.[0]?.properties?
     clearTimeout(timeout);
   }
 }
-
 
 function fallbackResponse({ points, reason = "Routing provider could not snap this segment." }) {
   const distance = routeDistanceMeters(points);
@@ -374,7 +340,6 @@ function getOpenRouteServiceApiKey() {
   );
 }
 
-
 async function collectOrsCandidates({ points, sportId }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) {
@@ -397,10 +362,6 @@ async function collectOrsCandidates({ points, sportId }) {
           errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
         }
       }
-
-      // Do not stop early for Running. A high-scoring first candidate can still
-      // hide a much better paved alternative from another preference/base.
-      // Collect all candidates first, then sort by quality inside the detour limit.
     }
   }
 
@@ -427,22 +388,24 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: "At least two points are required." }, { status: 400 });
   }
 
-  // This endpoint is intentionally segment-first. Long routes must be sent as A→B calls.
-  const segment = [points[0], points[points.length - 1]];
+  // FIX: Use all waypoints for routing, not just endpoints
+  // This allows intermediate control points to influence the snapped route
+  const routingPoints = points.length > 2 ? points : [points[0], points[points.length - 1]];
   const normalizedSportId = normalizeSportId(sportId);
   const provider = "ors";
   const errors = [];
   let candidates = [];
 
   try {
-    candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
+    candidates = await collectOrsCandidates({ points: routingPoints, sportId: normalizedSportId });
   } catch (error) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
 
   if (!candidates.length) {
+    // FIX: Return all input points as fallback, not just endpoints
     return fallbackResponse({
-      points: segment,
+      points: routingPoints,
       reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
     });
   }
@@ -456,8 +419,6 @@ export async function POST(request) {
       const aWithinDetour = Number(a.detour || 99) <= maxDetour;
       const bWithinDetour = Number(b.detour || 99) <= maxDetour;
 
-      // Detour is a boundary, not the primary sort key. Inside the allowed
-      // detour window, choose the best Running quality even when it is longer.
       if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
 
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
@@ -472,7 +433,6 @@ export async function POST(request) {
       const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
       if (Math.abs(unknownDiff) >= 10) return unknownDiff;
 
-      // Final tie-breaker only: shorter route.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
@@ -515,7 +475,7 @@ export async function POST(request) {
       provider_profile: best.profile,
       preference: best.preference,
       points: best.points,
-      waypoints: segment,
+      waypoints: routingPoints,
       point_count: best.points.length,
       distance_km: Number((distance / 1000).toFixed(3)),
       elevation_gain_m: ascent,

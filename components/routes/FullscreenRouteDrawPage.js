@@ -173,7 +173,7 @@ async function resolveHumanLocationLabelFromCoordinates(point) {
     const response = await fetch(`/api/geocode/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
     if (!response.ok) return "";
     const data = await response.json();
-    return cleanHumanLocationLabel(data?.label || data?.name || data?.display_name || data?.place || data?.city || data?.town || data?.village || data?.municipality || data?.locality || data?.county || "");
+    return cleanHumanLocationLabel(data?.label || data?.name || data?.display_name || data?.place || data?.city || data?.town || data?.village || data?.municipality || data?.locality || data?.country || "");
   } catch (error) {
     console.warn("Could not resolve route location", error);
     return "";
@@ -188,6 +188,8 @@ export default function FullscreenRouteDrawPage() {
   const routingAbortRef = useRef(null);
   const routingRequestIdRef = useRef(0);
   const skipNextAutoRerouteRef = useRef(false);
+  const lastDragTimestampRef = useRef(0);
+  const manualEditPendingRef = useRef(false);
 
   const [profile, setProfile] = useState(null);
   const [sportId, setSportId] = useState("");
@@ -212,10 +214,6 @@ export default function FullscreenRouteDrawPage() {
   const metrics = useMemo(() => calculateRouteMetrics(activeRoutePayload), [activeRoutePayload]);
   const canContinue = points.length >= 2 || routedPoints.length >= 2;
   const mapPerformanceMode = isImportedEditRoute && gpxGeometryLocked ? "gpx-edit" : "normal";
-  const routeSignature = useMemo(
-    () => points.map((point) => `${Number(point.lat).toFixed(6)},${Number(point.lon).toFixed(6)}`).join("|"),
-    [points]
-  );
 
   useEffect(() => {
     async function bootstrap() {
@@ -337,20 +335,19 @@ export default function FullscreenRouteDrawPage() {
     requestCurrentLocation({ focus: true, quiet: true });
   }, [checking]);
 
+  // AUTO-REROUTE: Only trigger after manual edit completes (debounced)
   useEffect(() => {
-    if (checking || gpxGeometryLocked || points.length < 2 || !routeSignature || loadedDraftRef.current) return;
+    if (checking || gpxGeometryLocked || points.length < 2 || !sportId || loadedDraftRef.current) return;
 
-    if (skipNextAutoRerouteRef.current) {
-      skipNextAutoRerouteRef.current = false;
-      return;
-    }
+    if (!manualEditPendingRef.current) return;
 
     const timeout = window.setTimeout(() => {
+      manualEditPendingRef.current = false;
       rerouteControlPoints(points, { silent: true });
-    }, 650);
+    }, 800);
 
     return () => window.clearTimeout(timeout);
-  }, [checking, gpxGeometryLocked, routeSignature, sportId]);
+  }, [checking, gpxGeometryLocked, points.length, sportId]);
 
   function requestCurrentLocation({ focus = true, quiet = false } = {}) {
     if (!navigator.geolocation) {
@@ -490,8 +487,11 @@ export default function FullscreenRouteDrawPage() {
 
     const controls = compactControlPoints(nextPoints);
     loadedDraftRef.current = false;
+    lastDragTimestampRef.current = Date.now();
+    manualEditPendingRef.current = true;
+
     setPointsPayload(makeRoutePointPayload(controls));
-    setRoutingStatus(controls.length >= 2 ? "routing" : "idle");
+    setRoutingStatus(controls.length >= 2 ? "debounce" : "idle");
     setMessage("");
   }
 
@@ -506,6 +506,7 @@ export default function FullscreenRouteDrawPage() {
 
     loadedDraftRef.current = false;
     skipNextAutoRerouteRef.current = true;
+    manualEditPendingRef.current = false;
     setIsImportedEditRoute(false);
     setGpxGeometryLocked(false);
     setPointsPayload(makeRoutePointPayload(controls, "gpx-converted-edit-control-points"));
@@ -532,6 +533,7 @@ export default function FullscreenRouteDrawPage() {
     setIsImportedEditRoute(false);
     setRoutingStatus("idle");
     loadedDraftRef.current = false;
+    manualEditPendingRef.current = false;
     setMessage("");
   }
 
@@ -703,7 +705,9 @@ export default function FullscreenRouteDrawPage() {
             <strong>GPX lightweight edit</strong>
             <span>Full route is displayed as one fast read-only line.</span>
           </div>
-          <button type="button" onClick={convertGpxToEditableRoute}>Convert to editable</button>
+          <button type="button" onClick={convertGpxToEditableRoute}>
+            Convert to editable
+          </button>
         </section>
       ) : null}
 
@@ -735,7 +739,7 @@ export default function FullscreenRouteDrawPage() {
       </section>
 
       <section className="route-draw-tip">
-        {isImportedEditRoute && gpxGeometryLocked ? "GPX lightweight mode · convert only if you want to reshape the route" : routingStatus === "routing" ? "Snapping route to roads and paths..." : "Tap map to add points · drag points to reshape"}
+        {isImportedEditRoute && gpxGeometryLocked ? "GPX lightweight mode · convert only if you want to reshape the route" : routingStatus === "routing" ? "Snapping route to roads and paths..." : routingStatus === "debounce" ? "Waiting for you to finish editing before snapping..." : message}
       </section>
 
       <section className="route-editor-control-layer" aria-label="Route editor controls">
