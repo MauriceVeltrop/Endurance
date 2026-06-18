@@ -177,8 +177,38 @@ function compactRoutePoints(points, maxPoints = 900) {
   return compacted;
 }
 
-function compactControlPoints(points) {
-  return normalizeRoutePoints(points).slice(0, 80);
+function compactControlPoints(points, maxPoints = 32) {
+  const normalized = normalizeRoutePoints(points);
+
+  if (normalized.length <= maxPoints) return normalized;
+
+  // GPX uploads can contain hundreds of points. Those points are geometry,
+  // not editable control points. Showing every GPX point in edit mode makes
+  // the map heavy and visually breaks the editor. Use evenly distributed
+  // editable anchors while preserving the full geometry in routedPayload.
+  const lastIndex = normalized.length - 1;
+  const sampled = [];
+  const seen = new Set();
+
+  for (let i = 0; i < maxPoints; i += 1) {
+    const index = Math.round((i * lastIndex) / (maxPoints - 1));
+    const point = normalized[index];
+    if (!point) continue;
+
+    const key = `${Number(point.lat).toFixed(6)},${Number(point.lon).toFixed(6)}`;
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    sampled.push(point);
+  }
+
+  const first = normalized[0];
+  const last = normalized[lastIndex];
+
+  if (first && sampled[0] !== first) sampled.unshift(first);
+  if (last && sampled[sampled.length - 1] !== last) sampled.push(last);
+
+  return sampled;
 }
 
 function buildSafeDraftRoutePayload(payload, fallbackPoints) {
@@ -632,15 +662,19 @@ export default function FullscreenRouteDrawPage() {
           loadedDraftRef.current = true;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
           const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
-          const editableControlPoints = savedWaypoints.length >= 2
-            ? savedWaypoints
-            : compactControlPoints(geometry);
+          const editableControlPoints = compactControlPoints(
+            savedWaypoints.length >= 2 ? savedWaypoints : geometry
+          );
 
           setPointsPayload(makeRoutePointPayload(editableControlPoints, "draw-edit-control-points"));
           setRoutedPayload({
             ...editDraft.route_points,
+            // Keep the complete GPX/full geometry for display and saving.
+            // Only the draggable control points are compacted.
             points: geometry,
             waypoints: editableControlPoints,
+            control_points: editableControlPoints,
+            geometry_points: geometry,
             point_count: geometry.length,
           });
           setMessage("");
