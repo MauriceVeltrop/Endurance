@@ -13851,3 +13851,91 @@ button.route-sport-card > * {
     min-width: 180px;
   }
 }
+
+/* ROUTE_DETAIL_STATS_ELEVATION_DESCRIPTION_OVERWRITE_V1
+   Route detail cleanup:
+   - Route Stats only contains non-duplicated facts.
+   - Elevation Profile sits directly below Route Stats.
+   - Visibility stays only in the editable route details block.
+   - Description is a final card; editable by route creator only.
+*/
+.route-stats-grid-clean {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.route-elevation-inline-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(230,255,0,0.08), transparent 36%),
+    rgba(0,0,0,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+
+.route-elevation-inline-panel .route-section-title {
+  margin-bottom: 14px;
+}
+
+.route-description-panel {
+  margin-top: 16px;
+  margin-bottom: calc(112px + env(safe-area-inset-bottom));
+}
+
+.route-description-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.route-description-editor textarea {
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 24px;
+  background: rgba(0,0,0,0.30);
+  color: #fff;
+  padding: 18px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.35;
+  resize: vertical;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.route-description-editor textarea:focus {
+  border-color: rgba(230,255,0,0.45);
+  box-shadow: 0 0 0 3px rgba(230,255,0,0.08);
+}
+
+.route-description-editor textarea::placeholder {
+  color: rgba(255,255,255,0.42);
+}
+
+.route-description-readonly {
+  margin: 0;
+  color: rgba(255,255,255,0.74);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 430px) {
+  .route-stats-grid-clean {
+    grid-template-columns: 1fr !important;
+  }
+
+  .route-elevation-inline-panel {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .route-description-editor textarea {
+    min-height: 132px;
+    font-size: 16px;
+  }
+}
