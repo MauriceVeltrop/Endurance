@@ -15,7 +15,20 @@ const EQUIPMENT_OPTIONS = ["Barbell", "Dumbbell", "Cable", "Machine", "Smith Mac
 function makeId(prefix = "item") { return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function cleanNumber(value) { if (value === "" || value === null || value === undefined) return null; const number = Number(value); return Number.isFinite(number) ? number : null; }
 function firstName(profile) { return profile?.first_name || String(profile?.name || "").split(" ")[0] || "Maurice"; }
-function normalizeExercise(row, source) { return { id: row.id, source, name: row.name, primary_muscle_group: row.primary_muscle_group, equipment: row.equipment || "", image_url: row.image_url || "" }; }
+function normalizeMuscleGroup(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return MUSCLE_GROUPS.find((group) => group.toLowerCase() === normalized) || String(value || "").trim();
+}
+function normalizeExercise(row, source) {
+  return {
+    id: row.id,
+    source,
+    name: String(row.name || "").trim(),
+    primary_muscle_group: normalizeMuscleGroup(row.primary_muscle_group),
+    equipment: String(row.equipment || "").trim(),
+    image_url: row.image_url || "",
+  };
+}
 function catalogDedupKey(exercise) { return `${String(exercise?.name || "").trim().toLowerCase()}::${String(exercise?.primary_muscle_group || "").trim().toLowerCase()}::${String(exercise?.equipment || "").trim().toLowerCase()}`; }
 function buildExerciseCatalog(globalExercises = [], customExercises = []) {
   const dbExercises = [
@@ -55,6 +68,7 @@ export default function NewWorkoutPage() {
   const [method, setMethod] = useState("");
   const [selectedMuscles, setSelectedMuscles] = useState([]);
   const [exerciseCatalog, setExerciseCatalog] = useState([]);
+  const [exerciseLoadInfo, setExerciseLoadInfo] = useState("");
   const [selectedExercises, setSelectedExercises] = useState([]);
   const [customOpen, setCustomOpen] = useState(false);
   const [customForm, setCustomForm] = useState({ name: "", primary_muscle_group: "Chest", equipment: "", notes: "" });
@@ -73,7 +87,7 @@ export default function NewWorkoutPage() {
       if (!profileRow?.onboarding_completed) return router.replace("/onboarding");
       setProfile(profileRow || null);
       const [globalResult, customResult, notificationResult, inviteResult] = await Promise.all([
-        supabase.from("strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").eq("active", true).order("primary_muscle_group").order("name"),
+        supabase.from("strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").neq("active", false).order("primary_muscle_group", { ascending: true }).order("name", { ascending: true }),
         supabase.from("user_strength_exercises").select("id,name,primary_muscle_group,equipment,image_url,active").eq("user_id", user.id).eq("active", true).order("primary_muscle_group").order("name"),
         supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
         supabase.from("training_invites").select("id", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending"),
@@ -84,19 +98,20 @@ export default function NewWorkoutPage() {
 
       const catalog = buildExerciseCatalog(globalResult.data || [], customResult.data || []);
       setExerciseCatalog(catalog);
+      setExerciseLoadInfo(`${globalResult.data?.length || 0} global exercises loaded from strength_exercises`);
       if (!catalog.length) {
-        setMessage("No strength exercises found in the database. Add active exercises to strength_exercises.");
+        setMessage("No strength exercises found in the database. Check RLS SELECT policies for strength_exercises.");
       }
       const notificationCount = notificationResult.count || 0;
       const inviteCount = inviteResult.count || 0;
       setUnreadCount(notificationCount + inviteCount);
     } catch (error) {
-      console.error(error); setExerciseCatalog([]); setMessage(error?.message || "Could not load strength exercises from the database.");
+      console.error(error); setExerciseCatalog([]); setExerciseLoadInfo(""); setMessage(error?.message || "Could not load strength exercises from the database.");
     } finally { setChecking(false); }
   }
 
   const groupedExercises = useMemo(() => {
-    const result = {}; MUSCLE_GROUPS.forEach((group) => { result[group] = exerciseCatalog.filter((exercise) => exercise.primary_muscle_group === group); }); return result;
+    const result = {}; MUSCLE_GROUPS.forEach((group) => { result[group] = exerciseCatalog.filter((exercise) => normalizeMuscleGroup(exercise.primary_muscle_group) === group); }); return result;
   }, [exerciseCatalog]);
   const selectedMuscleSummary = selectedMuscles.length ? selectedMuscles.join(", ") : "No muscle groups selected";
   const selectedSetCount = selectedExercises.reduce((sum, item) => sum + item.sets.length, 0);
