@@ -13939,3 +13939,45 @@ button.route-sport-card > * {
     font-size: 16px;
   }
 }
+
+/* Route detail polish: remove redundant saved action, use shared topo-line page background */
+.route-detail-page {
+  position: relative;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 78% 0%, rgba(230,255,0,.10), transparent 26%),
+    radial-gradient(circle at 8% 26%, rgba(230,255,0,.045), transparent 30%),
+    linear-gradient(180deg, #05080b 0%, #071014 48%, #05070a 100%) !important;
+}
+
+.route-detail-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: .34;
+  background:
+    radial-gradient(circle at 18% 78%, rgba(230,255,0,.08), transparent 22%),
+    repeating-radial-gradient(ellipse at 18% 18%, rgba(230,255,0,.10) 0 1px, transparent 1px 22px),
+    repeating-radial-gradient(ellipse at 78% 88%, rgba(230,255,0,.075) 0 1px, transparent 1px 24px);
+  mix-blend-mode: screen;
+  mask-image: linear-gradient(180deg, transparent 0%, #000 17%, #000 100%);
+}
+
+.route-detail-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.route-description-panel {
+  margin-bottom: 0 !important;
+}
+
+.route-linked-trainings {
+  margin-bottom: calc(112px + env(safe-area-inset-bottom));
+}
+
+.route-detail-916-actions {
+  grid-template-columns: 1fr;
+}
