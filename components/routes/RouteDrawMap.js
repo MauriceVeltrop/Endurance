@@ -573,7 +573,6 @@ export default function RouteDrawMap({
       }
 
         }
-      }
 
       const shapeHandles = !isHeavyRoute ? buildShapeHandles(waypoints, displayLinePoints) : [];
       const currentZoom = Number(mapRef.current?.getZoom?.() || 13);
