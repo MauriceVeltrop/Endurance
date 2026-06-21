@@ -1100,7 +1100,7 @@ export default function FullscreenRouteDrawPage() {
       setPointsPayload(makeRoutePointPayload(nextControls, "gpx-promoted-control-points"));
       setRoutedPayload(null);
 
-      await syncRouteSegments(nextControls, { silent: false });
+      await rerouteControlPoints(nextControls, { silent: false });
 
       setNativeEditStatus("edited");
     } catch (error) {
@@ -1154,6 +1154,7 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
+    setRouteSegments([]);
     setRoutedPayload(null);
     setRoutingStatus("routing");
   }
@@ -1252,7 +1253,7 @@ export default function FullscreenRouteDrawPage() {
         });
         setRoutingStatus("done");
         setRoutingError("");
-        if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+        if (!silent) setMessage("Could not snap this route. Keeping the drawn control line as fallback.");
         return;
       }
 
@@ -1298,7 +1299,7 @@ export default function FullscreenRouteDrawPage() {
       });
       setRoutingStatus("done");
       setRoutingError("");
-      if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+      if (!silent) setMessage("Could not snap this route. Keeping the drawn control line as fallback.");
     } finally {
       if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
         routingAbortRef.current = null;
@@ -1660,7 +1661,7 @@ export default function FullscreenRouteDrawPage() {
     }
 
     const timeout = window.setTimeout(() => {
-      syncRouteSegments(points, { silent: true });
+      rerouteControlPoints(points, { silent: true });
     }, 250);
 
     return () => window.clearTimeout(timeout);
