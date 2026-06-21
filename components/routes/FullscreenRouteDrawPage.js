@@ -387,54 +387,94 @@ const MAP_STYLE_OPTIONS = [
   { id: "minimal", name: "Minimal", provider: "Carto Positron", description: "Clean light map for running and city routes.", icon: "◻️" },
   { id: "outdoor", name: "Outdoor", provider: "OpenTopoMap", description: "Terrain, paths and contours for trail and hiking.", icon: "⛰️" },
   { id: "cycling", name: "Cycling", provider: "CyclOSM", description: "Cycle-friendly map with cycling infrastructure.", icon: "🚴" },
-  { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Dark performance view for night planning.", icon: "🌙" },
+  { id: "satellite", name: "Satellite", provider: "Esri World Imagery", description: "Aerial view for forests, fields and landmarks.", icon: "🛰️" },
+  { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Low-glare dark map for evening planning.", icon: "🌙" },
 ];
 
-const DEFAULT_CENTER = { lat: 50.853, lon: 5.691 };
-
-function toMapPoint(point) {
-  if (!point) return null;
-
-  const lat = Number(point.lat);
-  const lon = Number(point.lon);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-  return {
-    ...point,
-    lat: Number(lat.toFixed(6)),
-    lon: Number(lon.toFixed(6)),
-  };
+function defaultMapStyleForSport() {
+  return "standard";
 }
 
-function getCenterPoint(points) {
+function safeReadEditDraft() {
+  try {
+    if (typeof window === "undefined") return null;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("editDraft") !== "1") return null;
+
+    const raw = window.sessionStorage.getItem("endurance_route_edit_draft");
+    if (!raw) return null;
+
+    const draft = JSON.parse(raw);
+    const points = normalizeRoutePoints(draft?.route_points);
+
+    if (!points.length) return null;
+
+    return {
+      ...draft,
+      route_points: {
+        ...(draft.route_points && typeof draft.route_points === "object" && !Array.isArray(draft.route_points) ? draft.route_points : {}),
+        points,
+        point_count: points.length,
+      },
+    };
+  } catch (error) {
+    console.error("Could not load route edit draft", error);
+    return null;
+  }
+}
+
+
+function ElevationMiniStrip({ points = [] }) {
   const normalized = normalizeRoutePoints(points);
-  if (!normalized.length) return DEFAULT_CENTER;
+  const elevationPoints = normalized.filter((point) => Number.isFinite(Number(point.ele)));
 
-  const sums = normalized.reduce(
-    (acc, point) => ({ lat: acc.lat + point.lat, lon: acc.lon + point.lon }),
-    { lat: 0, lon: 0 }
+  if (normalized.length < 2) return null;
+
+  const values = elevationPoints.length >= 2
+    ? normalized.map((point) => Number.isFinite(Number(point.ele)) ? Number(point.ele) : null)
+    : normalized.map((_, index) => Math.sin((index / Math.max(1, normalized.length - 1)) * Math.PI) * 0.25 + 0.5);
+
+  const numericValues = values.filter((value) => Number.isFinite(Number(value)));
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const range = Math.max(1, max - min);
+  const width = 220;
+  const height = 38;
+
+  const path = values
+    .map((value, index) => {
+      const safe = Number.isFinite(Number(value)) ? Number(value) : min;
+      const x = (index / Math.max(1, values.length - 1)) * width;
+      const y = height - 5 - ((safe - min) / range) * (height - 10);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <section className="route-draw-elevation-mini" aria-label="Elevation preview">
+      <span>Elevation</span>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+        <path d={`${path} L ${width} ${height} L 0 ${height} Z`} className="fill" />
+        <path d={path} className="line" />
+      </svg>
+    </section>
   );
-
-  return {
-    lat: Number((sums.lat / normalized.length).toFixed(6)),
-    lon: Number((sums.lon / normalized.length).toFixed(6)),
-  };
 }
 
+function metersToPercentMap(summary = {}) {
+  const entries = Object.entries(summary || {}).map(([label, meters]) => [label, Number(meters || 0)]);
+  const total = entries.reduce((sum, [, meters]) => sum + meters, 0);
 
-function getRouteQuality(payload, sportId = "") {
-  const quality = payload?.route_quality || payload?.quality || payload?.metadata?.route_quality || null;
+  if (!total) return [];
 
-  if (!quality || typeof quality !== "object") return null;
-
-  return {
-    ...quality,
-    sport_id: quality.sport_id || sportId || payload?.sport_id || null,
-  };
+  return entries
+    .filter(([, meters]) => meters > 0)
+    .map(([label, meters]) => ({ label, meters, percent: Math.round((meters / total) * 100) }))
+    .sort((a, b) => b.meters - a.meters);
 }
 
-function RouteQualityPanel({ payload, sportId, onClose }) {
+function getRouteQuality(payload = {}, sportId = "") {
   const quality = payload?.route_quality;
   if (!quality) return null;
 
@@ -446,76 +486,85 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
     ? Math.max(0, Math.min(100, Math.round(Number(quality.suitability_score))))
     : Math.max(0, Math.min(100, Math.round((pavedRatio * 88) + ((1 - unsuitableRatio) * 12))));
 
-  const warning = (() => {
-    const key = String(sportId || quality.sport_id || "").toLowerCase();
-    if (["running", "road_cycling", "roadcycling"].includes(key) && unsuitableRatio >= 0.18) return "Contains a lot of unpaved surface for this sport.";
-    if (["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key) && pavedRatio >= 0.75) return "This route is quite paved for the selected sport.";
-    if (unknownRatio >= 0.35) return "A large part of the surface is unknown in OSM/ORS data.";
-    return "Looks suitable for this sport.";
-  })();
+  const warnings = [];
+  const key = String(sportId || quality.sport_id || "").toLowerCase();
+
+  if (["running", "road_cycling", "roadcycling"].includes(key) && unsuitableRatio >= 0.18) {
+    warnings.push("Contains a lot of unpaved surface for this sport.");
+  }
+
+  if (["trail_running", "trailrunning", "mountain_biking", "mtb", "gravel", "gravel_cycling"].includes(key) && pavedRatio >= 0.75) {
+    warnings.push("This route is quite paved for the selected sport.");
+  }
+
+  if (unknownRatio >= 0.35) {
+    warnings.push("A large part of the surface is unknown in OSM/ORS data.");
+  }
+
+  return {
+    score,
+    pavedPercent: Math.round(pavedRatio * 100),
+    unsuitablePercent: Math.round(unsuitableRatio * 100),
+    unknownPercent: Math.round(unknownRatio * 100),
+    detourFactor: Number(quality.detour_factor || 1),
+    candidates: Number(quality.candidates_considered || 0),
+    surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
+    waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
+    warnings,
+  };
+}
+
+function humanizeRouteLabel(value = "") {
+  return String(value || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\w/g, (char) => char.toUpperCase());
+}
+
+function RouteQualityPanel({ payload, sportId, onClose }) {
+  const quality = getRouteQuality(payload, sportId);
+
+  if (!quality) return null;
 
   return (
     <section className="route-quality-panel-expanded" aria-label="Route quality">
       <div className="route-quality-panel-header">
         <span>◎</span>
         <strong>Route quality</strong>
-        <b>{score}/100</b>
+        <b>{quality.score}/100</b>
         <button type="button" onClick={onClose} aria-label="Close route quality">×</button>
       </div>
+
       <div className="route-quality-grid">
-        <div><span>Paved / suitable</span><b>{Math.round(pavedRatio * 100)}%</b></div>
-        <div><span>Unsuitable</span><b>{Math.round(unsuitableRatio * 100)}%</b></div>
-        <div><span>Unknown</span><b>{Math.round(unknownRatio * 100)}%</b></div>
-        <div><span>Detour</span><b>{Number(quality.detour_factor || 1).toFixed(2)}×</b></div>
+        <div><span>Paved / suitable</span><b>{quality.pavedPercent}%</b></div>
+        <div><span>Unsuitable</span><b>{quality.unsuitablePercent}%</b></div>
+        <div><span>Unknown</span><b>{quality.unknownPercent}%</b></div>
+        <div><span>Detour</span><b>{quality.detourFactor.toFixed(2)}×</b></div>
       </div>
-      <div className={warning.startsWith("Looks") ? "route-quality-ok" : "route-quality-warning"}>{warning}</div>
-    </section>
-  );
-}
 
-function MapStylePanel({ value, onChange, onClose }) {
-  return (
-    <section className="route-map-style-panel" aria-label="Map style">
-      <div className="route-map-style-header">
-        <strong>Map style</strong>
-        <button type="button" onClick={onClose} aria-label="Close map style panel">×</button>
-      </div>
-      <div className="route-map-style-options">
-        {MAP_STYLE_OPTIONS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={value === option.id ? "active" : ""}
-            onClick={() => {
-              onChange(option.id);
-              onClose();
-            }}
-          >
-            <span>{option.icon}</span>
-            <div>
-              <strong>{option.name}</strong>
-              <small>{option.provider}</small>
-              <p>{option.description}</p>
-            </div>
-          </button>
-        ))}
+      {quality.warnings.length ? (
+        <div className="route-quality-warning">{quality.warnings[0]}</div>
+      ) : (
+        <div className="route-quality-ok">Looks suitable for {getSportLabel(sportId || "running")}.</div>
+      )}
+
+      <div className="route-quality-breakdown">
+        <div>
+          <small>Surface</small>
+          {quality.surfaces.length ? quality.surfaces.map((item) => (
+            <p key={`surface-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
+          )) : <p><span>Unknown</span><b>—</b></p>}
+        </div>
+        <div>
+          <small>Waytype</small>
+          {quality.waytypes.length ? quality.waytypes.map((item) => (
+            <p key={`waytype-${item.label}`}><span>{humanizeRouteLabel(item.label)}</span><b>{item.percent}%</b></p>
+          )) : <p><span>Unknown</span><b>—</b></p>}
+        </div>
       </div>
     </section>
   );
 }
 
-function ControlButton({ icon, label, onClick, danger = false, disabled = false }) {
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} className={`route-draw-control ${danger ? "danger" : ""}`}>
-      <span>{icon}</span>
-      <small>{label}</small>
-    </button>
-  );
-}
-
-function pointsEqual(a, b) {
-  return Number(a?.lat).toFixed(6) === Number(b?.lat).toFixed(6) && Number(a?.lon).toFixed(6) === Number(b?.lon).toFixed(6);
-}
 
 export default function FullscreenRouteDrawPage() {
   const router = useRouter();
@@ -607,30 +656,16 @@ export default function FullscreenRouteDrawPage() {
   }, [points, routedPoints, titleEditedManually]);
 
   useEffect(() => {
-    if (titleEditedManually) return;
-
-    const distance = metrics.distance_km || routedPayload?.distance_km || activeRoutePayload?.distance_km;
-    const nextTitle = buildAutomaticRouteTitle({ startLocation: routeStartLocation, distanceKm: distance, sportId });
-
-    if (nextTitle) {
-      setTitle((current) => {
-        if (current === nextTitle) return current;
-        if (current && !isAutoGeneratedRouteTitle(current, sportId)) return current;
-        return nextTitle;
-      });
-    }
-  }, [routeStartLocation, metrics.distance_km, routedPayload?.distance_km, activeRoutePayload?.distance_km, sportId, titleEditedManually]);
-
-  useEffect(() => {
     async function bootstrap() {
       setChecking(true);
 
       try {
         const params = new URLSearchParams(window.location.search);
-        const draftRaw = window.sessionStorage.getItem("endurance_route_edit_draft");
-        const editDraft = draftRaw ? JSON.parse(draftRaw) : null;
+        const editDraft = safeReadEditDraft();
         const draftRouteId = editDraft?.edit_route_id || params.get("routeId") || "";
         const draftReturnTo = editDraft?.return_to || params.get("returnTo") || (draftRouteId ? `/routes/${draftRouteId}` : "");
+        setEditRouteId(draftRouteId);
+        setEditReturnTo(draftReturnTo);
         const initialSport = params.get("sport_id") || editDraft?.sport_id;
 
         if (!initialSport) {
@@ -638,28 +673,28 @@ export default function FullscreenRouteDrawPage() {
           return;
         }
 
-        setSportId(initialSport);
-        setEditRouteId(draftRouteId);
-        setEditReturnTo(draftReturnTo);
+        const draftTitleIsAuto = editDraft?.title_is_auto !== false || isAutoGeneratedRouteTitle(editDraft?.title, initialSport);
+        setTitleEditedManually(!draftTitleIsAuto);
 
-        const draftTitle = editDraft?.title || defaultTitle(initialSport);
-        setTitle(draftTitle);
-        setTitleEditedManually(!(editDraft?.title_is_auto !== false || isAutoGeneratedRouteTitle(draftTitle, initialSport)));
+        setSportId(initialSport);
+        setDrawLayer((current) => current || defaultMapStyleForSport(initialSport));
+        if (!editDraft?.route_points?.points?.length) {
+          setDrawLayer(defaultMapStyleForSport(initialSport));
+        }
+        setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
           loadedDraftRef.current = true;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
-          const savedControls = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
-          const source = String(editDraft.route_points.source || "").toLowerCase();
-          const editableControlPoints = savedControls.length >= 2
-            ? compactControlPoints(savedControls)
-            : source.includes("gpx") || geometry.length > 300
-              ? [geometry[0], geometry[geometry.length - 1]].filter(Boolean)
-              : compactControlPoints(geometry);
+          const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
+          const editableControlPoints = savedWaypoints.length >= 2
+            ? savedWaypoints
+            : compactControlPoints(geometry);
 
-          setPointsPayload(makeRoutePointPayload(editableControlPoints, source.includes("gpx") ? "gpx-edit-control-points" : "draw-edit-control-points"));
+          setPointsPayload(makeRoutePointPayload(editableControlPoints, "draw-edit-control-points"));
           setRoutedPayload({
             ...editDraft.route_points,
+            source: editDraft.route_points?.source || "gpx-native-edit",
             points: geometry,
             waypoints: editableControlPoints,
             control_points: editableControlPoints,
@@ -791,241 +826,177 @@ export default function FullscreenRouteDrawPage() {
       });
 
       const data = await response.json().catch(() => ({}));
+
       if (syncId !== segmentSyncIdRef.current) return null;
 
-      if (!response.ok || !Array.isArray(data?.points) || data.points.length < 2) {
-        throw new Error(data?.error || data?.warning || "No snapped segment returned.");
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Segment routing failed.");
       }
 
-      const routed = {
+      const routed = data.route_points || data;
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+      if (geometry.length < 2) {
+        throw new Error("No segment geometry returned.");
+      }
+
+      const nextSegment = {
         ...segment,
-        geometry: normalizeRoutePoints(data.points),
-        points: normalizeRoutePoints(data.points),
+        geometry,
+        points: geometry,
         routed: data?.routed !== false,
-        status: "ready",
-        quality: data?.route_quality || null,
+        status: data?.routed === false ? "failed" : "snapped",
+        profile: routed?.provider_profile || routed?.profile || data?.profile || null,
+        preference: routed?.preference || data?.preference || null,
+        quality: routed?.quality || routed?.route_quality || data?.route_quality || null,
+        fallback_reason: data?.routed === false ? routed?.fallback_reason || data?.warning || "Fallback geometry used." : null,
         updated_at: new Date().toISOString(),
       };
 
-      segmentCacheRef.current.set(segment.key, routed);
-      return routed;
+      segmentCacheRef.current.set(segment.key, nextSegment);
+      return nextSegment;
     } catch (error) {
-      console.warn("Segment routing fallback", error);
-      const fallback = fallbackSegmentPayload(segment, error?.message || "Segment routing failed.");
-      segmentCacheRef.current.set(segment.key, fallback);
-      return fallback;
+      if (syncId !== segmentSyncIdRef.current) return null;
+      const failed = fallbackSegmentPayload(segment, error?.message || "Segment routing failed.");
+      segmentCacheRef.current.set(segment.key, failed);
+      return failed;
     }
   }
 
-  async function syncRouteSegments(controlPoints, { silent = false } = {}) {
-    const control = normalizeRoutePoints(controlPoints);
+  async function syncRouteSegments(controlPoints, { silent = true } = {}) {
+    const controls = compactControlPoints(controlPoints);
 
-    if (control.length < 2) {
+    if (controls.length < 2) {
+      segmentSyncIdRef.current += 1;
       setRouteSegments([]);
       setRoutedPayload(null);
       setRoutingStatus("idle");
       return;
     }
 
-    const segments = getControlSegments(control);
     const syncId = segmentSyncIdRef.current + 1;
     segmentSyncIdRef.current = syncId;
-    setRoutingStatus("loading");
-    setRoutingError("");
-    if (!silent) setMessage("Snapping route segments...");
+    const definitions = getControlSegments(controls, sportId);
+    const provisional = definitions.map((segment) => segmentCacheRef.current.get(segment.key) || {
+      ...segment,
+      geometry: segment.control,
+      points: segment.control,
+      routed: false,
+      status: "pending",
+    });
 
-    const previousGeometry = normalizeRoutePoints(routedPayload?.points);
+    setRouteSegments(provisional);
+    setRoutedPayload(buildRoutePayloadFromSegments({
+      segments: provisional,
+      controlPoints: controls,
+      source: "segmented-routing-provisional",
+      sportId,
+    }));
+    setRoutingStatus("routing");
 
-    const previousMap = new Map(routeSegments.map((segment) => [segment.key, segment]));
-    const initialSegments = segments.map((segment) => previousMap.get(segment.key) || { ...segment, geometry: segment.control, points: segment.control, status: "loading" });
-    setRouteSegments(initialSegments);
-
-    const routedSegments = await Promise.all(segments.map((segment) => routeSingleSegment(segment, syncId)));
-    if (syncId !== segmentSyncIdRef.current) return;
-
-    const validSegments = routedSegments.filter(Boolean);
-    setRouteSegments(validSegments);
-    const payload = buildRoutePayloadFromSegments(validSegments, "segment-snap");
-    const nextGeometry = normalizeRoutePoints(payload.points);
-    if (previousGeometry.length >= 2) {
-      const nextMetrics = calculateRouteMetrics(nextGeometry);
-      const previousMetrics = calculateRouteMetrics(previousGeometry);
-      const grewTooMuch = previousMetrics.distance_km > 0 && nextMetrics.distance_km > previousMetrics.distance_km * 1.35;
-
-      if (grewTooMuch && !silent) {
-        setMessage("Keeping previous route because the snap result looked unstable.");
+    try {
+      const routed = [];
+      for (const segment of definitions) {
+        if (syncId !== segmentSyncIdRef.current) return;
+        const result = await routeSingleSegment(segment, syncId);
+        if (!result) return;
+        routed.push(result);
+        setRouteSegments([...routed, ...definitions.slice(routed.length).map((remaining) => segmentCacheRef.current.get(remaining.key) || {
+          ...remaining,
+          geometry: remaining.control,
+          points: remaining.control,
+          routed: false,
+          status: "pending",
+        })]);
+        setRoutedPayload(buildRoutePayloadFromSegments({
+          segments: [...routed, ...definitions.slice(routed.length).map((remaining) => segmentCacheRef.current.get(remaining.key) || {
+            ...remaining,
+            geometry: remaining.control,
+            points: remaining.control,
+            routed: false,
+            status: "pending",
+          })],
+          controlPoints: controls,
+          source: "segmented-routing-progress",
+          sportId,
+        }));
       }
 
-      if (grewTooMuch) {
-        setRoutedPayload({
-          ...routePayloadFromGeometry(previousGeometry, control, "segment-snap-kept-previous"),
-          unstable_snap_rejected: true,
-          rejected_distance_km: nextMetrics.distance_km,
-          previous_distance_km: previousMetrics.distance_km,
-        });
-        setRoutingStatus("done");
-        setRoutingError("");
-        return;
-      }
-    }
+      if (syncId !== segmentSyncIdRef.current) return;
 
-    if (payload?.points?.length >= 2) {
-      setRoutedPayload({
-        ...payload,
-        source: "segment-snap",
-        waypoints: control,
-        control_points: control,
-        route_quality: payload.route_quality || null,
-        routed_at: new Date().toISOString(),
+      const payload = buildRoutePayloadFromSegments({
+        segments: routed,
+        controlPoints: controls,
+        source: "segmented-routing",
+        sportId,
       });
+
+      setRouteSegments(routed);
+      setRoutedPayload(payload);
       setRoutingStatus("done");
       setRoutingError("");
-      if (!silent) setMessage("");
-    } else {
-      const fallback = routePayloadFromGeometry(control, control, "drawn-fallback");
-      setRoutedPayload({ ...fallback, routed: false });
-      setRoutingStatus("done");
-      setRoutingError("");
-      if (!silent) setMessage("Using the drawn line as a fallback.");
-    }
-  }
 
-  useEffect(() => {
-    if (checking || !sportId) return;
-    if (loadedDraftRef.current && points.length < 3) return;
-    if (suppressNextSegmentSyncRef.current) {
-      suppressNextSegmentSyncRef.current = false;
-      return;
-    }
-
-    if (points.length < 2) {
-      setRouteSegments([]);
-      setRoutedPayload(null);
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      syncRouteSegments(points, { silent: true });
-    }, 450);
-
-    return () => window.clearTimeout(timeout);
-  }, [routeSignature, checking, sportId]);
-
-  async function handleSearch() {
-    const query = searchText.trim();
-    if (!query) return;
-
-    setSearching(true);
-    setMessage("");
-
-    try {
-      const response = await fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) throw new Error(data?.error || "Could not search this place.");
-
-      setSearchResults(Array.isArray(data.results) ? data.results : []);
-      if (!data.results?.length) setMessage("No places found. Try another search term.");
+      const failedCount = routed.filter((segment) => segment.routed === false).length;
+      if (!silent && failedCount) {
+        setMessage(`${failedCount} segment${failedCount === 1 ? "" : "s"} could not snap and use a drawn fallback.`);
+      } else if (!silent) {
+        setMessage("");
+      }
     } catch (error) {
-      setMessage(error?.message || "Search failed.");
-    } finally {
-      setSearching(false);
+      if (syncId !== segmentSyncIdRef.current) return;
+      console.error("Segment sync failed", error);
+      setRoutingStatus("error");
+      setRoutingError(error?.message || "Could not update route segments.");
     }
   }
 
-  function handleSelectSearchResult(result) {
-    const target = toMapPoint({ lat: result.lat, lon: result.lon, label: result.label, zoom: 15, selectedAt: Date.now() });
-    if (!target) return;
-    setTargetLocation(target);
-    setSearchOpen(false);
-    setSearchText(result.label || "");
-    setSearchResults([]);
-  }
+  async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
+    const previous = normalizeRoutePoints(previousControlPoints);
+    const next = compactControlPoints(nextControlPoints);
+    const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
 
-  function handleTargetLocationHandled() {
-    setTargetLocation(null);
-  }
+    const segmentControlPoints = [
+      next[safeInsertAt - 1],
+      next[safeInsertAt],
+      next[safeInsertAt + 1],
+    ].filter(Boolean);
 
-  function clearRoute() {
-    if (!window.confirm("Clear this route?")) return;
-    setPointsPayload(null);
-    setRoutedPayload(null);
-    setRouteSegments([]);
-    setRoutingStatus("idle");
-    setRoutingError("");
-    setTitleEditedManually(false);
-    setRouteStartLocation("Locatie bepalen");
-    setMessage("");
-    loadedDraftRef.current = false;
-  }
-
-  function undoPoint() {
-    const next = points.slice(0, -1);
-    setPointsPayload(makeRoutePointPayload(next));
-    if (next.length < 2) {
-      setRoutedPayload(null);
-      setRouteSegments([]);
-    }
-  }
-
-  async function addLoopPoint() {
-    if (!points.length) {
-      requestCurrentLocation({ focus: true, quiet: false });
-      return;
-    }
-
-    const lastPoint = points[points.length - 1];
-    const offset = 0.01;
-    const nextPoint = {
-      lat: Number((lastPoint.lat + offset).toFixed(6)),
-      lon: Number((lastPoint.lon + offset).toFixed(6)),
-    };
-    const next = [...points, nextPoint, points[0]];
-    setPointsPayload(makeRoutePointPayload(next));
-  }
-
-  function handlePointsChange(nextPoints) {
-    const normalized = normalizeRoutePoints(nextPoints);
-    setPointsPayload(makeRoutePointPayload(normalized));
-  }
-
-  async function handleLocalSegmentEdit(segmentEdit) {
-    const insertAt = Number(segmentEdit?.insertAt);
-    const editPoint = segmentEdit?.editPoint;
-
-    if (!Number.isInteger(insertAt) || !editPoint) return;
-
-    const next = [...points.slice(0, insertAt), editPoint, ...points.slice(insertAt)];
-    const previous = points;
-    suppressNextSegmentSyncRef.current = true;
-    setPointsPayload(makeRoutePointPayload(next));
-    setRoutingStatus("loading");
-    setRoutingError("");
-    setMessage("Updating this route segment...");
+    if (segmentControlPoints.length < 2) return;
 
     try {
-      const segmentControl = [previous[insertAt - 1], editPoint, previous[insertAt]].filter(Boolean);
+      setRoutingStatus("routing");
+
       const response = await fetch("/api/routes/reroute", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           sport_id: sportId,
-          points: segmentControl,
+          points: segmentControlPoints,
         }),
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || !Array.isArray(data?.points) || data.points.length < 2) {
-        throw new Error(data?.error || data?.warning || "No snapped segment returned.");
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Local rerouting failed.");
       }
 
-      const routed = normalizeRoutePoints(data.points);
+      const routed = data.route_points || data;
+      const segmentGeometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+      if (segmentGeometry.length < 2) {
+        throw new Error("No local segment geometry returned.");
+      }
+
+      const baseGeometry = routedPoints.length ? routedPoints : previous;
       const mergedGeometry = mergeLocalSegmentGeometry(
-        routedPayload?.points,
+        baseGeometry,
         previous,
         next,
-        insertAt,
-        routed
+        safeInsertAt,
+        segmentGeometry
       );
 
       setRoutedPayload({
@@ -1138,10 +1109,180 @@ export default function FullscreenRouteDrawPage() {
     setRouteSegments([]);
     setRoutingStatus("done");
     setRoutingError("");
-    setNativeEditStatus("edited");
-    setMessage("");
     loadedDraftRef.current = true;
   }
+
+  function handlePointsChange(nextPoints, meta = {}) {
+    const safeControlPoints = compactControlPoints(nextPoints);
+    loadedDraftRef.current = false;
+
+    setPointsPayload(makeRoutePointPayload(safeControlPoints));
+    setRoutingError("");
+
+    if (safeControlPoints.length < 2) {
+      segmentSyncIdRef.current += 1;
+      setRouteSegments([]);
+      setRoutedPayload(null);
+      setRoutingStatus("idle");
+      return;
+    }
+
+    setRoutedPayload(null);
+    setRoutingStatus("routing");
+  }
+
+  function undoPoint() {
+    handlePointsChange(points.slice(0, -1));
+  }
+
+  function clearRoute() {
+    setPointsPayload(null);
+    setRoutedPayload(null);
+    setRoutingStatus("idle");
+    setRoutingError("");
+    setDrawInsertMode(false);
+    setMessage("");
+    setShowPointPanel(false);
+  }
+
+  function removePoint(indexToRemove) {
+    handlePointsChange(points.filter((_, index) => index !== indexToRemove));
+  }
+
+  function closeLoop() {
+    if (points.length < 3) {
+      setMessage("Add at least three points before closing the loop.");
+      return;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+
+    if (first.lat === last.lat && first.lon === last.lon) {
+      setMessage("This route is already closed.");
+      return;
+    }
+
+    handlePointsChange([...points, { ...first }]);
+  }
+
+  function useCurrentLocation() {
+    if (currentLocation?.lat && currentLocation?.lon) {
+      setTargetLocation({
+        ...currentLocation,
+        label: "Current location",
+        selectedAt: Date.now(),
+        zoom: 15,
+      });
+      setMessage("");
+      return;
+    }
+
+    requestCurrentLocation({ focus: true, quiet: false, allowRouteFocus: true });
+  }
+
+
+  async function rerouteControlPoints(controlPoints, { silent = false } = {}) {
+    const control = compactControlPoints(controlPoints);
+    if (control.length < 2) return;
+
+    const requestId = routingRequestIdRef.current + 1;
+    routingRequestIdRef.current = requestId;
+
+    if (routingAbortRef.current) {
+      routingAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    routingAbortRef.current = controller;
+
+    try {
+      setRoutingStatus("routing");
+
+      const response = await fetch("/api/routes/reroute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sport_id: sportId,
+          points: control,
+        }),
+        signal: controller.signal,
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (requestId !== routingRequestIdRef.current) return;
+
+      if (!response.ok || !data?.ok) {
+        const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
+        setRoutedPayload({
+          ...fallbackPayload,
+          routed: false,
+          fallback_reason: data?.error || "Routing failed.",
+          routed_at: new Date().toISOString(),
+        });
+        setRoutingStatus("done");
+        setRoutingError("");
+        if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+        return;
+      }
+
+      const routed = data.route_points || data;
+
+      if (!routed?.points?.length && !Array.isArray(routed)) {
+        throw new Error("No routed geometry returned.");
+      }
+
+      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+      const routePayload = geometry.length >= 2
+        ? {
+            ...routePayloadFromGeometry(geometry, control, data?.routed === false ? "drawn-fallback" : "full-controlpoint-reroute"),
+            profile: routed?.profile || data?.profile || null,
+            provider_url: routed?.provider_url || data?.provider_url || null,
+            route_quality: routed?.route_quality || data?.route_quality || null,
+            routed: data?.routed !== false,
+            fallback_reason: data?.routed === false ? data?.warning || "Routing provider used fallback geometry." : null,
+            routed_at: new Date().toISOString(),
+          }
+        : routed;
+
+      setRoutedPayload(routePayload);
+      setRoutingStatus("done");
+      setRoutingError("");
+
+      if (data?.routed === false) {
+        if (!silent) setMessage(data?.warning || "No snapped path found. Using the drawn line.");
+      } else if (!silent) {
+        setMessage("");
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (requestId !== routingRequestIdRef.current) return;
+
+      console.error("Routing failed", error);
+      const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
+      setRoutedPayload({
+        ...fallbackPayload,
+        routed: false,
+        fallback_reason: error?.message || "Routing failed.",
+        routed_at: new Date().toISOString(),
+      });
+      setRoutingStatus("done");
+      setRoutingError("");
+      if (!silent) setMessage("Could not snap this route. Using the drawn line as a fallback.");
+    } finally {
+      if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
+        routingAbortRef.current = null;
+      }
+    }
+  }
+
+  async function rerouteRoute({ silent = false } = {}) {
+    return rerouteControlPoints(points, { silent });
+  }
+
 
   function buildCurrentDraft(titleOverride) {
     const isNativeGeometryDraft = loadedDraftRef.current && routedPayload?.points?.length >= 2;
@@ -1167,48 +1308,133 @@ export default function FullscreenRouteDrawPage() {
       safePayload.start_location = readableStartLocation;
     }
 
-    const metricsForDraft = calculateRouteMetrics(safePayload);
-    const nextTitle = titleOverride || title;
-
     return makeRouteDraft({
       sportId,
-      title: nextTitle,
+      title: titleOverride || title,
+      method: "draw",
       profileId: profile?.id,
-      metrics: metricsForDraft,
+      metrics,
       routePayload: safePayload,
-      titleIsAuto: !titleEditedManually && isAutoGeneratedRouteTitle(nextTitle, sportId),
+      titleIsAuto: !titleEditedManually,
     });
   }
 
-  function saveDraftAndContinue() {
-    const draft = buildCurrentDraft();
-    window.sessionStorage.setItem("endurance_new_route_draft", JSON.stringify(draft));
-    router.push("/routes/new/details");
+  async function buildTitleForPayload(routePayload, fallbackDistanceKm) {
+    const safePoints = normalizeRoutePoints(routePayload?.points);
+    const safeMetrics = calculateRouteMetrics(safePoints);
+    const distanceKm = safeMetrics.distance_km || fallbackDistanceKm || 0;
+
+    let place = cleanRouteLocationName(routePayload?.start_location) || cleanRouteLocationName(routeStartLocation);
+
+    if (!place) {
+      const firstPoint = safePoints[0] || points[0] || routedPoints[0];
+      if (firstPoint) {
+        place = await resolvePlaceNameFromCoordinates({ lat: firstPoint.lat, lon: firstPoint.lon });
+        if (place) setRouteStartLocation(place);
+      }
+    }
+
+    return buildAutomaticRouteTitle({
+      startLocation: place,
+      distanceKm,
+      sportId,
+    });
+  }
+
+  async function resolveCurrentEndpointLabels(routePayload) {
+    const safePoints = normalizeRoutePoints(routePayload?.points);
+    const firstPoint = safePoints[0] || points[0] || routedPoints[0];
+    const lastPoint = safePoints[safePoints.length - 1] || points[points.length - 1] || routedPoints[routedPoints.length - 1];
+
+    const existingStart = cleanHumanLocationLabel(routePayload?.start_location_label || routePayload?.start_location);
+    const existingFinish = cleanHumanLocationLabel(routePayload?.finish_location_label || routePayload?.finish_location);
+
+    const [resolvedStart, resolvedFinish] = await Promise.all([
+      existingStart && !/^locatie bepalen$/i.test(existingStart)
+        ? Promise.resolve(existingStart)
+        : firstPoint
+          ? resolveHumanLocationLabelFromCoordinates({ lat: firstPoint.lat, lon: firstPoint.lon })
+          : Promise.resolve(""),
+      existingFinish && !/^locatie bepalen$/i.test(existingFinish)
+        ? Promise.resolve(existingFinish)
+        : lastPoint
+          ? resolveHumanLocationLabelFromCoordinates({ lat: lastPoint.lat, lon: lastPoint.lon })
+          : Promise.resolve(""),
+    ]);
+
+    return {
+      start: cleanHumanLocationLabel(resolvedStart || existingStart),
+      finish: cleanHumanLocationLabel(resolvedFinish || existingFinish),
+    };
   }
 
   async function getStableTitleForSave() {
-    if (titleEditedManually && title.trim()) return title.trim();
+    if (titleEditedManually) return title?.trim() || defaultTitle(sportId);
 
-    const geometry = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
-    const first = geometry[0];
-    const distance = calculateRouteMetrics(geometry).distance_km || metrics.distance_km || routedPayload?.distance_km || activeRoutePayload?.distance_km;
-    let startLabel = cleanHumanLocationLabel(routeStartLocation);
+    const safePayload = buildSafeDraftRoutePayload(
+      routedPayload?.points?.length ? routedPayload : makeRoutePointPayload(points),
+      points
+    );
+    const generatedTitle = await buildTitleForPayload(safePayload, metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0);
 
-    if ((!startLabel || /^locatie bepalen$/i.test(startLabel)) && first) {
-      startLabel = await resolveHumanLocationLabelFromCoordinates(first);
+    if (generatedTitle) {
+      setTitle(generatedTitle);
+      return generatedTitle;
     }
 
-    const autoTitle = buildAutomaticRouteTitle({
-      startLocation: startLabel,
-      distanceKm: distance,
-      sportId,
-    });
+    return isPlaceholderRouteTitle(title) ? defaultTitle(sportId) : title;
+  }
 
-    return autoTitle || title.trim() || defaultTitle(sportId);
+  async function saveDraftLocally() {
+    if (!canContinue) {
+      setMessage("Add at least two routepoints before saving a draft.");
+      return;
+    }
+
+    try {
+      const stableTitle = await getStableTitleForSave();
+      const draft = buildCurrentDraft(stableTitle);
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
+      setMessage("Draft saved.");
+
+      if (draftSavedMessageTimerRef.current) {
+        window.clearTimeout(draftSavedMessageTimerRef.current);
+      }
+      draftSavedMessageTimerRef.current = window.setTimeout(() => setMessage(""), 1200);
+    } catch (error) {
+      console.error("Could not save route draft", error);
+      setMessage("Could not save this route draft.");
+    }
+  }
+
+  function downloadGpx() {
+    const exportPoints = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
+
+    if (exportPoints.length < 2) {
+      setMessage("Add at least two routepoints before downloading GPX.");
+      return;
+    }
+
+    const safeTitle = (title?.trim() || defaultTitle(sportId)).replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "endurance-route";
+    const gpx = routePointsToGpx(exportPoints, title?.trim() || defaultTitle(sportId));
+    downloadTextFile({ filename: `${safeTitle}.gpx`, text: gpx });
   }
 
   async function continueToDetails() {
-    if (!canContinue || !profile?.id) return;
+    if (!canContinue) {
+      setMessage("Add at least two routepoints before continuing.");
+      return;
+    }
+
+    if (routingStatus === "routing") {
+      setMessage("Route is still snapping to roads/paths. Wait a moment and try again.");
+      return;
+    }
+
+    if (points.length >= 2 && !routedPayload?.points?.length) {
+      setRoutedPayload(routePayloadFromGeometry(points, points, "drawn-fallback"));
+    }
 
     if (editRouteId) {
       try {
@@ -1236,224 +1462,422 @@ export default function FullscreenRouteDrawPage() {
           ? normalizeRoutePoints(safeRoutePoints?.waypoints || safeRoutePoints?.control_points)
           : normalizeRoutePoints(safeRoutePoints?.waypoints || safeRoutePoints?.control_points);
         const metrics = calculateRouteMetrics(normalizedRoutePoints);
+        const endpointLabels = await resolveCurrentEndpointLabels({
+          ...(safeRoutePoints && typeof safeRoutePoints === "object" && !Array.isArray(safeRoutePoints) ? safeRoutePoints : {}),
+          points: normalizedRoutePoints,
+        });
+        const shouldKeepAutoTitle = !titleEditedManually;
+        const routePointsForTitle = {
+          ...(safeRoutePoints && typeof safeRoutePoints === "object" && !Array.isArray(safeRoutePoints) ? safeRoutePoints : {}),
+          points: normalizedRoutePoints,
+          start_location_label: endpointLabels.start || safeRoutePoints?.start_location_label || safeRoutePoints?.start_location || "",
+          finish_location_label: endpointLabels.finish || safeRoutePoints?.finish_location_label || safeRoutePoints?.finish_location || "",
+        };
+        const finalTitle = shouldKeepAutoTitle
+          ? (await buildTitleForPayload(routePointsForTitle, metrics.distance_km || draft.distance_km)) || stableTitle
+          : draft.title;
 
-        if (normalizedRoutePoints.length < 2) throw new Error("Route geometry is missing.");
-
-        const firstPoint = normalizedRoutePoints[0];
-        const lastPoint = normalizedRoutePoints[normalizedRoutePoints.length - 1];
-        const [startLabel, finishLabel] = await Promise.all([
-          resolveHumanLocationLabelFromCoordinates(firstPoint),
-          resolveHumanLocationLabelFromCoordinates(lastPoint),
-        ]);
-
-        const finalTitle = titleEditedManually
-          ? stableTitle
-          : buildAutomaticRouteTitle({
-              startLocation: startLabel || routeStartLocation,
-              distanceKm: metrics.distance_km,
-              sportId,
-            }) || stableTitle;
-        const nextTitleIsAuto = !titleEditedManually && isAutoGeneratedRouteTitle(finalTitle, sportId);
-
-        const routeUpdate = {
+        const payload = {
           title: finalTitle,
-          title_is_auto: nextTitleIsAuto,
-          description: draft.description || "",
-          sport_id: sportId,
-          distance_km: metrics.distance_km || null,
-          elevation_gain_m: metrics.elevation_gain_m || 0,
+          title_is_auto: shouldKeepAutoTitle,
           route_points: {
-            ...safeRoutePoints,
-            points: normalizedRoutePoints,
-            geometry_points: normalizedRoutePoints,
-            waypoints: normalizedWaypoints,
-            control_points: normalizedWaypoints,
-            point_count: normalizedRoutePoints.length,
-            distance_km: metrics.distance_km || null,
-            elevation_gain_m: metrics.elevation_gain_m || 0,
+            ...(safeRoutePoints && typeof safeRoutePoints === "object" && !Array.isArray(safeRoutePoints) ? safeRoutePoints : {}),
             source: isNativeGeometrySave
               ? (safeRoutePoints?.source || "native-gpx-direct-geometry-edit")
               : (safeRoutePoints?.source || "draw-fullscreen-edit"),
-            start_location: startLabel || safeRoutePoints?.start_location || null,
-            start_location_label: startLabel || safeRoutePoints?.start_location_label || null,
-            finish_location: finishLabel || safeRoutePoints?.finish_location || null,
-            finish_location_label: finishLabel || safeRoutePoints?.finish_location_label || null,
+            points: normalizedRoutePoints,
+            waypoints: normalizedWaypoints,
+            control_points: normalizedWaypoints,
+            point_count: normalizedRoutePoints.length,
+            start_location_label: endpointLabels.start || safeRoutePoints?.start_location_label || safeRoutePoints?.start_location || "",
+            finish_location_label: endpointLabels.finish || safeRoutePoints?.finish_location_label || safeRoutePoints?.finish_location || "",
+            start_location: endpointLabels.start || safeRoutePoints?.start_location || "",
+            finish_location: endpointLabels.finish || safeRoutePoints?.finish_location || "",
+            edited_at: new Date().toISOString(),
           },
-          start_location: startLabel || null,
-          finish_location: finishLabel || null,
-          route_version: Date.now(),
-          source_type: inferRouteSourceType({
-            route_points: {
-              ...safeRoutePoints,
-              points: normalizedRoutePoints,
-            },
-            gpx_file_url: draft.gpx_file_url,
-          }),
+          source_type: inferRouteSourceType("edited", safeRoutePoints),
+          distance_km: metrics.distance_km || draft.distance_km || null,
+          elevation_gain_m: metrics.elevation_gain_m || draft.elevation_gain_m || 0,
           updated_at: new Date().toISOString(),
         };
 
-        const { data: updatedRoute, error: routeError } = await supabase
+        const { error } = await supabase
           .from("routes")
-          .update(routeUpdate)
-          .eq("id", editRouteId)
-          .eq("creator_id", profile.id)
-          .select("id")
-          .maybeSingle();
+          .update(payload)
+          .eq("id", editRouteId);
 
-        if (routeError) throw routeError;
-        if (!updatedRoute?.id) throw new Error("Route could not be saved.");
+        if (error) throw error;
 
         const geometryInsert = buildRouteGeometryInsert({
-          route_id: updatedRoute.id,
-          route_points: routeUpdate.route_points,
-          version: routeUpdate.route_version,
-          source_type: routeUpdate.source_type,
-          distance_km: routeUpdate.distance_km,
-          elevation_gain_m: routeUpdate.elevation_gain_m,
+          routeId: editRouteId,
+          routePoints: normalizedRoutePoints,
+          sourceType: inferRouteSourceType("edited", safeRoutePoints),
         });
 
-        const { data: geometryRow, error: geometryError } = await supabase
-          .from("route_geometries")
-          .insert(geometryInsert)
-          .select("id,version")
-          .single();
+        if (geometryInsert.point_count >= 2) {
+          const { data: existingGeometry } = await supabase
+            .from("route_geometries")
+            .select("id,version")
+            .eq("route_id", editRouteId)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (geometryError) throw geometryError;
+          const nextVersion = Number(existingGeometry?.version || 0) + 1;
+          const { data: geometryRow, error: geometryError } = await supabase
+            .from("route_geometries")
+            .insert({
+              ...geometryInsert,
+              version: nextVersion,
+              source_type: "edited",
+            })
+            .select("id,version")
+            .single();
 
-        const { error: linkError } = await supabase
-          .from("routes")
-          .update({ geometry_id: geometryRow.id, route_version: geometryRow.version, updated_at: new Date().toISOString() })
-          .eq("id", updatedRoute.id)
-          .eq("creator_id", profile.id);
+          if (geometryError) throw geometryError;
 
-        if (linkError) throw linkError;
+          if (geometryRow?.id) {
+            await supabase
+              .from("routes")
+              .update({
+                geometry_id: geometryRow.id,
+                route_version: geometryRow.version || nextVersion,
+              })
+              .eq("id", editRouteId);
+          }
+        }
 
         window.sessionStorage.removeItem("endurance_route_edit_draft");
-        setMessage("Route saved.");
-        router.replace(editReturnTo || `/routes/${updatedRoute.id}`);
+        router.push(editReturnTo || `/routes/${editRouteId}`);
         return;
       } catch (error) {
-        console.error("Route update failed", error);
+        console.error("Could not save edited route", error);
         setMessage(error?.message || "Could not save route.");
         return;
       }
     }
 
-    saveDraftAndContinue();
+    try {
+      const stableTitle = await getStableTitleForSave();
+      const draft = buildCurrentDraft(stableTitle);
+      window.sessionStorage.setItem("endurance_route_draft", JSON.stringify(draft));
+      window.localStorage.setItem("endurance_route_draft_backup", JSON.stringify(draft));
+
+      const params = new URLSearchParams(window.location.search);
+      const detailsParams = new URLSearchParams({ routeDraft: "1" });
+      const returnTo = params.get("returnTo");
+      const step = params.get("step");
+      if (returnTo) detailsParams.set("returnTo", returnTo);
+      if (step) detailsParams.set("step", step);
+
+      window.location.assign(`/routes/new?${detailsParams.toString()}`);
+    } catch (error) {
+      console.error("Could not save route draft", error);
+      setMessage("Could not prepare the route details. Try again with fewer routepoints.");
+    }
   }
 
-  function handleTitleChange(event) {
-    setTitle(event.target.value);
-    setTitleEditedManually(true);
-  }
 
-  function downloadGpx() {
-    const geometry = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
 
-    if (geometry.length < 2) {
-      setMessage("No route geometry available for GPX export.");
+  useEffect(() => {
+    const query = searchText.trim();
+
+    if (query.length < 2) {
+      setSearchResults([]);
       return;
     }
 
-    const safeName = (title || "endurance-route").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "endurance-route";
-    downloadTextFile({
-      filename: `${safeName}.gpx`,
-      text: routePointsToGpx(geometry, title),
+    const timeout = window.setTimeout(async () => {
+      try {
+        setSearching(true);
+
+        const response = await fetch(`/api/geocode/search?text=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        setSearchResults(Array.isArray(data?.features) ? data.features : []);
+      } catch (error) {
+        console.error("Location search failed", error);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchText]);
+
+  function flyToLocation(result) {
+    const location = {
+      lat: Number(result.lat),
+      lon: Number(result.lon),
+      label: result.label || "Selected location",
+      forceFocusAt: Date.now(),
+    };
+
+    setTargetLocation(location);
+    setSearchResults([]);
+    setSearchText(result.label || "");
+    setSearchOpen(false);
+  }
+
+
+  useEffect(() => {
+    if (points.length < 2 || !routeSignature) return;
+
+    if (suppressNextSegmentSyncRef.current) {
+      suppressNextSegmentSyncRef.current = false;
+      return;
+    }
+
+    if (loadedDraftRef.current && routedPayload?.points?.length >= 2) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      syncRouteSegments(points, { silent: true });
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [routeSignature, sportId, routedPayload?.points?.length]);
+
+
+  useEffect(() => {
+    if (titleEditedManually) return;
+
+    const distanceKm = metrics.distance_km || routedPayload?.distance_km || pointsPayload?.distance_km || 0;
+
+    const generatedTitle = buildAutomaticRouteTitle({
+      startLocation: routeStartLocation,
+      distanceKm,
+      sportId,
     });
+
+    if (generatedTitle) {
+      setTitle(generatedTitle);
+    }
+  }, [
+    titleEditedManually,
+    routeStartLocation,
+    metrics.distance_km,
+    routedPayload?.distance_km,
+    pointsPayload?.distance_km,
+    sportId,
+  ]);
+
+
+
+  function dispatchMapControl(action) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("endurance:route-map-control", {
+        detail: { action },
+      })
+    );
   }
 
   if (checking) {
     return (
-      <main className="route-draw-fullscreen route-draw-loading">
-        <div>
-          <strong>Opening route studio...</strong>
-          <span>Preparing map tools</span>
-        </div>
+      <main className="route-draw-fullscreen">
+        <div className="route-draw-loading">Opening fullscreen editor...</div>
       </main>
     );
   }
 
-  const center = getCenterPoint(routedPoints.length ? routedPoints : points);
-  const elevationValue = Math.round(metrics.elevation_gain_m || 0);
-  const drawMapLayer = drawLayer;
-
   return (
-    <main className="route-draw-fullscreen">
+    <main className="route-draw-fullscreen route-draw-polished route-draw-immersive">
+      <section className="route-draw-topbar">
+        <button
+          type="button"
+          className="route-draw-round-btn"
+          onClick={() => router.push(editReturnTo || "/routes/new")}
+          aria-label="Close draw editor"
+        >
+          ←
+        </button>
+
+        <div className="route-draw-title-block route-draw-title-block-single route-draw-title-block-two-line">
+          <textarea
+            value={title}
+            rows={2}
+            onChange={(event) => {
+              setTitleEditedManually?.(true);
+              setTitle(event.target.value);
+            }}
+            aria-label="Route title"
+          />
+        </div>
+
+        <button
+          type="button"
+          className="route-draw-save-btn"
+          onClick={continueToDetails}
+          disabled={!canContinue}
+        >
+          {editRouteId ? "Save route" : "Save & continue"}
+        </button>
+      </section>
+
+      {searchOpen ? (
+        <div className="route-search-bar route-search-bar-expanded">
+          <div className="route-search-input-wrap">
+            <span className="route-search-icon">⌕</span>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search address, café, restaurant or place"
+              autoFocus
+            />
+            <button
+              type="button"
+              className="route-search-close"
+              onClick={() => {
+                setSearchOpen(false);
+                setSearchResults([]);
+              }}
+              aria-label="Close search"
+            >
+              ×
+            </button>
+          </div>
+
+          {searchResults.length ? (
+            <div className="route-search-results">
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  type="button"
+                  onClick={() => flyToLocation(result)}
+                >
+                  <b>{result.label}</b>
+                  <small>
+                    {Number(result.lat).toFixed(5)}, {Number(result.lon).toFixed(5)}
+                  </small>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {searching ? (
+            <div className="route-search-loading">Searching locations...</div>
+          ) : null}
+        </div>
+      ) : null}
+
       <RouteDrawMap
         points={points}
-        routedPoints={routedPoints}
+        routedPoints={routedPoints.length ? routedPoints : points}
         onChange={handlePointsChange}
         onNativeGeometrySegmentEdit={handleNativeGeometrySegmentEdit}
         onNativeGeometryChange={handleNativeGeometryChange}
         nativeGeometryEdit={loadedDraftRef.current && routedPoints.length >= 2}
-        height="100%"
-        layer={drawMapLayer}
-        onLayerChange={setDrawLayer}
-        routeMode={routeSegments.length ? "segmented" : routedPoints.length >= 2 ? "routed" : "drawn"}
+        height="100vh"
+        title={title || "Draw route"}
+        insertMode={drawInsertMode}
+        layer="standard"
+        routeMode={routedPoints.length ? "routed" : "drawn"}
         currentLocation={currentLocation}
-        focusCurrentLocation={currentLocation ? { ...currentLocation, selectedAt: Date.now(), zoom: 15 } : null}
+        focusCurrentLocation={!points.length && !loadedDraftRef.current}
         targetLocation={targetLocation}
-        onTargetLocationHandled={handleTargetLocationHandled}
+        onTargetLocationHandled={() => setTargetLocation(null)}
       />
+      <section className="route-draw-bottom-hud route-draw-bottom-hud-final route-draw-bottom-hud-elevation-only" aria-label="Route elevation">
+        <div className="route-draw-hud-metrics route-draw-hud-metrics-final route-draw-hud-metrics-elevation-only">
+          <div>
+            <i className="route-hud-icon route-hud-elevation" aria-hidden="true"></i>
+            <span>Elevation</span>
+            <b>{metrics.elevation_gain_m || 0} m+</b>
+          </div>
+        </div>
+      </section>
 
-      <div className="route-draw-topbar">
-        <button type="button" className="route-draw-back" onClick={() => router.back()} aria-label="Back">←</button>
-        <input value={title} onChange={handleTitleChange} aria-label="Route title" />
-        <button type="button" className="route-draw-save" onClick={continueToDetails} disabled={!canContinue || routingStatus === "loading"}>
-          {editRouteId ? "Save route" : "Continue"}
-        </button>
-      </div>
 
-      <div className="route-draw-controls route-draw-controls-left">
-        <ControlButton icon="⌖" label="Current Location" onClick={() => requestCurrentLocation({ focus: true, quiet: false, allowRouteFocus: true })} />
-        <ControlButton icon="⌕" label="Search" onClick={() => setSearchOpen((value) => !value)} />
-        <ControlButton icon="◌" label="Loop" onClick={addLoopPoint} disabled={loadedDraftRef.current && points.length < 3} />
-        <ControlButton icon="↶" label="Undo" onClick={undoPoint} disabled={!points.length} />
-        <ControlButton icon="⌫" label="Clear" onClick={clearRoute} danger />
-        <ControlButton icon="◎" label="Quality" onClick={() => setShowQualityPanel((value) => !value)} disabled={!routeQuality} />
-        <ControlButton icon="△" label="Elevation" onClick={() => setShowElevationPanel((value) => !value)} />
-        <ControlButton icon="GPX" label="Export" onClick={downloadGpx} disabled={normalizeRoutePoints(activeRoutePayload).length < 2} />
-        <ControlButton icon="▦" label="Layers" onClick={() => setShowPointPanel((value) => !value)} />
-      </div>
+      {/* Map style picker removed: map style is selected automatically per sport. */}
 
-      {searchOpen && (
-        <section className="route-draw-search-panel">
-          <form onSubmit={(event) => { event.preventDefault(); handleSearch(); }}>
-            <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search place or address" />
-            <button type="submit" disabled={searching}>{searching ? "..." : "Search"}</button>
-          </form>
-          {searchResults.length > 0 && (
-            <div className="route-draw-search-results">
-              {searchResults.slice(0, 6).map((result) => (
-                <button key={`${result.lat}-${result.lon}-${result.label}`} type="button" onClick={() => handleSelectSearchResult(result)}>
-                  <strong>{result.label}</strong>
-                  <span>{Number(result.lat).toFixed(4)}, {Number(result.lon).toFixed(4)}</span>
-                </button>
-              ))}
-            </div>
+      {routingError && points.length < 2 ? <section className="route-draw-routing-error">{routingError}</section> : null}
+
+      {routedPoints.length ? (
+        <section className="route-draw-routing-status">
+          
+        </section>
+      ) : null}
+
+      {showElevationPanel ? (
+        <section className="route-elevation-panel-expanded" aria-label="Elevation profile">
+          <div className="route-elevation-panel-header">
+            <span>△</span>
+            <strong>Elevation profile</strong>
+            <button type="button" onClick={() => setShowElevationPanel(false)} aria-label="Close elevation profile">⌃</button>
+          </div>
+          <ElevationMiniStrip points={activeRoutePayload} />
+        </section>
+      ) : null}
+
+      {showQualityPanel ? (
+        <RouteQualityPanel
+          payload={routedPayload || activeRoutePayload}
+          sportId={sportId}
+          onClose={() => setShowQualityPanel(false)}
+        />
+      ) : null}
+
+
+
+      {showPointPanel ? (
+        <section className="route-draw-point-panel">
+          <div>
+            <strong>Route points</strong>
+            <button type="button" onClick={() => setShowPointPanel(false)}>×</button>
+          </div>
+
+          {points.length ? (
+            points.map((point, index) => (
+              <button key={`${point.lat}-${point.lon}-${index}`} type="button" onClick={() => removePoint(index)}>
+                <span>{index + 1}</span>
+                <small>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</small>
+                <b>Remove</b>
+              </button>
+            ))
+          ) : (
+            <p>Tap on the map to add your first point.</p>
           )}
         </section>
-      )}
+      ) : null}
 
-      {showQualityPanel && <RouteQualityPanel payload={routedPayload || activeRoutePayload} sportId={sportId} onClose={() => setShowQualityPanel(false)} />}
-      {showPointPanel && <MapStylePanel value={drawLayer} onChange={setDrawLayer} onClose={() => setShowPointPanel(false)} />}
-      {showElevationPanel && (
-        <section className="route-draw-elevation-panel">
-          <button type="button" onClick={() => setShowElevationPanel(false)}>×</button>
-          <strong>Elevation gain</strong>
-          <b>{elevationValue} m+</b>
-          <span>{metrics.distance_km ? `${metrics.distance_km.toFixed(2)} km route` : "Draw or edit a route"}</span>
-        </section>
-      )}
+      <section className="route-draw-tip">
+        Tap map to add points · tap route line to shape · drag points to reshape
+      </section>
 
-      <div className="route-draw-bottom-metric">
-        <span>Elevation</span>
-        <strong>{elevationValue} m+</strong>
-      </div>
 
-      {message && <div className="route-draw-message">{message}</div>}
-      {routingStatus === "loading" && <div className="route-draw-status">Snapping route...</div>}
-      {routingError && <div className="route-draw-error">{routingError}</div>}
+      <section className="route-editor-control-layer" aria-label="Route editor controls">
+
+        <div className="route-editor-left-rail route-editor-left-rail-labeled route-editor-left-rail-compact" aria-label="Route tools">
+          <button type="button" onClick={useCurrentLocation} aria-label="Current Location">
+            <b>⌖</b><span>Current<br />Location</span>
+          </button>
+          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search">
+            <b>⌕</b><span>Search</span>
+          </button>
+          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop">
+            <b>◌</b><span>Loop</span>
+          </button>
+          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
+            <b>↶</b><span>Undo</span>
+          </button>
+          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
+            <b className="route-tool-danger">⌫</b><span>Clear</span>
+          </button>
+          <button type="button" onClick={() => setShowQualityPanel((value) => !value)} className={showQualityPanel ? "active" : ""} disabled={!routeQuality} aria-label="Route quality">
+            <b>◎</b><span>Quality</span>
+          </button>
+          <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile">
+            <b>△</b><span>Elevation</span>
+          </button>
+        </div>
+
+
+</section>
+
+      {message ? <section className="route-draw-toast">{message}</section> : null}
     </main>
   );
 }

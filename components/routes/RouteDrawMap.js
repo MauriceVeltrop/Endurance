@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const CSS_ID = "endurance-leaflet-css";
 const SCRIPT_ID = "endurance-leaflet-script";
+const MAX_VISIBLE_CONTROL_MARKERS = 12;
 
 const LAYERS = {
   standard: {
@@ -98,31 +99,6 @@ function norm(input) {
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
 }
 
-function evenlySamplePoints(points, maxPoints = 550) {
-  if (!Array.isArray(points) || points.length <= maxPoints) return points || [];
-
-  const sampled = [];
-  const lastIndex = points.length - 1;
-
-  for (let index = 0; index < maxPoints; index += 1) {
-    const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
-    const point = points[sourceIndex];
-    const previous = sampled[sampled.length - 1];
-
-    if (point && (!previous || previous.lat !== point.lat || previous.lon !== point.lon)) {
-      sampled.push(point);
-    }
-  }
-
-  const first = points[0];
-  const last = points[lastIndex];
-
-  if (first && (sampled[0]?.lat !== first.lat || sampled[0]?.lon !== first.lon)) sampled.unshift(first);
-  if (last && (sampled[sampled.length - 1]?.lat !== last.lat || sampled[sampled.length - 1]?.lon !== last.lon)) sampled.push(last);
-
-  return sampled;
-}
-
 function distSeg(p, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -139,15 +115,17 @@ function closestRoutePoint(eventLatLng, map, linePoints) {
 
   const clickPoint = map.latLngToLayerPoint(eventLatLng);
   let best = null;
+  let bestIndex = -1;
   let bestDistance = Infinity;
 
-  linePoints.forEach((point) => {
+  linePoints.forEach((point, index) => {
     const layerPoint = map.latLngToLayerPoint([point.lat, point.lon]);
     const distance = Math.hypot(clickPoint.x - layerPoint.x, clickPoint.y - layerPoint.y);
 
     if (distance < bestDistance) {
       bestDistance = distance;
       best = point;
+      bestIndex = index;
     }
   });
 
@@ -156,8 +134,46 @@ function closestRoutePoint(eventLatLng, map, linePoints) {
         lat: Number(best.lat.toFixed(6)),
         lon: Number(best.lon.toFixed(6)),
         ele: best.ele ?? null,
+        geometryIndex: bestIndex,
       }
     : null;
+}
+
+function findClosestRouteIndex(eventLatLng, map, linePoints) {
+  if (!map || !Array.isArray(linePoints) || !linePoints.length) return -1;
+
+  const clickPoint = map.latLngToLayerPoint(eventLatLng);
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+
+  linePoints.forEach((point, index) => {
+    const layerPoint = map.latLngToLayerPoint([point.lat, point.lon]);
+    const distance = Math.hypot(clickPoint.x - layerPoint.x, clickPoint.y - layerPoint.y);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function pickNativeSegmentBounds(linePoints, geometryIndex, radius = 8) {
+  if (!Array.isArray(linePoints) || linePoints.length < 2) return null;
+
+  const safeIndex = Math.max(0, Math.min(Number(geometryIndex) || 0, linePoints.length - 1));
+  const beforeIndex = Math.max(0, safeIndex - radius);
+  const afterIndex = Math.min(linePoints.length - 1, safeIndex + radius);
+
+  if (afterIndex <= beforeIndex) return null;
+
+  return {
+    beforeIndex,
+    afterIndex,
+    before: linePoints[beforeIndex],
+    after: linePoints[afterIndex],
+  };
 }
 
 function insertionIndexForRouteClick(eventLatLng, map, controlPoints) {
@@ -181,55 +197,23 @@ function insertionIndexForRouteClick(eventLatLng, map, controlPoints) {
   return bestIndex;
 }
 
-function nearestPointIndex(target, linePoints) {
-  if (!target || !Array.isArray(linePoints) || !linePoints.length) return -1;
+function visibleControlMarkers(waypoints) {
+  if (!Array.isArray(waypoints) || !waypoints.length) return [];
 
-  let bestIndex = -1;
-  let bestDistance = Infinity;
+  if (waypoints.length <= MAX_VISIBLE_CONTROL_MARKERS) {
+    return waypoints.map((point, index) => ({ point, index }));
+  }
 
-  linePoints.forEach((point, index) => {
-    const distance = Math.hypot(Number(point.lat) - Number(target.lat), Number(point.lon) - Number(target.lon));
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  });
+  const markers = [{ point: waypoints[0], index: 0 }];
 
-  return bestIndex;
-}
+  if (waypoints.length > 1) {
+    markers.push({
+      point: waypoints[waypoints.length - 1],
+      index: waypoints.length - 1,
+    });
+  }
 
-function buildShapeHandles(controlPoints, linePoints) {
-  if (!Array.isArray(controlPoints) || controlPoints.length < 2) return [];
-
-  return controlPoints.slice(0, -1).map((point, index) => {
-    const next = controlPoints[index + 1];
-    let handle = {
-      lat: Number(((Number(point.lat) + Number(next.lat)) / 2).toFixed(6)),
-      lon: Number(((Number(point.lon) + Number(next.lon)) / 2).toFixed(6)),
-      segmentIndex: index,
-    };
-
-    if (Array.isArray(linePoints) && linePoints.length >= 2) {
-      const startIndex = nearestPointIndex(point, linePoints);
-      const endIndex = nearestPointIndex(next, linePoints);
-
-      if (startIndex >= 0 && endIndex >= 0 && startIndex !== endIndex) {
-        const low = Math.min(startIndex, endIndex);
-        const high = Math.max(startIndex, endIndex);
-        const mid = linePoints[Math.round((low + high) / 2)];
-
-        if (mid) {
-          handle = {
-            lat: Number(Number(mid.lat).toFixed(6)),
-            lon: Number(Number(mid.lon).toFixed(6)),
-            segmentIndex: index,
-          };
-        }
-      }
-    }
-
-    return handle;
-  }).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+  return markers;
 }
 
 function disableMarkerDragging(markers) {
@@ -257,6 +241,9 @@ export default function RouteDrawMap({
   points = [],
   routedPoints = [],
   onChange,
+  onNativeGeometrySegmentEdit,
+  onNativeGeometryChange,
+  nativeGeometryEdit = false,
   height = 430,
   center = [50.887, 6.023],
   title = "Draw route",
@@ -268,8 +255,6 @@ export default function RouteDrawMap({
   focusCurrentLocation = false,
   targetLocation = null,
   onTargetLocationHandled,
-  performanceMode = "normal",
-  readOnlyGeometry = false,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -277,7 +262,6 @@ export default function RouteDrawMap({
   const routeRef = useRef(null);
   const locationRef = useRef(null);
   const pointsRef = useRef(points);
-  const readOnlyGeometryRef = useRef(readOnlyGeometry);
   const hasFocusedLocationRef = useRef(false);
   const lastManualFocusRef = useRef(0);
   const userOwnsCameraRef = useRef(false);
@@ -287,33 +271,25 @@ export default function RouteDrawMap({
   const isDraggingRef = useRef(false);
   const isMultiTouchRef = useRef(false);
   const markerRefs = useRef([]);
+  const skipNextMapClickRef = useRef(false);
   const [error, setError] = useState("");
   const [dynamicHandle, setDynamicHandle] = useState(null);
   const [mapZoom, setMapZoom] = useState(13);
 
   const waypoints = useMemo(() => norm(points), [points]);
+  const routedGeometry = useMemo(() => norm(routedPoints), [routedPoints]);
+
+  // Critical GPX rule:
+  // The visual line must prefer the full routed/GPX geometry, even when editable
+  // control points are reduced to start/finish or a small waypoint set.
   const linePoints = useMemo(() => {
-    const routed = norm(routedPoints);
-    return routed.length >= 2 && routeMode === "routed" ? routed : waypoints;
-  }, [routedPoints, waypoints, routeMode]);
-
-  const isGpxEditPerformanceMode = performanceMode === "gpx-edit";
-
-  const displayLinePoints = useMemo(() => {
-    const mobile = typeof window !== "undefined" && window.innerWidth < 760;
-    const maxPoints = readOnlyGeometry ? (mobile ? 90 : 140) : isGpxEditPerformanceMode ? (mobile ? 120 : 180) : (mobile ? 420 : 650);
-    return evenlySamplePoints(linePoints, maxPoints);
-  }, [linePoints, isGpxEditPerformanceMode, readOnlyGeometry]);
-
-  const isHeavyRoute = readOnlyGeometry || isGpxEditPerformanceMode || linePoints.length > 650 || waypoints.length > 24;
+    if (routedGeometry.length >= 2) return routedGeometry;
+    return waypoints;
+  }, [routedGeometry, waypoints]);
 
   useEffect(() => {
     pointsRef.current = waypoints;
   }, [waypoints]);
-
-  useEffect(() => {
-    readOnlyGeometryRef.current = readOnlyGeometry;
-  }, [readOnlyGeometry]);
 
   useEffect(() => {
     if (waypoints.length < 2 && linePoints.length < 2) {
@@ -392,32 +368,29 @@ export default function RouteDrawMap({
           };
 
           mapRef.current.on("click", (event) => {
-            if (readOnlyGeometryRef.current) return;
             if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
+
+            if (skipNextMapClickRef.current) {
+              skipNextMapClickRef.current = false;
+              return;
+            }
+
+            const currentPoints = pointsRef.current || [];
+
+            if (nativeGeometryEdit && currentPoints.length >= 2) {
+              return;
+            }
+
             const point = {
               lat: Number(event.latlng.lat.toFixed(6)),
               lon: Number(event.latlng.lng.toFixed(6)),
               ele: null,
             };
 
-            let next = [...pointsRef.current];
+            const next = [...currentPoints];
 
             if (insertMode && next.length >= 2) {
-              let bestIndex = next.length;
-              let bestDistance = Infinity;
-
-              for (let index = 0; index < next.length - 1; index += 1) {
-                const a = mapRef.current.latLngToLayerPoint([next[index].lat, next[index].lon]);
-                const b = mapRef.current.latLngToLayerPoint([next[index + 1].lat, next[index + 1].lon]);
-                const p = mapRef.current.latLngToLayerPoint(event.latlng);
-                const distance = distSeg(p, a, b);
-
-                if (distance < bestDistance) {
-                  bestDistance = distance;
-                  bestIndex = index + 1;
-                }
-              }
-
+              const bestIndex = insertionIndexForRouteClick(event.latlng, mapRef.current, next);
               next.splice(bestIndex, 0, point);
             } else {
               next.push(point);
@@ -439,7 +412,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [nativeGeometryEdit, insertMode, onChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -479,33 +452,10 @@ export default function RouteDrawMap({
       markerRefs.current = [];
 
       const group = L.layerGroup();
-      const routeLatLngs = displayLinePoints.map((point) => [point.lat, point.lon]);
+      const routeLatLngs = linePoints.map((point) => [point.lat, point.lon]);
       const waypointLatLngs = waypoints.map((point) => [point.lat, point.lon]);
 
       if (routeLatLngs.length >= 2) {
-        if (readOnlyGeometry) {
-          const canvasRenderer = L.canvas ? L.canvas({ padding: 0.35 }) : undefined;
-          L.polyline(routeLatLngs, {
-            renderer: canvasRenderer,
-            color: "#031006",
-            weight: 5.8,
-            opacity: 0.58,
-            lineJoin: "round",
-            lineCap: "round",
-            smoothFactor: 2.5,
-            interactive: false,
-          }).addTo(group);
-          L.polyline(routeLatLngs, {
-            renderer: canvasRenderer,
-            color: "#e6ff00",
-            weight: 2.8,
-            opacity: 1,
-            lineJoin: "round",
-            lineCap: "round",
-            smoothFactor: 2.5,
-            interactive: false,
-          }).addTo(group);
-        } else {
         L.polyline(routeLatLngs, {
           color: "#031006",
           weight: routeMode === "routed" ? 7 : 5.5,
@@ -524,15 +474,14 @@ export default function RouteDrawMap({
           interactive: false,
         }).addTo(group);
 
-        const routeLine = !isHeavyRoute
-          ? L.polyline(routeLatLngs, {
-              color: "#e6ff00",
-              weight: 20,
-              opacity: 0,
-              lineJoin: "round",
-              lineCap: "round",
-            }).addTo(group)
-          : null;
+        const routeLine = L.polyline(routeLatLngs, {
+          color: "#e6ff00",
+          weight: 24,
+          opacity: 0,
+          lineJoin: "round",
+          lineCap: "round",
+          interactive: true,
+        }).addTo(group);
 
         L.polyline(routeLatLngs, {
           color: "#e6ff00",
@@ -552,9 +501,14 @@ export default function RouteDrawMap({
           interactive: false,
         }).addTo(group);
 
-        routeLine?.on("click", (event) => {
+        routeLine.on("click", (event) => {
           if (isMultiTouchRef.current || isMultiTouchEvent(event)) return;
-          if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
+
+          skipNextMapClickRef.current = true;
+          if (event?.originalEvent) {
+            L.DomEvent.stopPropagation(event.originalEvent);
+            L.DomEvent.preventDefault(event.originalEvent);
+          }
 
           const currentControlPoints = pointsRef.current;
           if (!currentControlPoints || currentControlPoints.length < 2) return;
@@ -562,70 +516,34 @@ export default function RouteDrawMap({
           const newShapePoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
           if (!newShapePoint) return;
 
+          if (nativeGeometryEdit) {
+            const geometryIndex = findClosestRouteIndex(event.latlng, mapRef.current, linePoints);
+            const bounds = pickNativeSegmentBounds(linePoints, geometryIndex);
+
+            if (!bounds) return;
+
+            setDynamicHandle({
+              ...newShapePoint,
+              insertAt: geometryIndex,
+              geometryIndex,
+              nativeSegmentEdit: true,
+              beforeIndex: bounds.beforeIndex,
+              afterIndex: bounds.afterIndex,
+              before: bounds.before,
+              after: bounds.after,
+              createdAt: Date.now(),
+            });
+            return;
+          }
+
           const insertAt = insertionIndexForRouteClick(event.latlng, mapRef.current, currentControlPoints);
 
           setDynamicHandle({
             ...newShapePoint,
             insertAt,
+            geometryIndex: newShapePoint.geometryIndex,
             createdAt: Date.now(),
           });
-        });
-      }
-
-        }
-
-      const shapeHandles = !isHeavyRoute ? buildShapeHandles(waypoints, displayLinePoints) : [];
-      const currentZoom = Number(mapRef.current?.getZoom?.() || 13);
-      const showShapeHandles = !isHeavyRoute && routeLatLngs.length >= 2 && waypoints.length >= 2 && currentZoom >= 13;
-
-      if (showShapeHandles) {
-        shapeHandles.forEach((handle) => {
-          const icon = L.divIcon({
-            className: "route-shape-handle route-shape-handle-visible",
-            html: "<span></span>",
-            iconSize: [22, 22],
-            iconAnchor: [11, 11],
-          });
-
-          L.marker([handle.lat, handle.lon], {
-            icon,
-            draggable: true,
-            zIndexOffset: 520,
-          })
-            .on("dragstart", (event) => {
-              if (isMultiTouchRef.current || isMultiTouchEvent(event)) {
-                isDraggingRef.current = false;
-                return;
-              }
-              isDraggingRef.current = true;
-              mapRef.current?.dragging?.disable?.();
-            })
-            .on("dragend", (event) => {
-              const latLng = event.target.getLatLng();
-              const promoted = {
-                lat: Number(latLng.lat.toFixed(6)),
-                lon: Number(latLng.lng.toFixed(6)),
-                ele: null,
-              };
-
-              const next = [...pointsRef.current];
-              const insertAt = Math.max(1, Math.min(Number(handle.segmentIndex) + 1, next.length));
-              next.splice(insertAt, 0, promoted);
-
-              isDraggingRef.current = false;
-              mapRef.current?.dragging?.enable?.();
-              lastManualFocusRef.current = Date.now();
-              setDynamicHandle(null);
-              onChange?.(next, {
-                type: "promote_shape_handle",
-                insertAt,
-                segmentIndex: Number(handle.segmentIndex),
-              });
-            })
-            .on("click", (event) => {
-              if (event?.originalEvent) L.DomEvent.stop(event.originalEvent);
-            })
-            .addTo(group);
         });
       }
 
@@ -643,11 +561,10 @@ export default function RouteDrawMap({
           zIndexOffset: 650,
         })
           .on("dragstart", () => {
-            if (readOnlyGeometry || waypoints.length > 24) return;
             isDraggingRef.current = true;
+            mapRef.current?.dragging?.disable?.();
           })
           .on("dragend", (event) => {
-            if (readOnlyGeometry || waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const promoted = {
               lat: Number(latLng.lat.toFixed(6)),
@@ -655,12 +572,31 @@ export default function RouteDrawMap({
               ele: null,
             };
 
+            isDraggingRef.current = false;
+            mapRef.current?.dragging?.enable?.();
+            lastManualFocusRef.current = Date.now();
+
+            if (
+              nativeGeometryEdit &&
+              dynamicHandle?.nativeSegmentEdit &&
+              typeof onNativeGeometrySegmentEdit === "function"
+            ) {
+              setDynamicHandle(null);
+              onNativeGeometrySegmentEdit({
+                editPoint: promoted,
+                before: dynamicHandle.before,
+                after: dynamicHandle.after,
+                beforeIndex: dynamicHandle.beforeIndex,
+                afterIndex: dynamicHandle.afterIndex,
+                geometryIndex: dynamicHandle.geometryIndex,
+              });
+              return;
+            }
+
             const next = [...pointsRef.current];
             const insertAt = Math.max(1, Math.min(Number(dynamicHandle.insertAt) || next.length, next.length));
             next.splice(insertAt, 0, promoted);
 
-            isDraggingRef.current = false;
-            lastManualFocusRef.current = Date.now();
             setDynamicHandle(null);
             onChange?.(next, {
               type: "promote_shape_handle",
@@ -674,19 +610,9 @@ export default function RouteDrawMap({
           .addTo(group);
       }
 
-      const editableWaypoints = readOnlyGeometry
-        ? waypoints.filter((_, index) => index === 0 || index === waypoints.length - 1)
-        : isGpxEditPerformanceMode
-          ? waypoints.filter((_, index) => index === 0 || index === waypoints.length - 1)
-          : waypoints.length > 24
-          ? evenlySamplePoints(waypoints, 14)
-          : waypoints;
-
-      editableWaypoints.forEach((point, index) => {
+      visibleControlMarkers(waypoints).forEach(({ point, index }) => {
         const isStart = index === 0;
-        const isFinish = isGpxEditPerformanceMode
-          ? index === editableWaypoints.length - 1 && editableWaypoints.length > 1
-          : index === waypoints.length - 1 && waypoints.length > 1;
+        const isFinish = index === waypoints.length - 1 && waypoints.length > 1;
 
         const icon = L.divIcon({
           className: isStart
@@ -701,15 +627,13 @@ export default function RouteDrawMap({
 
         L.marker([point.lat, point.lon], {
           icon,
-          draggable: !readOnlyGeometry && !isGpxEditPerformanceMode && waypoints.length <= 24,
+          draggable: true,
         })
           .on("dragstart", () => {
-            if (readOnlyGeometry || waypoints.length > 24) return;
             isDraggingRef.current = true;
             mapRef.current?.dragging?.disable?.();
           })
           .on("dragend", (event) => {
-            if (readOnlyGeometry || waypoints.length > 24) return;
             const latLng = event.target.getLatLng();
             const next = pointsRef.current.map((existing, pointIndex) =>
               pointIndex === index
@@ -730,7 +654,6 @@ export default function RouteDrawMap({
             });
           })
           .on("click", () => {
-            if (readOnlyGeometry || waypoints.length > 24) return;
             if (isDraggingRef.current) return;
             const next = pointsRef.current.filter((_, pointIndex) => pointIndex !== index);
             lastManualFocusRef.current = Date.now();
@@ -741,13 +664,10 @@ export default function RouteDrawMap({
 
       group.addTo(mapRef.current);
       routeRef.current = group;
-      markerRefs.current = group.getLayers ? group.getLayers().filter((layer) => layer?.dragging) : [];
+      markerRefs.current = group.getLayers ? group.getLayers().filter((leafletLayer) => leafletLayer?.dragging) : [];
       if (isMultiTouchRef.current) disableMarkerDragging(markerRefs.current);
 
-      const boundsSource =
-        routeLatLngs.length >= 2
-          ? routeLatLngs
-          : waypointLatLngs;
+      const boundsSource = routeLatLngs.length >= 2 ? routeLatLngs : waypointLatLngs;
 
       const recentlyFocused = Date.now() - lastManualFocusRef.current < 3500;
       const routeFitKey = boundsSource.length >= 2
@@ -780,9 +700,7 @@ export default function RouteDrawMap({
     return () => {
       cancelled = true;
     };
-  }, [displayLinePoints, linePoints, waypoints, onChange, routeMode, targetLocation?.lat, targetLocation?.lon, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, mapZoom, isHeavyRoute, isGpxEditPerformanceMode, readOnlyGeometry]);
-
-
+  }, [linePoints, waypoints, onChange, onNativeGeometryChange, onNativeGeometrySegmentEdit, routeMode, nativeGeometryEdit, dynamicHandle?.lat, dynamicHandle?.lon, dynamicHandle?.insertAt, dynamicHandle?.geometryIndex, mapZoom]);
 
   useEffect(() => {
     function handleFlyTo(event) {
@@ -805,8 +723,6 @@ export default function RouteDrawMap({
       window.removeEventListener("endurance:fly-to-location", handleFlyTo);
     };
   }, []);
-
-
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -849,7 +765,7 @@ export default function RouteDrawMap({
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-      const layer = L.layerGroup();
+      const layerGroup = L.layerGroup();
 
       L.circle([lat, lon], {
         radius: Number(currentLocation?.accuracy || 35),
@@ -858,7 +774,7 @@ export default function RouteDrawMap({
         opacity: 0.55,
         fillColor: "#2d8cff",
         fillOpacity: 0.12,
-      }).addTo(layer);
+      }).addTo(layerGroup);
 
       L.marker([lat, lon], {
         icon: L.divIcon({
@@ -868,10 +784,10 @@ export default function RouteDrawMap({
           iconAnchor: [8, 8],
         }),
         interactive: false,
-      }).addTo(layer);
+      }).addTo(layerGroup);
 
-      layer.addTo(mapRef.current);
-      locationRef.current = layer;
+      layerGroup.addTo(mapRef.current);
+      locationRef.current = layerGroup;
 
       const hasExistingRoute = pointsRef.current.length > 0 || linePoints.length >= 2;
 
@@ -888,47 +804,6 @@ export default function RouteDrawMap({
       cancelled = true;
     };
   }, [currentLocation, focusCurrentLocation, linePoints.length]);
-
-  const zoomIn = () => {
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current?.zoomIn?.();
-  };
-
-  const zoomOut = () => {
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current?.zoomOut?.();
-  };
-
-  const fitRoute = async () => {
-    const L = await loadLeaflet();
-    const map = mapRef.current;
-    const source = linePoints.length >= 2 ? linePoints : waypoints;
-    if (!map || source.length < 2) return;
-
-    userOwnsCameraRef.current = false;
-    lastManualFocusRef.current = 0;
-    map.fitBounds(L.latLngBounds(source.map((point) => [point.lat, point.lon])), {
-      padding: [72, 72],
-      maxZoom: 16,
-      animate: true,
-    });
-  };
-
-  const centerOnMe = () => {
-    const lat = Number(currentLocation?.lat);
-    const lon = Number(currentLocation?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !mapRef.current) return;
-
-    userOwnsCameraRef.current = true;
-    lastManualFocusRef.current = Date.now();
-    mapRef.current.flyTo([lat, lon], 16, {
-      animate: true,
-      duration: 0.75,
-    });
-  };
-
 
   useEffect(() => {
     function handleMapControl(event) {
@@ -987,13 +862,18 @@ export default function RouteDrawMap({
     };
   }, [linePoints, waypoints, currentLocation?.lat, currentLocation?.lon]);
 
-
   return (
     <div className="route-draw-map-wrap route-draw-map-wrap-light route-draw-map-immersive">
       <div className="route-draw-map-stage">
         <div ref={containerRef} className="route-draw-map endurance-premium-map" style={{ height, minHeight: height }} />
-<div className="route-draw-instruction-chip">
-          {insertMode ? "Tap near a segment to insert" : "Tap to add · drag points to shape"}
+        <div className="route-draw-instruction-chip">
+          {nativeGeometryEdit
+            ? "Tap the route line to enter edit mode"
+            : waypoints.length > MAX_VISIBLE_CONTROL_MARKERS
+              ? "Tap the route line to add an edit point"
+              : insertMode
+                ? "Tap near a segment to insert"
+                : "Tap to add · drag points to shape"}
         </div>
       </div>
 
