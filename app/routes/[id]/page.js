@@ -16,7 +16,7 @@ import {
   getRoutePreviewStats,
   getElevationStats,
 } from "../../../lib/routePreview";
-import { hydrateRouteWithGeometry } from "../../../lib/routeData";
+import { geometryRowToRoutePoints, hydrateRouteWithGeometry } from "../../../lib/routeData";
 
 
 async function getAcceptedTeamPartnerIds(userId) {
@@ -532,47 +532,93 @@ export default function RouteDetailPage() {
     downloadTextFile(`${safeName}.gpx`, routePointsToGpx(route));
   }
 
-  function openRouteDrawEditor() {
+  async function openRouteDrawEditor() {
     if (!route || !editable) return;
 
     try {
-      const routePoints =
-        route.route_points && typeof route.route_points === "object"
-          ? route.route_points
-          : { points: getRoutePoints(route.route_points) };
+      setMessage("");
 
-      const points = getRoutePoints(routePoints);
+      const { data: latestRoute, error: latestRouteError } = await supabase
+        .from("routes")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,source_type,geometry_id,route_version,created_at,updated_at")
+        .eq("id", route.id)
+        .maybeSingle();
+
+      if (latestRouteError) throw latestRouteError;
+      if (!latestRoute?.id) throw new Error("Route not found.");
+
+      let activeGeometry = null;
+
+      if (latestRoute.geometry_id) {
+        const { data: geometryRow, error: geometryError } = await supabase
+          .from("route_geometries")
+          .select("id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at")
+          .eq("id", latestRoute.geometry_id)
+          .maybeSingle();
+
+        if (geometryError) throw geometryError;
+        activeGeometry = geometryRow || null;
+      }
+
+      if (!activeGeometry) {
+        const { data: latestGeometry, error: latestGeometryError } = await supabase
+          .from("route_geometries")
+          .select("id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at")
+          .eq("route_id", latestRoute.id)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestGeometryError) throw latestGeometryError;
+        activeGeometry = latestGeometry || null;
+      }
+
+      const activeRoutePoints = geometryRowToRoutePoints(activeGeometry, latestRoute.route_points);
+      const points = getRoutePoints(activeRoutePoints);
       const controlPoints = getRoutePoints(
-        routePoints.control_points || routePoints.waypoints || routePoints.controlPoints
+        activeRoutePoints?.control_points || activeRoutePoints?.waypoints || activeRoutePoints?.controlPoints
       );
+
+      if (points.length < 2) {
+        throw new Error("Route geometry is missing.");
+      }
+
+      const draftDistance = activeRoutePoints?.distance_km ?? activeGeometry?.distance_km ?? latestRoute.distance_km ?? "";
+      const draftElevation = activeRoutePoints?.elevation_gain_m ?? activeGeometry?.elevation_gain_m ?? latestRoute.elevation_gain_m ?? "";
 
       window.sessionStorage.setItem(
         "endurance_route_edit_draft",
         JSON.stringify({
-          edit_route_id: route.id,
-          return_to: `/routes/${route.id}`,
-          sport_id: route.sport_id,
-          title: route.title,
-          title_is_auto: route.title_is_auto !== false,
-          description: route.description || "",
-          visibility: route.visibility,
-          distance_km: route.distance_km || "",
-          elevation_gain_m: route.elevation_gain_m || "",
+          edit_route_id: latestRoute.id,
+          return_to: `/routes/${latestRoute.id}`,
+          sport_id: latestRoute.sport_id,
+          title: latestRoute.title,
+          title_is_auto: latestRoute.title_is_auto !== false,
+          description: latestRoute.description || "",
+          visibility: latestRoute.visibility,
+          distance_km: draftDistance,
+          elevation_gain_m: draftElevation,
           route_points: {
-            ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
+            ...(activeRoutePoints && typeof activeRoutePoints === "object" && !Array.isArray(activeRoutePoints) ? activeRoutePoints : {}),
+            source: activeRoutePoints?.source || activeGeometry?.source_type || latestRoute.source_type || "route_geometries",
             points,
-            waypoints: controlPoints.length >= 2 ? controlPoints : routePoints.waypoints,
-            control_points: controlPoints.length >= 2 ? controlPoints : routePoints.control_points,
+            geometry_points: points,
+            waypoints: controlPoints.length >= 2 ? controlPoints : activeRoutePoints?.waypoints,
+            control_points: controlPoints.length >= 2 ? controlPoints : activeRoutePoints?.control_points,
             point_count: points.length,
+            distance_km: draftDistance,
+            elevation_gain_m: draftElevation,
+            route_geometry_id: activeGeometry?.id || activeRoutePoints?.route_geometry_id || latestRoute.geometry_id || null,
+            route_geometry_version: activeGeometry?.version || activeRoutePoints?.route_geometry_version || latestRoute.route_version || null,
           },
           saved_at: new Date().toISOString(),
         })
       );
 
-      router.push(`/routes/draw?editDraft=1&routeId=${route.id}&returnTo=${encodeURIComponent(`/routes/${route.id}`)}`);
+      router.push(`/routes/draw?editDraft=1&routeId=${latestRoute.id}&returnTo=${encodeURIComponent(`/routes/${latestRoute.id}`)}`);
     } catch (error) {
       console.error("Could not open route draw editor", error);
-      setMessage("Could not open the route editor.");
+      setMessage(error?.message || "Could not open the route editor.");
     }
   }
 
