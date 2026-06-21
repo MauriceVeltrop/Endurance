@@ -1043,93 +1043,71 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    // Native GPX edit must not draw a straight spike first.
-    // Keep the current route visible, ask the routing API for a local A -> edit -> B segment,
-    // and only replace that local slice after a valid routed geometry is returned.
-    const localWindow = Math.max(12, Math.min(42, Math.round(geometry.length * 0.06)));
-    const startIndex = Math.max(0, targetIndex - localWindow);
-    const endIndex = Math.min(geometry.length - 1, targetIndex + localWindow);
-    const startPoint = geometry[startIndex];
-    const endPoint = geometry[endIndex];
+    // Use the same logic as a newly drawn route:
+    // promote the GPX geometry to a compact ordered control-point route,
+    // insert the dragged shaping point at the matching position,
+    // then let syncRouteSegments() rebuild the route through /api/routes/reroute.
+    const existingControls = normalizeRoutePoints(routedPayload?.waypoints || routedPayload?.control_points);
+    const baseControls = existingControls.length >= 2
+      ? existingControls
+      : compactControlPoints(geometry, 14);
 
-    if (!startPoint || !endPoint || startIndex >= endIndex) {
-      setMessage("Could not determine the local route segment.");
+    if (baseControls.length < 2) {
+      setMessage("Could not prepare this GPX route for routing.");
       return;
     }
 
-    const segmentControlPoints = [startPoint, editPoint, endPoint];
+    const controlGeometryIndexes = baseControls.map((point) => nearestGeometryIndex(point, geometry));
+    let insertAt = 1;
+
+    for (let index = 0; index < controlGeometryIndexes.length - 1; index += 1) {
+      const currentIndex = Number(controlGeometryIndexes[index]);
+      const nextIndex = Number(controlGeometryIndexes[index + 1]);
+
+      if (Number.isFinite(currentIndex) && Number.isFinite(nextIndex) && currentIndex <= targetIndex && targetIndex <= nextIndex) {
+        insertAt = index + 1;
+        break;
+      }
+
+      if (Number.isFinite(currentIndex) && currentIndex < targetIndex) {
+        insertAt = index + 1;
+      }
+    }
+
+    insertAt = Math.max(1, Math.min(insertAt, baseControls.length));
+
+    const previousControl = baseControls[insertAt - 1];
+    const nextControl = baseControls[insertAt];
+    const editIsTooCloseToExistingControl =
+      [previousControl, nextControl].some((point) => {
+        if (!point) return false;
+        const distance = Math.hypot(Number(point.lat) - Number(editPoint.lat), Number(point.lon) - Number(editPoint.lon));
+        return distance < 0.00003;
+      });
+
+    const nextControls = editIsTooCloseToExistingControl
+      ? baseControls
+      : [...baseControls.slice(0, insertAt), editPoint, ...baseControls.slice(insertAt)];
 
     try {
       setRoutingStatus("routing");
       setRoutingError("");
-      setMessage("Rerouting this part of the route...");
+      setMessage("Rerouting route with the new shaping point...");
 
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points: segmentControlPoints,
-          mode: "local_segment_edit",
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok || data?.ok === false) {
-        throw new Error(data?.error || data?.warning || "Could not reroute this segment.");
-      }
-
-      const routed = data?.route_points || data;
-      const segmentGeometry = normalizeRoutePoints(
-        routed?.points?.length
-          ? routed.points
-          : Array.isArray(data?.points)
-            ? data.points
-            : routed
-      );
-
-      if (segmentGeometry.length < 2) {
-        throw new Error("No routed segment geometry returned.");
-      }
-
-      const before = geometry.slice(0, startIndex);
-      const after = geometry.slice(endIndex + 1);
-      const mergedGeometry = compactRoutePoints([...before, ...segmentGeometry, ...after], 1200);
-      const controls = normalizeRoutePoints(routedPayload?.waypoints || routedPayload?.control_points);
-      const metrics = calculateRouteMetrics(mergedGeometry);
-
-      setPointsPayload(makeRoutePointPayload(
-        controls.length >= 2 ? controls : compactControlPoints(mergedGeometry),
-        "native-gpx-edit-control-points"
-      ));
-      setRoutedPayload({
-        ...(routedPayload && typeof routedPayload === "object" && !Array.isArray(routedPayload) ? routedPayload : {}),
-        source: data?.routed === false ? "native-gpx-local-segment-fallback" : "native-gpx-local-segment-reroute",
-        points: mergedGeometry,
-        geometry_points: mergedGeometry,
-        waypoints: controls,
-        control_points: controls,
-        point_count: mergedGeometry.length,
-        distance_km: metrics.distance_km || null,
-        elevation_gain_m: metrics.elevation_gain_m || 0,
-        route_quality: routed?.route_quality || data?.route_quality || null,
-        edited_at: new Date().toISOString(),
-        edit_mode: "local_segment_reroute",
-      });
+      loadedDraftRef.current = false;
+      suppressNextSegmentSyncRef.current = true;
       setRouteSegments([]);
-      setRoutingStatus("done");
-      setRoutingError("");
+      setPointsPayload(makeRoutePointPayload(nextControls, "gpx-promoted-control-points"));
+      setRoutedPayload(null);
+
+      await syncRouteSegments(nextControls, { silent: false });
+
       setNativeEditStatus("edited");
-      setMessage(data?.routed === false ? (data?.warning || "Reroute used a fallback segment.") : "");
-      loadedDraftRef.current = true;
     } catch (error) {
-      console.error("Native local segment rerouting failed", error);
+      console.error("GPX promoted control-point reroute failed", error);
       setRoutingStatus("error");
-      setRoutingError(error?.message || "Could not reroute this segment.");
-      setMessage(error?.message || "Could not reroute this segment.");
+      setRoutingError(error?.message || "Could not reroute this GPX route.");
+      setMessage(error?.message || "Could not reroute this GPX route.");
     }
   }
 
