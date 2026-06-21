@@ -12,6 +12,7 @@ import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
 import { calculateRouteMetrics, estimateTimeText } from "../../../lib/routeMetrics";
+import { buildRouteGeometryInsert, inferRouteSourceType } from "../../../lib/routeData";
 
 const FALLBACK_ROUTE_SPORTS = [
   "running",
@@ -796,6 +797,7 @@ export default function NewRoutePage() {
         distance_km: form.distance_km ? Number(form.distance_km) : null,
         elevation_gain_m: form.elevation_gain_m ? Math.round(Number(form.elevation_gain_m)) : null,
         gpx_file_url: form.gpx_file_url || null,
+        source_type: inferRouteSourceType(form.method, form.route_points),
         route_points: form.route_points || null,
       };
 
@@ -806,6 +808,34 @@ export default function NewRoutePage() {
         .single();
 
       if (error) throw error;
+
+      if (data?.id && form.route_points) {
+        const geometryInsert = buildRouteGeometryInsert({
+          routeId: data.id,
+          routePoints: form.route_points,
+          sourceType: inferRouteSourceType(form.method, form.route_points),
+        });
+
+        if (geometryInsert.point_count >= 2) {
+          const { data: geometryRow, error: geometryError } = await supabase
+            .from("route_geometries")
+            .insert(geometryInsert)
+            .select("id,version")
+            .single();
+
+          if (geometryError) throw geometryError;
+
+          if (geometryRow?.id) {
+            await supabase
+              .from("routes")
+              .update({
+                geometry_id: geometryRow.id,
+                route_version: geometryRow.version || 1,
+              })
+              .eq("id", data.id);
+          }
+        }
+      }
 
       try {
         window.sessionStorage.removeItem("endurance_route_draft");
