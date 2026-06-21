@@ -8,6 +8,7 @@ import AppHeader from "../../components/AppHeader";
 import BottomNav from "../../components/BottomNav";
 import RouteCard from "../../components/routes/RouteCard";
 import { supabase } from "../../lib/supabase";
+import { hydrateRouteWithGeometry } from "../../lib/routeData";
 import { getSportLabel } from "../../lib/trainingHelpers";
 
 
@@ -156,7 +157,7 @@ export default function RoutesPage() {
 
       const { data, error } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at,creator:profiles!routes_creator_id_fkey(id,name,first_name,last_name,avatar_url)")
+        .select("id,creator_id,sport_id,title,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,source_type,geometry_id,route_version,created_at,updated_at,route_geometries!route_geometries_route_id_fkey(id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at),creator:profiles!routes_creator_id_fkey(id,name,first_name,last_name,avatar_url)")
         .or(`visibility.eq.public,creator_id.eq.${user.id}${teamCreatorFilter}`)
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
