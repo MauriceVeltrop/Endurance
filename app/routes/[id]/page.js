@@ -16,6 +16,7 @@ import {
   getRoutePreviewStats,
   getElevationStats,
 } from "../../../lib/routePreview";
+import { hydrateRouteWithGeometry } from "../../../lib/routeData";
 
 
 async function getAcceptedTeamPartnerIds(userId) {
@@ -299,7 +300,7 @@ export default function RouteDetailPage() {
 
       const { data: routeRow, error: routeError } = await supabase
         .from("routes")
-        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,source_type,geometry_id,route_version,created_at,updated_at,route_geometries!route_geometries_route_id_fkey(id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at)")
         .eq("id", id)
         .maybeSingle();
 
@@ -320,7 +321,7 @@ export default function RouteDetailPage() {
         return;
       }
 
-      setRoute(routeRow);
+      setRoute(hydrateRouteWithGeometry(routeRow));
 
       const [{ data: creatorRow }, { data: trainingRows }, { count: notificationCount }, { count: inviteCount }] =
         await Promise.all([
@@ -463,12 +464,12 @@ export default function RouteDetailPage() {
         .from("routes")
         .update(payload)
         .eq("id", route.id)
-        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,source_type,geometry_id,route_version,created_at,updated_at,route_geometries!route_geometries_route_id_fkey(id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at)")
         .maybeSingle();
 
       if (error) throw error;
 
-      setRoute(data || { ...route, ...payload });
+      setRoute(hydrateRouteWithGeometry(data || { ...route, ...payload }));
       setMessage("Route changes saved.");
     } catch (error) {
       console.error("Could not save route changes", error);
@@ -613,7 +614,7 @@ export default function RouteDetailPage() {
         .from("routes")
         .update(payload)
         .eq("id", route.id)
-        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,created_at,updated_at")
+        .select("id,creator_id,sport_id,title,title_is_auto,description,visibility,distance_km,elevation_gain_m,gpx_file_url,route_points,source_type,geometry_id,route_version,created_at,updated_at,route_geometries!route_geometries_route_id_fkey(id,version,source_type,geometry,point_count,distance_km,elevation_gain_m,elevation_loss_m,metadata,updated_at)")
         .maybeSingle();
 
       if (error) throw error;
