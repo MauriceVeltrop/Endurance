@@ -422,6 +422,18 @@ function getCenterPoint(points) {
   };
 }
 
+
+function getRouteQuality(payload, sportId = "") {
+  const quality = payload?.route_quality || payload?.quality || payload?.metadata?.route_quality || null;
+
+  if (!quality || typeof quality !== "object") return null;
+
+  return {
+    ...quality,
+    sport_id: quality.sport_id || sportId || payload?.sport_id || null,
+  };
+}
+
 function RouteQualityPanel({ payload, sportId, onClose }) {
   const quality = payload?.route_quality;
   if (!quality) return null;
