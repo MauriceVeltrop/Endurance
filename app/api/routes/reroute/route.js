@@ -328,7 +328,6 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 
     const data = await response.json();
 
-console.log("ORS extras debug:", JSON.stringify(data?.features?.[0]?.properties?.extras, null, 2));
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
       .map((feature) => scoreOrsCandidate({ feature, points, sportId, profile, preference }))
