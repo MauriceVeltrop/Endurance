@@ -28,6 +28,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   const segmentCacheRef = useRef(new Map());
   const segmentInflightRef = useRef(new Map());
+  const segmentAbortRef = useRef(new Map());
   const syncIdRef = useRef(0);
 
   const routeSignature = useMemo(
@@ -59,12 +60,26 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     return pendingSegment(segment);
   }), [pendingSegment]);
 
+  const abortObsoleteSegments = useCallback((activeKeys = new Set()) => {
+    segmentAbortRef.current.forEach((controller, key) => {
+      if (activeKeys.has(key)) return;
+      try {
+        controller?.abort?.();
+      } catch (_) {}
+      segmentAbortRef.current.delete(key);
+      segmentInflightRef.current.delete(key);
+    });
+  }, []);
+
   const routeSegment = useCallback((segment) => {
     const cached = segmentCacheRef.current.get(segment.key);
     if (cached?.geometry?.length >= 2) return Promise.resolve(cached);
 
     const inflight = segmentInflightRef.current.get(segment.key);
     if (inflight) return inflight;
+
+    const controller = new AbortController();
+    segmentAbortRef.current.set(segment.key, controller);
 
     const promise = (async () => {
       try {
@@ -75,6 +90,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
             sport_id: sportId,
             points: segment.control,
           }),
+          signal: controller.signal,
         });
 
         const data = await response.json().catch(() => ({}));
@@ -103,11 +119,13 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
         segmentCacheRef.current.set(segment.key, nextSegment);
         return nextSegment;
       } catch (error) {
+        if (error?.name === "AbortError") return null;
         const failed = fallbackSegment(segment, error?.message || "Segment routing failed.");
         segmentCacheRef.current.set(segment.key, failed);
         return failed;
       } finally {
         segmentInflightRef.current.delete(segment.key);
+        segmentAbortRef.current.delete(segment.key);
       }
     })();
 
@@ -120,6 +138,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
     if (controls.length < 2) {
       syncIdRef.current += 1;
+      abortObsoleteSegments(new Set());
       setRouteSegments([]);
       setRoutePayload(null);
       setRoutingStatus("idle");
@@ -131,6 +150,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     syncIdRef.current = syncId;
 
     const definitions = getControlSegments(controls, sportId);
+    abortObsoleteSegments(new Set(definitions.map((segment) => segment.key)));
     const routedOverrides = new Map();
     let latestSegments = buildSegmentState(definitions, routedOverrides);
 
@@ -205,11 +225,60 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     }
 
     return payload;
-  }, [buildSegmentState, controlPoints, routeSegment, sportId]);
+  }, [abortObsoleteSegments, buildSegmentState, controlPoints, routeSegment, sportId]);
 
   const setRouteControlPoints = useCallback((nextPoints) => {
-    setControlPoints(normalizeRoutePoints(nextPoints));
+    const controls = normalizeRoutePoints(nextPoints);
+    syncIdRef.current += 1;
+    setControlPoints(controls);
+    setRoutingError("");
+
+    if (controls.length < 2) {
+      setRouteSegments([]);
+      setRoutePayload(null);
+      setRoutingStatus("idle");
+      return;
+    }
+
+    const definitions = getControlSegments(controls, sportId);
+    const provisional = buildSegmentState(definitions);
+
+    setRouteSegments(provisional);
+    setRoutePayload(buildRoutePayloadFromSegments({
+      segments: provisional,
+      controlPoints: controls,
+      source: "segmented-routing-local-provisional",
+      sportId,
+    }));
+    setRoutingStatus("routing");
+  }, [buildSegmentState, sportId]);
+
+  const loadRoute = useCallback(({ controlPoints: nextControlPoints = [], routePayload: nextRoutePayload = null, status = "done" } = {}) => {
+    const controls = normalizeRoutePoints(nextControlPoints);
+    syncIdRef.current += 1;
+    setControlPoints(controls);
+    setRouteSegments([]);
+    setRoutePayload(nextRoutePayload);
+    setRoutingStatus(status);
+    setRoutingError("");
   }, []);
+
+  const setRoutePayloadDirect = useCallback((nextRoutePayload, { status = "done" } = {}) => {
+    syncIdRef.current += 1;
+    setRoutePayload(nextRoutePayload);
+    setRoutingStatus(status);
+    setRoutingError("");
+  }, []);
+
+  const resetRoute = useCallback(() => {
+    syncIdRef.current += 1;
+    abortObsoleteSegments(new Set());
+    setControlPoints([]);
+    setRouteSegments([]);
+    setRoutePayload(null);
+    setRoutingStatus("idle");
+    setRoutingError("");
+  }, [abortObsoleteSegments]);
 
   const requestCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -258,5 +327,8 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     mapFocusTarget,
     focusLocation,
     syncSegments,
+    loadRoute,
+    resetRoute,
+    setRoutePayload: setRoutePayloadDirect,
   };
 }
