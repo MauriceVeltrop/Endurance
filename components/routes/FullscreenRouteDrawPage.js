@@ -291,6 +291,55 @@ function routePayloadFromGeometry(points, waypoints, source = "local-segment-rer
   };
 }
 
+async function routeNativeGpxEditLeg({ from, to, sportId }) {
+  const fallback = normalizeRoutePoints([from, to]);
+  if (fallback.length < 2) return fallback;
+
+  try {
+    const response = await fetch("/api/routes/reroute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sport_id: sportId,
+        points: fallback,
+        mode: "live",
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const routed = data?.route_points || data;
+    const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+
+    if (!response.ok || !data?.ok || geometry.length < 2) {
+      return fallback;
+    }
+
+    return geometry;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function mergeLocalNativeGpxEdit({ geometry, beforeIndex, afterIndex, replacement }) {
+  const safeGeometry = normalizeRoutePoints(geometry);
+  const safeReplacement = normalizeRoutePoints(replacement);
+  const start = Math.max(0, Math.min(Number(beforeIndex) || 0, safeGeometry.length - 1));
+  const end = Math.max(start + 1, Math.min(Number(afterIndex) || start + 1, safeGeometry.length - 1));
+
+  if (safeGeometry.length < 2 || safeReplacement.length < 2) return safeGeometry;
+
+  const merged = [
+    ...safeGeometry.slice(0, start),
+    ...safeReplacement,
+    ...safeGeometry.slice(end + 1),
+  ];
+
+  return normalizeRoutePoints(merged).filter((point, index, points) => {
+    const previous = points[index - 1];
+    return !previous || previous.lat !== point.lat || previous.lon !== point.lon;
+  });
+}
+
 
 function xmlEscape(value = "") {
   return String(value)
@@ -348,7 +397,7 @@ const MAP_STYLE_OPTIONS = [
   { id: "standard", name: "Standard", provider: "OpenStreetMap", description: "Clear everyday map with streets and parks.", icon: "🗺️" },
   { id: "minimal", name: "Minimal", provider: "Carto Positron", description: "Clean light map for running and city routes.", icon: "◻️" },
   { id: "outdoor", name: "Outdoor", provider: "OpenTopoMap", description: "Terrain, paths and contours for trail and hiking.", icon: "⛰️" },
-  { id: "cycling", name: "Cycling", provider: "CyclOSM", description: "Cycle-friendly map with cycling infrastructure.", icon: "🚴" },
+  { id: "cycling", name: "CyclOSM", provider: "CyclOSM", description: "Cycle-friendly map with cycling infrastructure.", icon: "🚴" },
   { id: "satellite", name: "Satellite", provider: "Esri World Imagery", description: "Aerial view for forests, fields and landmarks.", icon: "🛰️" },
   { id: "dark", name: "Dark", provider: "Carto Dark Matter", description: "Low-glare dark map for evening planning.", icon: "🌙" },
 ];
@@ -760,8 +809,6 @@ export default function FullscreenRouteDrawPage() {
   async function handleNativeGeometrySegmentEdit(segmentEdit) {
     const geometry = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
     const geometryIndex = Number(segmentEdit?.geometryIndex);
-    const beforeIndex = Number(segmentEdit?.beforeIndex);
-    const afterIndex = Number(segmentEdit?.afterIndex);
     const editPoint = normalizeRoutePoints([segmentEdit?.editPoint])[0];
 
     if (geometry.length < 2 || !editPoint) {
@@ -769,75 +816,76 @@ export default function FullscreenRouteDrawPage() {
       return;
     }
 
-    const targetIndex = Number.isInteger(geometryIndex)
-      ? geometryIndex
-      : Number.isInteger(beforeIndex) && Number.isInteger(afterIndex)
-        ? Math.round((beforeIndex + afterIndex) / 2)
-        : -1;
+    const targetIndex = Number.isInteger(geometryIndex) ? geometryIndex : -1;
+    const safeBeforeIndex = Number.isInteger(Number(segmentEdit?.beforeIndex))
+      ? Math.max(0, Math.min(Number(segmentEdit.beforeIndex), geometry.length - 2))
+      : Math.max(0, targetIndex - 8);
+    const safeAfterIndex = Number.isInteger(Number(segmentEdit?.afterIndex))
+      ? Math.max(safeBeforeIndex + 1, Math.min(Number(segmentEdit.afterIndex), geometry.length - 1))
+      : Math.min(geometry.length - 1, Math.max(targetIndex + 8, safeBeforeIndex + 1));
 
-    if (targetIndex < 1 || targetIndex >= geometry.length - 1) {
+    const beforePoint = geometry[safeBeforeIndex];
+    const afterPoint = geometry[safeAfterIndex];
+
+    if (!beforePoint || !afterPoint || safeAfterIndex <= safeBeforeIndex) {
       setMessage("Could not edit this part of the route.");
       return;
     }
 
-    // Use the same logic as a newly drawn route:
-    // promote the GPX geometry to a compact ordered control-point route,
-    // insert the dragged shaping point at the matching position,
-    // then let the central draw engine rebuild the route through segment-based /api/routes/reroute calls.
-    const existingControls = normalizeRoutePoints(routedPayload?.waypoints || routedPayload?.control_points);
-    const baseControls = existingControls.length >= 2
-      ? existingControls
-      : compactControlPoints(geometry, 14);
+    try {
+      setMessage("Rerouting only this GPX segment...");
 
-    if (baseControls.length < 2) {
-      setMessage("Could not prepare this GPX route for routing.");
-      return;
-    }
+      // GPX edit rule: keep the original GPX geometry as the source of truth.
+      // Only replace the local geometry window around the dragged shaping point.
+      // Do not compact the full GPX into control points and reroute the whole route.
+      const [firstLeg, secondLeg] = await Promise.all([
+        routeNativeGpxEditLeg({ from: beforePoint, to: editPoint, sportId }),
+        routeNativeGpxEditLeg({ from: editPoint, to: afterPoint, sportId }),
+      ]);
 
-    const controlGeometryIndexes = baseControls.map((point) => nearestGeometryIndex(point, geometry));
-    let insertAt = 1;
+      const localReplacement = [
+        ...firstLeg,
+        ...secondLeg.slice(1),
+      ];
 
-    for (let index = 0; index < controlGeometryIndexes.length - 1; index += 1) {
-      const currentIndex = Number(controlGeometryIndexes[index]);
-      const nextIndex = Number(controlGeometryIndexes[index + 1]);
-
-      if (Number.isFinite(currentIndex) && Number.isFinite(nextIndex) && currentIndex <= targetIndex && targetIndex <= nextIndex) {
-        insertAt = index + 1;
-        break;
-      }
-
-      if (Number.isFinite(currentIndex) && currentIndex < targetIndex) {
-        insertAt = index + 1;
-      }
-    }
-
-    insertAt = Math.max(1, Math.min(insertAt, baseControls.length));
-
-    const previousControl = baseControls[insertAt - 1];
-    const nextControl = baseControls[insertAt];
-    const editIsTooCloseToExistingControl =
-      [previousControl, nextControl].some((point) => {
-        if (!point) return false;
-        const distance = Math.hypot(Number(point.lat) - Number(editPoint.lat), Number(point.lon) - Number(editPoint.lon));
-        return distance < 0.00003;
+      const nextGeometry = mergeLocalNativeGpxEdit({
+        geometry,
+        beforeIndex: safeBeforeIndex,
+        afterIndex: safeAfterIndex,
+        replacement: localReplacement,
       });
 
-    const nextControls = editIsTooCloseToExistingControl
-      ? baseControls
-      : [...baseControls.slice(0, insertAt), editPoint, ...baseControls.slice(insertAt)];
+      if (nextGeometry.length < 2) {
+        throw new Error("Could not build the edited GPX geometry.");
+      }
 
-    try {
-      setMessage("Rerouting route with the new shaping point...");
+      const controls = normalizeRoutePoints(routedPayload?.waypoints || routedPayload?.control_points);
+      const nextControls = controls.length >= 2 ? controls : compactControlPoints(nextGeometry, 18);
+      const metrics = calculateRouteMetrics(nextGeometry);
 
-      loadedDraftRef.current = false;
-      setEngineControlPoints(nextControls);
+      loadEngineRoute({
+        controlPoints: nextControls,
+        routePayload: {
+          ...(routedPayload && typeof routedPayload === "object" && !Array.isArray(routedPayload) ? routedPayload : {}),
+          source: "native-gpx-local-segment-edit",
+          points: nextGeometry,
+          geometry_points: nextGeometry,
+          waypoints: nextControls,
+          control_points: nextControls,
+          point_count: nextGeometry.length,
+          distance_km: metrics.distance_km || null,
+          elevation_gain_m: metrics.elevation_gain_m || 0,
+          edited_at: new Date().toISOString(),
+        },
+        status: "done",
+      });
 
-      await syncEngineSegments(nextControls, { silent: false });
-
+      loadedDraftRef.current = true;
       setNativeEditStatus("edited");
+      setMessage("");
     } catch (error) {
-      console.error("GPX promoted control-point reroute failed", error);
-      setMessage(error?.message || "Could not reroute this GPX route.");
+      console.error("GPX local segment edit failed", error);
+      setMessage(error?.message || "Could not edit this GPX segment.");
     }
   }
 
@@ -1071,7 +1119,7 @@ export default function FullscreenRouteDrawPage() {
     }
 
     if (points.length >= 2 && !routedPayload?.points?.length) {
-      setEngineRoutePayload(routePayloadFromGeometry(points, points, "drawn-fallback"), { status: "done" });
+      setEngineRoutePayload(routePayloadFromGeometry(points, points, "drawn-fallback"));
     }
 
     if (editRouteId) {
@@ -1374,128 +1422,105 @@ export default function FullscreenRouteDrawPage() {
               ))}
             </div>
           ) : null}
-
-          {searching ? (
-            <div className="route-search-loading">Searching locations...</div>
-          ) : null}
         </div>
       ) : null}
 
-      <RouteDrawMap
-        points={points}
-        routedPoints={routedPoints.length ? routedPoints : points}
-        onChange={handlePointsChange}
-        onNativeGeometrySegmentEdit={handleNativeGeometrySegmentEdit}
-        onNativeGeometryChange={handleNativeGeometryChange}
-        nativeGeometryEdit={loadedDraftRef.current && routedPoints.length >= 2}
-        height="100vh"
-        title={title || "Draw route"}
-        insertMode={drawInsertMode}
-        layer="standard"
-        routeMode={routedPoints.length ? "routed" : "drawn"}
-        currentLocation={currentLocation}
-        focusCurrentLocation={!points.length && !loadedDraftRef.current}
-        targetLocation={targetLocation}
-        onTargetLocationHandled={() => setTargetLocation(null)}
-      />
-      <section className="route-draw-bottom-hud route-draw-bottom-hud-final route-draw-bottom-hud-elevation-only" aria-label="Route elevation">
-        <div className="route-draw-hud-metrics route-draw-hud-metrics-final route-draw-hud-metrics-elevation-only">
-          <div>
-            <i className="route-hud-icon route-hud-elevation" aria-hidden="true"></i>
-            <span>Elevation</span>
-            <b>{metrics.elevation_gain_m || 0} m+</b>
-          </div>
+      <div className="route-draw-floating-actions route-draw-floating-actions-left">
+        <button type="button" onClick={useCurrentLocation}>
+          <span>⌖</span>
+          <small>Current<br />Location</small>
+        </button>
+        <button type="button" onClick={() => setSearchOpen(true)}>
+          <span>⌕</span>
+          <small>Search</small>
+        </button>
+        <button type="button" onClick={closeLoop} disabled={points.length < 3}>
+          <span>◎</span>
+          <small>Loop</small>
+        </button>
+        <button type="button" onClick={undoPoint} disabled={!points.length}>
+          <span>↶</span>
+          <small>Undo</small>
+        </button>
+        <button type="button" onClick={clearRoute} disabled={!points.length} className="danger">
+          <span>⌫</span>
+          <small>Clear</small>
+        </button>
+        <button type="button" onClick={() => setShowQualityPanel((value) => !value)} disabled={!routeQuality}>
+          <span>⊙</span>
+          <small>Quality</small>
+        </button>
+        <button type="button" onClick={() => setShowElevationPanel((value) => !value)} disabled={routedPoints.length < 2 && points.length < 2}>
+          <span>△</span>
+          <small>Elevation</small>
+        </button>
+      </div>
+
+      <div className="route-draw-map-shell">
+        <RouteDrawMap
+          points={points}
+          routedPoints={routedPoints.length >= 2 ? routedPoints : []}
+          onChange={handlePointsChange}
+          onNativeGeometrySegmentEdit={handleNativeGeometrySegmentEdit}
+          onNativeGeometryChange={handleNativeGeometryChange}
+          nativeGeometryEdit={loadedDraftRef.current}
+          title={title}
+          insertMode={drawInsertMode}
+          layer={drawLayer}
+          onLayerChange={setDrawLayer}
+          routeMode={routedPayload?.points?.length ? "routed" : "drawn"}
+          currentLocation={currentLocation}
+          focusCurrentLocation={!loadedDraftRef.current && points.length === 0 && routedPoints.length === 0}
+          targetLocation={targetLocation}
+          onTargetLocationHandled={() => setTargetLocation(null)}
+        />
+      </div>
+
+      {message ? <div className="route-draw-toast">{message}</div> : null}
+      {routingError ? <div className="route-draw-error-toast">{routingError}</div> : null}
+      {routingStatus === "routing" ? <div className="route-draw-status-pill">Snapping route...</div> : null}
+
+      <div className="route-draw-bottom-card route-draw-bottom-card-compact">
+        <ElevationMiniStrip points={routedPoints.length >= 2 ? routedPoints : points} />
+        <div className="route-draw-stats route-draw-stats-compact">
+          <span><b>{formatRouteDistanceLabel(metrics.distance_km)}</b><small>Distance</small></span>
+          <span><b>{Math.round(metrics.elevation_gain_m || 0)} m+</b><small>Elevation</small></span>
+          <span><b>{points.length}</b><small>Points</small></span>
         </div>
-      </section>
-
-
-      {/* Map style picker removed: map style is selected automatically per sport. */}
-
-      {routingError && points.length < 2 ? <section className="route-draw-routing-error">{routingError}</section> : null}
-
-      {routedPoints.length ? (
-        <section className="route-draw-routing-status">
-          
-        </section>
-      ) : null}
+      </div>
 
       {showElevationPanel ? (
-        <section className="route-elevation-panel-expanded" aria-label="Elevation profile">
-          <div className="route-elevation-panel-header">
-            <span>△</span>
-            <strong>Elevation profile</strong>
-            <button type="button" onClick={() => setShowElevationPanel(false)} aria-label="Close elevation profile">⌃</button>
+        <section className="route-draw-panel route-draw-panel-bottom">
+          <button type="button" onClick={() => setShowElevationPanel(false)} className="route-panel-close">×</button>
+          <h3>Elevation profile</h3>
+          <ElevationMiniStrip points={routedPoints.length >= 2 ? routedPoints : points} />
+          <div className="route-draw-panel-grid">
+            <span><b>{Math.round(metrics.elevation_gain_m || 0)} m+</b><small>Gain</small></span>
+            <span><b>{Math.round(metrics.elevation_loss_m || 0)} m-</b><small>Loss</small></span>
+            <span><b>{Math.round(metrics.max_elevation_m || 0)} m</b><small>Max</small></span>
           </div>
-          <ElevationMiniStrip points={activeRoutePayload} />
         </section>
       ) : null}
 
       {showQualityPanel ? (
-        <RouteQualityPanel
-          payload={routedPayload || activeRoutePayload}
-          sportId={sportId}
-          onClose={() => setShowQualityPanel(false)}
-        />
+        <RouteQualityPanel payload={routedPayload || activeRoutePayload} sportId={sportId} onClose={() => setShowQualityPanel(false)} />
       ) : null}
-
-
 
       {showPointPanel ? (
-        <section className="route-draw-point-panel">
-          <div>
-            <strong>Route points</strong>
-            <button type="button" onClick={() => setShowPointPanel(false)}>×</button>
-          </div>
-
-          {points.length ? (
-            points.map((point, index) => (
-              <button key={`${point.lat}-${point.lon}-${index}`} type="button" onClick={() => removePoint(index)}>
+        <section className="route-draw-panel route-draw-panel-points">
+          <button type="button" onClick={() => setShowPointPanel(false)} className="route-panel-close">×</button>
+          <h3>Route points</h3>
+          <div className="route-point-list">
+            {points.map((point, index) => (
+              <div key={`${point.lat}-${point.lon}-${index}`}>
                 <span>{index + 1}</span>
-                <small>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</small>
-                <b>Remove</b>
-              </button>
-            ))
-          ) : (
-            <p>Tap on the map to add your first point.</p>
-          )}
+                <p>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</p>
+                <button type="button" onClick={() => removePoint(index)}>Remove</button>
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
-
-      <section className="route-draw-tip">
-        Tap map to add points · tap route line to shape · drag points to reshape
-      </section>
-
-
-      <section className="route-editor-control-layer" aria-label="Route editor controls">
-
-        <div className="route-editor-left-rail route-editor-left-rail-labeled route-editor-left-rail-compact" aria-label="Route tools">
-          <button type="button" onClick={useCurrentLocation} aria-label="Current Location">
-            <b>⌖</b><span>Current<br />Location</span>
-          </button>
-          <button type="button" onClick={() => setSearchOpen((value) => !value)} className={searchOpen ? "active" : ""} aria-label="Search">
-            <b>⌕</b><span>Search</span>
-          </button>
-          <button type="button" onClick={closeLoop} disabled={points.length < 3} aria-label="Loop">
-            <b>◌</b><span>Loop</span>
-          </button>
-          <button type="button" onClick={undoPoint} disabled={!points.length} aria-label="Undo">
-            <b>↶</b><span>Undo</span>
-          </button>
-          <button type="button" onClick={clearRoute} disabled={!points.length} aria-label="Clear">
-            <b className="route-tool-danger">⌫</b><span>Clear</span>
-          </button>
-          <button type="button" onClick={() => setShowQualityPanel((value) => !value)} className={showQualityPanel ? "active" : ""} disabled={!routeQuality} aria-label="Route quality">
-            <b>◎</b><span>Quality</span>
-          </button>
-          <button type="button" onClick={() => setShowElevationPanel((value) => !value)} className={showElevationPanel ? "active" : ""} aria-label="Elevation profile">
-            <b>△</b><span>Elevation</span>
-          </button>
-        </div>
-
-
-</section>
-
-      {message ? <section className="route-draw-toast">{message}</section> : null}
     </main>
   );
 }
