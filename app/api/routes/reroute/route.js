@@ -328,6 +328,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 
     const data = await response.json();
 
+console.log("ORS extras debug:", JSON.stringify(data?.features?.[0]?.properties?.extras, null, 2));
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
       .map((feature) => scoreOrsCandidate({ feature, points, sportId, profile, preference }))
@@ -374,7 +375,7 @@ function getOpenRouteServiceApiKey() {
 }
 
 
-async function collectOrsCandidates({ points, sportId }) {
+async function collectOrsCandidates({ points, sportId, routingMode = "quality" }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) {
     throw new Error("OpenRouteService API key is missing.");
@@ -384,6 +385,20 @@ async function collectOrsCandidates({ points, sportId }) {
   const preferences = getRoutingPreferences(sportId);
   const candidates = [];
   const errors = [];
+
+
+  if (routingMode === "live") {
+    const profile = (getProviderProfiles(sportId) || [])[0];
+    const preference = (getRoutingPreferences(sportId) || [])[0];
+    const base = ORS_ROUTING_BASES[0];
+    if (!profile || !preference || !base) return [];
+    try {
+      const url = orsProviderUrl(base, profile);
+      return await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
+    } catch (error) {
+      throw error;
+    }
+  }
 
   for (const profile of profiles) {
     for (const preference of preferences) {
@@ -421,6 +436,7 @@ export async function POST(request) {
 
   const points = normalizePoints(body?.points);
   const sportId = body?.sport_id || body?.sportId || "running";
+  const routingMode = body?.mode || "quality";
 
   if (points.length < 2) {
     return NextResponse.json({ ok: false, error: "At least two points are required." }, { status: 400 });
@@ -434,7 +450,7 @@ export async function POST(request) {
   let candidates = [];
 
   try {
-    candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId });
+    candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId, routingMode });
   } catch (error) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
