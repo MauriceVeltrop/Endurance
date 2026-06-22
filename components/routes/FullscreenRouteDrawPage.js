@@ -273,44 +273,6 @@ function nearestGeometryIndex(target, geometry) {
   return bestIndex;
 }
 
-function mergeLocalSegmentGeometry(existingGeometry, previousControlPoints, nextControlPoints, insertAt, segmentGeometry) {
-  const existing = normalizeRoutePoints(existingGeometry);
-  const previous = normalizeRoutePoints(previousControlPoints);
-  const next = normalizeRoutePoints(nextControlPoints);
-  const segment = normalizeRoutePoints(segmentGeometry);
-
-  if (!next.length) return [];
-
-  const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
-  const previousPoint = previous[safeInsertAt - 1] || next[safeInsertAt - 1];
-  const nextPoint = previous[safeInsertAt] || next[safeInsertAt + 1];
-  const promotedPoint = next[safeInsertAt];
-  const replacement = segment.length >= 2
-    ? segment
-    : [previousPoint, promotedPoint, nextPoint].filter(Boolean);
-
-  if (existing.length < 2 || !previousPoint || !nextPoint) {
-    return next;
-  }
-
-  let startIndex = nearestGeometryIndex(previousPoint, existing);
-  let endIndex = nearestGeometryIndex(nextPoint, existing);
-
-  if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) {
-    return next;
-  }
-
-  if (startIndex > endIndex) {
-    [startIndex, endIndex] = [endIndex, startIndex];
-  }
-
-  const before = existing.slice(0, startIndex);
-  const after = existing.slice(endIndex + 1);
-  const merged = [...before, ...replacement, ...after];
-
-  return compactRoutePoints(merged, 900);
-}
-
 function routePayloadFromGeometry(points, waypoints, source = "local-segment-reroute") {
   const geometry = compactRoutePoints(points);
   const metrics = calculateRouteMetrics(geometry);
@@ -572,8 +534,6 @@ export default function FullscreenRouteDrawPage() {
   const currentLocationRequestedRef = useRef(false);
   const draftSavedMessageTimerRef = useRef(null);
   const routeStartLookupRef = useRef("");
-  const routingAbortRef = useRef(null);
-  const routingRequestIdRef = useRef(0);
   const segmentCacheRef = useRef(new Map());
   const segmentSyncIdRef = useRef(0);
   const suppressNextSegmentSyncRef = useRef(false);
@@ -864,6 +824,8 @@ export default function FullscreenRouteDrawPage() {
   }
 
   async function syncRouteSegments(controlPoints, { silent = true } = {}) {
+    // Single routing path for drawing/editing: controlpoints are split into A→B segments.
+    // Never send the full A→B→C route to /api/routes/reroute; that endpoint is segment-first.
     const controls = compactControlPoints(controlPoints);
 
     if (controls.length < 2) {
@@ -950,76 +912,6 @@ export default function FullscreenRouteDrawPage() {
     }
   }
 
-  async function rerouteLocalSegment({ previousControlPoints, nextControlPoints, insertAt }) {
-    const previous = normalizeRoutePoints(previousControlPoints);
-    const next = compactControlPoints(nextControlPoints);
-    const safeInsertAt = Math.max(1, Math.min(Number(insertAt) || next.length - 1, next.length - 1));
-
-    const segmentControlPoints = [
-      next[safeInsertAt - 1],
-      next[safeInsertAt],
-      next[safeInsertAt + 1],
-    ].filter(Boolean);
-
-    if (segmentControlPoints.length < 2) return;
-
-    try {
-      setRoutingStatus("routing");
-
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points: segmentControlPoints,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Local rerouting failed.");
-      }
-
-      const routed = data.route_points || data;
-      const segmentGeometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
-
-      if (segmentGeometry.length < 2) {
-        throw new Error("No local segment geometry returned.");
-      }
-
-      const baseGeometry = routedPoints.length ? routedPoints : previous;
-      const mergedGeometry = mergeLocalSegmentGeometry(
-        baseGeometry,
-        previous,
-        next,
-        safeInsertAt,
-        segmentGeometry
-      );
-
-      setRoutedPayload({
-        ...routePayloadFromGeometry(mergedGeometry, next, data?.routed === false ? "manual-local-segment" : "local-segment-reroute"),
-        profile: routed?.profile || null,
-        provider_url: routed?.provider_url || null,
-        route_quality: routed?.route_quality || data?.route_quality || null,
-        routed_at: new Date().toISOString(),
-      });
-      setRoutingStatus("done");
-      setRoutingError("");
-      if (data?.routed === false) {
-        setMessage(data?.warning || "No snapped path found. Using the drawn line.");
-      }
-    } catch (error) {
-      console.error("Local segment rerouting failed", error);
-      setRoutingStatus("error");
-      setRoutingError(error?.message || "Local rerouting failed.");
-      setMessage(error?.message || "Could not snap this segment to roads/paths.");
-    }
-  }
-
-
   async function handleNativeGeometrySegmentEdit(segmentEdit) {
     const geometry = normalizeRoutePoints(routedPayload?.points?.length ? routedPayload.points : activeRoutePayload);
     const geometryIndex = Number(segmentEdit?.geometryIndex);
@@ -1095,12 +987,11 @@ export default function FullscreenRouteDrawPage() {
       setMessage("Rerouting route with the new shaping point...");
 
       loadedDraftRef.current = false;
-      suppressNextSegmentSyncRef.current = true;
       setRouteSegments([]);
       setPointsPayload(makeRoutePointPayload(nextControls, "gpx-promoted-control-points"));
       setRoutedPayload(null);
 
-      await rerouteControlPoints(nextControls, { silent: false });
+      await syncRouteSegments(nextControls, { silent: false });
 
       setNativeEditStatus("edited");
     } catch (error) {
@@ -1207,108 +1098,6 @@ export default function FullscreenRouteDrawPage() {
     }
 
     requestCurrentLocation({ focus: true, quiet: false, allowRouteFocus: true });
-  }
-
-
-  async function rerouteControlPoints(controlPoints, { silent = false } = {}) {
-    const control = compactControlPoints(controlPoints);
-    if (control.length < 2) return;
-
-    const requestId = routingRequestIdRef.current + 1;
-    routingRequestIdRef.current = requestId;
-
-    if (routingAbortRef.current) {
-      routingAbortRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    routingAbortRef.current = controller;
-
-    try {
-      setRoutingStatus("routing");
-
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points: control,
-        }),
-        signal: controller.signal,
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (requestId !== routingRequestIdRef.current) return;
-
-      if (!response.ok || !data?.ok) {
-        const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
-        setRoutedPayload({
-          ...fallbackPayload,
-          routed: false,
-          fallback_reason: data?.error || "Routing failed.",
-          routed_at: new Date().toISOString(),
-        });
-        setRoutingStatus("done");
-        setRoutingError("");
-        if (!silent) setMessage("Could not snap this route. Keeping the drawn control line as fallback.");
-        return;
-      }
-
-      const routed = data.route_points || data;
-
-      if (!routed?.points?.length && !Array.isArray(routed)) {
-        throw new Error("No routed geometry returned.");
-      }
-
-      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
-      const routePayload = geometry.length >= 2
-        ? {
-            ...routePayloadFromGeometry(geometry, control, data?.routed === false ? "drawn-fallback" : "full-controlpoint-reroute"),
-            profile: routed?.profile || data?.profile || null,
-            provider_url: routed?.provider_url || data?.provider_url || null,
-            route_quality: routed?.route_quality || data?.route_quality || null,
-            routed: data?.routed !== false,
-            fallback_reason: data?.routed === false ? data?.warning || "Routing provider used fallback geometry." : null,
-            routed_at: new Date().toISOString(),
-          }
-        : routed;
-
-      setRoutedPayload(routePayload);
-      setRoutingStatus("done");
-      setRoutingError("");
-
-      if (data?.routed === false) {
-        if (!silent) setMessage(data?.warning || "No snapped path found. Using the drawn line.");
-      } else if (!silent) {
-        setMessage("");
-      }
-    } catch (error) {
-      if (error?.name === "AbortError") return;
-      if (requestId !== routingRequestIdRef.current) return;
-
-      console.error("Routing failed", error);
-      const fallbackPayload = routePayloadFromGeometry(control, control, "drawn-fallback");
-      setRoutedPayload({
-        ...fallbackPayload,
-        routed: false,
-        fallback_reason: error?.message || "Routing failed.",
-        routed_at: new Date().toISOString(),
-      });
-      setRoutingStatus("done");
-      setRoutingError("");
-      if (!silent) setMessage("Could not snap this route. Keeping the drawn control line as fallback.");
-    } finally {
-      if (requestId === routingRequestIdRef.current && routingAbortRef.current === controller) {
-        routingAbortRef.current = null;
-      }
-    }
-  }
-
-  async function rerouteRoute({ silent = false } = {}) {
-    return rerouteControlPoints(points, { silent });
   }
 
 
@@ -1661,11 +1450,11 @@ export default function FullscreenRouteDrawPage() {
     }
 
     const timeout = window.setTimeout(() => {
-      rerouteControlPoints(points, { silent: true });
+      syncRouteSegments(points, { silent: true });
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [routeSignature, sportId, routedPayload?.points?.length]);
+  }, [routeSignature, sportId]);
 
 
   useEffect(() => {
