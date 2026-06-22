@@ -27,6 +27,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const [mapFocusTarget, setMapFocusTarget] = useState(null);
 
   const segmentCacheRef = useRef(new Map());
+  const segmentInflightRef = useRef(new Map());
   const syncIdRef = useRef(0);
 
   const routeSignature = useMemo(
@@ -39,52 +40,79 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     [routePayload]
   );
 
-  const routeSegment = useCallback(async (segment, syncId) => {
+  const pendingSegment = useCallback((segment) => {
     const cached = segmentCacheRef.current.get(segment.key);
     if (cached?.geometry?.length >= 2) return cached;
 
-    try {
-      const response = await fetch("/api/routes/reroute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sport_id: sportId,
-          points: segment.control,
-        }),
-      });
+    return {
+      ...segment,
+      geometry: segment.control,
+      points: segment.control,
+      routed: false,
+      status: segmentInflightRef.current.has(segment.key) ? "routing" : "pending",
+    };
+  }, []);
 
-      const data = await response.json().catch(() => ({}));
-      if (syncId !== syncIdRef.current) return null;
+  const buildSegmentState = useCallback((definitions, routedOverrides = new Map()) => definitions.map((segment) => {
+    const override = routedOverrides.get(segment.key);
+    if (override?.geometry?.length >= 2) return override;
+    return pendingSegment(segment);
+  }), [pendingSegment]);
 
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Segment routing failed.");
+  const routeSegment = useCallback((segment) => {
+    const cached = segmentCacheRef.current.get(segment.key);
+    if (cached?.geometry?.length >= 2) return Promise.resolve(cached);
+
+    const inflight = segmentInflightRef.current.get(segment.key);
+    if (inflight) return inflight;
+
+    const promise = (async () => {
+      try {
+        const response = await fetch("/api/routes/reroute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sport_id: sportId,
+            points: segment.control,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error || "Segment routing failed.");
+        }
+
+        const routed = data.route_points || data;
+        const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
+        if (geometry.length < 2) throw new Error("No segment geometry returned.");
+
+        const nextSegment = {
+          ...segment,
+          geometry,
+          points: geometry,
+          routed: data?.routed !== false,
+          status: data?.routed === false ? "failed" : "snapped",
+          profile: routed?.provider_profile || routed?.profile || data?.profile || null,
+          preference: routed?.preference || data?.preference || null,
+          quality: routed?.quality || routed?.route_quality || data?.route_quality || null,
+          fallback_reason: data?.routed === false ? routed?.fallback_reason || data?.warning || "Fallback geometry used." : null,
+          updated_at: new Date().toISOString(),
+        };
+
+        segmentCacheRef.current.set(segment.key, nextSegment);
+        return nextSegment;
+      } catch (error) {
+        const failed = fallbackSegment(segment, error?.message || "Segment routing failed.");
+        segmentCacheRef.current.set(segment.key, failed);
+        return failed;
+      } finally {
+        segmentInflightRef.current.delete(segment.key);
       }
+    })();
 
-      const routed = data.route_points || data;
-      const geometry = normalizeRoutePoints(routed?.points?.length ? routed.points : routed);
-      if (geometry.length < 2) throw new Error("No segment geometry returned.");
-
-      const nextSegment = {
-        ...segment,
-        geometry,
-        points: geometry,
-        routed: data?.routed !== false,
-        status: data?.routed === false ? "failed" : "snapped",
-        profile: routed?.provider_profile || routed?.profile || data?.profile || null,
-        preference: routed?.preference || data?.preference || null,
-        quality: routed?.quality || routed?.route_quality || data?.route_quality || null,
-        fallback_reason: data?.routed === false ? routed?.fallback_reason || data?.warning || "Fallback geometry used." : null,
-        updated_at: new Date().toISOString(),
-      };
-
-      segmentCacheRef.current.set(segment.key, nextSegment);
-      return nextSegment;
-    } catch (error) {
-      if (syncId !== syncIdRef.current) return null;
-      const failed = fallbackSegment(segment, error?.message || "Segment routing failed.");
-      segmentCacheRef.current.set(segment.key, failed);
-      return failed;
-    }
+    segmentInflightRef.current.set(segment.key, promise);
+    return promise;
   }, [sportId]);
 
   const syncSegments = useCallback(async (nextControlPoints = controlPoints, { silent = true } = {}) => {
@@ -103,17 +131,12 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     syncIdRef.current = syncId;
 
     const definitions = getControlSegments(controls, sportId);
-    const provisional = definitions.map((segment) => segmentCacheRef.current.get(segment.key) || {
-      ...segment,
-      geometry: segment.control,
-      points: segment.control,
-      routed: false,
-      status: "pending",
-    });
+    const routedOverrides = new Map();
+    let latestSegments = buildSegmentState(definitions, routedOverrides);
 
-    setRouteSegments(provisional);
+    setRouteSegments(latestSegments);
     setRoutePayload(buildRoutePayloadFromSegments({
-      segments: provisional,
+      segments: latestSegments,
       controlPoints: controls,
       source: "segmented-routing-provisional",
       sportId,
@@ -121,54 +144,68 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     setRoutingStatus("routing");
     setRoutingError("");
 
-    const routed = [];
+    const pending = definitions.filter((segment) => !segmentCacheRef.current.get(segment.key)?.geometry?.length);
 
-    for (const segment of definitions) {
-      if (syncId !== syncIdRef.current) return null;
-
-      const result = await routeSegment(segment, syncId);
-      if (!result) return null;
-      routed.push(result);
-
-      const pending = definitions.slice(routed.length).map((remaining) => segmentCacheRef.current.get(remaining.key) || {
-        ...remaining,
-        geometry: remaining.control,
-        points: remaining.control,
-        routed: false,
-        status: "pending",
-      });
-
-      const progressSegments = [...routed, ...pending];
-      setRouteSegments(progressSegments);
-      setRoutePayload(buildRoutePayloadFromSegments({
-        segments: progressSegments,
+    if (!pending.length) {
+      const payload = buildRoutePayloadFromSegments({
+        segments: latestSegments,
         controlPoints: controls,
-        source: "segmented-routing-progress",
+        source: "segmented-routing-cache",
         sportId,
-      }));
+      });
+      setRoutePayload(payload);
+      setRoutingStatus("done");
+      return payload;
     }
 
+    const maxConcurrent = Math.min(3, pending.length);
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < pending.length) {
+        const segment = pending[cursor];
+        cursor += 1;
+
+        const result = await routeSegment(segment);
+        if (!result) continue;
+        if (syncId !== syncIdRef.current) return;
+
+        routedOverrides.set(segment.key, result);
+        latestSegments = buildSegmentState(definitions, routedOverrides);
+
+        setRouteSegments(latestSegments);
+        setRoutePayload(buildRoutePayloadFromSegments({
+          segments: latestSegments,
+          controlPoints: controls,
+          source: "segmented-routing-progress",
+          sportId,
+        }));
+      }
+    }
+
+    await Promise.all(Array.from({ length: maxConcurrent }, () => worker()));
     if (syncId !== syncIdRef.current) return null;
 
+    latestSegments = buildSegmentState(definitions, routedOverrides);
     const payload = buildRoutePayloadFromSegments({
-      segments: routed,
+      segments: latestSegments,
       controlPoints: controls,
       source: "segmented-routing",
       sportId,
     });
 
-    setRouteSegments(routed);
+    setRouteSegments(latestSegments);
     setRoutePayload(payload);
     setRoutingStatus("done");
     setRoutingError("");
 
-    const failedCount = routed.filter((segment) => segment.routed === false).length;
+    const failedCount = latestSegments.filter((segment) => segment.routed === false && segment.status === "failed").length;
     if (!silent && failedCount) {
       setRoutingError(`${failedCount} segment${failedCount === 1 ? "" : "s"} could not snap and use a drawn fallback.`);
     }
 
     return payload;
-  }, [controlPoints, routeSegment, sportId]);
+  }, [buildSegmentState, controlPoints, routeSegment, sportId]);
 
   const setRouteControlPoints = useCallback((nextPoints) => {
     setControlPoints(normalizeRoutePoints(nextPoints));
