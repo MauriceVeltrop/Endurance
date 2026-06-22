@@ -30,6 +30,8 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const segmentInflightRef = useRef(new Map());
   const segmentAbortRef = useRef(new Map());
   const syncIdRef = useRef(0);
+  const progressTimerRef = useRef(null);
+  const latestProgressRef = useRef(null);
 
   const routeSignature = useMemo(
     () => controlPoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join("|"),
@@ -133,12 +135,40 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     return promise;
   }, [sportId]);
 
+
+
+  const flushProgressUpdate = useCallback(() => {
+    const snapshot = latestProgressRef.current;
+    latestProgressRef.current = null;
+    if (!snapshot) return;
+
+    setRouteSegments(snapshot.segments);
+    setRoutePayload(buildRoutePayloadFromSegments({
+      segments: snapshot.segments,
+      controlPoints: snapshot.controls,
+      source: snapshot.source || "segmented-routing-progress-throttled",
+      sportId,
+    }));
+  }, [sportId]);
+
+  const scheduleProgressUpdate = useCallback((segments, controls) => {
+    latestProgressRef.current = { segments, controls };
+    if (progressTimerRef.current) return;
+
+    progressTimerRef.current = window.setTimeout(() => {
+      progressTimerRef.current = null;
+      flushProgressUpdate();
+    }, 220);
+  }, [flushProgressUpdate]);
+
   const syncSegments = useCallback(async (nextControlPoints = controlPoints, { silent = true } = {}) => {
     const controls = normalizeRoutePoints(nextControlPoints);
 
     if (controls.length < 2) {
       syncIdRef.current += 1;
       abortObsoleteSegments(new Set());
+      if (progressTimerRef.current) { window.clearTimeout(progressTimerRef.current); progressTimerRef.current = null; }
+      latestProgressRef.current = null;
       setRouteSegments([]);
       setRoutePayload(null);
       setRoutingStatus("idle");
@@ -164,7 +194,9 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     setRoutingStatus("routing");
     setRoutingError("");
 
-    const pending = definitions.filter((segment) => !segmentCacheRef.current.get(segment.key)?.geometry?.length);
+    const pending = definitions
+      .filter((segment) => !segmentCacheRef.current.get(segment.key)?.geometry?.length)
+      .sort((a, b) => Number(b.index || 0) - Number(a.index || 0));
 
     if (!pending.length) {
       const payload = buildRoutePayloadFromSegments({
@@ -178,7 +210,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
       return payload;
     }
 
-    const maxConcurrent = Math.min(3, pending.length);
+    const maxConcurrent = Math.min(2, pending.length);
     let cursor = 0;
 
     async function worker() {
@@ -193,18 +225,15 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
         routedOverrides.set(segment.key, result);
         latestSegments = buildSegmentState(definitions, routedOverrides);
 
-        setRouteSegments(latestSegments);
-        setRoutePayload(buildRoutePayloadFromSegments({
-          segments: latestSegments,
-          controlPoints: controls,
-          source: "segmented-routing-progress",
-          sportId,
-        }));
+        scheduleProgressUpdate(latestSegments, controls);
       }
     }
 
     await Promise.all(Array.from({ length: maxConcurrent }, () => worker()));
     if (syncId !== syncIdRef.current) return null;
+
+    if (progressTimerRef.current) { window.clearTimeout(progressTimerRef.current); progressTimerRef.current = null; }
+    latestProgressRef.current = null;
 
     latestSegments = buildSegmentState(definitions, routedOverrides);
     const payload = buildRoutePayloadFromSegments({
@@ -225,7 +254,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     }
 
     return payload;
-  }, [abortObsoleteSegments, buildSegmentState, controlPoints, routeSegment, sportId]);
+  }, [abortObsoleteSegments, buildSegmentState, controlPoints, routeSegment, scheduleProgressUpdate, sportId]);
 
   const setRouteControlPoints = useCallback((nextPoints) => {
     const controls = normalizeRoutePoints(nextPoints);
@@ -307,7 +336,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
     const timeout = window.setTimeout(() => {
       syncSegments(controlPoints, { silent: true });
-    }, 300);
+    }, 700);
 
     return () => window.clearTimeout(timeout);
   }, [routeSignature, syncSegments]);
