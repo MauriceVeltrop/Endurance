@@ -275,13 +275,16 @@ function nearestGeometryIndex(target, geometry) {
 
 function routePayloadFromGeometry(points, waypoints, source = "local-segment-reroute") {
   const geometry = compactRoutePoints(points);
+  const controls = normalizeRoutePoints(waypoints);
+  const safeControlPoints = controls.length >= 2 ? controls : compactControlPoints(points);
   const metrics = calculateRouteMetrics(geometry);
 
   return {
     source,
     points: geometry,
-    waypoints: compactControlPoints(waypoints),
-    control_points: compactControlPoints(waypoints),
+    waypoints: safeControlPoints,
+    control_points: safeControlPoints,
+    control_point_count: safeControlPoints.length,
     geometry_points: geometry,
     point_count: geometry.length,
     distance_km: metrics.distance_km || null,
@@ -941,8 +944,14 @@ export default function FullscreenRouteDrawPage() {
       safePayload.waypoints = nativeControls;
       safePayload.control_points = nativeControls;
     } else {
-      safePayload.waypoints = compactControlPoints(points);
-      safePayload.control_points = compactControlPoints(points);
+      // Draw routes: keep the engine control points as the source of truth.
+      // Do not resample/derive control points from geometry when saving or reopening.
+      const drawControlPoints = normalizeRoutePoints(controlPoints);
+      const safeControlPoints = drawControlPoints.length >= 2 ? drawControlPoints : compactControlPoints(points);
+      safePayload.waypoints = safeControlPoints;
+      safePayload.control_points = safeControlPoints;
+      safePayload.control_point_count = safeControlPoints.length;
+      safePayload.edit_mode = "draw";
     }
     safePayload.geometry_points = safePayload.points;
     const readableStartLocation = cleanHumanLocationLabel(routeStartLocation);
