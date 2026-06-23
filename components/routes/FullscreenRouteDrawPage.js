@@ -622,6 +622,8 @@ export default function FullscreenRouteDrawPage() {
       try {
         const params = new URLSearchParams(window.location.search);
         const editDraft = safeReadEditDraft();
+        const routeEditMode = params.get("editMode") || editDraft?.edit_mode || editDraft?.route_points?.edit_mode || "";
+        const shouldOpenNativeGeometryEdit = routeEditMode !== "draw" && Boolean(editDraft?.route_points?.points?.length);
         const draftRouteId = editDraft?.edit_route_id || params.get("routeId") || "";
         const draftReturnTo = editDraft?.return_to || params.get("returnTo") || (draftRouteId ? `/routes/${draftRouteId}` : "");
         setEditRouteId(draftRouteId);
@@ -644,7 +646,9 @@ export default function FullscreenRouteDrawPage() {
         setTitle(editDraft?.title || defaultTitle(initialSport));
 
         if (editDraft?.route_points?.points?.length) {
-          loadedDraftRef.current = true;
+          // Reopen Map Editor for normal drawn routes must stay in draw mode.
+          // Native geometry edit mode is only for GPX/existing geometry editing.
+          loadedDraftRef.current = shouldOpenNativeGeometryEdit;
           const geometry = normalizeRoutePoints(editDraft.route_points.points);
           const savedWaypoints = normalizeRoutePoints(editDraft.route_points.waypoints || editDraft.route_points.control_points);
           const editableControlPoints = savedWaypoints.length >= 2
@@ -655,7 +659,8 @@ export default function FullscreenRouteDrawPage() {
             controlPoints: editableControlPoints,
             routePayload: {
               ...editDraft.route_points,
-              source: editDraft.route_points?.source || "gpx-native-edit",
+              source: editDraft.route_points?.source || (shouldOpenNativeGeometryEdit ? "gpx-native-edit" : "draw-reopen-map-editor"),
+              edit_mode: shouldOpenNativeGeometryEdit ? "native" : "draw",
               points: geometry,
               waypoints: editableControlPoints,
               control_points: editableControlPoints,
