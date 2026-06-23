@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import AppHeader from "../../../components/AppHeader";
 import BottomNav from "../../../components/BottomNav";
 import OSMRouteMap from "../../../components/OSMRouteMap";
-import RouteDrawMap from "../../../components/routes/RouteDrawMap";
 import { supabase } from "../../../lib/supabase";
 import { getSportLabel } from "../../../lib/trainingHelpers";
 import { parseGpxText, formatRoutePointSummary } from "../../../lib/gpxUtils";
@@ -218,25 +217,19 @@ function normalizeRoutePoints(routePoints) {
 }
 
 
-function routeMetricsFromPoints(points) {
-  return calculateRouteMetrics(points);
-}
-
-function makeRoutePointPayload(points, source = "draw") {
-  const normalized = normalizeRoutePoints(points);
-  const metrics = calculateRouteMetrics(normalized);
-  return { points: normalized, point_count: normalized.length, distance_km: metrics.distance_km || null, elevation_gain_m: metrics.elevation_gain_m || 0, elevation_loss_m: metrics.elevation_loss_m || 0, max_elevation_m: metrics.max_elevation_m || null, drawn_at: new Date().toISOString(), source };
-}
 
 function buildEditableRouteDraft(form, profileId) {
   const routePoints = form?.route_points || null;
   const points = normalizeRoutePoints(routePoints);
-  const waypoints = normalizeRoutePoints(routePoints?.waypoints).length >= 2
-    ? normalizeRoutePoints(routePoints?.waypoints)
+  const storedWaypoints = normalizeRoutePoints(routePoints?.waypoints || routePoints?.control_points);
+  const waypoints = storedWaypoints.length >= 2
+    ? storedWaypoints
     : points.length >= 2
-      ? [points[0], points[points.length - 1]]
-      : points;
+      ? points
+      : [];
   const metrics = calculateRouteMetrics(points);
+  const distanceKm = form?.distance_km || routePoints?.distance_km || metrics.distance_km || "";
+  const elevationGainM = form?.elevation_gain_m || routePoints?.elevation_gain_m || metrics.elevation_gain_m || "";
 
   return {
     sport_id: form?.sport_id || "",
@@ -244,17 +237,25 @@ function buildEditableRouteDraft(form, profileId) {
     title_is_auto: form?.title_is_auto !== false,
     description: form?.description || "",
     method: "draw",
-    distance_km: form?.distance_km || metrics.distance_km || "",
-    elevation_gain_m: form?.elevation_gain_m || metrics.elevation_gain_m || "",
+    edit_mode: "draw",
+    distance_km: distanceKm,
+    elevation_gain_m: elevationGainM,
     route_points: {
       ...(routePoints && typeof routePoints === "object" && !Array.isArray(routePoints) ? routePoints : {}),
-      source: routePoints?.source || "draw-edit",
+      source: routePoints?.source || "draw-fullscreen-reopen",
+      edit_mode: "draw",
       points,
+      geometry_points: points,
       waypoints,
+      control_points: waypoints,
       point_count: points.length,
       waypoint_count: waypoints.length,
-      distance_km: form?.distance_km || routePoints?.distance_km || metrics.distance_km || null,
-      elevation_gain_m: form?.elevation_gain_m || routePoints?.elevation_gain_m || metrics.elevation_gain_m || 0,
+      distance_km: distanceKm || null,
+      elevation_gain_m: elevationGainM || 0,
+      start_location: routePoints?.start_location || routePoints?.start_location_label || "",
+      start_location_label: routePoints?.start_location_label || routePoints?.start_location || "",
+      finish_location: routePoints?.finish_location || routePoints?.finish_location_label || "",
+      finish_location_label: routePoints?.finish_location_label || routePoints?.finish_location || "",
       edited_at: new Date().toISOString(),
     },
     created_by: profileId || null,
@@ -371,12 +372,6 @@ export default function NewRoutePage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [previewMapReady, setPreviewMapReady] = useState(false);
   const [form, setForm] = useState(initialForm());
-  const [drawInsertMode, setDrawInsertMode] = useState(false);
-  const [drawLayer, setDrawLayer] = useState("light");
-  const [autoReroute, setAutoReroute] = useState(false);
-  const [routingStatus, setRoutingStatus] = useState("idle");
-  const [routingError, setRoutingError] = useState("");
-  const [routedPayload, setRoutedPayload] = useState(null);
 
   const selectedSport = useMemo(
     () => availableSports.find((sport) => sport.id === form.sport_id) || null,
@@ -469,13 +464,23 @@ export default function NewRoutePage() {
             ? rawRoutePoints.points
             : [];
 
+        const routeMetrics = calculateRouteMetrics(safePoints);
         const safePayload = {
+          ...(rawRoutePoints && typeof rawRoutePoints === "object" && !Array.isArray(rawRoutePoints) ? rawRoutePoints : {}),
           source: rawRoutePoints?.source || "draw-fullscreen",
           profile: rawRoutePoints?.profile || null,
           provider_url: rawRoutePoints?.provider_url || null,
           waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+          control_points: Array.isArray(rawRoutePoints?.control_points) ? rawRoutePoints.control_points : Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
           points: safePoints,
+          geometry_points: safePoints,
           point_count: safePoints.length,
+          distance_km: rawRoutePoints?.distance_km || draft.distance_km || routeMetrics.distance_km || null,
+          elevation_gain_m: rawRoutePoints?.elevation_gain_m || draft.elevation_gain_m || routeMetrics.elevation_gain_m || 0,
+          start_location: rawRoutePoints?.start_location || rawRoutePoints?.start_location_label || "",
+          start_location_label: rawRoutePoints?.start_location_label || rawRoutePoints?.start_location || "",
+          finish_location: rawRoutePoints?.finish_location || rawRoutePoints?.finish_location_label || "",
+          finish_location_label: rawRoutePoints?.finish_location_label || rawRoutePoints?.finish_location || "",
           routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
         };
 
@@ -485,11 +490,11 @@ export default function NewRoutePage() {
 
         const sportId = draft.sport_id || "running";
         const startPlaceName = await resolveStartPlaceName(safePayload);
-        const shouldAutoName = isGenericRouteTitle(draft.title, sportId);
+        const shouldAutoName = draft.title_is_auto !== false || isGenericRouteTitle(draft.title, sportId);
         const title = shouldAutoName
           ? buildAutomaticRouteTitle({
               startLocation: startPlaceName,
-              distanceKm: draft.distance_km || safePayload.distance_km,
+              distanceKm: safePayload.distance_km || draft.distance_km,
               sportId,
             })
           : draft.title;
@@ -503,12 +508,11 @@ export default function NewRoutePage() {
           title: title || current.title || `${getSportLabel(draft.sport_id)} Route`,
           title_is_auto: shouldAutoName,
           description: draft.description || current.description,
-          distance_km: draft.distance_km ? String(draft.distance_km) : current.distance_km,
-          elevation_gain_m: draft.elevation_gain_m ? String(draft.elevation_gain_m) : current.elevation_gain_m,
+          distance_km: safePayload.distance_km ? String(safePayload.distance_km) : current.distance_km,
+          elevation_gain_m: safePayload.elevation_gain_m ? String(safePayload.elevation_gain_m) : current.elevation_gain_m,
           route_points: safePayload,
         }));
 
-        setRoutedPayload(safePayload);
         setCurrentStep(3);
         setMessage(startPlaceName ? "Drawn route loaded. Start location resolved." : "Drawn route loaded. Review the details and save your route.");
         window.sessionStorage.removeItem("endurance_route_draft");
@@ -685,97 +689,6 @@ export default function NewRoutePage() {
   }
 
 
-  function handleDrawPointsChange(points) {
-    const metrics = routeMetricsFromPoints(points);
-    const payload = makeRoutePointPayload(points, "draw");
-    setRoutedPayload(null);
-    setRoutingError("");
-    setForm((current) => ({ ...current, method: "draw", route_points: payload, distance_km: metrics.distance_km ? String(metrics.distance_km) : current.distance_km, elevation_gain_m: metrics.elevation_gain_m ? String(metrics.elevation_gain_m) : current.elevation_gain_m }));
-  }
-
-  function undoDrawPoint() {
-    const currentPoints = normalizeRoutePoints(form.route_points);
-    handleDrawPointsChange(currentPoints.slice(0, -1));
-  }
-
-  function clearDrawPoints() {
-    setForm((current) => ({
-      ...current,
-      route_points: null,
-      distance_km: "",
-      elevation_gain_m: "",
-    }));
-  }
-
-  function closeDrawLoop() {
-    const currentPoints = normalizeRoutePoints(form.route_points);
-
-    if (currentPoints.length < 3) {
-      setMessage("Add at least three points before closing the loop.");
-      return;
-    }
-
-    const first = currentPoints[0];
-    const last = currentPoints[currentPoints.length - 1];
-
-    if (first.lat === last.lat && first.lon === last.lon) {
-      setMessage("This route is already closed.");
-      return;
-    }
-
-    handleDrawPointsChange([...currentPoints, { ...first }]);
-  }
-
-  function useCurrentLocationAsDrawStart() {
-    if (!navigator.geolocation) {
-      setMessage("Geolocation is not available on this device.");
-      return;
-    }
-
-    setMessage("Getting your current location...");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const point = {
-          lat: Number(position.coords.latitude.toFixed(6)),
-          lon: Number(position.coords.longitude.toFixed(6)),
-          ele: null,
-        };
-
-        const currentPoints = normalizeRoutePoints(form.route_points);
-        handleDrawPointsChange(currentPoints.length ? [point, ...currentPoints] : [point]);
-        setMessage("Current location added as start point.");
-      },
-      () => {
-        setMessage("Could not access current location. Check browser permission.");
-      },
-      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
-    );
-  }
-
-  function removeDrawPoint(indexToRemove) {
-    const currentPoints = normalizeRoutePoints(form.route_points);
-    handleDrawPointsChange(currentPoints.filter((_, index) => index !== indexToRemove));
-  }
-
-
-  async function rerouteDrawnRoute() {
-    const waypoints = normalizeRoutePoints(form.route_points);
-    if (waypoints.length < 2) { setMessage("Add at least two points before rerouting."); return null; }
-    setRoutingStatus("routing"); setRoutingError("");
-    try {
-      const response = await fetch("/api/routes/reroute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport_id: form.sport_id, points: waypoints }) });
-      const data = await response.json();
-      if (!response.ok || !data?.ok) throw new Error(data?.error || "Could not reroute.");
-      setRoutedPayload(data.route_points);
-      setForm((current) => ({ ...current, route_points: { ...data.route_points, waypoints }, distance_km: data.distance_km ? String(data.distance_km) : current.distance_km, elevation_gain_m: data.elevation_gain_m ? String(data.elevation_gain_m) : current.elevation_gain_m }));
-      setRoutingStatus("done"); setMessage(`Route snapped to roads/paths using ${data.profile}.`); return data;
-    } catch (error) {
-      console.error("Reroute failed", error); setRoutingStatus("error"); setRoutingError(error?.message || "Reroute failed. Straight line route remains available."); setMessage(error?.message || "Reroute failed. Straight line route remains available."); return null;
-    }
-  }
-
-
 
   async function saveRoute() {
     if (!canSave) {
@@ -868,18 +781,6 @@ export default function NewRoutePage() {
   }
 
 
-  useEffect(() => {
-    if (!autoReroute || form.method !== "draw") return;
-
-    const points = normalizeRoutePoints(form.route_points);
-    if (points.length < 2) return;
-
-    const timeout = window.setTimeout(() => {
-      rerouteDrawnRoute();
-    }, 900);
-
-    return () => window.clearTimeout(timeout);
-  }, [autoReroute, form.method, form.route_points?.point_count]);
 
   return (
     <main className="endurance-page create-route-v2-page route-step-page">
@@ -1092,7 +993,7 @@ export default function NewRoutePage() {
                             console.error("Could not prepare route edit draft", error);
                           }
 
-                          router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}&editDraft=1`);
+                          router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}&editDraft=1&editMode=draw`);
                         }}
                       >
                         Reopen map editor
