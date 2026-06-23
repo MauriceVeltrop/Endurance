@@ -32,6 +32,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const syncIdRef = useRef(0);
   const progressTimerRef = useRef(null);
   const latestProgressRef = useRef(null);
+  const skipNextAutoSyncRef = useRef(false);
 
   const routeSignature = useMemo(
     () => controlPoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join("|"),
@@ -263,6 +264,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   const setRouteControlPoints = useCallback((nextPoints) => {
     const controls = normalizeRoutePoints(nextPoints);
+    skipNextAutoSyncRef.current = false;
     syncIdRef.current += 1;
     clearProgressQueue();
     setControlPoints(controls);
@@ -294,6 +296,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const loadRoute = useCallback(({ controlPoints: nextControlPoints = [], routePayload: nextRoutePayload = null, status = "done" } = {}) => {
     const controls = normalizeRoutePoints(nextControlPoints);
     syncIdRef.current += 1;
+    skipNextAutoSyncRef.current = Boolean(nextRoutePayload?.points?.length);
     abortObsoleteSegments(new Set());
     clearProgressQueue();
     setControlPoints(controls);
@@ -305,6 +308,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   const setRoutePayloadDirect = useCallback((nextRoutePayload, { status = "done" } = {}) => {
     syncIdRef.current += 1;
+    skipNextAutoSyncRef.current = false;
     abortObsoleteSegments(new Set());
     clearProgressQueue();
     setRoutePayload(nextRoutePayload);
@@ -314,6 +318,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   const resetRoute = useCallback(() => {
     syncIdRef.current += 1;
+    skipNextAutoSyncRef.current = false;
     abortObsoleteSegments(new Set());
     clearProgressQueue();
     setControlPoints([]);
@@ -347,6 +352,11 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   useEffect(() => {
     if (controlPoints.length < 2) return;
+
+    if (skipNextAutoSyncRef.current) {
+      skipNextAutoSyncRef.current = false;
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       syncSegments(controlPoints, { silent: true });
