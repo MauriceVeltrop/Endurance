@@ -557,7 +557,7 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function handlePointsChange(nextPoints, meta = {}) {
-    const safeControlPoints = compactControlPoints(nextPoints);
+    const safeControlPoints = normalizeRoutePoints(nextPoints);
     loadedDraftRef.current = false;
     setEngineControlPoints(safeControlPoints);
   }
