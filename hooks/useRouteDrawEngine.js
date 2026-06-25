@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeRoutePoints } from "../lib/routeMetrics";
-import { buildRoutePayloadFromSegments, getControlSegments } from "../lib/routes/routeSegmentEngine";
+import { buildRoutePayloadFromSegments, getControlSegments, hydrateSegmentsFromRoutePayload } from "../lib/routes/routeSegmentEngine";
 
 const SEGMENT_TIMEOUT_MS = 7500;
 const AUTO_SYNC_DELAY_MS = 350;
@@ -88,6 +88,15 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
       } catch (_) {}
       segmentAbortRef.current.delete(key);
       segmentInflightRef.current.delete(key);
+    });
+  }, []);
+
+  const primeSegmentCache = useCallback((segments = [], { replace = false } = {}) => {
+    if (replace) segmentCacheRef.current = new Map();
+
+    (Array.isArray(segments) ? segments : []).forEach((segment) => {
+      if (!segment?.key || !segment?.geometry?.length) return;
+      segmentCacheRef.current.set(segment.key, segment);
     });
   }, []);
 
@@ -320,19 +329,48 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
   const loadRoute = useCallback(({ controlPoints: nextControlPoints = [], routePayload: nextRoutePayload = null, status = "done" } = {}) => {
     const controls = normalizeRoutePoints(nextControlPoints);
+    const hydratedSegments = hydrateSegmentsFromRoutePayload({
+      routePayload: nextRoutePayload,
+      controlPoints: controls,
+      sportId,
+    });
+    const rebuiltPayload = hydratedSegments.length
+      ? buildRoutePayloadFromSegments({
+          segments: hydratedSegments,
+          controlPoints: controls,
+          source: nextRoutePayload?.source || "hydrated-route",
+          sportId,
+        })
+      : null;
+    const originalGeometry = normalizeRoutePoints(nextRoutePayload?.points?.length ? nextRoutePayload.points : nextRoutePayload?.geometry_points);
+    const hydratedPayload = rebuiltPayload
+      ? {
+          ...(nextRoutePayload && typeof nextRoutePayload === "object" && !Array.isArray(nextRoutePayload) ? nextRoutePayload : {}),
+          ...rebuiltPayload,
+          source: nextRoutePayload?.source || rebuiltPayload.source,
+          points: originalGeometry.length >= 2 ? originalGeometry : rebuiltPayload.points,
+          geometry_points: originalGeometry.length >= 2 ? originalGeometry : rebuiltPayload.points,
+          waypoints: controls,
+          control_points: controls,
+          route_segments: rebuiltPayload.route_segments,
+          rehydrated: true,
+        }
+      : nextRoutePayload;
+
     syncIdRef.current += 1;
     abortObsoleteSegments(new Set());
     clearProgressQueue();
+    primeSegmentCache(hydratedSegments, { replace: true });
     setControlPoints(controls);
-    setRouteSegments([]);
-    setRoutePayload(nextRoutePayload);
+    setRouteSegments(hydratedSegments);
+    setRoutePayload(hydratedPayload);
     setRoutingStatus(status);
     setRoutingError("");
 
-    hydratedRouteSignatureRef.current = nextRoutePayload?.points?.length
+    hydratedRouteSignatureRef.current = hydratedPayload?.points?.length
       ? controlSignature(controls)
       : "";
-  }, [abortObsoleteSegments, clearProgressQueue]);
+  }, [abortObsoleteSegments, clearProgressQueue, primeSegmentCache, sportId]);
 
   const setRoutePayloadDirect = useCallback((nextRoutePayload, { status = "done" } = {}) => {
     syncIdRef.current += 1;
