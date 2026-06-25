@@ -557,6 +557,9 @@ export default function FullscreenRouteDrawPage() {
   }
 
   function handlePointsChange(nextPoints, meta = {}) {
+    // In normal draw mode, nextPoints already are the user's real control points.
+    // Do not compact/sample them here; that would change the route structure and
+    // can make the editor rebuild the route from a distorted control-point set.
     const safeControlPoints = normalizeRoutePoints(nextPoints);
     loadedDraftRef.current = false;
     setEngineControlPoints(safeControlPoints);
