@@ -562,7 +562,7 @@ export default function FullscreenRouteDrawPage() {
     // can make the editor rebuild the route from a distorted control-point set.
     const safeControlPoints = normalizeRoutePoints(nextPoints);
     loadedDraftRef.current = false;
-    setEngineControlPoints(safeControlPoints);
+    setEngineControlPoints(safeControlPoints, meta);
   }
 
   function undoPoint() {
