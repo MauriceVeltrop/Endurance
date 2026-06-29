@@ -469,7 +469,7 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
 
 
 
-async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null }) {
+async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null, routingMode = "quality" }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
@@ -489,21 +489,20 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      // Running: ask ORS for more alternatives and avoid features that are
-      // clearly poor for running. ORS cannot avoid surfaces directly here, so
-      // we broaden candidate generation and let Endurance's surface/waytype
-      // scoring choose the most paved option.
       payload.options = {
         avoid_features: ["ferries", "steps"],
       };
 
-      payload.alternative_routes = {
-        target_count: 4,
-        weight_factor: Math.max(1.2, maxDetour),
-        // High share_factor keeps useful urban variants visible instead of
-        // forcing wildly different forest/trail alternatives.
-        share_factor: 0.9,
-      };
+      // Live drawing must stay fast and must return a snapped segment quickly.
+      // Heavy candidate search, paved-corridor exploration and debugging belong
+      // to quality mode, not to every click/drag while drawing.
+      if (routingMode !== "live") {
+        payload.alternative_routes = {
+          target_count: 4,
+          weight_factor: Math.max(1.2, maxDetour),
+          share_factor: 0.9,
+        };
+      }
     } else {
       payload.alternative_routes = {
         target_count: 2,
@@ -601,7 +600,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
     // multi-profile exploration belongs in quality/debug mode, not in every drag
     // or click during drawing.
     const liveProfiles = isRunning ? ["foot-walking"] : profiles.slice(0, 1);
-    const livePreferences = isRunning ? preferences : preferences.slice(0, 1);
+    const livePreferences = isRunning ? ["recommended"] : preferences.slice(0, 1);
     const liveBases = ORS_ROUTING_BASES.slice(0, 1);
 
     for (const profile of liveProfiles) {
@@ -610,7 +609,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
           if (!profile || !preference || !base) continue;
           try {
             const url = orsProviderUrl(base, profile);
-            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
+            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routingMode });
             candidates.push(...result);
           } catch (error) {
             errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -631,7 +630,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
       for (const base of ORS_ROUTING_BASES) {
         try {
           const url = orsProviderUrl(base, profile);
-          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
+          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routingMode });
           candidates.push(...result);
         } catch (error) {
           errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -679,6 +678,7 @@ async function collectRunningPavedCorridorCandidates({ segment, sportId, routing
           directDistanceMeters,
           routeKind: "paved-corridor-via",
           viaIndex,
+          routingMode,
         });
         candidates.push(...result);
       } catch (_) {
@@ -734,7 +734,7 @@ export async function POST(request) {
     });
   }
 
-  if (normalizedSportId === "running" && shouldTryRunningPavedCorridor(candidates)) {
+  if (routingMode !== "live" && normalizedSportId === "running" && shouldTryRunningPavedCorridor(candidates)) {
     const corridorCandidates = await collectRunningPavedCorridorCandidates({
       segment,
       sportId: normalizedSportId,
