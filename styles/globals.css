@@ -14074,3 +14074,57 @@ button.route-sport-card > * {
     font-size: 0.78rem;
   }
 }
+
+.route-quality-candidates {
+  margin-top: 1rem;
+  display: grid;
+  gap: .75rem;
+}
+
+.route-quality-candidates > small,
+.route-quality-candidate-segment > p span {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(230, 255, 0, .92);
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.route-quality-candidate-segment,
+.route-quality-candidate {
+  border: 1px solid rgba(255, 255, 255, .09);
+  background: rgba(255, 255, 255, .055);
+  border-radius: 16px;
+  padding: .75rem;
+}
+
+.route-quality-candidate-segment {
+  display: grid;
+  gap: .55rem;
+}
+
+.route-quality-candidate-segment > p,
+.route-quality-candidate p {
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  margin: 0;
+}
+
+.route-quality-candidate-segment b,
+.route-quality-candidate b {
+  color: #fff;
+  white-space: nowrap;
+}
+
+.route-quality-candidate {
+  display: grid;
+  gap: .25rem;
+  font-size: .82rem;
+}
+
+.route-quality-candidate em {
+  color: rgba(255, 255, 255, .72);
+  font-style: normal;
+  line-height: 1.25;
+}
