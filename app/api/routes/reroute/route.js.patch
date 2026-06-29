@@ -1,0 +1,12 @@
+// PATCH FOR app/api/routes/reroute/route.js
+
+// Always expose candidate_summary during live routing.
+// Add temporary debug output in returned quality object:
+//
+// quality: {
+//   ...
+//   candidate_summary,
+//   debug_candidates: candidateSummary,
+// }
+//
+// This patch is for analysis only.
