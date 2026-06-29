@@ -513,10 +513,10 @@ export default function RouteDrawMap({
           const currentControlPoints = pointsRef.current;
           if (!currentControlPoints || currentControlPoints.length < 2) return;
 
-          const newShapePoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
-          if (!newShapePoint) return;
-
           if (nativeGeometryEdit) {
+            const newShapePoint = closestRoutePoint(event.latlng, mapRef.current, linePoints);
+            if (!newShapePoint) return;
+
             const geometryIndex = findClosestRouteIndex(event.latlng, mapRef.current, linePoints);
             const bounds = pickNativeSegmentBounds(linePoints, geometryIndex);
 
@@ -537,11 +537,16 @@ export default function RouteDrawMap({
           }
 
           const insertAt = insertionIndexForRouteClick(event.latlng, mapRef.current, currentControlPoints);
+          const clickShapePoint = {
+            lat: Number(event.latlng.lat.toFixed(6)),
+            lon: Number(event.latlng.lng.toFixed(6)),
+            ele: null,
+          };
 
           setDynamicHandle({
-            ...newShapePoint,
+            ...clickShapePoint,
             insertAt,
-            geometryIndex: newShapePoint.geometryIndex,
+            geometryIndex: findClosestRouteIndex(event.latlng, mapRef.current, linePoints),
             createdAt: Date.now(),
           });
         });
