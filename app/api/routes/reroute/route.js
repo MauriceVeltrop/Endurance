@@ -231,13 +231,27 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
       + Number(surfacePercent.paved || 0)
       + Number(surfacePercent.paving_stones || 0)
       + Number(surfacePercent.sett || 0);
-    const safeWayPercent =
+    const footwayPercent =
       Number(wayPercent.footway || 0)
-      + Number(wayPercent.pedestrian || 0)
-      + Number(wayPercent.cycleway || 0)
-      + Number(wayPercent.living_street || 0)
+      + Number(wayPercent.pedestrian || 0);
+    const cyclingWalkablePercent = Number(wayPercent.cycleway || 0);
+    const quietStreetPercent =
+      Number(wayPercent.living_street || 0)
       + Number(wayPercent.residential || 0)
       + Number(wayPercent.street || 0);
+    const safeWayPercent = footwayPercent + cyclingWalkablePercent + quietStreetPercent;
+
+    // Running rule: within the allowed detour window, paved/asphalt/footway
+    // infrastructure is the primary preference. This value is used for both
+    // scoring and sorting, so a slightly longer paved/footway option beats a
+    // shorter dirt/track/path option up to maxDetourFactor.
+    const pavedFootwayPriority = Math.min(
+      100,
+      pavedPercent
+        + footwayPercent * 1.05
+        + cyclingWalkablePercent * 0.75
+        + quietStreetPercent * 0.35
+    );
 
     suitable = Math.min(100, Math.max(surfacePositive + pavedPercent * 0.35, wayRunnable));
     acceptable = Math.min(100, wayAcceptable + surfaceAcceptable);
@@ -352,6 +366,18 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
       + Number(wayPercent.residential || 0)
       + Number(wayPercent.street || 0)
     ) : null,
+    paved_footway_priority: normalizeSportId(sportId) === "running" ? Math.round(
+      (Number(surfacePercent.asphalt || 0)
+        + Number(surfacePercent.concrete || 0)
+        + Number(surfacePercent.paved || 0)
+        + Number(surfacePercent.paving_stones || 0)
+        + Number(surfacePercent.sett || 0))
+      + (Number(wayPercent.footway || 0) + Number(wayPercent.pedestrian || 0)) * 1.05
+      + Number(wayPercent.cycleway || 0) * 0.75
+      + (Number(wayPercent.living_street || 0)
+        + Number(wayPercent.residential || 0)
+        + Number(wayPercent.street || 0)) * 0.35
+    ) : null,
   };
 }
 
@@ -386,8 +412,8 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       };
 
       payload.alternative_routes = {
-        target_count: 4,
-        weight_factor: Math.max(1.2, maxDetour),
+        target_count: 3,
+        weight_factor: Math.max(1.15, maxDetour),
         // High share_factor keeps useful urban variants visible instead of
         // forcing wildly different forest/trail alternatives.
         share_factor: 0.9,
@@ -480,10 +506,11 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality" }
   if (routingMode === "live") {
     const isRunning = normalizeSportId(sportId) === "running";
 
-    // Running live routing needs candidate choice. A single walking response can
-    // prefer a short trail/track link, so collect walking plus paved-infrastructure
-    // fallback profiles and both preferences from the primary base.
-    const liveProfiles = isRunning ? profiles : profiles.slice(0, 1);
+    // Live drawing must stay fast. Running still gets candidate choice, but only
+    // through the primary walking profile and the configured preferences. Heavy
+    // multi-profile exploration belongs in quality/debug mode, not in every drag
+    // or click during drawing.
+    const liveProfiles = isRunning ? ["foot-walking"] : profiles.slice(0, 1);
     const livePreferences = isRunning ? preferences : preferences.slice(0, 1);
     const liveBases = ORS_ROUTING_BASES.slice(0, 1);
 
@@ -580,31 +607,32 @@ export async function POST(request) {
       const aWithinDetour = Number(a.detour || 99) <= maxDetour;
       const bWithinDetour = Number(b.detour || 99) <= maxDetour;
 
-      // Detour is a boundary, not the primary sort key. Inside the allowed
-      // detour window, choose the best Running quality even when it is longer.
-      if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
+      // Hard Running rule:
+      // within maxDetourFactor, asphalt/paved/footway infrastructure wins before
+      // short dirt/track/path shortcuts. Detour is a boundary, not a preference.
+      const aPriority = Number(a.paved_footway_priority || 0);
+      const bPriority = Number(b.paved_footway_priority || 0);
+      if (Math.abs(bPriority - aPriority) >= 8) return bPriority - aPriority;
+
+      const aPaved = Number(a.paved_percent || 0);
+      const bPaved = Number(b.paved_percent || 0);
+      if (Math.abs(bPaved - aPaved) >= 10) return bPaved - aPaved;
 
       const aCleanEnough = Number(a.bad_surface_percent || 0) <= 18 && Number(a.track_path_percent || 0) <= 35;
       const bCleanEnough = Number(b.bad_surface_percent || 0) <= 18 && Number(b.track_path_percent || 0) <= 35;
       if (aCleanEnough !== bCleanEnough) return aCleanEnough ? -1 : 1;
 
       const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
-      if (Math.abs(badSurfaceDiff) >= 8) return badSurfaceDiff;
+      if (Math.abs(badSurfaceDiff) >= 6) return badSurfaceDiff;
 
       const trackPathDiff = Number(a.track_path_percent || 0) - Number(b.track_path_percent || 0);
-      if (Math.abs(trackPathDiff) >= 12) return trackPathDiff;
+      if (Math.abs(trackPathDiff) >= 8) return trackPathDiff;
 
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) >= 2) return scoreDiff;
 
-      const pavedDiff = Number(b.paved_percent || 0) - Number(a.paved_percent || 0);
-      if (Math.abs(pavedDiff) >= 10) return pavedDiff;
-
       const suitableDiff = Number(b.suitable_percent || 0) - Number(a.suitable_percent || 0);
       if (Math.abs(suitableDiff) >= 3) return suitableDiff;
-
-      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
-      if (Math.abs(unsuitableDiff) >= 2) return unsuitableDiff;
 
       const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
       if (Math.abs(unknownDiff) >= 10) return unknownDiff;
@@ -633,6 +661,7 @@ export async function POST(request) {
     track_path_percent: candidate.track_path_percent,
     paved_percent: candidate.paved_percent,
     safe_way_percent: candidate.safe_way_percent,
+    paved_footway_priority: candidate.paved_footway_priority,
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
   }));
@@ -670,6 +699,7 @@ export async function POST(request) {
         track_path_percent: best.track_path_percent,
         paved_percent: best.paved_percent,
         safe_way_percent: best.safe_way_percent,
+        paved_footway_priority: best.paved_footway_priority,
         detour: Number(best.detour.toFixed(2)),
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
