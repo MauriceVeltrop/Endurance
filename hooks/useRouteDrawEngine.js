@@ -42,6 +42,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const progressTimerRef = useRef(null);
   const latestProgressRef = useRef(null);
   const hydratedRouteSignatureRef = useRef("");
+  const staleSegmentDisplayRef = useRef(new Map());
 
   const routeSignature = useMemo(
     () => controlSignature(controlPoints),
@@ -56,6 +57,20 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
   const pendingSegment = useCallback((segment) => {
     const cached = segmentCacheRef.current.get(segment.key);
     if (cached?.geometry?.length >= 2) return cached;
+
+    const staleDisplay = staleSegmentDisplayRef.current.get(segment.key);
+    const staleGeometry = normalizeRoutePoints(staleDisplay?.geometry || staleDisplay?.points);
+    if (staleGeometry.length >= 2) {
+      return {
+        ...segment,
+        geometry: staleGeometry,
+        points: staleGeometry,
+        routed: false,
+        status: segmentInflightRef.current.has(segment.key) ? "routing" : "pending",
+        stale: true,
+        stale_source: staleDisplay?.source || "previous-segment-display",
+      };
+    }
 
     return {
       ...segment,
@@ -262,6 +277,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
         if (!result) continue;
         if (syncId !== syncIdRef.current) return;
 
+        staleSegmentDisplayRef.current.delete(segment.key);
         routedOverrides.set(segment.key, result);
         latestSegments = buildSegmentState(definitions, routedOverrides);
 
@@ -295,7 +311,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     return payload;
   }, [abortObsoleteSegments, buildSegmentState, clearProgressQueue, controlPoints, routeSegment, scheduleProgressUpdate, sportId]);
 
-  const setRouteControlPoints = useCallback((nextPoints) => {
+  const setRouteControlPoints = useCallback((nextPoints, meta = {}) => {
     const controls = normalizeRoutePoints(nextPoints);
     hydratedRouteSignatureRef.current = "";
     syncIdRef.current += 1;
@@ -305,6 +321,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
     if (controls.length < 2) {
       abortObsoleteSegments(new Set());
+      staleSegmentDisplayRef.current = new Map();
       setRouteSegments([]);
       setRoutePayload(null);
       setRoutingStatus("idle");
@@ -314,6 +331,30 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     const definitions = getControlSegments(controls, sportId);
     const activeKeys = new Set(definitions.map((segment) => segment.key));
     abortObsoleteSegments(activeKeys);
+
+    const staleDisplay = new Map();
+    if (meta?.type === "move_control_point" && Number.isInteger(Number(meta.index))) {
+      const movedIndex = Number(meta.index);
+      [movedIndex - 1, movedIndex].forEach((segmentIndex) => {
+        if (segmentIndex < 0 || segmentIndex >= definitions.length) return;
+        const definition = definitions[segmentIndex];
+        const previousSegment = routeSegments.find((segment) => Number(segment?.index) === segmentIndex) || routeSegments[segmentIndex];
+        const previousGeometry = normalizeRoutePoints(previousSegment?.geometry || previousSegment?.points);
+        if (definition?.key && previousGeometry.length >= 2) {
+          staleDisplay.set(definition.key, {
+            ...definition,
+            geometry: previousGeometry,
+            points: previousGeometry,
+            routed: false,
+            status: "routing",
+            stale: true,
+            source: "previous-segment-display",
+          });
+        }
+      });
+    }
+    staleSegmentDisplayRef.current = staleDisplay;
+
     const provisional = buildSegmentState(definitions);
 
     setRouteSegments(provisional);
@@ -325,7 +366,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     }));
 
     setRoutingStatus("pending");
-  }, [abortObsoleteSegments, buildSegmentState, clearProgressQueue, sportId]);
+  }, [abortObsoleteSegments, buildSegmentState, clearProgressQueue, routeSegments, sportId]);
 
   const loadRoute = useCallback(({ controlPoints: nextControlPoints = [], routePayload: nextRoutePayload = null, status = "done" } = {}) => {
     const controls = normalizeRoutePoints(nextControlPoints);
@@ -360,6 +401,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     syncIdRef.current += 1;
     abortObsoleteSegments(new Set());
     clearProgressQueue();
+    staleSegmentDisplayRef.current = new Map();
     primeSegmentCache(hydratedSegments, { replace: true });
     setControlPoints(controls);
     setRouteSegments(hydratedSegments);
@@ -377,6 +419,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     hydratedRouteSignatureRef.current = "";
     abortObsoleteSegments(new Set());
     clearProgressQueue();
+    staleSegmentDisplayRef.current = new Map();
     setRoutePayload(nextRoutePayload);
     setRoutingStatus(status);
     setRoutingError("");
@@ -387,6 +430,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     hydratedRouteSignatureRef.current = "";
     abortObsoleteSegments(new Set());
     clearProgressQueue();
+    staleSegmentDisplayRef.current = new Map();
     setControlPoints([]);
     setRouteSegments([]);
     setRoutePayload(null);
