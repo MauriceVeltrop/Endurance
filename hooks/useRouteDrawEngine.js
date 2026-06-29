@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeRoutePoints } from "../lib/routeMetrics";
 import { buildRoutePayloadFromSegments, getControlSegments, hydrateSegmentsFromRoutePayload } from "../lib/routes/routeSegmentEngine";
 
-const SEGMENT_TIMEOUT_MS = 7500;
+const SEGMENT_TIMEOUT_MS = 12000;
 const AUTO_SYNC_DELAY_MS = 350;
 
 function fallbackSegment(segment, reason = "Routing provider could not snap this segment.") {
