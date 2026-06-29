@@ -243,12 +243,14 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
     acceptable = Math.min(100, wayAcceptable + surfaceAcceptable);
     unsuitable = Math.min(100, Math.max(surfaceNegative, wayUnsuitable, badSurfacePercent + trackPathPercent * 0.45));
 
-    // Raw surface unknown is only trusted when the route is mainly on clear
-    // running infrastructure. Unknown forest tracks/paths should lose from a
-    // longer paved alternative.
+    // Unknown surface is interpreted together with waytype. In NL/BE many
+    // residential streets, footways and cycleways simply lack surface tags,
+    // so unknown+safe infrastructure should not be punished like dirt.
+    // Unknown+track/path remains suspicious for Running.
     const knownRunnableWay = Math.min(100, waySuitable + wayAcceptable);
-    const trustedUnknownCredit = safeWayPercent >= 65 ? knownRunnableWay * 0.7 : knownRunnableWay * 0.35;
-    unknown = Math.max(0, Math.min(100, surfaceUnknown + wayUnknown - trustedUnknownCredit));
+    const likelyPavedUnknown = Math.min(surfaceUnknown, safeWayPercent);
+    const suspiciousUnknown = Math.max(0, surfaceUnknown - likelyPavedUnknown) + wayUnknown + trackPathPercent * 0.35;
+    unknown = Math.max(0, Math.min(100, suspiciousUnknown - knownRunnableWay * 0.15));
 
     const detourPenalty = detour <= maxDetour
       ? Math.max(0, (detour - 1) * 7)
@@ -261,9 +263,10 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
       + grassSandPercent * 3.8
       + unpavedPercent * 3.2
       + gravelPercent * 2.0;
-    const badWaytypePenalty = trackPathPercent * 2.6 + Number(wayPercent.state_road || 0) * 2.0;
-    const unknownPenalty = unknown * (safeWayPercent >= 65 ? 0.45 : 0.9);
-    const pavedBonus = Math.min(28, pavedPercent * 0.55 + safeWayPercent * 0.18);
+    const badWaytypePenalty = trackPathPercent * 2.9 + Number(wayPercent.state_road || 0) * 2.2;
+    const roadHeavyPenalty = Math.max(0, Number(wayPercent.road || 0) - 25) * 1.4;
+    const unknownPenalty = unknown * (safeWayPercent >= 55 ? 0.35 : 0.85);
+    const pavedBonus = Math.min(34, pavedPercent * 0.65 + safeWayPercent * 0.22);
 
     score = Math.max(
       0,
@@ -277,17 +280,21 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
           - unknownPenalty
           - badRunningSurfacePenalty
           - badWaytypePenalty
+          - roadHeavyPenalty
           - detourPenalty
       )
     );
 
     // Hard caps: these candidates may still be used if ORS offers nothing else,
     // but they must never outrank a genuinely paved running alternative.
-    if (badSurfacePercent > 28 || trackPathPercent > 45 || (unknown > 55 && safeWayPercent < 55)) {
+    if (badSurfacePercent > 28 || trackPathPercent > 42 || (unknown > 55 && safeWayPercent < 45)) {
       score = Math.min(score, 18);
     }
     if (mudPercent + dirtPercent + groundPercent + grassSandPercent > 18) {
       score = Math.min(score, 8);
+    }
+    if (trackPathPercent > 55) {
+      score = Math.min(score, 6);
     }
     if (pavedPercent >= 55 && safeWayPercent >= 55 && badSurfacePercent <= 10) {
       score = Math.min(100, score + 12);
@@ -370,16 +377,20 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      // Use the sport detour setting in the ORS alternative-route search itself.
-      // Previously Running always used a hard-coded 1.6 here, so changing
-      // maxDetourFactor in sportRouteProfiles only affected the quality score,
-      // not the alternatives ORS was allowed to return.
+      // Running: ask ORS for more alternatives and avoid features that are
+      // clearly poor for running. ORS cannot avoid surfaces directly here, so
+      // we broaden candidate generation and let Endurance's surface/waytype
+      // scoring choose the most paved option.
+      payload.options = {
+        avoid_features: ["ferries", "steps"],
+      };
+
       payload.alternative_routes = {
-        target_count: 3,
-        weight_factor: Math.max(1.05, maxDetour),
-        // Allow ORS to return alternatives that partially overlap. A too-strict
-        // share factor can hide obvious paved alternatives in dense urban areas.
-        share_factor: 0.8,
+        target_count: 4,
+        weight_factor: Math.max(1.2, maxDetour),
+        // High share_factor keeps useful urban variants visible instead of
+        // forcing wildly different forest/trail alternatives.
+        share_factor: 0.9,
       };
     } else {
       payload.alternative_routes = {
@@ -469,12 +480,12 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality" }
   if (routingMode === "live") {
     const isRunning = normalizeSportId(sportId) === "running";
 
-    // Running live routing still needs candidate choice. A single ORS response can
-    // prefer a short trail/track link, so collect both Running preferences from
-    // the primary base and then let the scorer choose. Non-running stays cheaper.
-    const liveProfiles = isRunning ? profiles.slice(0, 1) : profiles.slice(0, 1);
+    // Running live routing needs candidate choice. A single walking response can
+    // prefer a short trail/track link, so collect walking plus paved-infrastructure
+    // fallback profiles and both preferences from the primary base.
+    const liveProfiles = isRunning ? profiles : profiles.slice(0, 1);
     const livePreferences = isRunning ? preferences : preferences.slice(0, 1);
-    const liveBases = ORS_ROUTING_BASES.slice(0, isRunning ? 2 : 1);
+    const liveBases = ORS_ROUTING_BASES.slice(0, 1);
 
     for (const profile of liveProfiles) {
       for (const preference of livePreferences) {
