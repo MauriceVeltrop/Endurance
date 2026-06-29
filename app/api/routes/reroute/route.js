@@ -207,34 +207,53 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
   if (normalizeSportId(sportId) === "running") {
     const maxDetour = Number(config.maxDetourFactor || 1.4);
 
-    // Running uses waytype as the primary signal.
-    // Surface is only a correction layer when ORS/OSM actually knows the surface.
-    const wayRunnable = Math.min(100, waySuitable + wayAcceptable * 0.65);
-    const surfacePositive = Math.min(100, surfaceSuitable + surfaceAcceptable * 0.5);
+    // Running prefers paved, predictable infrastructure. Waytype is still
+    // important, but known bad surfaces must be able to overrule a generally
+    // runnable waytype. This keeps road-running away from muddy/dirt trail links.
+    const wayRunnable = Math.min(100, waySuitable + wayAcceptable * 0.55);
+    const surfacePositive = Math.min(100, surfaceSuitable + surfaceAcceptable * 0.35);
     const surfaceNegative = surfaceUnsuitable;
+
+    const mudPercent = Number(surfacePercent.mud || 0);
+    const dirtPercent = Number(surfacePercent.dirt || 0);
+    const groundPercent = Number(surfacePercent.ground || 0) + Number(surfacePercent.earth || 0);
+    const grassSandPercent = Number(surfacePercent.grass || 0) + Number(surfacePercent.sand || 0);
+    const unpavedPercent = Number(surfacePercent.unpaved || 0);
+    const gravelPercent = Number(surfacePercent.gravel || 0);
 
     suitable = Math.min(100, Math.max(surfacePositive, wayRunnable));
     acceptable = Math.min(100, wayAcceptable + surfaceAcceptable);
     unsuitable = Math.min(100, Math.max(surfaceNegative, wayUnsuitable));
 
-    // Raw surface unknown is not route unknown when the waytype is known and runnable.
+    // Raw surface unknown is less trusted for Running than for general walking.
+    // If the waytype is known and runnable it still helps, but unknown should not
+    // beat a clearly paved alternative.
     const knownRunnableWay = Math.min(100, waySuitable + wayAcceptable);
-    unknown = Math.max(0, Math.min(100, surfaceUnknown + wayUnknown - knownRunnableWay));
+    unknown = Math.max(0, Math.min(100, surfaceUnknown + wayUnknown - knownRunnableWay * 0.65));
 
     const detourPenalty = detour <= maxDetour
-      ? Math.max(0, (detour - 1) * 14)
-      : 10 + (detour - maxDetour) * 90;
+      ? Math.max(0, (detour - 1) * 10)
+      : 8 + (detour - maxDetour) * 85;
+
+    const badRunningSurfacePenalty =
+      mudPercent * 3.2
+      + dirtPercent * 2.7
+      + groundPercent * 2.2
+      + grassSandPercent * 2.0
+      + unpavedPercent * 1.8
+      + gravelPercent * 1.15;
 
     score = Math.max(
       0,
       Math.min(
         100,
-        35
-          + suitable * 0.85
-          + acceptable * 0.15
-          + surfacePositive * 0.15
-          - unsuitable * 1.25
-          - unknown * 0.25
+        38
+          + suitable * 0.9
+          + acceptable * 0.1
+          + surfacePositive * 0.18
+          - unsuitable * 1.55
+          - unknown * 0.45
+          - badRunningSurfacePenalty
           - detourPenalty
       )
     );
