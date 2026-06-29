@@ -60,6 +60,96 @@ function routeDistanceMeters(points) {
   return total;
 }
 
+
+function destinationPoint(start, bearingDegrees, distanceMeters) {
+  const R = 6371000;
+  const bearing = (Number(bearingDegrees) * Math.PI) / 180;
+  const lat1 = (Number(start.lat) * Math.PI) / 180;
+  const lon1 = (Number(start.lon) * Math.PI) / 180;
+  const angular = Number(distanceMeters) / R;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angular) +
+      Math.cos(lat1) * Math.sin(angular) * Math.cos(bearing)
+  );
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(angular) * Math.cos(lat1),
+    Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2)
+  );
+
+  return {
+    lat: Number(((lat2 * 180) / Math.PI).toFixed(6)),
+    lon: Number((((lon2 * 180) / Math.PI + 540) % 360 - 180).toFixed(6)),
+    ele: null,
+  };
+}
+
+function bearingDegrees(a, b) {
+  const lat1 = (Number(a.lat) * Math.PI) / 180;
+  const lat2 = (Number(b.lat) * Math.PI) / 180;
+  const dLon = ((Number(b.lon) - Number(a.lon)) * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+function midpoint(a, b) {
+  return {
+    lat: (Number(a.lat) + Number(b.lat)) / 2,
+    lon: (Number(a.lon) + Number(b.lon)) / 2,
+    ele: null,
+  };
+}
+
+function runningCandidateIsBad(candidate = {}) {
+  return (
+    Number(candidate.bad_surface_percent || 0) > 18 ||
+    Number(candidate.track_path_percent || 0) > 35 ||
+    Number(candidate.score || 0) < 45
+  );
+}
+
+function runningCandidateIsPavedChoice(candidate = {}) {
+  return (
+    Number(candidate.detour || 99) <= 1.6 &&
+    Number(candidate.paved_footway_priority || 0) >= 55 &&
+    Number(candidate.bad_surface_percent || 0) <= 18 &&
+    Number(candidate.track_path_percent || 0) <= 35
+  );
+}
+
+function shouldTryRunningPavedCorridor(candidates = []) {
+  const runningCandidates = Array.isArray(candidates) ? candidates : [];
+  if (!runningCandidates.length) return true;
+  if (runningCandidates.some(runningCandidateIsPavedChoice)) return false;
+  return runningCandidateIsBad(runningCandidates[0]);
+}
+
+function buildRunningCorridorWaypoints(segment, routingMode = "live") {
+  const start = segment?.[0];
+  const finish = segment?.[1];
+  if (!start || !finish) return [];
+
+  const directMeters = routeDistanceMeters(segment);
+  if (!Number.isFinite(directMeters) || directMeters < 250) return [];
+
+  const mid = midpoint(start, finish);
+  const bearing = bearingDegrees(start, finish);
+  const perpendiculars = [(bearing + 90) % 360, (bearing + 270) % 360];
+  const baseOffset = Math.max(350, Math.min(1300, directMeters * 0.22));
+  const offsets = routingMode === "live" ? [baseOffset] : [baseOffset, Math.min(1800, baseOffset * 1.55)];
+
+  const waypointSets = [];
+  for (const offset of offsets) {
+    for (const perpendicular of perpendiculars) {
+      const via = destinationPoint(mid, perpendicular, offset);
+      waypointSets.push([start, via, finish]);
+    }
+  }
+
+  return waypointSets;
+}
+
 function routeAscentMeters(points) {
   const metrics = calculateRouteMetrics(points);
   return Math.round(Number(metrics.elevation_gain_m || 0));
@@ -144,12 +234,12 @@ function buildOrsExtraBreakdown(extra, labels, geometryPoints = []) {
   return decodeExtraInfo(extra.values, labels, geometryPoints);
 }
 
-function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
+function scoreOrsCandidate({ feature, points, sportId, profile, preference, directDistanceMeters }) {
   const config = getSportRouteProfile(sportId);
   const geometry = toPoints(feature?.geometry?.coordinates);
   const distance = Number(feature?.properties?.summary?.distance || routeDistanceMeters(geometry));
   const duration = Number(feature?.properties?.summary?.duration || 0);
-  const direct = Math.max(1, routeDistanceMeters(points));
+  const direct = Math.max(1, Number(directDistanceMeters) || routeDistanceMeters(points));
   const detour = distance / direct;
 
   const extras = feature?.properties?.extras || {};
@@ -241,10 +331,6 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
       + Number(wayPercent.street || 0);
     const safeWayPercent = footwayPercent + cyclingWalkablePercent + quietStreetPercent;
 
-    // Running rule: within the allowed detour window, paved/asphalt/footway
-    // infrastructure is the primary preference. This value is used for both
-    // scoring and sorting, so a slightly longer paved/footway option beats a
-    // shorter dirt/track/path option up to maxDetourFactor.
     const pavedFootwayPriority = Math.min(
       100,
       pavedPercent
@@ -383,7 +469,7 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference }) {
 
 
 
-async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile }) {
+async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
@@ -412,8 +498,8 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       };
 
       payload.alternative_routes = {
-        target_count: 3,
-        weight_factor: Math.max(1.15, maxDetour),
+        target_count: 4,
+        weight_factor: Math.max(1.2, maxDetour),
         // High share_factor keeps useful urban variants visible instead of
         // forcing wildly different forest/trail alternatives.
         share_factor: 0.9,
@@ -447,7 +533,11 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
-      .map((feature) => scoreOrsCandidate({ feature, points, sportId, profile, preference }))
+      .map((feature) => ({
+        ...scoreOrsCandidate({ feature, points, sportId, profile, preference, directDistanceMeters }),
+        route_kind: routeKind,
+        via_index: viaIndex,
+      }))
       .filter((candidate) => candidate.points.length >= 2);
   } finally {
     clearTimeout(timeout);
@@ -491,7 +581,7 @@ function getOpenRouteServiceApiKey() {
 }
 
 
-async function collectOrsCandidates({ points, sportId, routingMode = "quality" }) {
+async function collectOrsCandidates({ points, sportId, routingMode = "quality", directDistanceMeters }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) {
     throw new Error("OpenRouteService API key is missing.");
@@ -520,7 +610,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality" }
           if (!profile || !preference || !base) continue;
           try {
             const url = orsProviderUrl(base, profile);
-            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
+            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
             candidates.push(...result);
           } catch (error) {
             errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -541,7 +631,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality" }
       for (const base of ORS_ROUTING_BASES) {
         try {
           const url = orsProviderUrl(base, profile);
-          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
+          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
           candidates.push(...result);
         } catch (error) {
           errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -556,6 +646,46 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality" }
 
   if (!candidates.length && errors.length) {
     throw new Error(errors.slice(0, 2).join(" | "));
+  }
+
+  return candidates;
+}
+
+
+async function collectRunningPavedCorridorCandidates({ segment, sportId, routingMode = "live", directDistanceMeters }) {
+  const apiKey = getOpenRouteServiceApiKey();
+  if (!apiKey) return [];
+
+  const base = ORS_ROUTING_BASES[0];
+  if (!base) return [];
+
+  const waypointSets = buildRunningCorridorWaypoints(segment, routingMode);
+  const preferences = routingMode === "live" ? ["recommended"] : ["recommended", "shortest"];
+  const candidates = [];
+  let viaIndex = 0;
+
+  for (const viaPoints of waypointSets) {
+    viaIndex += 1;
+    for (const preference of preferences) {
+      try {
+        const url = orsProviderUrl(base, "foot-walking");
+        const result = await fetchOrsCandidate({
+          url,
+          apiKey,
+          points: viaPoints,
+          preference,
+          sportId,
+          profile: "foot-walking",
+          directDistanceMeters,
+          routeKind: "paved-corridor-via",
+          viaIndex,
+        });
+        candidates.push(...result);
+      } catch (_) {
+        // Corridor fallback is opportunistic. If one via-point fails, keep the
+        // direct ORS candidates rather than blocking live drawing.
+      }
+    }
   }
 
   return candidates;
@@ -580,13 +710,19 @@ export async function POST(request) {
 
   // This endpoint is intentionally segment-first. Long routes must be sent as A→B calls.
   const segment = [points[0], points[points.length - 1]];
+  const originalDirectDistanceMeters = routeDistanceMeters(segment);
   const normalizedSportId = normalizeSportId(sportId);
   const provider = "ors";
   const errors = [];
   let candidates = [];
 
   try {
-    candidates = await collectOrsCandidates({ points: segment, sportId: normalizedSportId, routingMode });
+    candidates = await collectOrsCandidates({
+      points: segment,
+      sportId: normalizedSportId,
+      routingMode,
+      directDistanceMeters: originalDirectDistanceMeters,
+    });
   } catch (error) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
@@ -596,6 +732,16 @@ export async function POST(request) {
       points: segment,
       reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
     });
+  }
+
+  if (normalizedSportId === "running" && shouldTryRunningPavedCorridor(candidates)) {
+    const corridorCandidates = await collectRunningPavedCorridorCandidates({
+      segment,
+      sportId: normalizedSportId,
+      routingMode,
+      directDistanceMeters: originalDirectDistanceMeters,
+    });
+    candidates.push(...corridorCandidates);
   }
 
   candidates.sort((a, b) => {
@@ -610,6 +756,8 @@ export async function POST(request) {
       // Hard Running rule:
       // within maxDetourFactor, asphalt/paved/footway infrastructure wins before
       // short dirt/track/path shortcuts. Detour is a boundary, not a preference.
+      if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
+
       const aPriority = Number(a.paved_footway_priority || 0);
       const bPriority = Number(b.paved_footway_priority || 0);
       if (Math.abs(bPriority - aPriority) >= 8) return bPriority - aPriority;
@@ -623,16 +771,22 @@ export async function POST(request) {
       if (aCleanEnough !== bCleanEnough) return aCleanEnough ? -1 : 1;
 
       const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
-      if (Math.abs(badSurfaceDiff) >= 6) return badSurfaceDiff;
+      if (Math.abs(badSurfaceDiff) >= 8) return badSurfaceDiff;
 
       const trackPathDiff = Number(a.track_path_percent || 0) - Number(b.track_path_percent || 0);
-      if (Math.abs(trackPathDiff) >= 8) return trackPathDiff;
+      if (Math.abs(trackPathDiff) >= 12) return trackPathDiff;
 
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) >= 2) return scoreDiff;
 
+      const pavedDiff = Number(b.paved_percent || 0) - Number(a.paved_percent || 0);
+      if (Math.abs(pavedDiff) >= 10) return pavedDiff;
+
       const suitableDiff = Number(b.suitable_percent || 0) - Number(a.suitable_percent || 0);
       if (Math.abs(suitableDiff) >= 3) return suitableDiff;
+
+      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
+      if (Math.abs(unsuitableDiff) >= 2) return unsuitableDiff;
 
       const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
       if (Math.abs(unknownDiff) >= 10) return unknownDiff;
@@ -662,6 +816,8 @@ export async function POST(request) {
     paved_percent: candidate.paved_percent,
     safe_way_percent: candidate.safe_way_percent,
     paved_footway_priority: candidate.paved_footway_priority,
+    route_kind: candidate.route_kind,
+    via_index: candidate.via_index,
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
   }));
@@ -700,6 +856,8 @@ export async function POST(request) {
         paved_percent: best.paved_percent,
         safe_way_percent: best.safe_way_percent,
         paved_footway_priority: best.paved_footway_priority,
+        route_kind: best.route_kind,
+        via_index: best.via_index,
         detour: Number(best.detour.toFixed(2)),
         surfaces: best.surfacePercent,
         waytypes: best.wayPercent,
