@@ -155,6 +155,7 @@ function getRouteQuality(payload = {}, sportId = "") {
     candidates: Number(quality.candidates_considered || 0),
     surfaces: metersToPercentMap(quality.surfaces).slice(0, 4),
     waytypes: metersToPercentMap(quality.waytypes).slice(0, 4),
+    candidateSegments: Array.isArray(quality.candidate_segments) ? quality.candidate_segments : [],
     warnings,
   };
 }
@@ -164,6 +165,54 @@ function humanizeRouteLabel(value = "") {
     .replace(/_/g, " ")
     .replace(/\w/g, (char) => char.toUpperCase());
 }
+
+function percentFromMap(map = {}, key = "") {
+  const value = Number(map?.[key] || 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function compactPercentList(map = {}, keys = []) {
+  return keys
+    .map((key) => [key, percentFromMap(map, key)])
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => `${humanizeRouteLabel(key)} ${Math.round(value)}%`)
+    .join(" · ");
+}
+
+function CandidateDebugPanel({ candidateSegments = [] }) {
+  const segments = Array.isArray(candidateSegments) ? candidateSegments.slice(0, 4) : [];
+  if (!segments.length) return null;
+
+  return (
+    <div className="route-quality-candidates">
+      <small>ORS candidates debug</small>
+      {segments.map((segment) => (
+        <div className="route-quality-candidate-segment" key={`candidate-segment-${segment.segment_index}`}>
+          <p>
+            <span>Segment {Number(segment.segment_index) + 1}</span>
+            <b>{segment.selected_score ?? "—"}/100 · {Number(segment.selected_detour || 1).toFixed(2)}×</b>
+          </p>
+          {(segment.candidates || []).slice(0, 4).map((candidate, index) => {
+            const surfaces = compactPercentList(candidate.surfaces, ["asphalt", "paved", "concrete", "unknown", "dirt", "ground", "mud", "sand", "gravel", "unpaved"]);
+            const waytypes = compactPercentList(candidate.waytypes, ["street", "footway", "cycleway", "path", "track", "road", "state_road"]);
+
+            return (
+              <div className="route-quality-candidate" key={`candidate-${segment.segment_index}-${index}`}>
+                <p>
+                  <span>#{index + 1} {candidate.profile}/{candidate.preference}</span>
+                  <b>{candidate.score ?? "—"}/100 · {Number(candidate.detour || 1).toFixed(2)}×</b>
+                </p>
+                <em>{surfaces || "No surface data"}</em>
+                <em>{waytypes || "No waytype data"}</em>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function RouteQualityPanel({ payload, sportId, onClose }) {
   const quality = getRouteQuality(payload, sportId);
@@ -206,6 +255,8 @@ function RouteQualityPanel({ payload, sportId, onClose }) {
           )) : <p><span>Unknown</span><b>—</b></p>}
         </div>
       </div>
+
+      <CandidateDebugPanel candidateSegments={quality.candidateSegments} />
     </section>
   );
 }
