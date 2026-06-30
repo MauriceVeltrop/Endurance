@@ -193,8 +193,8 @@ function CandidateDebugPanel({ candidateSegments = [] }) {
             <b>{segment.selected_score ?? "—"}/100 · {Number(segment.selected_detour || 1).toFixed(2)}×</b>
           </p>
           {(segment.candidates || []).slice(0, 4).map((candidate, index) => {
-            const surfaces = compactPercentList(candidate.surfaces, ["asphalt", "paved", "concrete", "unknown", "dirt", "ground", "mud", "sand", "gravel", "unpaved"]);
-            const waytypes = compactPercentList(candidate.waytypes, ["street", "footway", "cycleway", "path", "track", "road", "state_road"]);
+            const surfaces = compactPercentList(candidate.surfaces, ["effective_paved", "inferred_paved_unknown", "asphalt", "paved", "concrete", "unknown", "dirt", "ground", "mud", "sand", "gravel", "unpaved"]);
+            const waytypes = compactPercentList(candidate.waytypes, ["street", "footway", "cycleway", "path", "track", "suspicious_track_path", "road", "state_road"]);
 
             return (
               <div className="route-quality-candidate" key={`candidate-${segment.segment_index}-${index}`}>
