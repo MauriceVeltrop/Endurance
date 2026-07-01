@@ -318,119 +318,14 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   let score;
 
   if (normalizeSportId(sportId) === "running") {
-    const maxDetour = Number(config.maxDetourFactor || 1.6);
-
-    const wayRunnable = Math.min(100, waySuitable + wayAcceptable * 0.55);
-    const surfacePositive = Math.min(100, surfaceSuitable + surfaceAcceptable * 0.35);
-    const surfaceNegative = surfaceUnsuitable;
-
-    const mudPercent = Number(surfacePercent.mud || 0);
-    const dirtPercent = Number(surfacePercent.dirt || 0);
-    const groundPercent = Number(surfacePercent.ground || 0) + Number(surfacePercent.earth || 0);
-    const sandGrassPercent = Number(surfacePercent.sand || 0) + Number(surfacePercent.grass || 0);
-    const unpavedPercent = Number(surfacePercent.unpaved || 0);
-    const gravelPercent = Number(surfacePercent.gravel || 0);
-    const rawBadSurfacePercent = Math.min(
-      100,
-      mudPercent + dirtPercent + groundPercent + sandGrassPercent + unpavedPercent + gravelPercent
-    );
-
-    const trackPathPercent = Number(wayPercent.track || 0) + Number(wayPercent.path || 0);
-    const pavedPercent =
-      Number(surfacePercent.asphalt || 0)
-      + Number(surfacePercent.concrete || 0)
-      + Number(surfacePercent.paved || 0)
-      + Number(surfacePercent.paving_stones || 0)
-      + Number(surfacePercent.sett || 0);
-    const footwayPercent = Number(wayPercent.footway || 0) + Number(wayPercent.pedestrian || 0);
-    const cyclingWalkablePercent = Number(wayPercent.cycleway || 0);
-    const quietStreetPercent =
-      Number(wayPercent.living_street || 0)
-      + Number(wayPercent.residential || 0)
-      + Number(wayPercent.street || 0);
-    const safeWayPercent = footwayPercent + cyclingWalkablePercent + quietStreetPercent;
-
-    // ORS often reports surface=unknown on Dutch/Belgian streets, footways and
-    // cycleways even when they are obviously paved infrastructure. For Running,
-    // infer unknown+safe waytype as likely paved. Unknown+track/path stays
-    // suspicious. This fixes the false 0/100 scores where a city street was
-    // treated as unknown/unpaved just because OSM has no surface tag.
-    const likelyPavedUnknown = Math.min(surfaceUnknown, safeWayPercent);
-    const effectivePavedPercent = Math.min(100, pavedPercent + likelyPavedUnknown);
-    const suspiciousUnknown = Math.max(0, surfaceUnknown - likelyPavedUnknown) + wayUnknown;
-
-    // Track/path is not always bad when ORS also reports a high paved/asphalt
-    // share; many paved service roads are tagged as track/path. Let known/effective
-    // paved infrastructure offset part of the track/path penalty.
-    const pavedOffsetForTrackPath = Math.min(trackPathPercent, effectivePavedPercent) * 0.55;
-    const suspiciousTrackPathPercent = Math.max(0, trackPathPercent - pavedOffsetForTrackPath);
-
-    const pavedFootwayPriority = Math.min(
-      100,
-      effectivePavedPercent
-        + footwayPercent * 1.05
-        + cyclingWalkablePercent * 0.75
-        + quietStreetPercent * 0.35
-    );
-
-    suitable = Math.min(100, Math.max(surfacePositive + effectivePavedPercent * 0.55, wayRunnable, effectivePavedPercent));
-    acceptable = Math.min(100, wayAcceptable + surfaceAcceptable + likelyPavedUnknown * 0.25);
-    unsuitable = Math.min(100, Math.max(surfaceNegative, wayUnsuitable, rawBadSurfacePercent + suspiciousTrackPathPercent * 0.45));
-    unknown = Math.max(0, Math.min(100, suspiciousUnknown + suspiciousTrackPathPercent * 0.25 - wayRunnable * 0.12));
-
-    const detourPenalty = detour <= maxDetour
-      ? Math.max(0, (detour - 1) * 6)
-      : 8 + (detour - maxDetour) * 90;
-
-    const badRunningSurfacePenalty =
-      mudPercent * 6.0
-      + dirtPercent * 4.2
-      + groundPercent * 3.8
-      + sandGrassPercent * 3.4
-      + unpavedPercent * 2.7
-      + gravelPercent * 1.15;
-    const badWaytypePenalty = suspiciousTrackPathPercent * 1.9 + Number(wayPercent.state_road || 0) * 2.2;
-    const roadHeavyPenalty = Math.max(0, Number(wayPercent.road || 0) - 25) * 1.4;
-    const unknownPenalty = unknown * 0.45;
-    const pavedBonus = Math.min(42, effectivePavedPercent * 0.65 + safeWayPercent * 0.22);
-
-    score = Math.max(
-      0,
-      Math.min(
-        100,
-        34
-          + suitable * 0.78
-          + acceptable * 0.08
-          + pavedBonus
-          - unsuitable * 0.95
-          - unknownPenalty
-          - badRunningSurfacePenalty
-          - badWaytypePenalty
-          - roadHeavyPenalty
-          - detourPenalty
-      )
-    );
-
-    // Hard caps only apply when the route is both dirty/track-heavy AND lacks
-    // enough inferred paved infrastructure. Do not turn a mostly street/footway
-    // route into 0/100 because surface tags are missing.
-    if ((rawBadSurfacePercent > 34 || suspiciousTrackPathPercent > 50) && effectivePavedPercent < 45) {
-      score = Math.min(score, 24);
-    }
-    if (mudPercent + dirtPercent + groundPercent + sandGrassPercent > 24 && effectivePavedPercent < 55) {
-      score = Math.min(score, 18);
-    }
-    if (suspiciousTrackPathPercent > 60 && effectivePavedPercent < 45) {
-      score = Math.min(score, 12);
-    }
-    if (effectivePavedPercent >= 55 && safeWayPercent >= 45 && rawBadSurfacePercent <= 28) {
-      score = Math.min(100, score + 10);
-    }
-
-    // Expose adjusted Running diagnostics for the quality panel and sorting.
-    surfacePercent.inferred_paved_unknown = Math.round(likelyPavedUnknown);
-    surfacePercent.effective_paved = Math.round(effectivePavedPercent);
-    wayPercent.suspicious_track_path = Math.round(suspiciousTrackPathPercent);
+    // Diagnostic baseline for Running:
+    // quality is informational only and must not influence route choice.
+    // ORS shortest foot-walking decides the route.
+    suitable = 100;
+    acceptable = 0;
+    unsuitable = 0;
+    unknown = 0;
+    score = 100;
   } else {
     suitable = Math.min(100, surfaceSuitable + Math.round(waySuitable * 0.2));
     acceptable = Math.min(100, surfaceAcceptable);
@@ -520,19 +415,9 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      payload.options = {
-        avoid_features: ["ferries", "steps"],
-      };
-
-      // Live drawing must stay responsive. Deep alternatives and paved-corridor
-      // experiments belong to quality/debug mode, not every controlpoint drag.
-      if (routeKind !== "live-direct") {
-        payload.alternative_routes = {
-          target_count: 3,
-          weight_factor: Math.max(1.15, maxDetour),
-          share_factor: 0.9,
-        };
-      }
+      // Diagnostic baseline for Running:
+      // no alternative search, no avoid_features, no corridor steering.
+      // Let ORS return the shortest legal foot-walking route between A and B.
     } else {
       payload.alternative_routes = {
         target_count: 2,
@@ -616,8 +501,9 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
     throw new Error("OpenRouteService API key is missing.");
   }
 
-  const profiles = getProviderProfiles(sportId);
-  const preferences = getRoutingPreferences(sportId);
+  const isRunningBaseline = normalizeSportId(sportId) === "running";
+  const profiles = isRunningBaseline ? ["foot-walking"] : getProviderProfiles(sportId);
+  const preferences = isRunningBaseline ? ["shortest"] : getRoutingPreferences(sportId);
   const candidates = [];
   const errors = [];
 
@@ -625,12 +511,8 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
   if (routingMode === "live") {
     const isRunning = normalizeSportId(sportId) === "running";
 
-    // Live drawing must stay fast. Running still gets candidate choice, but only
-    // through the primary walking profile and the configured preferences. Heavy
-    // multi-profile exploration belongs in quality/debug mode, not in every drag
-    // or click during drawing.
     const liveProfiles = isRunning ? ["foot-walking"] : profiles.slice(0, 1);
-    const livePreferences = isRunning ? ["recommended"] : preferences.slice(0, 1);
+    const livePreferences = isRunning ? ["shortest"] : preferences.slice(0, 1);
     const liveBases = ORS_ROUTING_BASES.slice(0, 1);
 
     for (const profile of liveProfiles) {
@@ -639,16 +521,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
           if (!profile || !preference || !base) continue;
           try {
             const url = orsProviderUrl(base, profile);
-            const result = await fetchOrsCandidate({
-              url,
-              apiKey,
-              points,
-              preference,
-              sportId,
-              profile,
-              directDistanceMeters,
-              routeKind: isRunning ? "live-direct" : "direct",
-            });
+            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
             candidates.push(...result);
           } catch (error) {
             errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -666,7 +539,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
 
   for (const profile of profiles) {
     for (const preference of preferences) {
-      for (const base of ORS_ROUTING_BASES) {
+      for (const base of (isRunningBaseline ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
         try {
           const url = orsProviderUrl(base, profile);
           const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
@@ -772,68 +645,14 @@ export async function POST(request) {
     });
   }
 
-  if (routingMode !== "live" && normalizedSportId === "running" && shouldTryRunningPavedCorridor(candidates)) {
-    const corridorCandidates = await collectRunningPavedCorridorCandidates({
-      segment,
-      sportId: normalizedSportId,
-      routingMode,
-      directDistanceMeters: originalDirectDistanceMeters,
-    });
-    candidates.push(...corridorCandidates);
-  }
 
   candidates.sort((a, b) => {
     const isRunning = normalizedSportId === "running";
 
     if (isRunning) {
-      const config = getSportRouteProfile(normalizedSportId);
-      const maxDetour = Number(config.maxDetourFactor || 1.4);
-      const aWithinDetour = Number(a.detour || 99) <= maxDetour;
-      const bWithinDetour = Number(b.detour || 99) <= maxDetour;
-
-      // Hard Running rule:
-      // within maxDetourFactor, asphalt/paved/footway infrastructure wins before
-      // short dirt/track/path shortcuts. Detour is a boundary, not a preference.
-      if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
-
-      const aValidRunning = runningCandidateIsValid(a);
-      const bValidRunning = runningCandidateIsValid(b);
-      if (aValidRunning !== bValidRunning) return aValidRunning ? -1 : 1;
-
-      const aPriority = Number(a.paved_footway_priority || 0);
-      const bPriority = Number(b.paved_footway_priority || 0);
-      if (Math.abs(bPriority - aPriority) >= 8) return bPriority - aPriority;
-
-      const aPaved = Number(a.paved_percent || 0);
-      const bPaved = Number(b.paved_percent || 0);
-      if (Math.abs(bPaved - aPaved) >= 10) return bPaved - aPaved;
-
-      const aCleanEnough = Number(a.bad_surface_percent || 0) <= 18 && runningTrackPathPercent(a) <= 20;
-      const bCleanEnough = Number(b.bad_surface_percent || 0) <= 18 && runningTrackPathPercent(b) <= 20;
-      if (aCleanEnough !== bCleanEnough) return aCleanEnough ? -1 : 1;
-
-      const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
-      if (Math.abs(badSurfaceDiff) >= 8) return badSurfaceDiff;
-
-      const trackPathDiff = runningTrackPathPercent(a) - runningTrackPathPercent(b);
-      if (Math.abs(trackPathDiff) >= 12) return trackPathDiff;
-
-      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
-      if (Math.abs(scoreDiff) >= 2) return scoreDiff;
-
-      const pavedDiff = Number(b.paved_percent || 0) - Number(a.paved_percent || 0);
-      if (Math.abs(pavedDiff) >= 10) return pavedDiff;
-
-      const suitableDiff = Number(b.suitable_percent || 0) - Number(a.suitable_percent || 0);
-      if (Math.abs(suitableDiff) >= 3) return suitableDiff;
-
-      const unsuitableDiff = Number(a.unsuitable_percent || 0) - Number(b.unsuitable_percent || 0);
-      if (Math.abs(unsuitableDiff) >= 2) return unsuitableDiff;
-
-      const unknownDiff = Number(a.unknown_percent || 0) - Number(b.unknown_percent || 0);
-      if (Math.abs(unknownDiff) >= 10) return unknownDiff;
-
-      // Final tie-breaker only: shorter route.
+      // Diagnostic baseline for Running:
+      // no Endurance quality preferences. Take the shortest ORS foot-walking
+      // candidate between A and B.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
