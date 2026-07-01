@@ -316,68 +316,91 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   let unsuitable = 0;
   let unknown = 0;
   let score;
+  let runningMetrics = null;
 
   if (normalizeSportId(sportId) === "running") {
     const maxDetour = Number(config.maxDetourFactor || 1.8);
 
-    const pavedPercent =
+    const rawPavedPercent = Math.min(100,
       Number(surfacePercent.asphalt || 0)
       + Number(surfacePercent.concrete || 0)
       + Number(surfacePercent.paved || 0)
       + Number(surfacePercent.paving_stones || 0)
-      + Number(surfacePercent.sett || 0);
-    const compactPercent = Number(surfacePercent.compacted || 0) + Number(surfacePercent.fine_gravel || 0);
-    const gravelPercent = Number(surfacePercent.gravel || 0);
-
-    const mudPercent = Number(surfacePercent.mud || 0);
-    const dirtPercent = Number(surfacePercent.dirt || 0);
-    const sandPercent = Number(surfacePercent.sand || 0);
-    const grassPercent = Number(surfacePercent.grass || 0);
-    const groundPercent = Number(surfacePercent.ground || 0) + Number(surfacePercent.earth || 0);
-    const unpavedPercent = Number(surfacePercent.unpaved || 0);
-
-    const pathPercent = Number(wayPercent.path || 0);
-    const trackPercent = Number(wayPercent.track || 0);
-    const footCycleStreetPercent =
-      Number(wayPercent.footway || 0)
-      + Number(wayPercent.cycleway || 0)
-      + Number(wayPercent.street || 0)
-      + Number(wayPercent.pedestrian || 0);
-
-    // Track is neutral for Running. Path is mildly negative. Mud/dirt/sand/grass
-    // are the real hard blockers. Unknown surface is only lightly penalized.
-    suitable = Math.min(100, pavedPercent + compactPercent * 0.85 + gravelPercent * 0.35 + footCycleStreetPercent * 0.15);
-    acceptable = Math.min(100, gravelPercent + trackPercent * 0.25);
-    unsuitable = Math.min(100, mudPercent + dirtPercent + sandPercent + grassPercent + groundPercent + pathPercent * 0.4);
-    unknown = Math.max(0, Math.min(100, surfaceUnknown - footCycleStreetPercent * 0.45 - trackPercent * 0.2));
-
-    const badSurfacePenalty =
-      mudPercent * 6.5
-      + dirtPercent * 5.2
-      + sandPercent * 4.8
-      + grassPercent * 4.2
-      + groundPercent * 3.5
-      + unpavedPercent * 2.0;
-    const pathPenalty = pathPercent * 1.15;
-    const pavedBonus = pavedPercent * 0.45 + compactPercent * 0.35 + footCycleStreetPercent * 0.12;
-    const detourPenalty = detour <= maxDetour
-      ? Math.max(0, (detour - 1) * 8)
-      : 12 + (detour - maxDetour) * 95;
-
-    score = Math.max(
-      0,
-      Math.min(
-        100,
-        58
-          + suitable * 0.35
-          + acceptable * 0.08
-          + pavedBonus
-          - badSurfacePenalty
-          - pathPenalty
-          - unknown * 0.18
-          - detourPenalty
-      )
+      + Number(surfacePercent.sett || 0)
     );
+    const compactPercent = Math.min(100, Number(surfacePercent.compacted || 0) + Number(surfacePercent.fine_gravel || 0));
+    const gravelPercent = Number(surfacePercent.gravel || 0);
+    const dirtMudSandGrassPercent = Math.min(100,
+      Number(surfacePercent.mud || 0) * 1.25
+      + Number(surfacePercent.dirt || 0)
+      + Number(surfacePercent.sand || 0)
+      + Number(surfacePercent.grass || 0)
+      + Number(surfacePercent.ground || 0) * 0.75
+      + Number(surfacePercent.earth || 0) * 0.75
+    );
+
+    const trackPercent = Number(wayPercent.track || 0);
+    const pathPercent = Number(wayPercent.path || 0);
+    const safeWayPercent = Math.min(100,
+      Number(wayPercent.footway || 0)
+      + Number(wayPercent.pedestrian || 0)
+      + Number(wayPercent.cycleway || 0)
+      + Number(wayPercent.living_street || 0)
+      + Number(wayPercent.residential || 0)
+      + Number(wayPercent.street || 0)
+    );
+
+    // Unknown surface on streets/footways/cycleways is often paved in OSM.
+    // Track stays neutral; path is mildly unfavorable; dirt/mud/sand/grass are the real blockers.
+    const inferredPavedUnknown = Math.min(Number(surfacePercent.unknown || 0), safeWayPercent * 0.65);
+    const effectivePavedPercent = Math.min(100, rawPavedPercent + inferredPavedUnknown + compactPercent * 0.75);
+    const remainingUnknown = Math.max(0, Number(surfacePercent.unknown || 0) - inferredPavedUnknown);
+
+    suitable = Math.min(100, effectivePavedPercent + gravelPercent * 0.25);
+    acceptable = Math.min(100, compactPercent + gravelPercent + trackPercent * 0.15);
+    unsuitable = Math.min(100, dirtMudSandGrassPercent + pathPercent * 0.55);
+    unknown = Math.min(100, remainingUnknown);
+
+    const detourPenalty = detour <= maxDetour
+      ? Math.max(0, (detour - 1) * 5)
+      : 12 + (detour - maxDetour) * 95;
+    const surfacePenalty =
+      Number(surfacePercent.mud || 0) * 7.5
+      + Number(surfacePercent.dirt || 0) * 5.2
+      + Number(surfacePercent.sand || 0) * 5.0
+      + Number(surfacePercent.grass || 0) * 4.2
+      + (Number(surfacePercent.ground || 0) + Number(surfacePercent.earth || 0)) * 3.4;
+    const pathPenalty = pathPercent * 0.75;
+    const unknownPenalty = remainingUnknown * 0.35;
+    const pavedBonus = effectivePavedPercent * 0.55 + rawPavedPercent * 0.25 + compactPercent * 0.2;
+
+    score = Math.max(0, Math.min(100,
+      35
+        + pavedBonus
+        + acceptable * 0.1
+        - surfacePenalty
+        - pathPenalty
+        - unknownPenalty
+        - detourPenalty
+    ));
+
+    runningMetrics = {
+      badSurfacePercent: Math.round(Math.min(100,
+        Number(surfacePercent.mud || 0)
+        + Number(surfacePercent.dirt || 0)
+        + Number(surfacePercent.sand || 0)
+        + Number(surfacePercent.grass || 0)
+        + Number(surfacePercent.ground || 0)
+        + Number(surfacePercent.earth || 0)
+      )),
+      trackPathPercent: Math.round(trackPercent + pathPercent),
+      suspiciousTrackPathPercent: Math.round(pathPercent),
+      pavedPercent: Math.round(effectivePavedPercent),
+      rawPavedPercent: Math.round(rawPavedPercent),
+      inferredPavedUnknownPercent: Math.round(inferredPavedUnknown),
+      safeWayPercent: Math.round(safeWayPercent),
+      pavedFootwayPriority: Math.round(effectivePavedPercent + safeWayPercent * 0.25 - pathPercent * 0.4),
+    };
   } else {
     suitable = Math.min(100, surfaceSuitable + Math.round(waySuitable * 0.2));
     acceptable = Math.min(100, surfaceAcceptable);
@@ -405,56 +428,14 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
     suitable_percent: Math.round(suitable),
     unsuitable_percent: Math.round(unsuitable),
     unknown_percent: Math.round(unknown),
-    bad_surface_percent: normalizeSportId(sportId) === "running" ? Math.round(
-      Number(surfacePercent.mud || 0)
-      + Number(surfacePercent.dirt || 0)
-      + Number(surfacePercent.ground || 0)
-      + Number(surfacePercent.earth || 0)
-      + Number(surfacePercent.grass || 0)
-      + Number(surfacePercent.sand || 0)
-      + Number(surfacePercent.unpaved || 0)
-    ) : null,
-    track_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.track || 0)) : null,
-    path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.path || 0)) : null,
-    track_path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.track || 0) + Number(wayPercent.path || 0)) : null,
-    suspicious_track_path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.path || 0)) : null,
-    paved_percent: normalizeSportId(sportId) === "running" ? Math.round(
-      Number(surfacePercent.asphalt || 0)
-      + Number(surfacePercent.concrete || 0)
-      + Number(surfacePercent.paved || 0)
-      + Number(surfacePercent.paving_stones || 0)
-      + Number(surfacePercent.sett || 0)
-      + Number(surfacePercent.compacted || 0) * 0.85
-      + Number(surfacePercent.fine_gravel || 0) * 0.85
-    ) : null,
-    raw_paved_percent: normalizeSportId(sportId) === "running" ? Math.round(
-      Number(surfacePercent.asphalt || 0)
-      + Number(surfacePercent.concrete || 0)
-      + Number(surfacePercent.paved || 0)
-      + Number(surfacePercent.paving_stones || 0)
-      + Number(surfacePercent.sett || 0)
-    ) : null,
-    inferred_paved_unknown_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(surfacePercent.inferred_paved_unknown || 0)) : null,
-    safe_way_percent: normalizeSportId(sportId) === "running" ? Math.round(
-      Number(wayPercent.footway || 0)
-      + Number(wayPercent.pedestrian || 0)
-      + Number(wayPercent.cycleway || 0)
-      + Number(wayPercent.living_street || 0)
-      + Number(wayPercent.residential || 0)
-      + Number(wayPercent.street || 0)
-    ) : null,
-    paved_footway_priority: normalizeSportId(sportId) === "running" ? Math.round(
-      Number(surfacePercent.asphalt || 0)
-      + Number(surfacePercent.concrete || 0)
-      + Number(surfacePercent.paved || 0)
-      + Number(surfacePercent.paving_stones || 0)
-      + Number(surfacePercent.sett || 0)
-      + Number(surfacePercent.compacted || 0) * 0.85
-      + Number(surfacePercent.fine_gravel || 0) * 0.85
-      + (Number(wayPercent.footway || 0) + Number(wayPercent.pedestrian || 0)) * 0.75
-      + Number(wayPercent.cycleway || 0) * 0.55
-      + Number(wayPercent.street || 0) * 0.25
-    ) : null,
+    bad_surface_percent: runningMetrics?.badSurfacePercent ?? null,
+    track_path_percent: runningMetrics?.trackPathPercent ?? null,
+    suspicious_track_path_percent: runningMetrics?.suspiciousTrackPathPercent ?? null,
+    paved_percent: runningMetrics?.pavedPercent ?? null,
+    raw_paved_percent: runningMetrics?.rawPavedPercent ?? null,
+    inferred_paved_unknown_percent: runningMetrics?.inferredPavedUnknownPercent ?? null,
+    safe_way_percent: runningMetrics?.safeWayPercent ?? null,
+    paved_footway_priority: runningMetrics?.pavedFootwayPriority ?? null,
   };
 }
 
@@ -480,14 +461,15 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      // Running: keep the request simple, but allow ORS to return short
-      // alternatives up to the configured detour window. Endurance then chooses
-      // mainly on surface: mud/dirt/sand/grass are heavily penalized, track is
-      // neutral, and path is mildly negative.
+      // Running: generate more alternatives, then let Endurance score them.
+      // Track itself is neutral; dirt/mud/sand/grass are strongly penalized.
+      payload.options = {
+        avoid_features: ["ferries", "steps"],
+      };
       payload.alternative_routes = {
-        target_count: 2,
-        weight_factor: Math.max(1.05, maxDetour),
-        share_factor: 0.85,
+        target_count: 4,
+        weight_factor: Math.max(1.2, maxDetour),
+        share_factor: 0.9,
       };
     } else {
       payload.alternative_routes = {
@@ -572,9 +554,9 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
     throw new Error("OpenRouteService API key is missing.");
   }
 
-  const isRunningBaseline = normalizeSportId(sportId) === "running";
-  const profiles = isRunningBaseline ? ["foot-walking"] : getProviderProfiles(sportId);
-  const preferences = isRunningBaseline ? getRoutingPreferences(sportId) : getRoutingPreferences(sportId);
+  const isRunning = normalizeSportId(sportId) === "running";
+  const profiles = isRunning ? ["foot-walking"] : getProviderProfiles(sportId);
+  const preferences = isRunning ? ["shortest", "recommended"] : getRoutingPreferences(sportId);
   const candidates = [];
   const errors = [];
 
@@ -610,7 +592,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
 
   for (const profile of profiles) {
     for (const preference of preferences) {
-      for (const base of (isRunningBaseline ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
+      for (const base of (isRunning ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
         try {
           const url = orsProviderUrl(base, profile);
           const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
@@ -727,13 +709,15 @@ export async function POST(request) {
       const bWithinDetour = Number(b.detour || 99) <= maxDetour;
       if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
 
+      // Choose the best Endurance-scored route from a wider ORS candidate set.
+      // Track is neutral; path is mildly worse; dirt/mud/sand/grass dominate the penalty.
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) >= 3) return scoreDiff;
 
       const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
-      if (Math.abs(badSurfaceDiff) >= 4) return badSurfaceDiff;
+      if (Math.abs(badSurfaceDiff) >= 5) return badSurfaceDiff;
 
-      const pathDiff = Number(a.path_percent || 0) - Number(b.path_percent || 0);
+      const pathDiff = Number(a.suspicious_track_path_percent || 0) - Number(b.suspicious_track_path_percent || 0);
       if (Math.abs(pathDiff) >= 8) return pathDiff;
 
       const pavedDiff = Number(b.paved_percent || 0) - Number(a.paved_percent || 0);
@@ -759,8 +743,6 @@ export async function POST(request) {
     unsuitable_percent: candidate.unsuitable_percent,
     unknown_percent: candidate.unknown_percent,
     bad_surface_percent: candidate.bad_surface_percent,
-    track_percent: candidate.track_percent,
-    path_percent: candidate.path_percent,
     track_path_percent: candidate.track_path_percent,
     suspicious_track_path_percent: candidate.suspicious_track_path_percent,
     paved_percent: candidate.paved_percent,
@@ -804,8 +786,6 @@ export async function POST(request) {
         unsuitable_percent: best.unsuitable_percent,
         unknown_percent: best.unknown_percent,
         bad_surface_percent: best.bad_surface_percent,
-        track_percent: best.track_percent,
-        path_percent: best.path_percent,
         track_path_percent: best.track_path_percent,
         suspicious_track_path_percent: best.suspicious_track_path_percent,
         paved_percent: best.paved_percent,
