@@ -101,21 +101,44 @@ function midpoint(a, b) {
   };
 }
 
+function runningTrackPathPercent(candidate = {}) {
+  return Number(candidate.suspicious_track_path_percent ?? candidate.track_path_percent ?? 0);
+}
+
+function runningEffectivePavedPercent(candidate = {}) {
+  return Math.max(
+    Number(candidate.paved_percent || 0),
+    Number(candidate.paved_footway_priority || 0)
+  );
+}
+
+function runningCandidateIsValid(candidate = {}) {
+  const detour = Number(candidate.detour || 99);
+  const trackPath = runningTrackPathPercent(candidate);
+  const effectivePaved = runningEffectivePavedPercent(candidate);
+  const badSurface = Number(candidate.bad_surface_percent || 0);
+
+  if (detour > 1.6) return false;
+
+  // Hard Running acceptance rule:
+  // reject track/path-heavy shortcuts unless the candidate is overwhelmingly
+  // paved/footway. This prevents a forest/track shortcut from winning merely
+  // because it contains some asphalt or is shorter.
+  return (
+    trackPath <= 20 ||
+    (effectivePaved >= 75 && badSurface <= 18)
+  );
+}
+
 function runningCandidateIsBad(candidate = {}) {
   return (
-    Number(candidate.bad_surface_percent || 0) > 28 ||
-    Number(candidate.suspicious_track_path_percent ?? candidate.track_path_percent ?? 0) > 45 ||
+    !runningCandidateIsValid(candidate) ||
     Number(candidate.score || 0) < 45
   );
 }
 
 function runningCandidateIsPavedChoice(candidate = {}) {
-  return (
-    Number(candidate.detour || 99) <= 1.6 &&
-    Number(candidate.paved_footway_priority || 0) >= 58 &&
-    Number(candidate.bad_surface_percent || 0) <= 28 &&
-    Number(candidate.suspicious_track_path_percent ?? candidate.track_path_percent ?? 0) <= 45
-  );
+  return runningCandidateIsValid(candidate);
 }
 
 function shouldTryRunningPavedCorridor(candidates = []) {
@@ -773,6 +796,10 @@ export async function POST(request) {
       // short dirt/track/path shortcuts. Detour is a boundary, not a preference.
       if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
 
+      const aValidRunning = runningCandidateIsValid(a);
+      const bValidRunning = runningCandidateIsValid(b);
+      if (aValidRunning !== bValidRunning) return aValidRunning ? -1 : 1;
+
       const aPriority = Number(a.paved_footway_priority || 0);
       const bPriority = Number(b.paved_footway_priority || 0);
       if (Math.abs(bPriority - aPriority) >= 8) return bPriority - aPriority;
@@ -781,14 +808,14 @@ export async function POST(request) {
       const bPaved = Number(b.paved_percent || 0);
       if (Math.abs(bPaved - aPaved) >= 10) return bPaved - aPaved;
 
-      const aCleanEnough = Number(a.bad_surface_percent || 0) <= 28 && Number(a.suspicious_track_path_percent ?? a.track_path_percent ?? 0) <= 45;
-      const bCleanEnough = Number(b.bad_surface_percent || 0) <= 28 && Number(b.suspicious_track_path_percent ?? b.track_path_percent ?? 0) <= 45;
+      const aCleanEnough = Number(a.bad_surface_percent || 0) <= 18 && runningTrackPathPercent(a) <= 20;
+      const bCleanEnough = Number(b.bad_surface_percent || 0) <= 18 && runningTrackPathPercent(b) <= 20;
       if (aCleanEnough !== bCleanEnough) return aCleanEnough ? -1 : 1;
 
       const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
       if (Math.abs(badSurfaceDiff) >= 8) return badSurfaceDiff;
 
-      const trackPathDiff = Number(a.suspicious_track_path_percent ?? a.track_path_percent ?? 0) - Number(b.suspicious_track_path_percent ?? b.track_path_percent ?? 0);
+      const trackPathDiff = runningTrackPathPercent(a) - runningTrackPathPercent(b);
       if (Math.abs(trackPathDiff) >= 12) return trackPathDiff;
 
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
