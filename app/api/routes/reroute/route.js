@@ -208,11 +208,6 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   };
 }
 
-function runningCandidateUsesHighwayPath(candidate = {}) {
-  // Diagnostic threshold test: allow tiny path connectors, but reject real path routes.
-  // Path <= 5% stays valid; path > 5% is rejected.
-  return Number(candidate?.wayPercent?.path || 0) > 5;
-}
 
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters }) {
   const controller = new AbortController();
@@ -369,26 +364,17 @@ export async function POST(request) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
 
-  if (normalizedSportId === "running") {
-    // Diagnostic isolation test:
-    // The only active Running rule is that ORS candidates containing
-    // ORS waytype=path candidates are inaccessible.
-    // No surface, detour, track, asphalt, dirt or score preferences are applied.
-    candidates = candidates.filter((candidate) => !runningCandidateUsesHighwayPath(candidate));
-  }
 
   if (!candidates.length) {
     return fallbackResponse({
       points: segment,
-      reason: normalizedSportId === "running"
-        ? (errors.slice(0, 3).join(" | ") || "No valid Running route without highway=path was returned by ORS.")
-        : (errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment."),
+      reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
     });
   }
 
   candidates.sort((a, b) => {
     if (normalizedSportId === "running") {
-      // Running test: ORS recommended is requested; with one Running candidate this is a no-op.
+      // Running baseline: ORS shortest decides. Scores are informational only.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
     const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
@@ -408,8 +394,6 @@ export async function POST(request) {
     unsuitable_percent: candidate.unsuitable_percent,
     unknown_percent: candidate.unknown_percent,
     running_logic_disabled: candidate.running_logic_disabled,
-    highway_path_blocked: normalizedSportId === "running",
-    rejected_highway_path: runningCandidateUsesHighwayPath(candidate),
     path_percent: Math.round(Number(candidate?.wayPercent?.path || 0)),
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
@@ -451,9 +435,8 @@ export async function POST(request) {
         candidate_summary: candidateSummary,
         provider: best.provider || "ors",
         running_logic_disabled: normalizedSportId === "running",
-        highway_path_blocked: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
-        message: normalizedSportId === "running" ? "Running test: only highway=path is inaccessible; all other preferences are disabled." : undefined,
+        message: normalizedSportId === "running" ? "Running baseline: no path filter, no surface rules and no scoring preferences." : undefined,
       },
       routed_at: new Date().toISOString(),
     },
