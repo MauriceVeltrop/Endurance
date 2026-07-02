@@ -248,7 +248,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       preference,
       geometry_simplify: false,
       format: "geojson",
-      extra_info: ["waytype", "surface"],
+      extra_info: ["waytype", "surface", "tracktype"],
     };
 
     const response = await fetch(url, {
@@ -446,7 +446,7 @@ export async function POST(request) {
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running ORS baseline: foot-walking/recommended with elevation, no custom_model, no avoid_features, no alternative_routes and no hard path filtering. Score is informational only."
+            ? "Running ORS baseline + tracktype probe: foot-walking/recommended with elevation, no custom_model, no avoid_features, no alternative_routes and no hard path filtering. extra_info includes tracktype to verify ORS support."
             : undefined,
       },
       routed_at: new Date().toISOString(),
