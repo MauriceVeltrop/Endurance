@@ -209,7 +209,9 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
 }
 
 function runningCandidateUsesHighwayPath(candidate = {}) {
-  return Number(candidate?.wayPercent?.path || 0) > 0;
+  // Diagnostic threshold test: allow tiny path connectors, but reject real path routes.
+  // Path <= 5% stays valid; path > 5% is rejected.
+  return Number(candidate?.wayPercent?.path || 0) > 5;
 }
 
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters }) {
