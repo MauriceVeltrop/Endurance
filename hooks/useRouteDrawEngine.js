@@ -5,7 +5,8 @@ import { buildRoutePayloadFromSegments, getControlSegments, hydrateSegmentsFromR
 const SEGMENT_TIMEOUT_MS = 12000;
 const AUTO_SYNC_DELAY_MS = 350;
 const BACKGROUND_OPTIMIZE_DELAY_MS = 900;
-const BACKGROUND_OPTIMIZE_MIN_SCORE_GAIN = 8;
+const BACKGROUND_OPTIMIZE_MIN_SCORE_GAIN = 6;
+const BACKGROUND_OPTIMIZE_TIMEOUT_MS = 24000;
 
 function fallbackSegment(segment, reason = "Routing provider could not snap this segment.") {
   const geometry = normalizeRoutePoints(segment?.control || [segment?.from, segment?.to]);
@@ -38,6 +39,11 @@ function routeQualityScore(segment) {
   return Number.isFinite(value) ? value : null;
 }
 
+function qualityNumber(segment, key) {
+  const value = Number(segment?.quality?.[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function shouldUseOptimizedSegment(currentSegment, optimizedSegment) {
   const optimizedGeometry = normalizeRoutePoints(optimizedSegment?.geometry || optimizedSegment?.points);
   if (optimizedGeometry.length < 2 || optimizedSegment?.routed === false) return false;
@@ -46,9 +52,18 @@ function shouldUseOptimizedSegment(currentSegment, optimizedSegment) {
   const currentScore = routeQualityScore(currentSegment);
   const optimizedScore = routeQualityScore(optimizedSegment);
   if (optimizedScore === null) return false;
-  if (currentScore === null) return optimizedScore >= 45;
+  if (currentScore === null) return optimizedScore >= 35;
+  if (optimizedScore >= currentScore + BACKGROUND_OPTIMIZE_MIN_SCORE_GAIN) return true;
 
-  return optimizedScore >= currentScore + BACKGROUND_OPTIMIZE_MIN_SCORE_GAIN;
+  const currentBad = qualityNumber(currentSegment, "bad_surface_percent");
+  const optimizedBad = qualityNumber(optimizedSegment, "bad_surface_percent");
+  if (currentBad !== null && optimizedBad !== null && optimizedBad <= currentBad - 10 && optimizedScore >= currentScore - 4) return true;
+
+  const currentPath = qualityNumber(currentSegment, "path_percent");
+  const optimizedPath = qualityNumber(optimizedSegment, "path_percent");
+  if (currentPath !== null && optimizedPath !== null && optimizedPath <= currentPath - 12 && optimizedScore >= currentScore - 4) return true;
+
+  return false;
 }
 
 export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
@@ -160,12 +175,13 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
 
     const controller = new AbortController();
     let timedOut = false;
+    const timeoutMs = mode === "live" ? SEGMENT_TIMEOUT_MS : BACKGROUND_OPTIMIZE_TIMEOUT_MS;
     const timeout = window.setTimeout(() => {
       timedOut = true;
       try {
         controller.abort();
       } catch (_) {}
-    }, SEGMENT_TIMEOUT_MS);
+    }, timeoutMs);
 
     segmentAbortRef.current.set(inflightKey, controller);
 
@@ -280,7 +296,7 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
       if (optimizeInflightRef.current !== signature) return null;
       const currentSegment = nextByKey.get(definition.key) || segmentCacheRef.current.get(definition.key);
       const optimizedSegment = await routeSegment(definition, {
-        mode: "quality",
+        mode: "optimize",
         force: true,
         cacheResult: false,
       });
