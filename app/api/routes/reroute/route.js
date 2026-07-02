@@ -160,13 +160,35 @@ function buildRunningCorridorWaypoints(segment, routingMode = "live") {
   const bearing = bearingDegrees(start, finish);
   const perpendiculars = [(bearing + 90) % 360, (bearing + 270) % 360];
   const baseOffset = Math.max(350, Math.min(1300, directMeters * 0.22));
-  const offsets = routingMode === "live" ? [baseOffset] : [baseOffset, Math.min(1800, baseOffset * 1.55)];
+  const offsets = routingMode === "live"
+    ? [baseOffset]
+    : [
+        baseOffset,
+        Math.min(1800, baseOffset * 1.45),
+        Math.min(2400, baseOffset * 2.0),
+      ];
 
   const waypointSets = [];
+  const seen = new Set();
+  const pushSet = (points) => {
+    const key = points.map((point) => `${Number(point.lat).toFixed(5)},${Number(point.lon).toFixed(5)}`).join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    waypointSets.push(points);
+  };
+
   for (const offset of offsets) {
     for (const perpendicular of perpendiculars) {
       const via = destinationPoint(mid, perpendicular, offset);
-      waypointSets.push([start, via, finish]);
+      pushSet([start, via, finish]);
+
+      if (routingMode !== "live" && directMeters >= 900) {
+        const preMid = destinationPoint(start, bearing, directMeters * 0.33);
+        const postMid = destinationPoint(start, bearing, directMeters * 0.66);
+        const via1 = destinationPoint(preMid, perpendicular, offset);
+        const via2 = destinationPoint(postMid, perpendicular, offset);
+        pushSet([start, via1, via2, finish]);
+      }
     }
   }
 
@@ -456,9 +478,9 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
 
 function routingSafeAlternativeCount(preference, routingMode = "live") {
   if (routingMode === "quality" || routingMode === "optimize") {
-    return preference === "shortest" ? 6 : 5;
+    return preference === "shortest" ? 8 : 7;
   }
-  return preference === "shortest" ? 3 : 2;
+  return preference === "shortest" ? 2 : 2;
 }
 
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null, routingMode = "live" }) {
@@ -705,7 +727,7 @@ export async function POST(request) {
       directDistanceMeters: originalDirectDistanceMeters,
     });
 
-    if (normalizedSportId === "running" && routingMode !== "live" && shouldTryRunningPavedCorridor(candidates)) {
+    if (normalizedSportId === "running" && routingMode !== "live") {
       const corridorCandidates = await collectRunningPavedCorridorCandidates({
         segment,
         sportId: normalizedSportId,
@@ -736,14 +758,17 @@ export async function POST(request) {
       const bWithinDetour = Number(b.detour || 99) <= maxDetour;
       if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
 
+      const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
+      if (Math.abs(badSurfaceDiff) >= 10) return badSurfaceDiff;
+
+      const pathDiff = Number(a.path_percent || 0) - Number(b.path_percent || 0);
+      if (Math.abs(pathDiff) >= 12) return pathDiff;
+
       const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
       if (Math.abs(scoreDiff) >= 4) return scoreDiff;
 
-      const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
-      if (Math.abs(badSurfaceDiff) >= 6) return badSurfaceDiff;
-
-      const pathDiff = Number(a.path_percent || 0) - Number(b.path_percent || 0);
-      if (Math.abs(pathDiff) >= 8) return pathDiff;
+      const pavedDiff = Number(b.raw_paved_percent || b.paved_percent || 0) - Number(a.raw_paved_percent || a.paved_percent || 0);
+      if (Math.abs(pavedDiff) >= 12) return pavedDiff;
 
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
@@ -754,7 +779,7 @@ export async function POST(request) {
   });
 
   const best = candidates[0];
-  const candidateSummary = candidates.slice(0, 8).map((candidate) => ({
+  const candidateSummary = candidates.slice(0, 16).map((candidate) => ({
     provider: candidate.provider || provider,
     profile: candidate.profile,
     preference: candidate.preference,
