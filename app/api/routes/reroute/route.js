@@ -454,11 +454,14 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
 
 
 
-function routingSafeAlternativeCount(preference) {
+function routingSafeAlternativeCount(preference, routingMode = "live") {
+  if (routingMode === "quality" || routingMode === "optimize") {
+    return preference === "shortest" ? 6 : 5;
+  }
   return preference === "shortest" ? 3 : 2;
 }
 
-async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null }) {
+async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null, routingMode = "live" }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
@@ -482,7 +485,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       // set of alternatives so Endurance can prefer dry/paved surfaces within
       // the 1.8x detour window.
       payload.alternative_routes = {
-        target_count: routingSafeAlternativeCount(preference),
+        target_count: routingSafeAlternativeCount(preference, routingMode),
         weight_factor: Math.max(1.2, maxDetour),
         share_factor: 0.8,
       };
@@ -587,7 +590,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
           if (!profile || !preference || !base) continue;
           try {
             const url = orsProviderUrl(base, profile);
-            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
+            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routingMode });
             candidates.push(...result);
           } catch (error) {
             errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -608,7 +611,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
       for (const base of (isRunning ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
         try {
           const url = orsProviderUrl(base, profile);
-          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
+          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routingMode });
           candidates.push(...result);
         } catch (error) {
           errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -656,6 +659,7 @@ async function collectRunningPavedCorridorCandidates({ segment, sportId, routing
           directDistanceMeters,
           routeKind: "paved-corridor-via",
           viaIndex,
+          routingMode,
         });
         candidates.push(...result);
       } catch (_) {
@@ -700,6 +704,16 @@ export async function POST(request) {
       routingMode,
       directDistanceMeters: originalDirectDistanceMeters,
     });
+
+    if (normalizedSportId === "running" && routingMode !== "live" && shouldTryRunningPavedCorridor(candidates)) {
+      const corridorCandidates = await collectRunningPavedCorridorCandidates({
+        segment,
+        sportId: normalizedSportId,
+        routingMode,
+        directDistanceMeters: originalDirectDistanceMeters,
+      });
+      candidates.push(...corridorCandidates);
+    }
   } catch (error) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
