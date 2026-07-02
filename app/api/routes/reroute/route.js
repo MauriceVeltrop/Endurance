@@ -129,20 +129,6 @@ function percentMap(counts) {
   );
 }
 
-function runningAvoidHighwayPathCustomModel() {
-  // Diagnostic test: apply the path rule before ORS chooses a route.
-  // ORS/GraphHopper exposes the OSM highway class through road_class in custom models.
-  // highway=path maps to road_class == PATH. Multiplying priority by 0 makes it inaccessible.
-  return {
-    priority: [
-      {
-        if: "road_class == PATH",
-        multiply_by: 0,
-      },
-    ],
-  };
-}
-
 function scoreOrsCandidate({ feature, points, sportId, profile, preference, directDistanceMeters }) {
   const config = getSportRouteProfile(sportId);
   const normalizedSportId = normalizeSportId(sportId);
@@ -201,7 +187,37 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   const detourPenalty = Math.max(0, Math.round((detour - 1) * 45));
   const unknownPenalty = Math.round(unknown * 0.25);
   const unsuitablePenalty = Math.round(unsuitable * 0.8);
-  const score = Math.max(0, Math.min(100, 70 + suitable * 0.45 + acceptable * 0.12 - detourPenalty - unknownPenalty - unsuitablePenalty));
+
+  let score = 70 + suitable * 0.45 + acceptable * 0.12 - detourPenalty - unknownPenalty - unsuitablePenalty;
+
+  if (normalizedSportId === "running") {
+    const pathPenalty = Math.round(Number(wayPercent.path || 0) * 0.9);
+    const footwayBonus = Math.round(Number(wayPercent.footway || 0) * 0.18);
+    const pavedBonus =
+      Math.round(
+        (Number(surfacePercent.asphalt || 0) +
+          Number(surfacePercent.paved || 0) +
+          Number(surfacePercent.concrete || 0) +
+          Number(surfacePercent.paving_stones || 0)) *
+          0.22
+      );
+    const unpavedPenalty =
+      Math.round(
+        (Number(surfacePercent.unpaved || 0) +
+          Number(surfacePercent.ground || 0) +
+          Number(surfacePercent.dirt || 0) +
+          Number(surfacePercent.gravel || 0) +
+          Number(surfacePercent.fine_gravel || 0) +
+          Number(surfacePercent.sand || 0) +
+          Number(surfacePercent.mud || 0) +
+          Number(surfacePercent.grass || 0)) *
+          0.65
+      );
+
+    score = score + footwayBonus + pavedBonus - pathPenalty - unpavedPenalty;
+  }
+
+  score = Math.max(0, Math.min(100, score));
 
   return {
     provider: "ors",
@@ -218,16 +234,19 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
     suitable_percent: Math.round(suitable),
     unsuitable_percent: Math.round(unsuitable),
     unknown_percent: Math.round(unknown),
-    running_logic_disabled: normalizedSportId === "running",
+    running_path_discouraged: normalizedSportId === "running",
   };
 }
-
 
 async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
+    const config = getSportRouteProfile(sportId);
+    const maxDetour = Number(config.maxDetourFactor || 1.4);
+    const normalizedSportId = normalizeSportId(sportId);
+
     const payload = {
       coordinates: points.map((point) => [point.lon, point.lat]),
       elevation: true,
@@ -238,22 +257,16 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       extra_info: ["waytype", "surface"],
     };
 
-    if (normalizeSportId(sportId) === "running") {
-      // Only active Running rule for this diagnostic test:
-      // make OSM highway=path inaccessible during ORS routing.
-      // No post-filtering on ORS waytype=path is applied.
-      payload.custom_model = runningAvoidHighwayPathCustomModel();
-    } else {
-      const config = getSportRouteProfile(sportId);
-      const maxDetour = Number(config.maxDetourFactor || 1.4);
-      payload.alternative_routes = {
-        target_count: 2,
-        weight_factor: Math.max(1.05, maxDetour),
-        share_factor: 0.6,
-      };
-    }
+    // Do not use custom_model for Running. The ORS probe proved that custom_model
+    // is not available for foot-walking. Keep Routing stable and let scoring
+    // discourage path without rejecting the only valid candidate.
+    payload.alternative_routes = {
+      target_count: normalizedSportId === "running" ? 3 : 2,
+      weight_factor: Math.max(1.05, Math.min(maxDetour, normalizedSportId === "running" ? 2.2 : maxDetour)),
+      share_factor: 0.6,
+    };
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: apiKey,
@@ -263,6 +276,30 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
+
+    if (!response.ok) {
+      const firstText = await response.text().catch(() => "");
+      console.warn("ORS route alternatives failed, retrying without alternatives", {
+        status: response.status,
+        body: firstText.slice(0, 800),
+        profile,
+        preference,
+      });
+
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.alternative_routes;
+
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: apiKey,
+          "Content-Type": "application/json",
+          Accept: "application/json, application/geo+json",
+        },
+        body: JSON.stringify(fallbackPayload),
+        signal: controller.signal,
+      });
+    }
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -380,7 +417,6 @@ export async function POST(request) {
     errors.push(`ors: ${error?.message || "failed"}`);
   }
 
-
   if (!candidates.length) {
     return fallbackResponse({
       points: segment,
@@ -389,12 +425,8 @@ export async function POST(request) {
   }
 
   candidates.sort((a, b) => {
-    if (normalizedSportId === "running") {
-      // Running baseline: ORS shortest decides. Scores are informational only.
-      return Number(a.distance || 0) - Number(b.distance || 0);
-    }
     const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
-    if (Math.abs(scoreDiff) > 4) return scoreDiff;
+    if (Math.abs(scoreDiff) > (normalizedSportId === "running" ? 2 : 4)) return scoreDiff;
     return Number(a.distance || 0) - Number(b.distance || 0);
   });
 
@@ -409,7 +441,7 @@ export async function POST(request) {
     suitable_percent: candidate.suitable_percent,
     unsuitable_percent: candidate.unsuitable_percent,
     unknown_percent: candidate.unknown_percent,
-    running_logic_disabled: candidate.running_logic_disabled,
+    running_path_discouraged: candidate.running_path_discouraged,
     path_percent: Math.round(Number(candidate?.wayPercent?.path || 0)),
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
@@ -450,9 +482,12 @@ export async function POST(request) {
         candidates: candidates.length,
         candidate_summary: candidateSummary,
         provider: best.provider || "ors",
-        running_logic_disabled: normalizedSportId === "running",
+        running_path_discouraged: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
-        message: normalizedSportId === "running" ? "Running test: OSM highway=path is avoided during ORS routing via custom_model; no ORS waytype post-filter is applied." : undefined,
+        message:
+          normalizedSportId === "running"
+            ? "Running stable mode: ORS foot-walking without custom_model or hard path rejection. Path is discouraged in candidate scoring only."
+            : undefined,
       },
       routed_at: new Date().toISOString(),
     },
