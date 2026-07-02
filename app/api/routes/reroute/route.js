@@ -258,8 +258,15 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     };
 
     // Do not use custom_model for Running. The ORS probe proved that custom_model
-    // is not available for foot-walking. Keep Routing stable and let scoring
-    // discourage path without rejecting the only valid candidate.
+    // is not available for foot-walking. For Running, try ORS avoid_features first
+    // so ORS can avoid unpaved/steps before routing. If ORS rejects this option,
+    // retry without it to keep the route editor stable.
+    if (normalizedSportId === "running") {
+      payload.options = {
+        avoid_features: ["unpaved", "steps"],
+      };
+    }
+
     payload.alternative_routes = {
       target_count: normalizedSportId === "running" ? 3 : 2,
       weight_factor: Math.max(1.05, Math.min(maxDetour, normalizedSportId === "running" ? 2.2 : maxDetour)),
@@ -288,6 +295,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
 
       const fallbackPayload = { ...payload };
       delete fallbackPayload.alternative_routes;
+      delete fallbackPayload.options;
 
       response = await fetch(url, {
         method: "POST",
@@ -486,7 +494,7 @@ export async function POST(request) {
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running stable mode: ORS foot-walking without custom_model or hard path rejection. Path is discouraged in candidate scoring only."
+            ? "Running stable mode: ORS foot-walking without custom_model or hard path rejection. It tries avoid_features unpaved/steps first and falls back safely if ORS rejects it; path is discouraged in candidate scoring."
             : undefined,
       },
       routed_at: new Date().toISOString(),
