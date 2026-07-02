@@ -193,26 +193,24 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   if (normalizedSportId === "running") {
     const pathPenalty = Math.round(Number(wayPercent.path || 0) * 0.9);
     const footwayBonus = Math.round(Number(wayPercent.footway || 0) * 0.18);
-    const pavedBonus =
-      Math.round(
-        (Number(surfacePercent.asphalt || 0) +
-          Number(surfacePercent.paved || 0) +
-          Number(surfacePercent.concrete || 0) +
-          Number(surfacePercent.paving_stones || 0)) *
-          0.22
-      );
-    const unpavedPenalty =
-      Math.round(
-        (Number(surfacePercent.unpaved || 0) +
-          Number(surfacePercent.ground || 0) +
-          Number(surfacePercent.dirt || 0) +
-          Number(surfacePercent.gravel || 0) +
-          Number(surfacePercent.fine_gravel || 0) +
-          Number(surfacePercent.sand || 0) +
-          Number(surfacePercent.mud || 0) +
-          Number(surfacePercent.grass || 0)) *
-          0.65
-      );
+    const pavedBonus = Math.round(
+      (Number(surfacePercent.asphalt || 0) +
+        Number(surfacePercent.paved || 0) +
+        Number(surfacePercent.concrete || 0) +
+        Number(surfacePercent.paving_stones || 0)) *
+        0.22
+    );
+    const unpavedPenalty = Math.round(
+      (Number(surfacePercent.unpaved || 0) +
+        Number(surfacePercent.ground || 0) +
+        Number(surfacePercent.dirt || 0) +
+        Number(surfacePercent.gravel || 0) +
+        Number(surfacePercent.fine_gravel || 0) +
+        Number(surfacePercent.sand || 0) +
+        Number(surfacePercent.mud || 0) +
+        Number(surfacePercent.grass || 0)) *
+        0.65
+    );
 
     score = score + footwayBonus + pavedBonus - pathPenalty - unpavedPenalty;
   }
@@ -243,10 +241,6 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
 
   try {
-    const config = getSportRouteProfile(sportId);
-    const maxDetour = Number(config.maxDetourFactor || 1.4);
-    const normalizedSportId = normalizeSportId(sportId);
-
     const payload = {
       coordinates: points.map((point) => [point.lon, point.lat]),
       elevation: true,
@@ -257,23 +251,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       extra_info: ["waytype", "surface"],
     };
 
-    // Do not use custom_model for Running. The ORS probe proved that custom_model
-    // is not available for foot-walking. For Running, try ORS avoid_features first
-    // so ORS can avoid unpaved/steps before routing. If ORS rejects this option,
-    // retry without it to keep the route editor stable.
-    if (normalizedSportId === "running") {
-      payload.options = {
-        avoid_features: ["unpaved", "steps"],
-      };
-    }
-
-    payload.alternative_routes = {
-      target_count: normalizedSportId === "running" ? 3 : 2,
-      weight_factor: Math.max(1.05, Math.min(maxDetour, normalizedSportId === "running" ? 2.2 : maxDetour)),
-      share_factor: 0.6,
-    };
-
-    let response = await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: apiKey,
@@ -283,31 +261,6 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      const firstText = await response.text().catch(() => "");
-      console.warn("ORS route alternatives failed, retrying without alternatives", {
-        status: response.status,
-        body: firstText.slice(0, 800),
-        profile,
-        preference,
-      });
-
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.alternative_routes;
-      delete fallbackPayload.options;
-
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json, application/geo+json",
-        },
-        body: JSON.stringify(fallbackPayload),
-        signal: controller.signal,
-      });
-    }
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -409,7 +362,6 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: "At least two points are required." }, { status: 400 });
   }
 
-  // Segment-first: long routes are routed as A→B calls by the draw engine.
   const segment = [points[0], points[points.length - 1]];
   const originalDirectDistanceMeters = routeDistanceMeters(segment);
   const errors = [];
@@ -494,7 +446,7 @@ export async function POST(request) {
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running stable mode: ORS foot-walking without custom_model or hard path rejection. It tries avoid_features unpaved/steps first and falls back safely if ORS rejects it; path is discouraged in candidate scoring."
+            ? "Running ORS baseline: foot-walking/recommended with elevation, no custom_model, no avoid_features, no alternative_routes and no hard path filtering. Score is informational only."
             : undefined,
       },
       routed_at: new Date().toISOString(),
