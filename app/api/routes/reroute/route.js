@@ -118,7 +118,7 @@ function runningCandidateIsValid(candidate = {}) {
   const effectivePaved = runningEffectivePavedPercent(candidate);
   const badSurface = Number(candidate.bad_surface_percent || 0);
 
-  if (detour > 1.6) return false;
+  if (detour > 1.8) return false;
 
   // Hard Running acceptance rule:
   // reject track/path-heavy shortcuts unless the candidate is overwhelmingly
@@ -318,14 +318,71 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   let score;
 
   if (normalizeSportId(sportId) === "running") {
-    // Diagnostic baseline for Running:
-    // quality is informational only and must not influence route choice.
-    // ORS shortest foot-walking decides the route.
-    suitable = 100;
-    acceptable = 0;
-    unsuitable = 0;
-    unknown = 0;
-    score = 100;
+    const maxDetour = Number(config.maxDetourFactor || 1.8);
+    const asphaltPavedPercent =
+      Number(surfacePercent.asphalt || 0)
+      + Number(surfacePercent.concrete || 0)
+      + Number(surfacePercent.paved || 0)
+      + Number(surfacePercent.paving_stones || 0)
+      + Number(surfacePercent.sett || 0);
+    const compactPercent = Number(surfacePercent.compacted || 0) + Number(surfacePercent.fine_gravel || 0);
+    const gravelPercent = Number(surfacePercent.gravel || 0);
+    const mudPercent = Number(surfacePercent.mud || 0);
+    const dirtPercent = Number(surfacePercent.dirt || 0);
+    const sandPercent = Number(surfacePercent.sand || 0);
+    const grassPercent = Number(surfacePercent.grass || 0);
+    const groundPercent = Number(surfacePercent.ground || 0) + Number(surfacePercent.earth || 0);
+    const unpavedPercent = Number(surfacePercent.unpaved || 0);
+    const trackPercent = Number(wayPercent.track || 0);
+    const pathPercent = Number(wayPercent.path || 0);
+    const safeWayPercent =
+      Number(wayPercent.street || 0)
+      + Number(wayPercent.residential || 0)
+      + Number(wayPercent.footway || 0)
+      + Number(wayPercent.cycleway || 0)
+      + Number(wayPercent.pedestrian || 0)
+      + Number(wayPercent.living_street || 0)
+      + Number(wayPercent.service || 0);
+
+    // Running v2 simple rule:
+    // Surface leads. Track is neutral; path is mildly negative. Mud, dirt, sand
+    // and grass are strongly negative. Detour is allowed up to 1.8x.
+    suitable = Math.min(100, asphaltPavedPercent + compactPercent * 0.8 + safeWayPercent * 0.25);
+    acceptable = Math.min(100, gravelPercent + trackPercent * 0.25);
+    unsuitable = Math.min(
+      100,
+      mudPercent + dirtPercent + sandPercent + grassPercent + groundPercent + unpavedPercent + pathPercent * 0.45
+    );
+    unknown = Math.min(100, surfaceUnknown);
+
+    const detourPenalty = detour <= maxDetour
+      ? Math.max(0, (detour - 1) * 6)
+      : 10 + (detour - maxDetour) * 95;
+    const badSurfacePenalty =
+      mudPercent * 7.0
+      + dirtPercent * 5.0
+      + sandPercent * 5.0
+      + grassPercent * 4.5
+      + groundPercent * 3.2
+      + unpavedPercent * 2.6;
+    const pathPenalty = pathPercent * 1.2;
+    const unknownPenalty = Math.max(0, unknown - safeWayPercent * 0.45) * 0.45;
+    const goodSurfaceBonus = asphaltPavedPercent * 0.55 + compactPercent * 0.35;
+
+    score = Math.max(
+      0,
+      Math.min(
+        100,
+        58
+          + suitable * 0.42
+          + acceptable * 0.12
+          + goodSurfaceBonus
+          - badSurfacePenalty
+          - pathPenalty
+          - unknownPenalty
+          - detourPenalty
+      )
+    );
   } else {
     suitable = Math.min(100, surfaceSuitable + Math.round(waySuitable * 0.2));
     acceptable = Math.min(100, surfaceAcceptable);
@@ -364,6 +421,8 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
       + Number(surfacePercent.gravel || 0)
     ) : null,
     track_path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.track || 0) + Number(wayPercent.path || 0)) : null,
+    path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.path || 0)) : null,
+    track_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.track || 0)) : null,
     suspicious_track_path_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(wayPercent.suspicious_track_path || 0)) : null,
     paved_percent: normalizeSportId(sportId) === "running" ? Math.round(Number(surfacePercent.effective_paved || 0)) : null,
     raw_paved_percent: normalizeSportId(sportId) === "running" ? Math.round(
@@ -395,18 +454,13 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
 
 
 
-async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null, debugCollector = null }) {
+function routingSafeAlternativeCount(preference) {
+  return preference === "shortest" ? 3 : 2;
+}
+
+async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, routeKind = "direct", viaIndex = null }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-  const startedAt = Date.now();
-  const debugEntry = {
-    profile,
-    preference,
-    route_kind: routeKind,
-    via_index: viaIndex,
-    coordinate_count: Array.isArray(points) ? points.length : 0,
-    alternative_routes_requested: false,
-  };
 
   try {
     const isRunning = normalizeSportId(sportId) === "running";
@@ -424,17 +478,20 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const maxDetour = Number(config.maxDetourFactor || (isRunning ? 1.4 : 1.4));
 
     if (isRunning) {
-      // Diagnostic baseline for Running:
-      // no alternative search, no avoid_features, no corridor steering.
-      // Let ORS return the shortest legal foot-walking route between A and B.
+      // Running live/quality: keep the request light, but do ask ORS for a small
+      // set of alternatives so Endurance can prefer dry/paved surfaces within
+      // the 1.8x detour window.
+      payload.alternative_routes = {
+        target_count: routingSafeAlternativeCount(preference),
+        weight_factor: Math.max(1.2, maxDetour),
+        share_factor: 0.8,
+      };
     } else {
       payload.alternative_routes = {
         target_count: 2,
         weight_factor: Math.max(1.05, maxDetour),
         share_factor: 0.6,
       };
-      debugEntry.alternative_routes_requested = true;
-      debugEntry.alternative_routes = payload.alternative_routes;
     }
 
     const response = await fetch(url, {
@@ -448,12 +505,8 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       signal: controller.signal,
     });
 
-    debugEntry.status = response.status;
-    debugEntry.ok = response.ok;
-
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      debugEntry.error = text.slice(0, 500);
       console.error("ORS route error", { status: response.status, body: text.slice(0, 800), profile, preference });
       throw new Error(`${response.status} ${text.slice(0, 300)}`);
     }
@@ -461,31 +514,20 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
     const data = await response.json();
 
     const features = Array.isArray(data?.features) ? data.features : [];
-    const scored = features
+    return features
       .map((feature) => ({
         ...scoreOrsCandidate({ feature, points, sportId, profile, preference, directDistanceMeters }),
         route_kind: routeKind,
         via_index: viaIndex,
       }))
       .filter((candidate) => candidate.points.length >= 2);
-
-    debugEntry.feature_count = features.length;
-    debugEntry.candidate_count = scored.length;
-    debugEntry.geometry_points = scored.map((candidate) => candidate.points?.length || 0);
-    debugEntry.duration_ms = Date.now() - startedAt;
-    return scored;
-  } catch (error) {
-    debugEntry.duration_ms = Date.now() - startedAt;
-    debugEntry.error = error?.message || "failed";
-    throw error;
   } finally {
-    if (Array.isArray(debugCollector)) debugCollector.push(debugEntry);
     clearTimeout(timeout);
   }
 }
 
 
-function fallbackResponse({ points, reason = "Routing provider could not snap this segment.", debug = null }) {
+function fallbackResponse({ points, reason = "Routing provider could not snap this segment." }) {
   const distance = routeDistanceMeters(points);
   const ascent = routeAscentMeters(points);
   return NextResponse.json({
@@ -505,7 +547,6 @@ function fallbackResponse({ points, reason = "Routing provider could not snap th
         score: 0,
         routed: false,
         message: reason,
-        debug,
       },
       routed_at: new Date().toISOString(),
     },
@@ -522,24 +563,22 @@ function getOpenRouteServiceApiKey() {
 }
 
 
-async function collectOrsCandidates({ points, sportId, routingMode = "quality", directDistanceMeters, debugCollector = null }) {
+async function collectOrsCandidates({ points, sportId, routingMode = "quality", directDistanceMeters }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) {
     throw new Error("OpenRouteService API key is missing.");
   }
 
-  const isRunningBaseline = normalizeSportId(sportId) === "running";
-  const profiles = isRunningBaseline ? ["foot-walking"] : getProviderProfiles(sportId);
-  const preferences = isRunningBaseline ? ["shortest"] : getRoutingPreferences(sportId);
+  const isRunning = normalizeSportId(sportId) === "running";
+  const profiles = isRunning ? ["foot-walking"] : getProviderProfiles(sportId);
+  const preferences = isRunning ? ["recommended", "shortest"] : getRoutingPreferences(sportId);
   const candidates = [];
   const errors = [];
 
 
   if (routingMode === "live") {
-    const isRunning = normalizeSportId(sportId) === "running";
-
     const liveProfiles = isRunning ? ["foot-walking"] : profiles.slice(0, 1);
-    const livePreferences = isRunning ? ["shortest"] : preferences.slice(0, 1);
+    const livePreferences = isRunning ? ["recommended", "shortest"] : preferences.slice(0, 1);
     const liveBases = ORS_ROUTING_BASES.slice(0, 1);
 
     for (const profile of liveProfiles) {
@@ -548,7 +587,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
           if (!profile || !preference || !base) continue;
           try {
             const url = orsProviderUrl(base, profile);
-            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, debugCollector });
+            const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile });
             candidates.push(...result);
           } catch (error) {
             errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -566,10 +605,10 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
 
   for (const profile of profiles) {
     for (const preference of preferences) {
-      for (const base of (isRunningBaseline ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
+      for (const base of (isRunning ? ORS_ROUTING_BASES.slice(0, 1) : ORS_ROUTING_BASES)) {
         try {
           const url = orsProviderUrl(base, profile);
-          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters, debugCollector });
+          const result = await fetchOrsCandidate({ url, apiKey, points, preference, sportId, profile, directDistanceMeters });
           candidates.push(...result);
         } catch (error) {
           errors.push(`${profile}/${preference}: ${error?.message || "failed"}`);
@@ -590,7 +629,7 @@ async function collectOrsCandidates({ points, sportId, routingMode = "quality", 
 }
 
 
-async function collectRunningPavedCorridorCandidates({ segment, sportId, routingMode = "live", directDistanceMeters, debugCollector = null }) {
+async function collectRunningPavedCorridorCandidates({ segment, sportId, routingMode = "live", directDistanceMeters }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) return [];
 
@@ -617,7 +656,6 @@ async function collectRunningPavedCorridorCandidates({ segment, sportId, routing
           directDistanceMeters,
           routeKind: "paved-corridor-via",
           viaIndex,
-          debugCollector,
         });
         candidates.push(...result);
       } catch (_) {
@@ -653,7 +691,6 @@ export async function POST(request) {
   const normalizedSportId = normalizeSportId(sportId);
   const provider = "ors";
   const errors = [];
-  const requestDebug = [];
   let candidates = [];
 
   try {
@@ -662,7 +699,6 @@ export async function POST(request) {
       sportId: normalizedSportId,
       routingMode,
       directDistanceMeters: originalDirectDistanceMeters,
-      debugCollector: requestDebug,
     });
   } catch (error) {
     errors.push(`ors: ${error?.message || "failed"}`);
@@ -672,15 +708,6 @@ export async function POST(request) {
     return fallbackResponse({
       points: segment,
       reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
-      debug: {
-        mode: routingMode,
-        requested_profiles: normalizedSportId === "running" ? ["foot-walking"] : getProviderProfiles(normalizedSportId),
-        requested_preferences: normalizedSportId === "running" ? ["shortest"] : getRoutingPreferences(normalizedSportId),
-        request_count: requestDebug.length,
-        errors,
-        requests: requestDebug,
-        candidates_before_selection: 0,
-      },
     });
   }
 
@@ -689,9 +716,21 @@ export async function POST(request) {
     const isRunning = normalizedSportId === "running";
 
     if (isRunning) {
-      // Diagnostic baseline for Running:
-      // no Endurance quality preferences. Take the shortest ORS foot-walking
-      // candidate between A and B.
+      const config = getSportRouteProfile(normalizedSportId);
+      const maxDetour = Number(config.maxDetourFactor || 1.8);
+      const aWithinDetour = Number(a.detour || 99) <= maxDetour;
+      const bWithinDetour = Number(b.detour || 99) <= maxDetour;
+      if (aWithinDetour !== bWithinDetour) return aWithinDetour ? -1 : 1;
+
+      const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+      if (Math.abs(scoreDiff) >= 4) return scoreDiff;
+
+      const badSurfaceDiff = Number(a.bad_surface_percent || 0) - Number(b.bad_surface_percent || 0);
+      if (Math.abs(badSurfaceDiff) >= 6) return badSurfaceDiff;
+
+      const pathDiff = Number(a.path_percent || 0) - Number(b.path_percent || 0);
+      if (Math.abs(pathDiff) >= 8) return pathDiff;
+
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
 
@@ -713,6 +752,8 @@ export async function POST(request) {
     unknown_percent: candidate.unknown_percent,
     bad_surface_percent: candidate.bad_surface_percent,
     track_path_percent: candidate.track_path_percent,
+    path_percent: candidate.path_percent,
+    track_percent: candidate.track_percent,
     suspicious_track_path_percent: candidate.suspicious_track_path_percent,
     paved_percent: candidate.paved_percent,
     raw_paved_percent: candidate.raw_paved_percent,
@@ -731,25 +772,6 @@ export async function POST(request) {
 
   const distance = routeDistanceMeters(best.points);
   const ascent = Number.isFinite(Number(best.elevation_gain_m)) ? Number(best.elevation_gain_m) : routeAscentMeters(best.points);
-  const apiDebug = {
-    mode: routingMode,
-    requested_profiles: normalizedSportId === "running" ? ["foot-walking"] : getProviderProfiles(normalizedSportId),
-    requested_preferences: normalizedSportId === "running" ? ["shortest"] : getRoutingPreferences(normalizedSportId),
-    request_count: requestDebug.length,
-    errors,
-    requests: requestDebug,
-    candidate_count_after_filter: candidates.length,
-    selected_candidate: {
-      profile: best.profile,
-      preference: best.preference,
-      score: best.score,
-      detour: Number(best.detour || 0),
-      distance_km: Number((Number(best.distance || 0) / 1000).toFixed(3)),
-      geometry_points: best.points?.length || 0,
-      surfaces: best.surfacePercent,
-      waytypes: best.wayPercent,
-    },
-  };
 
   return NextResponse.json({
     ok: true,
@@ -757,7 +779,6 @@ export async function POST(request) {
     provider: best.provider || provider,
     profile: best.profile,
     preference: best.preference,
-    debug: apiDebug,
     route_points: {
       source: `${best.provider || provider}-segment`,
       provider: best.provider || provider,
@@ -776,6 +797,8 @@ export async function POST(request) {
         unknown_percent: best.unknown_percent,
         bad_surface_percent: best.bad_surface_percent,
         track_path_percent: best.track_path_percent,
+        path_percent: best.path_percent,
+        track_percent: best.track_percent,
         suspicious_track_path_percent: best.suspicious_track_path_percent,
         paved_percent: best.paved_percent,
         raw_paved_percent: best.raw_paved_percent,
@@ -789,7 +812,6 @@ export async function POST(request) {
         waytypes: best.wayPercent,
         candidates: candidates.length,
         candidate_summary: candidateSummary,
-        debug: apiDebug,
         provider: best.provider || provider,
       },
       routed_at: new Date().toISOString(),
