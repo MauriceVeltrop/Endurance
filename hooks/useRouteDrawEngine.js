@@ -8,6 +8,137 @@ const BACKGROUND_OPTIMIZE_DELAY_MS = 900;
 const BACKGROUND_OPTIMIZE_MIN_SCORE_GAIN = 6;
 const BACKGROUND_OPTIMIZE_TIMEOUT_MS = 24000;
 
+
+function haversineMeters(a, b) {
+  if (!a || !b) return Infinity;
+  const R = 6371000;
+  const toRad = (value) => (Number(value) * Math.PI) / 180;
+  const dLat = toRad(Number(b.lat) - Number(a.lat));
+  const dLon = toRad(Number(b.lon) - Number(a.lon));
+  const lat1 = toRad(Number(a.lat));
+  const lat2 = toRad(Number(b.lat));
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function routeDistanceMeters(points = []) {
+  const geometry = normalizeRoutePoints(points);
+  let total = 0;
+  for (let index = 1; index < geometry.length; index += 1) {
+    total += haversineMeters(geometry[index - 1], geometry[index]);
+  }
+  return total;
+}
+
+function nearestGeometryIndex(target, geometry = []) {
+  const point = normalizeRoutePoints([target])[0];
+  const points = normalizeRoutePoints(geometry);
+  if (!point || points.length < 2) return -1;
+
+  let bestIndex = -1;
+  let bestMeters = Infinity;
+  points.forEach((candidate, index) => {
+    const meters = haversineMeters(point, candidate);
+    if (meters < bestMeters) {
+      bestMeters = meters;
+      bestIndex = index;
+    }
+  });
+
+  return bestMeters <= 160 ? bestIndex : -1;
+}
+
+function weightedWindowScore(segments = []) {
+  let scoreMeters = 0;
+  let metersTotal = 0;
+  let badMeters = 0;
+  let pathMeters = 0;
+
+  segments.forEach((segment) => {
+    const geometry = normalizeRoutePoints(segment?.geometry || segment?.points || segment?.control);
+    const meters = Math.max(1, routeDistanceMeters(geometry));
+    const score = routeQualityScore(segment);
+    if (score !== null) scoreMeters += score * meters;
+    metersTotal += meters;
+
+    const bad = qualityNumber(segment, "bad_surface_percent");
+    const path = qualityNumber(segment, "path_percent");
+    if (bad !== null) badMeters += (bad / 100) * meters;
+    if (path !== null) pathMeters += (path / 100) * meters;
+  });
+
+  if (!metersTotal) return null;
+  return {
+    score: Math.round(scoreMeters / metersTotal),
+    bad: Math.round((badMeters / metersTotal) * 100),
+    path: Math.round((pathMeters / metersTotal) * 100),
+    meters: metersTotal,
+  };
+}
+
+function shouldUseOptimizedWindow(currentSegments = [], optimizedWindow) {
+  const optimizedScore = routeQualityScore(optimizedWindow);
+  if (optimizedScore === null || optimizedWindow?.routed === false) return false;
+
+  const current = weightedWindowScore(currentSegments);
+  if (!current) return optimizedScore >= 45;
+
+  const optimizedBad = qualityNumber(optimizedWindow, "bad_surface_percent");
+  const optimizedPath = qualityNumber(optimizedWindow, "path_percent");
+
+  if (optimizedScore >= current.score + 10) return true;
+  if (optimizedBad !== null && optimizedBad <= current.bad - 10 && optimizedScore >= current.score - 3) return true;
+  if (optimizedPath !== null && optimizedPath <= current.path - 12 && optimizedScore >= current.score - 3) return true;
+
+  return false;
+}
+
+function splitOptimizedWindow({ windowSegment, firstDefinition, secondDefinition }) {
+  const geometry = normalizeRoutePoints(windowSegment?.geometry || windowSegment?.points);
+  if (geometry.length < 3) return null;
+
+  const splitIndex = nearestGeometryIndex(firstDefinition?.to, geometry);
+  if (splitIndex <= 0 || splitIndex >= geometry.length - 1) return null;
+
+  let firstGeometry = geometry.slice(0, splitIndex + 1);
+  let secondGeometry = geometry.slice(splitIndex);
+
+  const middle = normalizeRoutePoints([firstDefinition.to])[0];
+  if (middle) {
+    firstGeometry = [...firstGeometry.slice(0, -1), middle];
+    secondGeometry = [middle, ...secondGeometry.slice(1)];
+  }
+
+  const quality = {
+    ...(windowSegment.quality || {}),
+    route_kind: "window-optimized-split",
+    window_optimized: true,
+  };
+
+  return [
+    {
+      ...firstDefinition,
+      geometry: firstGeometry,
+      points: firstGeometry,
+      routed: true,
+      status: "snapped",
+      source: "window-background-optimized",
+      quality,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      ...secondDefinition,
+      geometry: secondGeometry,
+      points: secondGeometry,
+      routed: true,
+      status: "snapped",
+      source: "window-background-optimized",
+      quality,
+      updated_at: new Date().toISOString(),
+    },
+  ];
+}
+
 function fallbackSegment(segment, reason = "Routing provider could not snap this segment.") {
   const geometry = normalizeRoutePoints(segment?.control || [segment?.from, segment?.to]);
 
@@ -291,6 +422,62 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     });
 
     let optimizedAny = false;
+
+    // Whole-route aware pass: optimize adjacent two-segment windows before
+    // falling back to individual A→B optimization. This lets Endurance replace
+    // a locally bad A→B + B→C pair with a better A→C corridor while keeping the
+    // user control point B as a split point when the optimized geometry passes
+    // close enough to it. If the window does not pass near B, it is rejected to
+    // avoid surprising control-point jumps.
+    for (let index = 0; index < definitions.length - 1; index += 1) {
+      if (optimizeInflightRef.current !== signature) return null;
+
+      const firstDefinition = definitions[index];
+      const secondDefinition = definitions[index + 1];
+      const currentFirst = nextByKey.get(firstDefinition.key) || segmentCacheRef.current.get(firstDefinition.key);
+      const currentSecond = nextByKey.get(secondDefinition.key) || segmentCacheRef.current.get(secondDefinition.key);
+      const currentWindow = [currentFirst, currentSecond].filter(Boolean);
+
+      const windowDefinition = {
+        index,
+        from: firstDefinition.from,
+        to: secondDefinition.to,
+        key: `window2::${firstDefinition.key}::${secondDefinition.key}`,
+        control: [firstDefinition.from, secondDefinition.to],
+      };
+
+      const optimizedWindow = await routeSegment(windowDefinition, {
+        mode: "optimize",
+        force: true,
+        cacheResult: false,
+      });
+
+      if (!optimizedWindow || optimizeInflightRef.current !== signature) return null;
+      if (!shouldUseOptimizedWindow(currentWindow, optimizedWindow)) continue;
+
+      const splitSegments = splitOptimizedWindow({
+        windowSegment: optimizedWindow,
+        firstDefinition,
+        secondDefinition,
+      });
+
+      if (!splitSegments) continue;
+
+      segmentCacheRef.current.set(firstDefinition.key, splitSegments[0]);
+      segmentCacheRef.current.set(secondDefinition.key, splitSegments[1]);
+      nextByKey.set(firstDefinition.key, splitSegments[0]);
+      nextByKey.set(secondDefinition.key, splitSegments[1]);
+      optimizedAny = true;
+
+      const nextSegments = buildSegmentState(definitions, nextByKey);
+      setRouteSegments(nextSegments);
+      setRoutePayload(buildRoutePayloadFromSegments({
+        segments: nextSegments,
+        controlPoints: controls,
+        source: "segmented-routing-window-background-optimized",
+        sportId,
+      }));
+    }
 
     for (const definition of definitions) {
       if (optimizeInflightRef.current !== signature) return null;
