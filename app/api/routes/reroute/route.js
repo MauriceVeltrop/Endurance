@@ -129,6 +129,20 @@ function percentMap(counts) {
   );
 }
 
+function runningAvoidHighwayPathCustomModel() {
+  // Diagnostic test: apply the path rule before ORS chooses a route.
+  // ORS/GraphHopper exposes the OSM highway class through road_class in custom models.
+  // highway=path maps to road_class == PATH. Multiplying priority by 0 makes it inaccessible.
+  return {
+    priority: [
+      {
+        if: "road_class == PATH",
+        multiply_by: 0,
+      },
+    ],
+  };
+}
+
 function scoreOrsCandidate({ feature, points, sportId, profile, preference, directDistanceMeters }) {
   const config = getSportRouteProfile(sportId);
   const normalizedSportId = normalizeSportId(sportId);
@@ -224,10 +238,12 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
       extra_info: ["waytype", "surface"],
     };
 
-    // Important: Running is now a pure ORS baseline.
-    // No custom models, no avoid_features, no alternative_routes, no corridor routing,
-    // no candidate rejection and no post-routing optimization.
-    if (normalizeSportId(sportId) !== "running") {
+    if (normalizeSportId(sportId) === "running") {
+      // Only active Running rule for this diagnostic test:
+      // make OSM highway=path inaccessible during ORS routing.
+      // No post-filtering on ORS waytype=path is applied.
+      payload.custom_model = runningAvoidHighwayPathCustomModel();
+    } else {
       const config = getSportRouteProfile(sportId);
       const maxDetour = Number(config.maxDetourFactor || 1.4);
       payload.alternative_routes = {
@@ -436,7 +452,7 @@ export async function POST(request) {
         provider: best.provider || "ors",
         running_logic_disabled: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
-        message: normalizedSportId === "running" ? "Running baseline: no path filter, no surface rules and no scoring preferences." : undefined,
+        message: normalizedSportId === "running" ? "Running test: OSM highway=path is avoided during ORS routing via custom_model; no ORS waytype post-filter is applied." : undefined,
       },
       routed_at: new Date().toISOString(),
     },
