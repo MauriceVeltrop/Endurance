@@ -192,6 +192,18 @@ function CandidateDebugPanel({ candidateSegments = [] }) {
             <span>Segment {Number(segment.segment_index) + 1}</span>
             <b>{segment.selected_score ?? "—"}/100 · {Number(segment.selected_detour || 1).toFixed(2)}×</b>
           </p>
+          {segment.debug ? (
+            <div className="route-quality-debug-requests">
+              <em>
+                mode {segment.debug.mode || "—"} · requests {segment.debug.request_count ?? 0} · candidates {segment.debug.candidate_count_after_filter ?? 0}
+              </em>
+              {(segment.debug.requests || []).slice(0, 5).map((request, requestIndex) => (
+                <em key={`debug-request-${segment.segment_index}-${requestIndex}`}>
+                  #{requestIndex + 1} {request.profile}/{request.preference} · status {request.status ?? "—"} · features {request.feature_count ?? 0} · candidates {request.candidate_count ?? 0} · points {(request.geometry_points || []).join(",") || "—"}{request.error ? ` · ${String(request.error).slice(0, 80)}` : ""}
+                </em>
+              ))}
+            </div>
+          ) : null}
           {(segment.candidates || []).slice(0, 4).map((candidate, index) => {
             const surfaces = compactPercentList(candidate.surfaces, ["effective_paved", "inferred_paved_unknown", "asphalt", "paved", "concrete", "unknown", "dirt", "ground", "mud", "sand", "gravel", "unpaved"]);
             const waytypes = compactPercentList(candidate.waytypes, ["street", "footway", "cycleway", "path", "track", "suspicious_track_path", "road", "state_road"]);
