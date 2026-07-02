@@ -370,7 +370,7 @@ export async function POST(request) {
   if (normalizedSportId === "running") {
     // Diagnostic isolation test:
     // The only active Running rule is that ORS candidates containing
-    // highway=path (reported by ORS as waytype/path) are inaccessible.
+    // ORS waytype=path candidates are inaccessible.
     // No surface, detour, track, asphalt, dirt or score preferences are applied.
     candidates = candidates.filter((candidate) => !runningCandidateUsesHighwayPath(candidate));
   }
@@ -386,7 +386,7 @@ export async function POST(request) {
 
   candidates.sort((a, b) => {
     if (normalizedSportId === "running") {
-      // Running baseline: ORS shortest decides. Scores are informational only.
+      // Running test: ORS recommended is requested; with one Running candidate this is a no-op.
       return Number(a.distance || 0) - Number(b.distance || 0);
     }
     const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
