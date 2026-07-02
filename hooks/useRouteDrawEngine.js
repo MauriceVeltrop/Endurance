@@ -514,20 +514,9 @@ export default function useRouteDrawEngine({ sportId, initialPoints = [] }) {
     return optimizedAny;
   }, [buildSegmentState, routeSegment, sportId]);
 
-  const scheduleBackgroundOptimize = useCallback((controlsSnapshot = [], liveSegmentsSnapshot = []) => {
-    if (String(sportId || "").toLowerCase() !== "running") return;
-    const controls = normalizeRoutePoints(controlsSnapshot);
-    if (controls.length < 2) return;
-
-    const signature = controlSignature(controls);
-    if (optimizedSignatureRef.current === signature) return;
-
-    clearOptimizeTimer();
-    optimizeTimerRef.current = window.setTimeout(() => {
-      optimizeTimerRef.current = null;
-      optimizeSegmentsInBackground(controls, liveSegmentsSnapshot);
-    }, BACKGROUND_OPTIMIZE_DELAY_MS);
-  }, [clearOptimizeTimer, optimizeSegmentsInBackground, sportId]);
+  // Running background optimization is intentionally disabled in this baseline.
+  // The draw engine now only asks the reroute API for the plain ORS segment route.
+  const scheduleBackgroundOptimize = useCallback(() => {}, []);
 
   const syncSegments = useCallback(async (nextControlPoints = controlPoints, { silent = true } = {}) => {
     const controls = normalizeRoutePoints(nextControlPoints);
