@@ -160,20 +160,20 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   const acceptableWaytypes = new Set(config.acceptableWaytypes || []);
   const unsuitableWaytypes = new Set(config.unsuitableWaytypes || []);
 
-  for (const [surface, pct] of Object.entries(surfacePercent)) {
-    if (surface === "unknown" || surface === "missing") unknown += pct;
-    else if (suitableSurfaces.has(surface)) suitable += pct;
-    else if (acceptableSurfaces.has(surface)) acceptable += pct;
-    else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
+  if (normalizedSportId !== "running") {
+    for (const [surface, pct] of Object.entries(surfacePercent)) {
+      if (surface === "unknown" || surface === "missing") unknown += pct;
+      else if (suitableSurfaces.has(surface)) suitable += pct;
+      else if (acceptableSurfaces.has(surface)) acceptable += pct;
+      else if (unsuitableSurfaces.has(surface)) unsuitable += pct;
+    }
   }
 
-  if (normalizedSportId !== "running") {
-    for (const [waytype, pct] of Object.entries(wayPercent)) {
-      if (waytype === "unknown" || waytype === "missing") unknown += Math.round(pct * 0.15);
-      else if (suitableWaytypes.has(waytype)) suitable += Math.round(pct * 0.2);
-      else if (acceptableWaytypes.has(waytype)) acceptable += Math.round(pct * 0.2);
-      else if (unsuitableWaytypes.has(waytype)) unsuitable += Math.round(pct * 0.25);
-    }
+  for (const [waytype, pct] of Object.entries(wayPercent)) {
+    if (waytype === "unknown" || waytype === "missing") unknown += normalizedSportId === "running" ? pct : Math.round(pct * 0.15);
+    else if (suitableWaytypes.has(waytype)) suitable += normalizedSportId === "running" ? pct : Math.round(pct * 0.2);
+    else if (acceptableWaytypes.has(waytype)) acceptable += normalizedSportId === "running" ? pct : Math.round(pct * 0.2);
+    else if (unsuitableWaytypes.has(waytype)) unsuitable += normalizedSportId === "running" ? pct : Math.round(pct * 0.25);
   }
 
   suitable = Math.min(100, suitable);
@@ -188,23 +188,15 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
   let score = 70 + suitable * 0.45 + acceptable * 0.12 - detourPenalty - unknownPenalty - unsuitablePenalty;
 
   if (normalizedSportId === "running") {
-    const allowedSurfaceBonus = Math.round(
-      (Number(surfacePercent.asphalt || 0) +
-        Number(surfacePercent.concrete || 0) +
-        Number(surfacePercent.paving_stones || 0)) *
-        0.75
+    const preferredWayBonus = Math.round(
+      (Number(wayPercent.footway || 0) + Number(wayPercent.street || 0) + Number(wayPercent.road || 0)) * 0.65
     );
-    const pavedFallbackBonus = Math.round(Number(surfacePercent.paved || 0) * 0.35);
-    const rejectedSurfacePenalty = Math.round(
-      (Number(surfacePercent.ground || 0) +
-        Number(surfacePercent.mud || 0) +
-        Number(surfacePercent.sand || 0) +
-        Number(surfacePercent.gravel || 0) +
-        Number(surfacePercent.grass || 0)) *
-        1.25
-    );
+    const cyclewayBonus = Math.round(Number(wayPercent.cycleway || 0) * 0.35);
+    const trackPenalty = Math.round(Number(wayPercent.track || 0) * 0.45);
+    const pathPenalty = Math.round(Number(wayPercent.path || 0) * 0.75);
+    const stepsPenalty = Math.round(Number(wayPercent.steps || 0) * 1.25);
 
-    score = 45 + allowedSurfaceBonus + pavedFallbackBonus - rejectedSurfacePenalty - unknownPenalty - detourPenalty;
+    score = 45 + preferredWayBonus + cyclewayBonus - trackPenalty - pathPenalty - stepsPenalty - unknownPenalty - detourPenalty;
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -224,7 +216,7 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
     suitable_percent: Math.round(suitable),
     unsuitable_percent: Math.round(unsuitable),
     unknown_percent: Math.round(unknown),
-    running_surface_only_scoring: normalizedSportId === "running",
+    running_waytype_only_scoring: normalizedSportId === "running",
   };
 }
 
@@ -393,7 +385,7 @@ export async function POST(request) {
     suitable_percent: candidate.suitable_percent,
     unsuitable_percent: candidate.unsuitable_percent,
     unknown_percent: candidate.unknown_percent,
-    running_surface_only_scoring: candidate.running_surface_only_scoring,
+    running_waytype_only_scoring: candidate.running_waytype_only_scoring,
     path_percent: Math.round(Number(candidate?.wayPercent?.path || 0)),
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
@@ -434,11 +426,11 @@ export async function POST(request) {
         candidates: candidates.length,
         candidate_summary: candidateSummary,
         provider: best.provider || "ors",
-        running_surface_only_scoring: normalizedSportId === "running",
+        running_waytype_only_scoring: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running surface-only scoring: asphalt, concrete and paving_stones are rewarded; ground, mud, sand, gravel and grass are penalized. Waytype/path is reported but not used for scoring."
+            ? "Running waytype-only scoring: footway, street, road and cycleway are rewarded; path, track and steps are penalized. Surface is reported but not used for scoring."
             : undefined,
       },
       routed_at: new Date().toISOString(),
