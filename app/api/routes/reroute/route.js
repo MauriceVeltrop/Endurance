@@ -192,11 +192,10 @@ function scoreOrsCandidate({ feature, points, sportId, profile, preference, dire
       (Number(wayPercent.footway || 0) + Number(wayPercent.street || 0) + Number(wayPercent.road || 0)) * 0.65
     );
     const cyclewayBonus = Math.round(Number(wayPercent.cycleway || 0) * 0.35);
-    const trackPenalty = Math.round(Number(wayPercent.track || 0) * 0.45);
     const pathPenalty = Math.round(Number(wayPercent.path || 0) * 0.75);
     const stepsPenalty = Math.round(Number(wayPercent.steps || 0) * 1.25);
 
-    score = 45 + preferredWayBonus + cyclewayBonus - trackPenalty - pathPenalty - stepsPenalty - unknownPenalty - detourPenalty;
+    score = 45 + preferredWayBonus + cyclewayBonus - pathPenalty - stepsPenalty - unknownPenalty - detourPenalty;
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -387,6 +386,7 @@ export async function POST(request) {
     unknown_percent: candidate.unknown_percent,
     running_waytype_only_scoring: candidate.running_waytype_only_scoring,
     path_percent: Math.round(Number(candidate?.wayPercent?.path || 0)),
+    track_percent: Math.round(Number(candidate?.wayPercent?.track || 0)),
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
   }));
@@ -428,9 +428,10 @@ export async function POST(request) {
         provider: best.provider || "ors",
         running_waytype_only_scoring: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
+        track_percent: Math.round(Number(best?.wayPercent?.track || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running waytype-only scoring: footway, street, road and cycleway are rewarded; path, track and steps are penalized. Surface is reported but not used for scoring."
+            ? "Running waytype-only scoring: footway, street, road and cycleway are rewarded; path and steps are penalized. Track is neutral. Surface is reported but not used for scoring."
             : undefined,
       },
       routed_at: new Date().toISOString(),
