@@ -262,7 +262,7 @@ async function fetchOrsCandidate({ url, apiKey, points, preference, sportId, pro
   }
 }
 
-function fallbackResponse({ points, reason = "Routing provider could not snap this segment." }) {
+function fallbackResponse({ points, reason = "Routing provider could not snap this segment.", debug = {} }) {
   const distance = routeDistanceMeters(points);
   const ascent = routeAscentMeters(points);
   return NextResponse.json({
@@ -282,6 +282,7 @@ function fallbackResponse({ points, reason = "Routing provider could not snap th
         score: 0,
         routed: false,
         message: reason,
+        debug,
       },
       routed_at: new Date().toISOString(),
     },
@@ -295,6 +296,10 @@ function getOpenRouteServiceApiKey() {
     process.env.ORS_API_KEY ||
     process.env.NEXT_PUBLIC_OPENROUTE_API_KEY
   );
+}
+
+function hasGraphHopperApiKey() {
+  return Boolean(process.env.GRAPHHOPPER_API_KEY || process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY);
 }
 
 async function collectGraphHopperCandidates({ points, sportId, directDistanceMeters }) {
@@ -346,9 +351,27 @@ export async function POST(request) {
   const points = normalizePoints(body?.points);
   const sportId = body?.sport_id || body?.sportId || "running";
   const normalizedSportId = normalizeSportId(sportId);
+  const routingDebug = {
+    sport: normalizedSportId,
+    graphhopper_key_present: hasGraphHopperApiKey(),
+    graphhopper_attempted: false,
+    graphhopper_success: false,
+    graphhopper_error: null,
+    ors_attempted: false,
+    ors_success: false,
+    ors_error: null,
+    selected_provider: null,
+  };
+
+  console.log("=== ROUTING START ===", {
+    sport: normalizedSportId,
+    points: points.length,
+    graphhopper_key_present: routingDebug.graphhopper_key_present,
+  });
 
   if (points.length < 2) {
-    return NextResponse.json({ ok: false, error: "At least two points are required." }, { status: 400 });
+    console.log("=== ROUTING END === invalid point count", { points: points.length });
+    return NextResponse.json({ ok: false, error: "At least two points are required.", debug: routingDebug }, { status: 400 });
   }
 
   const segment = [points[0], points[points.length - 1]];
@@ -357,31 +380,53 @@ export async function POST(request) {
   let candidates = [];
 
   try {
+    routingDebug.graphhopper_attempted = normalizedSportId === "running";
+    if (routingDebug.graphhopper_attempted) {
+      console.log("Trying GraphHopper", { sport: normalizedSportId, graphhopper_key_present: routingDebug.graphhopper_key_present });
+    }
+
     candidates = await collectGraphHopperCandidates({
       points: segment,
       sportId: normalizedSportId,
       directDistanceMeters: originalDirectDistanceMeters,
     });
+
+    routingDebug.graphhopper_success = candidates.some((candidate) => candidate.provider === "graphhopper");
+    if (routingDebug.graphhopper_attempted) {
+      console.log("GraphHopper result", { success: routingDebug.graphhopper_success, candidates: candidates.length });
+    }
   } catch (error) {
-    errors.push(`graphhopper: ${error?.message || "failed"}`);
+    routingDebug.graphhopper_error = error?.message || "failed";
+    errors.push(`graphhopper: ${routingDebug.graphhopper_error}`);
+    console.error("GraphHopper failed", { message: routingDebug.graphhopper_error });
   }
 
   if (!candidates.length) {
     try {
+      routingDebug.ors_attempted = true;
+      console.log("Falling back to ORS", { sport: normalizedSportId });
+
       candidates = await collectOrsCandidates({
         points: segment,
         sportId: normalizedSportId,
         directDistanceMeters: originalDirectDistanceMeters,
       });
+
+      routingDebug.ors_success = candidates.some((candidate) => candidate.provider === "ors");
+      console.log("ORS result", { success: routingDebug.ors_success, candidates: candidates.length });
     } catch (error) {
-      errors.push(`ors: ${error?.message || "failed"}`);
+      routingDebug.ors_error = error?.message || "failed";
+      errors.push(`ors: ${routingDebug.ors_error}`);
+      console.error("ORS failed", { message: routingDebug.ors_error });
     }
   }
 
   if (!candidates.length) {
+    console.log("=== ROUTING END === no candidates", routingDebug);
     return fallbackResponse({
       points: segment,
       reason: errors.slice(0, 3).join(" | ") || "Routing provider could not snap this segment.",
+      debug: routingDebug,
     });
   }
 
@@ -392,6 +437,8 @@ export async function POST(request) {
   });
 
   const best = candidates[0];
+  routingDebug.selected_provider = best.provider || "ors";
+
   const candidateSummary = candidates.slice(0, 8).map((candidate) => ({
     provider: candidate.provider || "ors",
     profile: candidate.profile,
@@ -410,9 +457,16 @@ export async function POST(request) {
     waytypes: candidate.wayPercent,
   }));
 
-  if (process.env.DEBUG_ORS_ROUTING === "true" || process.env.DEBUG_GRAPHHOPPER_ROUTING === "true") {
-    console.log("Route candidates", { sportId: normalizedSportId, candidateSummary });
-  }
+  console.log("=== ROUTING END ===", {
+    selected_provider: routingDebug.selected_provider,
+    graphhopper_attempted: routingDebug.graphhopper_attempted,
+    graphhopper_success: routingDebug.graphhopper_success,
+    graphhopper_error: routingDebug.graphhopper_error,
+    ors_attempted: routingDebug.ors_attempted,
+    ors_success: routingDebug.ors_success,
+    ors_error: routingDebug.ors_error,
+    candidates: candidateSummary.length,
+  });
 
   const distance = routeDistanceMeters(best.points);
   const ascent = Number.isFinite(Number(best.elevation_gain_m)) ? Number(best.elevation_gain_m) : routeAscentMeters(best.points);
@@ -423,6 +477,7 @@ export async function POST(request) {
     provider: best.provider || "ors",
     profile: best.profile,
     preference: best.preference,
+    debug: routingDebug,
     route_points: {
       source: `${best.provider || "ors"}-segment`,
       provider: best.provider || "ors",
@@ -445,6 +500,7 @@ export async function POST(request) {
         candidates: candidates.length,
         candidate_summary: candidateSummary,
         provider: best.provider || "ors",
+        debug: routingDebug,
         graphhopper_baseline: best.provider === "graphhopper",
         running_waytype_only_scoring: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
