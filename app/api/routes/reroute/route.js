@@ -1,6 +1,7 @@
 // app/api/routes/reroute/route.js
 import { NextResponse } from "next/server";
 import { calculateRouteMetrics } from "../../../../lib/routeMetrics";
+import { fetchGraphHopperRoute } from "../../../../lib/routing/graphhopper";
 import {
   getProviderProfiles,
   getRoutingPreferences,
@@ -296,6 +297,11 @@ function getOpenRouteServiceApiKey() {
   );
 }
 
+async function collectGraphHopperCandidates({ points, sportId, directDistanceMeters }) {
+  if (normalizeSportId(sportId) !== "running") return [];
+  return fetchGraphHopperRoute({ points, directDistanceMeters });
+}
+
 async function collectOrsCandidates({ points, sportId, directDistanceMeters }) {
   const apiKey = getOpenRouteServiceApiKey();
   if (!apiKey) throw new Error("OpenRouteService API key is missing.");
@@ -351,13 +357,25 @@ export async function POST(request) {
   let candidates = [];
 
   try {
-    candidates = await collectOrsCandidates({
+    candidates = await collectGraphHopperCandidates({
       points: segment,
       sportId: normalizedSportId,
       directDistanceMeters: originalDirectDistanceMeters,
     });
   } catch (error) {
-    errors.push(`ors: ${error?.message || "failed"}`);
+    errors.push(`graphhopper: ${error?.message || "failed"}`);
+  }
+
+  if (!candidates.length) {
+    try {
+      candidates = await collectOrsCandidates({
+        points: segment,
+        sportId: normalizedSportId,
+        directDistanceMeters: originalDirectDistanceMeters,
+      });
+    } catch (error) {
+      errors.push(`ors: ${error?.message || "failed"}`);
+    }
   }
 
   if (!candidates.length) {
@@ -385,14 +403,15 @@ export async function POST(request) {
     unsuitable_percent: candidate.unsuitable_percent,
     unknown_percent: candidate.unknown_percent,
     running_waytype_only_scoring: candidate.running_waytype_only_scoring,
+    graphhopper_baseline: candidate.graphhopper_baseline,
     path_percent: Math.round(Number(candidate?.wayPercent?.path || 0)),
     track_percent: Math.round(Number(candidate?.wayPercent?.track || 0)),
     surfaces: candidate.surfacePercent,
     waytypes: candidate.wayPercent,
   }));
 
-  if (process.env.DEBUG_ORS_ROUTING === "true") {
-    console.log("ORS route candidates", { sportId: normalizedSportId, candidateSummary });
+  if (process.env.DEBUG_ORS_ROUTING === "true" || process.env.DEBUG_GRAPHHOPPER_ROUTING === "true") {
+    console.log("Route candidates", { sportId: normalizedSportId, candidateSummary });
   }
 
   const distance = routeDistanceMeters(best.points);
@@ -426,12 +445,13 @@ export async function POST(request) {
         candidates: candidates.length,
         candidate_summary: candidateSummary,
         provider: best.provider || "ors",
+        graphhopper_baseline: best.provider === "graphhopper",
         running_waytype_only_scoring: normalizedSportId === "running",
         path_percent: Math.round(Number(best?.wayPercent?.path || 0)),
         track_percent: Math.round(Number(best?.wayPercent?.track || 0)),
         message:
           normalizedSportId === "running"
-            ? "Running waytype-only scoring: footway, street, road and cycleway are rewarded; path and steps are penalized. Track is neutral. Surface is reported but not used for scoring."
+            ? "Running baseline: GraphHopper foot is tried first when available; ORS remains fallback. Waytype-only scoring is active. Track is neutral. Surface is reported but not used for scoring."
             : undefined,
       },
       routed_at: new Date().toISOString(),
