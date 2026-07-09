@@ -31,6 +31,30 @@ import {
   sportIconFor,
 } from "../../../lib/routes/createRoutePageUtils";
 
+function normalizeRouteSportId(value) {
+  const id = String(value || "running").toLowerCase();
+  return id === "trail_running" || id === "trailrunning" ? "running" : id;
+}
+
+function dedupeRouteSports(sports = [], preferredIds = []) {
+  const preferred = new Set(preferredIds.map(normalizeRouteSportId));
+  const seen = new Set();
+
+  return (sports || [])
+    .filter((sport) => sport?.id)
+    .map((sport) => ({
+      ...sport,
+      id: normalizeRouteSportId(sport.id),
+      name: normalizeRouteSportId(sport.id) === "running" ? "(Trail)Running" : sport.name,
+    }))
+    .filter((sport) => preferred.has(sport.id) || FALLBACK_ROUTE_SPORTS.includes(sport.id))
+    .filter((sport) => {
+      if (seen.has(sport.id)) return false;
+      seen.add(sport.id);
+      return true;
+    });
+}
+
 export default function NewRoutePage() {
   const router = useRouter();
 
@@ -66,19 +90,15 @@ export default function NewRoutePage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requestedSport = params.get("sport");
+    const requestedSport = normalizeRouteSportId(params.get("sport"));
     const requestedMethod = params.get("method");
 
     if (requestedSport && requestedMethod === "draw") {
-      const drawParams = new URLSearchParams({
-        sport_id: requestedSport,
-      });
-
+      const drawParams = new URLSearchParams({ sport_id: requestedSport });
       const returnTo = params.get("returnTo");
       const step = params.get("step");
       if (returnTo) drawParams.set("returnTo", returnTo);
       if (step) drawParams.set("step", step);
-
       router.replace(`/routes/draw?${drawParams.toString()}`);
       return;
     }
@@ -93,10 +113,7 @@ export default function NewRoutePage() {
     }
 
     if (requestedMethod) {
-      setForm((current) => ({
-        ...current,
-        method: requestedMethod,
-      }));
+      setForm((current) => ({ ...current, method: requestedMethod }));
       setCurrentStep(requestedSport ? 3 : 2);
     }
   }, [router]);
@@ -114,11 +131,9 @@ export default function NewRoutePage() {
     async function loadRouteDraft() {
       const params = new URLSearchParams(window.location.search);
       const shouldLoadDraft = params.get("routeDraft") === "1";
-
       if (!shouldLoadDraft) return;
 
       const rawDraft = window.sessionStorage.getItem("endurance_route_draft");
-
       if (!rawDraft) {
         window.history.replaceState({}, "", "/routes/new");
         return;
@@ -126,7 +141,6 @@ export default function NewRoutePage() {
 
       try {
         const draft = JSON.parse(rawDraft);
-
         const rawRoutePoints = draft?.route_points;
         const safePoints = Array.isArray(rawRoutePoints)
           ? rawRoutePoints
@@ -141,7 +155,11 @@ export default function NewRoutePage() {
           profile: rawRoutePoints?.profile || null,
           provider_url: rawRoutePoints?.provider_url || null,
           waypoints: Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
-          control_points: Array.isArray(rawRoutePoints?.control_points) ? rawRoutePoints.control_points : Array.isArray(rawRoutePoints?.waypoints) ? rawRoutePoints.waypoints : [],
+          control_points: Array.isArray(rawRoutePoints?.control_points)
+            ? rawRoutePoints.control_points
+            : Array.isArray(rawRoutePoints?.waypoints)
+              ? rawRoutePoints.waypoints
+              : [],
           points: safePoints,
           geometry_points: safePoints,
           point_count: safePoints.length,
@@ -154,11 +172,9 @@ export default function NewRoutePage() {
           routed_at: rawRoutePoints?.routed_at || rawRoutePoints?.drawn_at || new Date().toISOString(),
         };
 
-        if (!safePoints.length) {
-          throw new Error("Route draft has no valid route points.");
-        }
+        if (!safePoints.length) throw new Error("Route draft has no valid route points.");
 
-        const sportId = draft.sport_id || "running";
+        const sportId = normalizeRouteSportId(draft.sport_id || "running");
         const startPlaceName = await resolveStartPlaceName(safePayload);
         const shouldAutoName = draft.title_is_auto !== false || isGenericRouteTitle(draft.title, sportId);
         const title = shouldAutoName
@@ -173,9 +189,9 @@ export default function NewRoutePage() {
 
         setForm((current) => ({
           ...current,
-          sport_id: draft.sport_id || current.sport_id,
+          sport_id: sportId,
           method: "draw",
-          title: title || current.title || `${getSportLabel(draft.sport_id)} Route`,
+          title: title || current.title || `${getSportLabel(sportId)} Route`,
           title_is_auto: shouldAutoName,
           description: draft.description || current.description,
           distance_km: safePayload.distance_km ? String(safePayload.distance_km) : current.distance_km,
@@ -186,6 +202,7 @@ export default function NewRoutePage() {
         setCurrentStep(3);
         setMessage(startPlaceName ? "Drawn route loaded. Start location resolved." : "Drawn route loaded. Review the details and save your route.");
         window.sessionStorage.removeItem("endurance_route_draft");
+
         const keepParams = new URLSearchParams();
         const returnTo = params.get("returnTo");
         const step = params.get("step");
@@ -201,12 +218,10 @@ export default function NewRoutePage() {
     }
 
     loadRouteDraft();
-
     return () => {
       cancelled = true;
     };
   }, []);
-
 
   async function loadAccess() {
     setChecking(true);
@@ -254,31 +269,27 @@ export default function NewRoutePage() {
       if (preferredError) throw preferredError;
       if (sportError) throw sportError;
 
-      const preferredIds = (preferredRows || []).map((row) => row.sport_id).filter(Boolean);
-      const routeSports = (sportRows || []).filter(
-        (sport) => preferredIds.includes(sport.id) || FALLBACK_ROUTE_SPORTS.includes(sport.id)
-      );
-
+      const preferredIds = (preferredRows || []).map((row) => normalizeRouteSportId(row.sport_id)).filter(Boolean);
+      const routeSports = dedupeRouteSports(sportRows || [], preferredIds);
       const allowed = routeSports.filter((sport) => preferredIds.includes(sport.id));
+      const finalAllowed = allowed.length ? allowed : routeSports.filter((sport) => FALLBACK_ROUTE_SPORTS.includes(sport.id));
 
-      setAvailableSports(allowed);
+      setAvailableSports(finalAllowed);
 
-      if (allowed.length) {
+      if (finalAllowed.length) {
         const params = new URLSearchParams(window.location.search);
-        const requestedSport = params.get("sport");
+        const requestedSport = normalizeRouteSportId(params.get("sport"));
         const requestedMethod = params.get("method");
-        const requestedAllowedSport = allowed.find((sport) => sport.id === requestedSport);
-        const first = requestedAllowedSport || allowed[0];
+        const requestedAllowedSport = finalAllowed.find((sport) => sport.id === requestedSport);
+        const first = requestedAllowedSport || finalAllowed[0];
 
         setForm((current) => ({
           ...current,
-          sport_id: current.sport_id || first.id,
-          title: current.title || `${getSportLabel(current.sport_id || first.id)} Route`,
+          sport_id: normalizeRouteSportId(current.sport_id || first.id),
+          title: current.title || `${getSportLabel(normalizeRouteSportId(current.sport_id || first.id))} Route`,
         }));
 
-        if (requestedAllowedSport) {
-          setCurrentStep(requestedMethod ? 3 : 2);
-        }
+        if (requestedAllowedSport) setCurrentStep(requestedMethod ? 3 : 2);
       }
     } catch (error) {
       console.error("Create route access error", error);
@@ -290,14 +301,13 @@ export default function NewRoutePage() {
 
   function updateForm(key, value) {
     setForm((current) => {
-      const next = { ...current, [key]: value };
+      const safeValue = key === "sport_id" ? normalizeRouteSportId(value) : value;
+      const next = { ...current, [key]: safeValue };
 
-      if (key === "title") {
-        next.title_is_auto = false;
-      }
+      if (key === "title") next.title_is_auto = false;
 
       if (key === "sport_id") {
-        next.title = `${getSportLabel(value)} Route`;
+        next.title = `${getSportLabel(safeValue)} Route`;
         next.title_is_auto = true;
         next.method = "";
         next.description = "";
@@ -307,10 +317,7 @@ export default function NewRoutePage() {
         next.route_points = null;
       }
 
-      if (key === "method") {
-        next.route_points = current.route_points;
-      }
-
+      if (key === "method") next.route_points = current.route_points;
       return next;
     });
   }
@@ -324,7 +331,6 @@ export default function NewRoutePage() {
     try {
       const text = await file.text();
       const parsed = parseGpxText(text);
-
       const startPlaceName = await resolveStartPlaceName(parsed);
 
       setForm((current) => {
@@ -358,8 +364,6 @@ export default function NewRoutePage() {
     }
   }
 
-
-
   async function saveRoute() {
     if (!canSave) {
       setMessage("Complete the route details before saving.");
@@ -372,7 +376,7 @@ export default function NewRoutePage() {
     try {
       const payload = {
         creator_id: profile.id,
-        sport_id: form.sport_id,
+        sport_id: normalizeRouteSportId(form.sport_id),
         title: form.title.trim(),
         title_is_auto: form.title_is_auto !== false,
         description: form.description || "",
@@ -384,12 +388,7 @@ export default function NewRoutePage() {
         route_points: form.route_points || null,
       };
 
-      const { data, error } = await supabase
-        .from("routes")
-        .insert(payload)
-        .select("id")
-        .single();
-
+      const { data, error } = await supabase.from("routes").insert(payload).select("id").single();
       if (error) throw error;
 
       if (data?.id && form.route_points) {
@@ -411,10 +410,7 @@ export default function NewRoutePage() {
           if (geometryRow?.id) {
             await supabase
               .from("routes")
-              .update({
-                geometry_id: geometryRow.id,
-                route_version: geometryRow.version || 1,
-              })
+              .update({ geometry_id: geometryRow.id, route_version: geometryRow.version || 1 })
               .eq("id", data.id);
           }
         }
@@ -425,19 +421,13 @@ export default function NewRoutePage() {
         window.sessionStorage.removeItem("endurance_route_edit_draft");
         window.localStorage.removeItem("endurance_route_draft");
         window.localStorage.removeItem("endurance_route_draft_backup");
-      } catch (_) {
-        // Ignore browser storage cleanup failures.
-      }
+      } catch (_) {}
 
       const queryParams = new URLSearchParams(window.location.search);
       const returnTo = queryParams.get("returnTo");
 
       if (returnTo && data?.id) {
-        const params = new URLSearchParams({
-          route_id: data.id,
-          step: queryParams.get("step") || "route",
-        });
-
+        const params = new URLSearchParams({ route_id: data.id, step: queryParams.get("step") || "route" });
         router.push(`${returnTo}?${params.toString()}`);
       } else {
         router.push(data?.id ? `/routes/${data.id}` : "/routes");
@@ -450,8 +440,6 @@ export default function NewRoutePage() {
     }
   }
 
-
-
   return (
     <main className="endurance-page create-route-v2-page route-step-page">
       <AppHeader active="routes" />
@@ -459,10 +447,7 @@ export default function NewRoutePage() {
       <section className="endurance-shell training-hero endurance-card create-route-v2-hero route-step-hero">
         <div>
           <p className="eyebrow">Create route</p>
-          <h1>
-            Create routes<span>.</span>
-          </h1>
-          
+          <h1>Create routes<span>.</span></h1>
         </div>
       </section>
 
@@ -486,9 +471,7 @@ export default function NewRoutePage() {
 
       {visibleMessage ? <section className="endurance-shell create-route-v2-message">{visibleMessage}</section> : null}
 
-      {checking ? (
-        <section className="endurance-shell endurance-card notification-empty">Loading route creator...</section>
-      ) : null}
+      {checking ? <section className="endurance-shell endurance-card notification-empty">Loading route creator...</section> : null}
 
       {!checking && !availableSports.length ? (
         <section className="endurance-shell endurance-card notification-empty">
@@ -503,12 +486,10 @@ export default function NewRoutePage() {
           {currentStep === 1 ? (
             <section className="endurance-shell create-route-v2-section route-step-section">
               <div className="route-builder-step route-builder-step-minimal"><h2>Choose sport</h2></div>
-
               <div className="route-sport-photo-grid">
                 {availableSports.map((sport) => {
                   const isSelected = form.sport_id === sport.id;
                   const sportProfile = routeProfileFor(sport.id);
-
                   return (
                     <button
                       key={sport.id}
@@ -545,9 +526,7 @@ export default function NewRoutePage() {
 
               <div className="route-method-premium-head">
                 <div className="route-method-selected-sport">
-                  <span className="route-sport-icon" aria-hidden="true">
-                    <img src={sportIconFor(selectedSport.id)} alt="" />
-                  </span>
+                  <span className="route-sport-icon" aria-hidden="true"><img src={sportIconFor(selectedSport.id)} alt="" /></span>
                   <div>
                     <strong>{getSportLabel(selectedSport.id)}</strong>
                     <small>{selectedProfile.focus}</small>
@@ -560,7 +539,6 @@ export default function NewRoutePage() {
                 {METHOD_ORDER.map((methodId) => {
                   const method = METHOD_DETAILS[methodId];
                   const recommended = recommendedMethodFor(form.sport_id) === methodId;
-
                   return (
                     <button
                       key={methodId}
@@ -571,17 +549,13 @@ export default function NewRoutePage() {
                           router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id || selectedSport.id)}`);
                           return;
                         }
-
                         updateForm("method", methodId);
                         setCurrentStep(3);
                       }}
                     >
                       <span className="route-method-option-icon" aria-hidden="true">{method.icon}</span>
                       <span className="route-method-option-main">
-                        <span className="route-method-option-topline">
-                          <em>{method.eyebrow}</em>
-                          {recommended ? <i>Recommended</i> : null}
-                        </span>
+                        <span className="route-method-option-topline"><em>{method.eyebrow}</em>{recommended ? <i>Recommended</i> : null}</span>
                         <strong>{method.title}</strong>
                         <small>{methodCopyFor(methodId, form.sport_id)}</small>
                         <span className="route-method-option-action">{method.action}</span>
@@ -592,9 +566,7 @@ export default function NewRoutePage() {
                 })}
               </div>
 
-              <button type="button" className="route-step-secondary route-method-back" onClick={() => setCurrentStep(1)}>
-                Back to sport
-              </button>
+              <button type="button" className="route-step-secondary route-method-back" onClick={() => setCurrentStep(1)}>Back to sport</button>
             </section>
           ) : null}
 
@@ -610,26 +582,12 @@ export default function NewRoutePage() {
 
               <div className="create-route-editor-grid step-details-grid">
                 <section className="create-route-form-card endurance-card">
-                  <label>
-                    Route title
-                    <input value={form.title} onChange={(event) => updateForm("title", event.target.value)} placeholder="Morning Trail Loop" />
-                  </label>
-
-                  <label>
-                    Description
-                    <textarea value={form.description} onChange={(event) => updateForm("description", event.target.value)} placeholder="Describe terrain, surface, scenery or warnings..." />
-                  </label>
+                  <label>Route title<input value={form.title} onChange={(event) => updateForm("title", event.target.value)} placeholder="Morning Trail Loop" /></label>
+                  <label>Description<textarea value={form.description} onChange={(event) => updateForm("description", event.target.value)} placeholder="Describe terrain, surface, scenery or warnings..." /></label>
 
                   <div className="create-route-two">
-                    <label>
-                      Distance km
-                      <input type="number" step="0.01" value={form.distance_km} onChange={(event) => updateForm("distance_km", event.target.value)} />
-                    </label>
-
-                    <label>
-                      Elevation m
-                      <input type="number" step="1" value={form.elevation_gain_m} onChange={(event) => updateForm("elevation_gain_m", event.target.value)} />
-                    </label>
+                    <label>Distance km<input type="number" step="0.01" value={form.distance_km} onChange={(event) => updateForm("distance_km", event.target.value)} /></label>
+                    <label>Elevation m<input type="number" step="1" value={form.elevation_gain_m} onChange={(event) => updateForm("elevation_gain_m", event.target.value)} /></label>
                   </div>
 
                   <label>
@@ -642,10 +600,7 @@ export default function NewRoutePage() {
                   </label>
 
                   {form.method === "upload" ? (
-                    <label className="create-route-upload">
-                      <span>Upload GPX file</span>
-                      <input type="file" accept=".gpx,application/gpx+xml,text/xml" onChange={handleGpxUpload} />
-                    </label>
+                    <label className="create-route-upload"><span>Upload GPX file</span><input type="file" accept=".gpx,application/gpx+xml,text/xml" onChange={handleGpxUpload} /></label>
                   ) : null}
 
                   {form.method === "draw" ? (
@@ -662,7 +617,6 @@ export default function NewRoutePage() {
                           } catch (error) {
                             console.error("Could not prepare route edit draft", error);
                           }
-
                           router.push(`/routes/draw?sport_id=${encodeURIComponent(form.sport_id)}&editDraft=1&editMode=draw`);
                         }}
                       >
@@ -672,48 +626,22 @@ export default function NewRoutePage() {
                   ) : null}
 
                   {form.method === "wizard" ? (
-                    <div className="create-route-coming-soon">
-                      <strong>Wizard foundation</strong>
-                      <span>Next step: distance, start point, loop preference and sport-specific routing profiles.</span>
-                    </div>
+                    <div className="create-route-coming-soon"><strong>Wizard foundation</strong><span>Next step: distance, start point, loop preference and route quality analysis.</span></div>
                   ) : null}
 
                   <div className="route-step-actions">
-                    <button type="button" className="route-step-secondary" onClick={() => setCurrentStep(2)}>
-                      Back
-                    </button>
-                    <button type="button" className="route-save-button" onClick={saveRoute} disabled={saving || !canSave}>
-                      {saving ? "Saving..." : "Save route"}
-                    </button>
+                    <button type="button" className="route-step-secondary" onClick={() => setCurrentStep(2)}>Back</button>
+                    <button type="button" className="route-save-button" onClick={saveRoute} disabled={saving || !canSave}>{saving ? "Saving..." : "Save route"}</button>
                   </div>
                 </section>
 
                 <section className="create-route-preview-card endurance-card">
-                  <div className="route-section-title">
-                    <div>
-                      <p className="eyebrow">Route preview</p>
-                      <h2>{form.title || "New route"}</h2>
-                    </div>
-                    <span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span>
-                  </div>
-
+                  <div className="route-section-title"><div><p className="eyebrow">Route preview</p><h2>{form.title || "New route"}</h2></div><span>{routePoints.length ? `${routePoints.length} points` : "No points"}</span></div>
                   {previewMapReady && routePoints.length ? (
-                    <OSMRouteMap
-                      routePoints={form.route_points}
-                      title={form.title || "New route"}
-                      height={360}
-                      interactive
-                      showLegend
-                      showLayerControl
-                      defaultLayer="dark"
-                    />
+                    <OSMRouteMap routePoints={form.route_points} title={form.title || "New route"} height={360} interactive showLegend showLayerControl defaultLayer="dark" />
                   ) : (
-                    <div className="route-preview-placeholder">
-                      <strong>Route loaded</strong>
-                      <span>{routePoints.length ? `${routePoints.length} route points ready` : "No route points loaded yet"}</span>
-                    </div>
+                    <div className="route-preview-placeholder"><strong>Route loaded</strong><span>{routePoints.length ? `${routePoints.length} route points ready` : "No route points loaded yet"}</span></div>
                   )}
-
                   <div className="create-route-preview-stats">
                     <span><b>{form.distance_km || "—"}</b>km</span>
                     <span><b>{form.elevation_gain_m || "—"}</b>m gain</span>
