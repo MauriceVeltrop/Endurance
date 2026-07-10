@@ -14,7 +14,7 @@ function isCreateTrainingPath(pathname) {
   return String(pathname || "").replace(/\/+$/, "") === "/trainings/new";
 }
 
-function findMountTarget() {
+function findTrainingNameField() {
   const labels = Array.from(document.querySelectorAll("label"));
   const trainingNameLabel = labels.find((label) => {
     const text = normalizeText(label.textContent);
@@ -24,17 +24,49 @@ function findMountTarget() {
 
   if (!trainingNameLabel) return null;
 
-  const section = trainingNameLabel.closest("section") || trainingNameLabel.parentElement;
+  return {
+    label: trainingNameLabel,
+    field: trainingNameLabel.querySelector("input, textarea"),
+  };
+}
+
+function findMountTarget() {
+  const trainingName = findTrainingNameField();
+  if (!trainingName?.label) return null;
+
+  const section = trainingName.label.closest("section") || trainingName.label.parentElement;
   if (!section) return null;
 
   let mount = section.querySelector("[data-training-route-selector-mount='true']");
   if (!mount) {
     mount = document.createElement("div");
     mount.setAttribute("data-training-route-selector-mount", "true");
-    trainingNameLabel.insertAdjacentElement("afterend", mount);
+    trainingName.label.insertAdjacentElement("afterend", mount);
   }
 
   return mount;
+}
+
+function sportIdsFromTrainingName(value) {
+  const title = normalizeText(value)
+    .replaceAll("_", " ")
+    .replace(/[()]/g, "")
+    .replace(/\btraining\b/g, "")
+    .trim();
+
+  // Running and Trail Running have been merged in the UI. Both legacy route IDs
+  // belong to the single (Trail)Running choice.
+  if (title.includes("trailrunning") || title.includes("trail running") || title === "running") {
+    return ["running", "trail_running"];
+  }
+
+  if (title.includes("road cycling")) return ["road_cycling"];
+  if (title.includes("gravel cycling") || title === "gravel") return ["gravel_cycling"];
+  if (title.includes("mountain biking") || title === "mtb") return ["mountain_biking"];
+  if (title.includes("walking")) return ["walking"];
+  if (title.includes("kayaking")) return ["kayaking"];
+
+  return [];
 }
 
 function getRouteIdFromLocation() {
@@ -47,6 +79,7 @@ export default function TrainingRouteSelector() {
   const pathname = usePathname();
   const activePath = isCreateTrainingPath(pathname);
   const [mountTarget, setMountTarget] = useState(null);
+  const [selectedSportIds, setSelectedSportIds] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -55,35 +88,60 @@ export default function TrainingRouteSelector() {
   useEffect(() => {
     if (!activePath) {
       setMountTarget(null);
+      setSelectedSportIds([]);
       return undefined;
     }
 
     setSelectedRouteId(getRouteIdFromLocation());
 
     let frame = 0;
-    const resolveTarget = () => {
+    let observedField = null;
+
+    const resolvePageState = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const target = findMountTarget();
         if (target) setMountTarget(target);
+
+        const trainingName = findTrainingNameField();
+        const detectedIds = sportIdsFromTrainingName(trainingName?.field?.value);
+        if (detectedIds.length) {
+          setSelectedSportIds((current) => {
+            const same = current.length === detectedIds.length && current.every((id, index) => id === detectedIds[index]);
+            return same ? current : detectedIds;
+          });
+        }
+
+        if (trainingName?.field && trainingName.field !== observedField) {
+          observedField?.removeEventListener("input", resolvePageState);
+          observedField?.removeEventListener("change", resolvePageState);
+          observedField = trainingName.field;
+          observedField.addEventListener("input", resolvePageState);
+          observedField.addEventListener("change", resolvePageState);
+        }
       });
     };
 
-    resolveTarget();
-    const observer = new MutationObserver(resolveTarget);
+    resolvePageState();
+    const observer = new MutationObserver(resolvePageState);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    const retryTimers = [100, 300, 700, 1400].map((delay) => setTimeout(resolveTarget, delay));
+    const retryTimers = [100, 300, 700, 1400].map((delay) => setTimeout(resolvePageState, delay));
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      observedField?.removeEventListener("input", resolvePageState);
+      observedField?.removeEventListener("change", resolvePageState);
       retryTimers.forEach(clearTimeout);
     };
   }, [activePath]);
 
   useEffect(() => {
-    if (!activePath) return undefined;
+    if (!activePath || selectedSportIds.length === 0) {
+      setRoutes([]);
+      return undefined;
+    }
 
     let cancelled = false;
 
@@ -91,15 +149,30 @@ export default function TrainingRouteSelector() {
       setLoading(true);
       setMessage("");
 
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+
+      if (!userId) {
+        if (!cancelled) {
+          setRoutes([]);
+          setMessage("Log in to select one of your routes.");
+          setLoading(false);
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from("routes")
         .select("id,title,sport_id,distance_km,elevation_gain_m,created_at")
-        .order("created_at", { ascending: false });
+        .eq("creator_id", userId)
+        .in("sport_id", selectedSportIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
 
       if (cancelled) return;
 
       if (error) {
-        console.warn("Could not load routes for training selector", error);
+        console.warn("Could not load matching routes for training selector", error);
         setRoutes([]);
         setMessage("Routes could not be loaded.");
       } else {
@@ -113,12 +186,18 @@ export default function TrainingRouteSelector() {
     return () => {
       cancelled = true;
     };
-  }, [activePath]);
+  }, [activePath, selectedSportIds]);
 
   const selectedRoute = useMemo(
     () => routes.find((route) => String(route.id) === String(selectedRouteId)) || null,
     [routes, selectedRouteId]
   );
+
+  const selectedSportLabel = selectedSportIds.length > 1
+    ? "(Trail)Running"
+    : selectedSportIds[0]
+      ? getSportLabel(selectedSportIds[0])
+      : "selected sport";
 
   function selectRoute(routeId) {
     setSelectedRouteId(routeId);
@@ -139,12 +218,12 @@ export default function TrainingRouteSelector() {
     window.location.assign(`${url.pathname}${url.search}${url.hash}`);
   }
 
-  if (!activePath || !mountTarget) return null;
+  if (!activePath || !mountTarget || selectedSportIds.length === 0) return null;
 
   return createPortal(
     <div className="training-route-selector">
       <label className="training-route-selector-label" htmlFor="training-existing-route">
-        Existing route
+        Existing {selectedSportLabel} route
       </label>
       <select
         id="training-existing-route"
@@ -153,12 +232,17 @@ export default function TrainingRouteSelector() {
         onChange={(event) => selectRoute(event.target.value)}
         disabled={loading}
       >
-        <option value="">{loading ? "Loading routes..." : "No route selected"}</option>
+        <option value="">
+          {loading
+            ? "Loading routes..."
+            : routes.length
+              ? "No route selected"
+              : `No ${selectedSportLabel} routes found`}
+        </option>
         {routes.map((route) => (
           <option key={route.id} value={route.id}>
             {route.title || "Untitled route"}
             {route.distance_km ? ` · ${Number(route.distance_km).toFixed(1)} km` : ""}
-            {route.sport_id ? ` · ${getSportLabel(route.sport_id)}` : ""}
           </option>
         ))}
       </select>
