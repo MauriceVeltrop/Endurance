@@ -1,43 +1,10 @@
-/* Create Route: remove the duplicate small heading above the main title. */
-.create-route-v2-page .create-route-v2-hero .eyebrow {
-  display: none !important;
+/* Create Route page */
+.create-route-v2-page{
+ background-image: var(--topographic-overlay), radial-gradient(circle at top,#17230f 0%,#09100a 100%) !important;
+ background-blend-mode:screen,normal;
 }
-
-/* Create Route: force the four route sport cards into two rows and two columns.
-   The page-scoped selector and !important deliberately override older
-   responsive rules in globals.css that can switch this grid back to 3 or 1 columns. */
-.create-route-v2-page .route-step-section .route-sport-photo-grid {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  grid-auto-flow: row !important;
-  gap: 12px !important;
-  width: 100% !important;
-  align-items: stretch;
-}
-
-.create-route-v2-page .route-step-section .route-sport-photo-grid > .route-sport-photo-card {
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  margin: 0 !important;
-
-  /* Brighter photo treatment: keep enough shading for white text,
-     but remove the heavy dark overlay from the original card style. */
-  background-image:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.08) 42%, rgba(0, 0, 0, 0.42) 100%),
-    var(--sport-bg) !important;
-  background-size: cover !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-}
-
-.create-route-v2-page .route-step-section .route-sport-photo-copy {
-  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.92);
-}
-
-@media (max-width: 480px) {
-  .create-route-v2-page .route-step-section .route-sport-photo-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
-  }
-}
+.create-route-v2-page .create-route-v2-hero .eyebrow{display:none!important;}
+.create-route-v2-page .route-step-section .route-sport-photo-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;gap:12px!important;width:100%!important;align-items:stretch;}
+.create-route-v2-page .route-step-section .route-sport-photo-grid>.route-sport-photo-card{width:100%!important;min-width:0!important;max-width:none!important;margin:0!important;background-image:linear-gradient(180deg,rgba(0,0,0,.03) 0%,rgba(0,0,0,.08) 42%,rgba(0,0,0,.42) 100%),var(--sport-bg)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;}
+.create-route-v2-page .route-step-section .route-sport-photo-copy{text-shadow:0 2px 7px rgba(0,0,0,.92)}
+@media (max-width:480px){.create-route-v2-page .route-step-section .route-sport-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}}
