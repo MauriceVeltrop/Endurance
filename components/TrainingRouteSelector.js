@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import { getSportLabel } from "../lib/trainingHelpers";
 
@@ -10,19 +10,22 @@ function normalizeText(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function isCreateTrainingPath(pathname) {
+  return String(pathname || "").replace(/\/+$/, "") === "/trainings/new";
+}
+
 function findMountTarget() {
-  const basicsHeading = Array.from(document.querySelectorAll("h1, h2, h3")).find(
-    (heading) => normalizeText(heading.textContent) === "basics"
-  );
-
-  const section = basicsHeading?.closest("section");
-  if (!section) return null;
-
-  const trainingNameLabel = Array.from(section.querySelectorAll("label")).find((label) =>
-    normalizeText(label.textContent).startsWith("training name")
-  );
+  const labels = Array.from(document.querySelectorAll("label"));
+  const trainingNameLabel = labels.find((label) => {
+    const text = normalizeText(label.textContent);
+    const input = label.querySelector("input, textarea");
+    return text.startsWith("training name") && Boolean(input);
+  });
 
   if (!trainingNameLabel) return null;
+
+  const section = trainingNameLabel.closest("section") || trainingNameLabel.parentElement;
+  if (!section) return null;
 
   let mount = section.querySelector("[data-training-route-selector-mount='true']");
   if (!mount) {
@@ -34,36 +37,53 @@ function findMountTarget() {
   return mount;
 }
 
+function getRouteIdFromLocation() {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  return params.get("route_id") || params.get("from_route") || params.get("route") || "";
+}
+
 export default function TrainingRouteSelector() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const activePath = isCreateTrainingPath(pathname);
   const [mountTarget, setMountTarget] = useState(null);
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  const selectedRouteId = searchParams.get("route_id") || searchParams.get("from_route") || searchParams.get("route") || "";
+  const [selectedRouteId, setSelectedRouteId] = useState("");
 
   useEffect(() => {
-    if (pathname !== "/trainings/new") {
+    if (!activePath) {
       setMountTarget(null);
       return undefined;
     }
 
+    setSelectedRouteId(getRouteIdFromLocation());
+
+    let frame = 0;
     const resolveTarget = () => {
-      const target = findMountTarget();
-      if (target) setMountTarget(target);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const target = findMountTarget();
+        if (target) setMountTarget(target);
+      });
     };
 
     resolveTarget();
     const observer = new MutationObserver(resolveTarget);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    return () => observer.disconnect();
-  }, [pathname]);
+    const retryTimers = [100, 300, 700, 1400].map((delay) => setTimeout(resolveTarget, delay));
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      retryTimers.forEach(clearTimeout);
+    };
+  }, [activePath]);
 
   useEffect(() => {
-    if (pathname !== "/trainings/new") return;
+    if (!activePath) return undefined;
 
     let cancelled = false;
 
@@ -93,7 +113,7 @@ export default function TrainingRouteSelector() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [activePath]);
 
   const selectedRoute = useMemo(
     () => routes.find((route) => String(route.id) === String(selectedRouteId)) || null,
@@ -101,6 +121,7 @@ export default function TrainingRouteSelector() {
   );
 
   function selectRoute(routeId) {
+    setSelectedRouteId(routeId);
     const url = new URL(window.location.href);
 
     if (routeId) {
@@ -118,7 +139,7 @@ export default function TrainingRouteSelector() {
     window.location.assign(`${url.pathname}${url.search}${url.hash}`);
   }
 
-  if (pathname !== "/trainings/new" || !mountTarget) return null;
+  if (!activePath || !mountTarget) return null;
 
   return createPortal(
     <div className="training-route-selector">
