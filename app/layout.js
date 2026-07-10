@@ -1,4 +1,6 @@
 import "../styles/globals.css";
+import "../styles/route-sport-grid.css";
+
 export const metadata = {
   title: "Endurance",
   description: "Verified Social Training Platform",
