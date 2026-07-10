@@ -1,10 +1,48 @@
-/* Create Route page */
-.create-route-v2-page{
- background-image: var(--topographic-overlay), radial-gradient(circle at top,#17230f 0%,#09100a 100%) !important;
- background-blend-mode:screen,normal;
+/* Create Route page: explicit topo pattern, independent of undefined CSS variables. */
+.create-route-v2-page {
+  background-color: #071009 !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='240' viewBox='0 0 360 240'%3E%3Cg fill='none' stroke='%23dfff00' stroke-opacity='.105' stroke-width='1.2'%3E%3Cpath d='M-35 52C20 6 88 8 136 42s95 35 151 3 103-22 132 17'/%3E%3Cpath d='M-42 78C17 31 82 33 131 66s101 36 157 5 101-18 133 20'/%3E%3Cpath d='M-48 106C11 58 76 60 126 93s103 37 159 7 99-15 134 23'/%3E%3Cpath d='M-54 136C4 88 70 89 120 122s105 38 161 9 97-12 138 26'/%3E%3Cpath d='M-58 168C0 120 64 120 115 153s107 38 163 11 95-9 142 29'/%3E%3Cpath d='M34 225c-24-28-19-61 9-80 31-21 75-17 99 8 22 23 20 56-5 77'/%3E%3Cpath d='M62 225c-18-21-14-46 7-61 24-16 57-13 75 6 17 18 15 43-4 58'/%3E%3Cpath d='M244 18c-20 18-23 44-7 64 18 23 52 29 77 14 23-14 32-43 20-67'/%3E%3Cpath d='M267 20c-14 13-16 31-5 45 13 17 37 21 55 10 16-10 23-30 15-47'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(circle at 50% -10%, #17230f 0%, #0a120b 42%, #050806 100%) !important;
+  background-size: 360px 240px, cover !important;
+  background-repeat: repeat, no-repeat !important;
+  background-position: center top, center !important;
+  background-attachment: scroll, fixed !important;
 }
-.create-route-v2-page .create-route-v2-hero .eyebrow{display:none!important;}
-.create-route-v2-page .route-step-section .route-sport-photo-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;gap:12px!important;width:100%!important;align-items:stretch;}
-.create-route-v2-page .route-step-section .route-sport-photo-grid>.route-sport-photo-card{width:100%!important;min-width:0!important;max-width:none!important;margin:0!important;background-image:linear-gradient(180deg,rgba(0,0,0,.03) 0%,rgba(0,0,0,.08) 42%,rgba(0,0,0,.42) 100%),var(--sport-bg)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;}
-.create-route-v2-page .route-step-section .route-sport-photo-copy{text-shadow:0 2px 7px rgba(0,0,0,.92)}
-@media (max-width:480px){.create-route-v2-page .route-step-section .route-sport-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}}
+
+.create-route-v2-page .create-route-v2-hero .eyebrow {
+  display: none !important;
+}
+
+.create-route-v2-page .route-step-section .route-sport-photo-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-auto-flow: row !important;
+  gap: 12px !important;
+  width: 100% !important;
+  align-items: stretch;
+}
+
+.create-route-v2-page .route-step-section .route-sport-photo-grid > .route-sport-photo-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.08) 42%, rgba(0,0,0,.42) 100%),
+    var(--sport-bg) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+.create-route-v2-page .route-step-section .route-sport-photo-copy {
+  text-shadow: 0 2px 7px rgba(0,0,0,.92);
+}
+
+@media (max-width: 480px) {
+  .create-route-v2-page .route-step-section .route-sport-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
