@@ -1,5 +1,6 @@
 import "../styles/globals.css";
 import "../styles/route-sport-grid.css";
+import TrainingSportDeduper from "../components/TrainingSportDeduper";
 
 export const metadata = {
   title: "Endurance",
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
           fontFamily: "system-ui, sans-serif",
         }}
       >
+        <TrainingSportDeduper />
         {children}
       </body>
     </html>
