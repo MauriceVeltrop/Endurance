@@ -34,6 +34,16 @@
   display: none !important;
 }
 
+/* Step 2 already identifies the selected sport in the profile heading.
+   Remove the duplicate selected-sport card and its Change sport button. */
+.create-route-v2-page .route-method-premium-head {
+  display: none !important;
+}
+
+.create-route-v2-page .route-step-section .route-method-cards {
+  margin-top: 0 !important;
+}
+
 .create-route-v2-page .route-step-section .route-sport-photo-grid {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
