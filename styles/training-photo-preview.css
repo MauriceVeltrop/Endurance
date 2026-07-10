@@ -1,22 +1,32 @@
 /* Create Training — show the saved crop in the same 9:16 format as the cropper and training card. */
 [data-section="DetailsPhotoInline"] label {
+  position: relative !important;
+  display: block !important;
   width: min(100%, 260px) !important;
   aspect-ratio: 9 / 16 !important;
   min-height: 0 !important;
   height: auto !important;
+  padding: 0 !important;
   justify-self: center !important;
   align-self: start !important;
   overflow: hidden !important;
 }
 
-[data-section="DetailsPhotoInline"] label > img {
+[data-section="DetailsPhotoInline"] img[alt="Training preview"] {
+  position: absolute !important;
+  inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  min-height: 0 !important;
-  aspect-ratio: 9 / 16 !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
   object-fit: cover !important;
   object-position: center center !important;
   display: block !important;
+  margin: 0 !important;
+  border-radius: inherit !important;
 }
 
 @media (max-width: 430px) {
