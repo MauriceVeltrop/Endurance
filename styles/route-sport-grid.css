@@ -1,19 +1,25 @@
-/* Create Route: keep the four route sport cards in a fixed 2 x 2 grid. */
-.route-sport-photo-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  width: 100%;
+/* Create Route: force the four route sport cards into two rows and two columns.
+   The page-scoped selector and !important deliberately override older
+   responsive rules in globals.css that can switch this grid back to 3 or 1 columns. */
+.create-route-v2-page .route-step-section .route-sport-photo-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-auto-flow: row !important;
+  gap: 12px !important;
+  width: 100% !important;
+  align-items: stretch;
 }
 
-.route-sport-photo-card {
-  width: 100%;
-  min-width: 0;
+.create-route-v2-page .route-step-section .route-sport-photo-grid > .route-sport-photo-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
 }
 
 @media (max-width: 480px) {
-  .route-sport-photo-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+  .create-route-v2-page .route-step-section .route-sport-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
   }
 }
