@@ -191,6 +191,7 @@ export default function TrainingCard({ training, participants = [] }) {
             <button
               type="button"
               className="endurance-training-card-v3-button"
+              style={{ background: "#e53935", color: "#ffffff", boxShadow: "0 14px 34px rgba(229,57,53,.24)" }}
               onClick={leaveTraining}
               disabled={leaving}
             >
