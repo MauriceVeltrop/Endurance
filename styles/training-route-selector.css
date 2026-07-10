@@ -1,0 +1,56 @@
+.training-route-selector {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.training-route-selector-label {
+  color: rgba(255,255,255,.82);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.training-route-selector-select {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.045);
+  color: #fff;
+  padding: 0 14px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.training-route-selector-select:focus {
+  border-color: rgba(228,239,22,.52);
+  box-shadow: 0 0 0 3px rgba(228,239,22,.08);
+}
+
+.training-route-selector-select option {
+  background: #101510;
+  color: #fff;
+}
+
+.training-route-selector-summary {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border-radius: 16px;
+  border: 1px solid rgba(228,239,22,.2);
+  background: rgba(228,239,22,.07);
+}
+
+.training-route-selector-summary strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.training-route-selector-summary span,
+.training-route-selector-message {
+  color: rgba(255,255,255,.62);
+  font-size: 12px;
+  font-weight: 700;
+}
