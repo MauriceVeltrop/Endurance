@@ -4,16 +4,17 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getTrainingHeroImage } from "../../lib/sportImages";
+import { createNotification, NOTIFICATION_TYPES, trainingUrl } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 
 let currentUserPromise = null;
 
-function getCurrentUserId() {
+function getCurrentUser() {
   if (!currentUserPromise) {
     currentUserPromise = supabase.auth
       .getUser()
-      .then(({ data }) => data?.user?.id || "")
-      .catch(() => "");
+      .then(({ data }) => data?.user || null)
+      .catch(() => null);
   }
   return currentUserPromise;
 }
@@ -79,25 +80,41 @@ function creatorId(training) {
   return training?.creator?.id || training?.profiles?.id || training?.creator_id || null;
 }
 
+function currentUserName(user) {
+  const metadata = user?.user_metadata || {};
+  return (
+    metadata.name ||
+    [metadata.first_name, metadata.last_name].filter(Boolean).join(" ") ||
+    user?.email ||
+    "Someone"
+  );
+}
+
 export default function TrainingCard({ training, participants = [] }) {
-  const [currentUserId, setCurrentUserId] = useState("");
-  const [leaving, setLeaving] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [participationBusy, setParticipationBusy] = useState(false);
+  const [joinedLocally, setJoinedLocally] = useState(false);
   const [hasLeft, setHasLeft] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    getCurrentUserId().then((id) => {
-      if (!cancelled) setCurrentUserId(id);
+    getCurrentUser().then((user) => {
+      if (!cancelled) setCurrentUser(user);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const currentUserId = currentUser?.id || "";
+
   const isParticipant = useMemo(() => {
     if (!currentUserId || hasLeft) return false;
-    return participants.some((participant) => String(participant?.user_id) === String(currentUserId));
-  }, [participants, currentUserId, hasLeft]);
+    return (
+      joinedLocally ||
+      participants.some((participant) => String(participant?.user_id) === String(currentUserId))
+    );
+  }, [participants, currentUserId, joinedLocally, hasLeft]);
 
   if (!training) return null;
 
@@ -107,16 +124,74 @@ export default function TrainingCard({ training, participants = [] }) {
   const image = heroImage.src;
   const flexible = training.planning_type === "flexible";
   const summary = distanceLine(training);
-  const displayedParticipantCount = Math.max(0, participants.length - (hasLeft ? 1 : 0));
+  const originalParticipant = participants.some(
+    (participant) => String(participant?.user_id) === String(currentUserId)
+  );
+  const displayedParticipantCount = Math.max(
+    0,
+    participants.length + (joinedLocally && !originalParticipant ? 1 : 0) - (hasLeft && originalParticipant ? 1 : 0)
+  );
   const participantText = `${displayedParticipantCount}${training.max_participants ? `/${training.max_participants}` : ""}`;
   const makerName = creatorName(training);
   const makerId = creatorId(training);
+  const isFull = Boolean(
+    training.max_participants && displayedParticipantCount >= Number(training.max_participants)
+  );
 
-  async function leaveTraining() {
-    if (!currentUserId || leaving) return;
+  async function joinTraining() {
+    if (!currentUserId || participationBusy || flexible || isParticipant) return;
+
+    if (isFull) {
+      window.alert("This training is full.");
+      return;
+    }
 
     try {
-      setLeaving(true);
+      setParticipationBusy(true);
+
+      const { error } = await supabase
+        .from("session_participants")
+        .upsert(
+          {
+            session_id: training.id,
+            user_id: currentUserId,
+          },
+          {
+            onConflict: "session_id,user_id",
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (error) throw error;
+
+      setHasLeft(false);
+      setJoinedLocally(true);
+
+      if (training.creator_id && training.creator_id !== currentUserId) {
+        await createNotification({
+          userId: training.creator_id,
+          actorId: currentUserId,
+          type: NOTIFICATION_TYPES.TRAINING_JOINED,
+          sessionId: training.id,
+          title: "Someone joined your training",
+          body: `${currentUserName(currentUser)} joined ${training.title}.`,
+          actionUrl: trainingUrl(training.id),
+          metadata: { source: "training_feed_join" },
+        });
+      }
+    } catch (error) {
+      console.error("Could not join training", error);
+      window.alert(error?.message || "Joining the training failed. Please try again.");
+    } finally {
+      setParticipationBusy(false);
+    }
+  }
+
+  async function leaveTraining() {
+    if (!currentUserId || participationBusy) return;
+
+    try {
+      setParticipationBusy(true);
       const { error } = await supabase
         .from("session_participants")
         .delete()
@@ -124,12 +199,27 @@ export default function TrainingCard({ training, participants = [] }) {
         .eq("user_id", currentUserId);
 
       if (error) throw error;
+
+      setJoinedLocally(false);
       setHasLeft(true);
+
+      if (training.creator_id && training.creator_id !== currentUserId) {
+        await createNotification({
+          userId: training.creator_id,
+          actorId: currentUserId,
+          type: NOTIFICATION_TYPES.TRAINING_LEFT,
+          sessionId: training.id,
+          title: "Someone left your training",
+          body: `${currentUserName(currentUser)} left ${training.title}.`,
+          actionUrl: trainingUrl(training.id),
+          metadata: { source: "training_feed_leave" },
+        });
+      }
     } catch (error) {
       console.error("Could not leave training", error);
       window.alert("Leaving the training failed. Please try again.");
     } finally {
-      setLeaving(false);
+      setParticipationBusy(false);
     }
   }
 
@@ -198,14 +288,23 @@ export default function TrainingCard({ training, participants = [] }) {
                 boxShadow: "none",
               }}
               onClick={leaveTraining}
-              disabled={leaving}
+              disabled={participationBusy}
             >
-              {leaving ? "Leaving..." : "Leave"}
+              {participationBusy ? "Leaving..." : "Leave"}
             </button>
-          ) : (
+          ) : flexible ? (
             <Link href={href} className="endurance-training-card-v3-button">
-              {flexible ? "Respond" : "Join"}
+              Respond
             </Link>
+          ) : (
+            <button
+              type="button"
+              className="endurance-training-card-v3-button"
+              onClick={joinTraining}
+              disabled={participationBusy || isFull || !currentUserId}
+            >
+              {participationBusy ? "Joining..." : isFull ? "Full" : "Join"}
+            </button>
           )}
         </div>
       </div>
