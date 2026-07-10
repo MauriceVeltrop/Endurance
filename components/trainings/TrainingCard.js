@@ -2,7 +2,21 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { getTrainingHeroImage } from "../../lib/sportImages";
+import { supabase } from "../../lib/supabase";
+
+let currentUserPromise = null;
+
+function getCurrentUserId() {
+  if (!currentUserPromise) {
+    currentUserPromise = supabase.auth
+      .getUser()
+      .then(({ data }) => data?.user?.id || "")
+      .catch(() => "");
+  }
+  return currentUserPromise;
+}
 
 function formatDate(training) {
   const value = training?.final_starts_at || training?.starts_at;
@@ -66,6 +80,25 @@ function creatorId(training) {
 }
 
 export default function TrainingCard({ training, participants = [] }) {
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [leaving, setLeaving] = useState(false);
+  const [hasLeft, setHasLeft] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentUserId().then((id) => {
+      if (!cancelled) setCurrentUserId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isParticipant = useMemo(() => {
+    if (!currentUserId || hasLeft) return false;
+    return participants.some((participant) => String(participant?.user_id) === String(currentUserId));
+  }, [participants, currentUserId, hasLeft]);
+
   if (!training) return null;
 
   const href = `/trainings/${training.id}`;
@@ -74,9 +107,31 @@ export default function TrainingCard({ training, participants = [] }) {
   const image = heroImage.src;
   const flexible = training.planning_type === "flexible";
   const summary = distanceLine(training);
-  const participantText = `${participants.length}${training.max_participants ? `/${training.max_participants}` : ""}`;
+  const displayedParticipantCount = Math.max(0, participants.length - (hasLeft ? 1 : 0));
+  const participantText = `${displayedParticipantCount}${training.max_participants ? `/${training.max_participants}` : ""}`;
   const makerName = creatorName(training);
   const makerId = creatorId(training);
+
+  async function leaveTraining() {
+    if (!currentUserId || leaving) return;
+
+    try {
+      setLeaving(true);
+      const { error } = await supabase
+        .from("session_participants")
+        .delete()
+        .eq("session_id", training.id)
+        .eq("user_id", currentUserId);
+
+      if (error) throw error;
+      setHasLeft(true);
+    } catch (error) {
+      console.error("Could not leave training", error);
+      window.alert("Leaving the training failed. Please try again.");
+    } finally {
+      setLeaving(false);
+    }
+  }
 
   return (
     <article className="endurance-training-card-v3">
@@ -128,13 +183,24 @@ export default function TrainingCard({ training, participants = [] }) {
               ⌖ {training.start_location}
             </a>
           )}
-          <span>◷ {formatDate(training)}{participants.length ? ` • ${participants.length}${training.max_participants ? ` / ${training.max_participants}` : ""} deelnemers` : ""}</span>
+          <span>◷ {formatDate(training)}{displayedParticipantCount ? ` • ${displayedParticipantCount}${training.max_participants ? ` / ${training.max_participants}` : ""} deelnemers` : ""}</span>
         </div>
 
         <div className="endurance-training-card-v3-actions">
-          <Link href={href} className="endurance-training-card-v3-button">
-            {flexible ? "Respond" : "Join"}
-          </Link>
+          {isParticipant ? (
+            <button
+              type="button"
+              className="endurance-training-card-v3-button"
+              onClick={leaveTraining}
+              disabled={leaving}
+            >
+              {leaving ? "Leaving..." : "Leave"}
+            </button>
+          ) : (
+            <Link href={href} className="endurance-training-card-v3-button">
+              {flexible ? "Respond" : "Join"}
+            </Link>
+          )}
         </div>
       </div>
     </article>
