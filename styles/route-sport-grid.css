@@ -1,3 +1,8 @@
+/* Create Route: remove the duplicate small heading above the main title. */
+.create-route-v2-page .create-route-v2-hero .eyebrow {
+  display: none !important;
+}
+
 /* Create Route: force the four route sport cards into two rows and two columns.
    The page-scoped selector and !important deliberately override older
    responsive rules in globals.css that can switch this grid back to 3 or 1 columns. */
