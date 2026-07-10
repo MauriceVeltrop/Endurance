@@ -1,5 +1,6 @@
 import "../styles/globals.css";
 import "../styles/route-sport-grid.css";
+import "../styles/training-photo-preview.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 
 export const metadata = {
