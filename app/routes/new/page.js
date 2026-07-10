@@ -32,12 +32,13 @@ import {
 } from "../../../lib/routes/createRoutePageUtils";
 
 function normalizeRouteSportId(value) {
-  const id = String(value || "running").toLowerCase();
+  const id = String(value ?? "").trim().toLowerCase();
+  if (!id) return "";
   return id === "trail_running" || id === "trailrunning" ? "running" : id;
 }
 
 function dedupeRouteSports(sports = [], preferredIds = []) {
-  const preferred = new Set(preferredIds.map(normalizeRouteSportId));
+  const preferred = new Set(preferredIds.map(normalizeRouteSportId).filter(Boolean));
   const seen = new Set();
 
   return (sports || [])
@@ -47,7 +48,7 @@ function dedupeRouteSports(sports = [], preferredIds = []) {
       id: normalizeRouteSportId(sport.id),
       name: normalizeRouteSportId(sport.id) === "running" ? "(Trail)Running" : sport.name,
     }))
-    .filter((sport) => preferred.has(sport.id) || FALLBACK_ROUTE_SPORTS.includes(sport.id))
+    .filter((sport) => sport.id && (preferred.has(sport.id) || FALLBACK_ROUTE_SPORTS.includes(sport.id)))
     .filter((sport) => {
       if (seen.has(sport.id)) return false;
       seen.add(sport.id);
@@ -174,7 +175,7 @@ export default function NewRoutePage() {
 
         if (!safePoints.length) throw new Error("Route draft has no valid route points.");
 
-        const sportId = normalizeRouteSportId(draft.sport_id || "running");
+        const sportId = normalizeRouteSportId(draft.sport_id || "running") || "running";
         const startPlaceName = await resolveStartPlaceName(safePayload);
         const shouldAutoName = draft.title_is_auto !== false || isGenericRouteTitle(draft.title, sportId);
         const title = shouldAutoName
@@ -280,13 +281,15 @@ export default function NewRoutePage() {
         const params = new URLSearchParams(window.location.search);
         const requestedSport = normalizeRouteSportId(params.get("sport"));
         const requestedMethod = params.get("method");
-        const requestedAllowedSport = finalAllowed.find((sport) => sport.id === requestedSport);
+        const requestedAllowedSport = requestedSport
+          ? finalAllowed.find((sport) => sport.id === requestedSport)
+          : null;
         const first = requestedAllowedSport || finalAllowed[0];
 
         setForm((current) => ({
           ...current,
-          sport_id: normalizeRouteSportId(current.sport_id || first.id),
-          title: current.title || `${getSportLabel(normalizeRouteSportId(current.sport_id || first.id))} Route`,
+          sport_id: normalizeRouteSportId(current.sport_id || first.id) || first.id,
+          title: current.title || `${getSportLabel(normalizeRouteSportId(current.sport_id || first.id) || first.id)} Route`,
         }));
 
         if (requestedAllowedSport) setCurrentStep(requestedMethod ? 3 : 2);
@@ -376,7 +379,7 @@ export default function NewRoutePage() {
     try {
       const payload = {
         creator_id: profile.id,
-        sport_id: normalizeRouteSportId(form.sport_id),
+        sport_id: normalizeRouteSportId(form.sport_id) || "running",
         title: form.title.trim(),
         title_is_auto: form.title_is_auto !== false,
         description: form.description || "",
