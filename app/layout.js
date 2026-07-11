@@ -2,6 +2,7 @@ import "../styles/globals.css";
 import "../styles/route-sport-grid.css";
 import "../styles/training-photo-preview.css";
 import "../styles/training-route-selector.css";
+import "../styles/workout-method-route-layout.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
 
