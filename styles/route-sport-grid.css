@@ -63,12 +63,25 @@
   max-width: none !important;
   margin: 0 !important;
   padding: 14px !important;
+  border: 1px solid rgba(230,255,0,.42) !important;
+  outline: none !important;
+  box-shadow: none !important;
   background-image:
     linear-gradient(180deg, rgba(0,0,0,.38) 0%, rgba(0,0,0,.10) 48%, rgba(0,0,0,.18) 100%),
     var(--sport-bg) !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
+}
+
+/* A selected tile should look exactly like every other tile. */
+.create-route-v2-page .route-step-section .route-sport-photo-card.selected,
+.create-route-v2-page .route-step-section .route-sport-photo-card[aria-pressed="true"] {
+  border: 1px solid rgba(230,255,0,.42) !important;
+  outline: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
 }
 
 .create-route-v2-page .route-step-section .route-sport-photo-copy {
@@ -94,8 +107,7 @@
 }
 
 .create-route-v2-page .route-step-section .route-sport-selected-check {
-  top: 10px !important;
-  right: 10px !important;
+  display: none !important;
 }
 
 @media (max-width: 480px) {
