@@ -2,8 +2,10 @@ import "../styles/globals.css";
 import "../styles/route-sport-grid.css";
 import "../styles/training-photo-preview.css";
 import "../styles/training-route-selector.css";
+import "../styles/garmin-route-importer.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
+import GarminRouteImporter from "../components/GarminRouteImporter";
 
 export const metadata = {
   title: "Endurance",
@@ -23,6 +25,7 @@ export default function RootLayout({ children }) {
       >
         <TrainingSportDeduper />
         <TrainingRouteSelector />
+        <GarminRouteImporter />
         {children}
       </body>
     </html>
