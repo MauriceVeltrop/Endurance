@@ -15,18 +15,22 @@
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 5px !important;
+  gap: 6px !important;
   min-width: 0 !important;
   width: 100% !important;
   min-height: 78px !important;
   padding: 9px 5px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
   border-radius: 22px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.065), rgba(255,255,255,.025)) !important;
+  color: rgba(255,255,255,.58) !important;
   text-align: center !important;
   white-space: normal !important;
   line-height: 1.05 !important;
   font-size: clamp(10px, 2.7vw, 13px) !important;
   font-weight: 1000 !important;
   overflow-wrap: anywhere;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045) !important;
 }
 
 .workout-builder-page .workout-builder-stepbar .builder-step b {
@@ -36,9 +40,34 @@
   margin: 0 !important;
   display: grid !important;
   place-items: center !important;
+  border: 1px solid rgba(255,255,255,.42) !important;
   border-radius: 999px !important;
+  background: rgba(255,255,255,.08) !important;
+  color: rgba(255,255,255,.70) !important;
   font-size: 14px !important;
   line-height: 1 !important;
+  font-weight: 1000 !important;
+  box-shadow: none !important;
+}
+
+.workout-builder-page .workout-builder-stepbar .builder-step.active {
+  border-color: rgba(230,255,0,.72) !important;
+  background: linear-gradient(180deg, rgba(230,255,0,.12), rgba(255,255,255,.025)) !important;
+  color: #fff !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 0 0 1px rgba(230,255,0,.08) !important;
+}
+
+.workout-builder-page .workout-builder-stepbar .builder-step.active b {
+  border-color: #e6ff00 !important;
+  background: #e6ff00 !important;
+  color: #071008 !important;
+  box-shadow: 0 0 0 3px rgba(230,255,0,.14), 0 0 22px rgba(230,255,0,.24) !important;
+}
+
+.workout-builder-page .workout-builder-stepbar .builder-step.done b {
+  border-color: rgba(230,255,0,.58) !important;
+  background: rgba(230,255,0,.12) !important;
+  color: #e6ff00 !important;
 }
 
 @media (max-width: 420px) {
