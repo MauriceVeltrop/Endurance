@@ -1,0 +1,61 @@
+/* Match the Workout Builder step navigation to the Route Builder pattern. */
+.workout-builder-page .workout-builder-stepbar {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 0 18px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.workout-builder-page .workout-builder-stepbar .builder-step {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  min-height: 78px !important;
+  padding: 9px 5px !important;
+  border-radius: 22px !important;
+  text-align: center !important;
+  white-space: normal !important;
+  line-height: 1.05 !important;
+  font-size: clamp(10px, 2.7vw, 13px) !important;
+  font-weight: 1000 !important;
+  overflow-wrap: anywhere;
+}
+
+.workout-builder-page .workout-builder-stepbar .builder-step b {
+  flex: 0 0 auto !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 420px) {
+  .workout-builder-page .workout-builder-stepbar {
+    gap: 6px !important;
+  }
+
+  .workout-builder-page .workout-builder-stepbar .builder-step {
+    min-height: 74px !important;
+    padding: 8px 3px !important;
+    border-radius: 19px !important;
+    font-size: 10px !important;
+  }
+
+  .workout-builder-page .workout-builder-stepbar .builder-step b {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 13px !important;
+  }
+}
