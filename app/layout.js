@@ -5,6 +5,7 @@ import "../styles/training-route-selector.css";
 import "../styles/workout-method-route-layout.css";
 import "../styles/workout-builder-top-actions.css";
 import "../styles/workout-hero-route-match.css";
+import "../styles/workout-topographic-background.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
 
