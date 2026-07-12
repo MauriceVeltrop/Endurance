@@ -5,6 +5,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_SPORTS = new Set(["strength_training", "hyrox", "crossfit", "bootcamp"]);
+const HYROX_COMPONENTS = new Set([
+  "Run 1 km",
+  "SkiErg",
+  "Sled Push",
+  "Sled Pull",
+  "Burpee Broad Jumps",
+  "RowErg",
+  "Farmers Carry",
+  "Sandbag Lunges",
+  "Wall Balls",
+]);
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -54,7 +65,11 @@ export async function GET(request) {
     if (exerciseResult.error) throw exerciseResult.error;
     if (structureResult.error) throw structureResult.error;
 
-    const exercises = (exerciseResult.data || []).map((row) => {
+    const sportExercises = sportId === "hyrox"
+      ? (exerciseResult.data || []).filter((row) => HYROX_COMPONENTS.has(row.name))
+      : (exerciseResult.data || []);
+
+    const exercises = sportExercises.map((row) => {
       if (sportId !== "strength_training" || !row.strength_exercise_id) return row;
       return { ...row, catalog_id: row.id, id: row.strength_exercise_id };
     });
