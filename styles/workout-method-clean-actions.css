@@ -1,0 +1,16 @@
+/* Keep the method cards clean: the whole card is already the action. */
+.workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card {
+  grid-template-columns: 92px minmax(0, 1fr) !important;
+}
+
+.workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card small::after,
+.workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card > i {
+  display: none !important;
+  content: none !important;
+}
+
+@media (max-width: 560px) {
+  .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card {
+    grid-template-columns: 72px minmax(0, 1fr) !important;
+  }
+}
