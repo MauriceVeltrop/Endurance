@@ -8,6 +8,7 @@ import "../styles/workout-hero-route-match.css";
 import "../styles/workout-topographic-background.css";
 import "../styles/workout-stepbar-route-layout.css";
 import "../styles/workout-method-no-step-number.css";
+import "../styles/workout-step-one-card.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
 
