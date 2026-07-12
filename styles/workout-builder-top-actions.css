@@ -1,0 +1,4 @@
+/* Keep Workout Builder consistent with Route Builder: no separate back or close controls. */
+.workout-builder-page .workout-builder-top-actions {
+  display: none !important;
+}
