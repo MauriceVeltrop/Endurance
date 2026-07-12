@@ -10,6 +10,7 @@ import "../styles/workout-stepbar-route-layout.css";
 import "../styles/workout-method-no-step-number.css";
 import "../styles/workout-step-one-card.css";
 import "../styles/workout-method-clean-actions.css";
+import "../styles/workout-sport-flow.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
 
