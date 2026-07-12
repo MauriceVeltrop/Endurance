@@ -24,7 +24,7 @@ export async function GET(request) {
     const [exerciseResult, structureResult] = await Promise.all([
       supabase
         .from("workout_catalog_exercises")
-        .select("id,name,sports,category,primary_muscle_group,equipment,metric_type,default_reps,default_distance_m,default_duration_seconds,sort_order,active")
+        .select("id,strength_exercise_id,name,sports,category,primary_muscle_group,equipment,metric_type,default_reps,default_distance_m,default_duration_seconds,sort_order,active")
         .contains("sports", [sportId])
         .eq("active", true)
         .order("sort_order", { ascending: true })
