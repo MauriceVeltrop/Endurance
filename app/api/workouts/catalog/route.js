@@ -40,9 +40,14 @@ export async function GET(request) {
     if (exerciseResult.error) throw exerciseResult.error;
     if (structureResult.error) throw structureResult.error;
 
+    const exercises = (exerciseResult.data || []).map((row) => {
+      if (sportId !== "strength_training" || !row.strength_exercise_id) return row;
+      return { ...row, catalog_id: row.id, id: row.strength_exercise_id };
+    });
+
     return NextResponse.json({
       sport_id: sportId,
-      exercises: exerciseResult.data || [],
+      exercises,
       structures: structureResult.data || [],
     });
   } catch (error) {
