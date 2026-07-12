@@ -1,0 +1,20 @@
+/* Match the Create Workouts hero box exactly to the Create Routes hero proportions. */
+.workout-builder-page .workout-builder-header {
+  box-sizing: border-box !important;
+  width: calc(100% + 20px) !important;
+  height: 168px !important;
+  min-height: 168px !important;
+  margin: -32px -10px 24px !important;
+  padding: 34px 26px !important;
+}
+
+@media (max-width: 560px) {
+  .workout-builder-page .workout-builder-header {
+    width: calc(100% + 20px) !important;
+    height: 168px !important;
+    min-height: 168px !important;
+    margin: -32px -10px 24px !important;
+    padding: 34px 26px !important;
+    border-radius: 34px !important;
+  }
+}
