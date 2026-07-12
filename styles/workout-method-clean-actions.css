@@ -1,6 +1,15 @@
 /* Keep the method cards clean: the whole card is already the action. */
 .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card {
-  grid-template-columns: 92px minmax(0, 1fr) !important;
+  grid-template-columns: 82px minmax(0, 1fr) !important;
+  min-height: 136px !important;
+  padding: 18px 20px !important;
+  gap: 16px !important;
+}
+
+.workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card > img {
+  width: 78px !important;
+  height: 78px !important;
+  padding: 13px !important;
 }
 
 .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card small::after,
@@ -11,6 +20,15 @@
 
 @media (max-width: 560px) {
   .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card {
-    grid-template-columns: 72px minmax(0, 1fr) !important;
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+    min-height: 118px !important;
+    padding: 15px 16px !important;
+    gap: 13px !important;
+  }
+
+  .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) .builder-choice-card > img {
+    width: 62px !important;
+    height: 62px !important;
+    padding: 10px !important;
   }
 }
