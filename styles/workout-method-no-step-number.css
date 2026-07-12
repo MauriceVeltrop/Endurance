@@ -4,6 +4,7 @@
   margin-left: 0 !important;
 }
 
+.workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > .builder-kicker::after,
 .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > h2::before {
   display: none !important;
   content: none !important;
