@@ -1,0 +1,173 @@
+/* Sport-first Workout Creator, based on the Create Routes visual language. */
+.workout-builder-page .workout-builder-stepbar-five {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+.workout-builder-page .workout-builder-stepbar-five .builder-step {
+  min-height: 76px !important;
+  padding-inline: 3px !important;
+  font-size: clamp(9px, 2.2vw, 12px) !important;
+}
+
+.workout-sport-step {
+  padding: 22px !important;
+  border: 1px solid rgba(230,255,0,.24) !important;
+  border-radius: 30px !important;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(230,255,0,.08), transparent 30%),
+    linear-gradient(145deg, rgba(10,18,17,.96), rgba(6,11,12,.96)) !important;
+}
+
+.workout-sport-step > h2 {
+  margin: 0 0 22px !important;
+  font-size: clamp(31px, 8vw, 48px) !important;
+  line-height: .95 !important;
+  letter-spacing: -.065em !important;
+}
+
+.workout-sport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workout-sport-card {
+  position: relative;
+  isolation: isolate;
+  min-height: 154px;
+  padding: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  border: 1px solid rgba(230,255,0,.34);
+  border-radius: 25px;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.82)),
+    var(--workout-sport-image);
+  background-size: cover;
+  background-position: center;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workout-sport-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(circle at 82% 12%, rgba(230,255,0,.13), transparent 38%);
+}
+
+.workout-sport-card span {
+  display: grid;
+  gap: 5px;
+}
+
+.workout-sport-card b {
+  color: #e6ff00;
+  font-size: clamp(20px, 5vw, 28px);
+  line-height: 1;
+  letter-spacing: -.045em;
+  font-weight: 1000;
+  text-shadow: 0 4px 14px rgba(0,0,0,.9);
+}
+
+.workout-sport-card small {
+  color: rgba(255,255,255,.72);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  text-shadow: 0 3px 10px rgba(0,0,0,.95);
+}
+
+.workout-structure-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0 24px;
+}
+
+.workout-structure-card {
+  min-height: 112px;
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+  color: white;
+  text-align: left;
+}
+
+.workout-structure-card b {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 1000;
+}
+
+.workout-structure-card small {
+  color: rgba(255,255,255,.55);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workout-structure-card.selected {
+  border-color: rgba(230,255,0,.72);
+  background: linear-gradient(145deg, rgba(230,255,0,.13), rgba(255,255,255,.025));
+  box-shadow: 0 0 0 2px rgba(230,255,0,.08), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.workout-structure-card.selected b {
+  color: #e6ff00;
+}
+
+@media (max-width: 560px) {
+  .workout-builder-page .workout-builder-stepbar-five {
+    gap: 5px !important;
+  }
+
+  .workout-builder-page .workout-builder-stepbar-five .builder-step {
+    min-height: 72px !important;
+    border-radius: 18px !important;
+    font-size: 9px !important;
+  }
+
+  .workout-builder-page .workout-builder-stepbar-five .builder-step b {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 12px !important;
+  }
+
+  .workout-sport-step {
+    padding: 18px !important;
+    border-radius: 26px !important;
+  }
+
+  .workout-sport-grid,
+  .workout-structure-grid {
+    gap: 10px;
+  }
+
+  .workout-sport-card {
+    min-height: 135px;
+    padding: 13px;
+    border-radius: 22px;
+  }
+
+  .workout-sport-card small {
+    display: none;
+  }
+
+  .workout-structure-card {
+    min-height: 96px;
+    padding: 13px;
+    border-radius: 21px;
+  }
+
+  .workout-structure-card b {
+    font-size: 17px;
+  }
+}
