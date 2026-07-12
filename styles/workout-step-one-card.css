@@ -20,9 +20,9 @@
 
 .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > h2 {
   margin-bottom: 24px !important;
-  font-size: clamp(23px, 6.2vw, 44px) !important;
-  line-height: 1 !important;
-  letter-spacing: -.06em !important;
+  font-size: clamp(25px, 6.8vw, 46px) !important;
+  line-height: .98 !important;
+  letter-spacing: -.07em !important;
   white-space: nowrap !important;
 }
 
@@ -33,6 +33,6 @@
   }
 
   .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > h2 {
-    font-size: clamp(22px, 6vw, 34px) !important;
+    font-size: clamp(24px, 6.7vw, 36px) !important;
   }
 }
