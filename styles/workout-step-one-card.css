@@ -20,11 +20,19 @@
 
 .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > h2 {
   margin-bottom: 24px !important;
+  font-size: clamp(21px, 5.8vw, 42px) !important;
+  line-height: 1 !important;
+  letter-spacing: -.055em !important;
+  white-space: nowrap !important;
 }
 
 @media (max-width: 560px) {
   .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) {
     padding: 18px !important;
     border-radius: 26px !important;
+  }
+
+  .workout-builder-page .workout-builder-form > .workout-builder-card:has(.builder-choice-card) > h2 {
+    font-size: clamp(20px, 5.7vw, 32px) !important;
   }
 }
