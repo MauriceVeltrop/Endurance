@@ -189,7 +189,7 @@ export default function NewWorkoutPage() {
       <section className="workout-builder-shell">
         <AppHeader profile={profile} compact />
         <div className="workout-builder-top-actions"><Link href="/workouts" className="workout-builder-back">← Back</Link><Link href="/workouts" className="workout-builder-close" aria-label="Close">×</Link></div>
-        <header className="workout-builder-header"><p>Workout Builder</p><h1>Create your strength workout</h1><span>Choose how you want to build. Then select muscle groups, exercises and set details.</span></header>
+        <header className="workout-builder-header"><p>Workout Builder</p><h1>Create Workout<span>.</span></h1></header>
         <nav className="workout-builder-stepbar" aria-label="Workout builder steps">{["Method","Muscle Groups","Exercises","Finish"].map((label, index) => { const number=index+1; const active=stepIndex===number; const done=stepIndex>number; return <button key={label} type="button" className={`builder-step ${active ? "active" : ""} ${done ? "done" : ""}`} onClick={() => { if(number===1)setStep("method"); if(number===2&&method)setStep("muscles"); if(number===3&&selectedMuscles.length)setStep("exercises"); if(number===4&&selectedExercises.length)setStep("finish"); }}><b>{done ? "✓" : number}</b>{label}</button>; })}</nav>
         {message ? <section className="workout-builder-message">{message}</section> : null}
         {checking ? <section className="workout-builder-card">Checking profile...</section> : (
