@@ -13,6 +13,7 @@ import "../styles/workout-method-clean-actions.css";
 import "../styles/workout-sport-flow.css";
 import "../styles/hyrox-block-builder.css";
 import "../styles/workout-muscle-images.css";
+import "../styles/workout-muscle-png.css";
 import TrainingSportDeduper from "../components/TrainingSportDeduper";
 import TrainingRouteSelector from "../components/TrainingRouteSelector";
 
