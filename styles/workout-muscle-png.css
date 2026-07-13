@@ -1,0 +1,14 @@
+/* Raster PNG muscle imagery. Loaded after the earlier image rules so no SVG is used. */
+img[src$="/chest.png"] { content: url("/muscle-images/chest.png") !important; }
+img[src$="/back.png"] { content: url("/muscle-images/back.png") !important; }
+img[src$="/shoulders.png"] { content: url("/muscle-images/shoulders.png") !important; }
+img[src$="/biceps.png"] { content: url("/muscle-images/biceps.png") !important; }
+img[src$="/triceps.png"] { content: url("/muscle-images/triceps.png") !important; }
+img[src$="/legs.png"] { content: url("/muscle-images/legs.png") !important; }
+img[src$="/core.png"] { content: url("/muscle-images/core.png") !important; }
+
+.muscle-picker-card img,
+.exercise-select-row img {
+  object-fit: cover !important;
+  background: #070c0d !important;
+}
