@@ -1,0 +1,35 @@
+/* Consistent anatomical illustrations for every Strength Training muscle group. */
+.muscle-picker-card img,
+.exercise-select-row img {
+  object-fit: cover !important;
+  border-radius: 20px !important;
+  background: #080d0e !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06) !important;
+}
+
+img[src$="/chest.png"] { content: url("/illustrations/workout-builder/muscles/chest.svg"); }
+img[src$="/back.png"] { content: url("/illustrations/workout-builder/muscles/back.svg"); }
+img[src$="/shoulders.png"] { content: url("/illustrations/workout-builder/muscles/shoulders.svg"); }
+img[src$="/biceps.png"] { content: url("/illustrations/workout-builder/muscles/biceps.svg"); }
+img[src$="/triceps.png"] { content: url("/illustrations/workout-builder/muscles/triceps.svg"); }
+img[src$="/legs.png"] { content: url("/illustrations/workout-builder/muscles/legs.svg"); }
+img[src$="/core.png"] { content: url("/illustrations/workout-builder/muscles/core.svg"); }
+
+.muscle-picker-card {
+  overflow: hidden;
+}
+
+.muscle-picker-card img {
+  width: 112px !important;
+  height: 112px !important;
+  flex: 0 0 112px !important;
+}
+
+@media (max-width: 560px) {
+  .muscle-picker-card img {
+    width: 96px !important;
+    height: 96px !important;
+    flex-basis: 96px !important;
+    border-radius: 18px !important;
+  }
+}
