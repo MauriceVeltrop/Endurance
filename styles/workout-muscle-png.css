@@ -1,24 +1,24 @@
-/* Latest transparent square anatomical PNG images from Google Drive folder "Fitness Anatomie Afbeeldingen". */
+/* Use local app-served PNG routes so the images always load in production. */
 img[src$="/chest.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=1kdEuG4eUX04bnsiS2AdAh9XZJag2Yba9") !important;
+  content: url("/muscle-images/chest.png") !important;
 }
 img[src$="/back.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=16HvS1vLxayFI65t2fOfS8qIPLAR6KzJl") !important;
+  content: url("/muscle-images/back.png") !important;
 }
 img[src$="/shoulders.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=1T8kwGp4ku6iGOreDZ6yWcTGjHbHXgINu") !important;
+  content: url("/muscle-images/shoulders.png") !important;
 }
 img[src$="/biceps.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=1tI4Qf2_UZtu0ulRwAVcNZO2pYQaAbGKc") !important;
+  content: url("/muscle-images/biceps.png") !important;
 }
 img[src$="/triceps.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=1Ii2rYyaq-lD7KBgAQwNzyxfTzXs-J14P") !important;
+  content: url("/muscle-images/triceps.png") !important;
 }
 img[src$="/legs.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=1uw96Wv4oncah7wpDJxyRFKL3B6hlOvpP") !important;
+  content: url("/muscle-images/legs.png") !important;
 }
 img[src$="/core.png"] {
-  content: url("https://drive.google.com/uc?export=view&id=11oV9e2uI7dMJmzU0w5kiISxTuv0WT3Z8") !important;
+  content: url("/muscle-images/core.png") !important;
 }
 
 .muscle-picker-card img,
