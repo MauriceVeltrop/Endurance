@@ -1,24 +1,24 @@
-/* Use local app-served PNG routes so the images always load in production. */
+/* Anatomical PNG files are stored locally in public/images/muscles. */
 img[src$="/chest.png"] {
-  content: url("/muscle-images/chest.png") !important;
+  content: url("/images/muscles/chest.png") !important;
 }
 img[src$="/back.png"] {
-  content: url("/muscle-images/back.png") !important;
+  content: url("/images/muscles/back.png") !important;
 }
 img[src$="/shoulders.png"] {
-  content: url("/muscle-images/shoulders.png") !important;
+  content: url("/images/muscles/shoulders.png") !important;
 }
 img[src$="/biceps.png"] {
-  content: url("/muscle-images/biceps.png") !important;
+  content: url("/images/muscles/biceps.png") !important;
 }
 img[src$="/triceps.png"] {
-  content: url("/muscle-images/triceps.png") !important;
+  content: url("/images/muscles/triceps.png") !important;
 }
 img[src$="/legs.png"] {
-  content: url("/muscle-images/legs.png") !important;
+  content: url("/images/muscles/legs.png") !important;
 }
 img[src$="/core.png"] {
-  content: url("/muscle-images/core.png") !important;
+  content: url("/images/muscles/core.png") !important;
 }
 
 .muscle-picker-card img,
