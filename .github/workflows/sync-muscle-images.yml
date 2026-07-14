@@ -1,0 +1,53 @@
+name: Sync muscle anatomy images
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/sync-muscle-images.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download anatomy PNG files from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/images/muscles
+
+          download_png() {
+            local id="$1"
+            local target="$2"
+            curl --fail --location --retry 3 --retry-delay 2 \
+              "https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t" \
+              --output "${target}"
+            test "$(head -c 8 "${target}" | xxd -p)" = "89504e470d0a1a0a"
+          }
+
+          download_png "1kdEuG4eUX04bnsiS2AdAh9XZJag2Yba9" "public/images/muscles/chest.png"
+          download_png "16HvS1vLxayFI65t2fOfS8qIPLAR6KzJl" "public/images/muscles/back.png"
+          download_png "1T8kwGp4ku6iGOreDZ6yWcTGjHbHXgINu" "public/images/muscles/shoulders.png"
+          download_png "1tI4Qf2_UZtu0ulRwAVcNZO2pYQaAbGKc" "public/images/muscles/biceps.png"
+          download_png "1Ii2rYyaq-lD7KBgAQwNzyxfTzXs-J14P" "public/images/muscles/triceps.png"
+          download_png "1uw96Wv4oncah7wpDJxyRFKL3B6hlOvpP" "public/images/muscles/legs.png"
+          download_png "11oV9e2uI7dMJmzU0w5kiISxTuv0WT3Z8" "public/images/muscles/core.png"
+
+      - name: Commit local anatomy images
+        shell: bash
+        run: |
+          if git diff --quiet -- public/images/muscles && [ -z "$(git status --porcelain public/images/muscles)" ]; then
+            echo "Muscle images are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/images/muscles
+          git commit -m "Store anatomical muscle images locally"
+          git push
