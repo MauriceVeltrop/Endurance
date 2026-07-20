@@ -36,6 +36,11 @@ img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
   transform: none !important;
 }
 
+/* Show the complete deltoids by placing the shoulders illustration slightly lower. */
+.muscle-picker-card img[src$="/shoulders.png"] {
+  object-position: 50% 35% !important;
+}
+
 /* Subtle bottom fade keeps every label readable without creating another frame. */
 .muscle-picker-card::after {
   content: "";
