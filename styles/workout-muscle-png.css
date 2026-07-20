@@ -1,61 +1,74 @@
 /* Anatomical PNG files are stored locally in public/images/muscles. */
-img[src$="/chest.png"] {
-  content: url("/images/muscles/chest.png") !important;
-  object-position: 50% 50% !important;
-}
-img[src$="/back.png"] {
-  content: url("/images/muscles/back.png") !important;
-  object-position: 50% 42% !important;
-}
-img[src$="/shoulders.png"] {
-  content: url("/images/muscles/shoulders.png") !important;
-  object-position: 50% 44% !important;
-}
-img[src$="/biceps.png"] {
-  content: url("/images/muscles/biceps.png") !important;
-  object-position: 50% 46% !important;
-}
-img[src$="/triceps.png"] {
-  content: url("/images/muscles/triceps.png") !important;
-  object-position: 50% 47% !important;
-}
-img[src$="/legs.png"] {
-  content: url("/images/muscles/legs.png") !important;
-  object-position: 50% 48% !important;
-}
-img[src$="/core.png"] {
-  content: url("/images/muscles/core.png") !important;
-  object-position: 50% 47% !important;
-}
+img[src$="/chest.png"] { content: url("/images/muscles/chest.png") !important; }
+img[src$="/back.png"] { content: url("/images/muscles/back.png") !important; }
+img[src$="/shoulders.png"] { content: url("/images/muscles/shoulders.png") !important; }
+img[src$="/biceps.png"] { content: url("/images/muscles/biceps.png") !important; }
+img[src$="/triceps.png"] { content: url("/images/muscles/triceps.png") !important; }
+img[src$="/legs.png"] { content: url("/images/muscles/legs.png") !important; }
+img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
 
+/* One single card: the illustration fills the outer card directly. */
 .muscle-picker-card {
   position: relative !important;
   min-height: 150px !important;
   overflow: hidden !important;
-}
-
-.muscle-picker-card img,
-.exercise-select-row img {
-  display: block !important;
-  object-fit: contain !important;
-  background: transparent !important;
-  padding: 8px !important;
-  box-sizing: border-box !important;
+  isolation: isolate !important;
+  padding: 0 !important;
 }
 
 .muscle-picker-card img {
-  width: 126px !important;
-  height: 126px !important;
-  flex: 0 0 126px !important;
-  transform: scale(1.35) !important;
-  transform-origin: center center !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  flex: none !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
+/* Subtle bottom fade keeps every label readable without creating another frame. */
+.muscle-picker-card::after {
+  content: "";
+  position: absolute;
+  inset: 42% 0 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(3, 8, 9, .38) 48%, rgba(3, 8, 9, .88) 100%);
+}
+
+/* All muscle-group labels use exactly the same position and alignment. */
 .muscle-picker-card b,
 .muscle-picker-card strong,
 .muscle-picker-card span {
-  position: relative !important;
+  position: absolute !important;
+  left: 18px !important;
+  right: 18px !important;
+  bottom: 16px !important;
   z-index: 2 !important;
+  margin: 0 !important;
+  text-align: left !important;
+  line-height: 1 !important;
+  color: #fff !important;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .9) !important;
+}
+
+/* Exercise rows keep their compact thumbnail layout. */
+.exercise-select-row img {
+  display: block !important;
+  object-fit: cover !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
 }
 
 @media (max-width: 560px) {
@@ -63,11 +76,11 @@ img[src$="/core.png"] {
     min-height: 132px !important;
   }
 
-  .muscle-picker-card img {
-    width: 112px !important;
-    height: 112px !important;
-    flex-basis: 112px !important;
-    padding: 6px !important;
-    transform: scale(1.38) !important;
+  .muscle-picker-card b,
+  .muscle-picker-card strong,
+  .muscle-picker-card span {
+    left: 14px !important;
+    right: 14px !important;
+    bottom: 13px !important;
   }
 }
