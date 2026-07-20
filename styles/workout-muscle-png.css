@@ -1,28 +1,73 @@
 /* Anatomical PNG files are stored locally in public/images/muscles. */
 img[src$="/chest.png"] {
   content: url("/images/muscles/chest.png") !important;
+  object-position: 50% 50% !important;
 }
 img[src$="/back.png"] {
   content: url("/images/muscles/back.png") !important;
+  object-position: 50% 42% !important;
 }
 img[src$="/shoulders.png"] {
   content: url("/images/muscles/shoulders.png") !important;
+  object-position: 50% 44% !important;
 }
 img[src$="/biceps.png"] {
   content: url("/images/muscles/biceps.png") !important;
+  object-position: 50% 46% !important;
 }
 img[src$="/triceps.png"] {
   content: url("/images/muscles/triceps.png") !important;
+  object-position: 50% 47% !important;
 }
 img[src$="/legs.png"] {
   content: url("/images/muscles/legs.png") !important;
+  object-position: 50% 48% !important;
 }
 img[src$="/core.png"] {
   content: url("/images/muscles/core.png") !important;
+  object-position: 50% 47% !important;
+}
+
+.muscle-picker-card {
+  position: relative !important;
+  min-height: 150px !important;
+  overflow: hidden !important;
 }
 
 .muscle-picker-card img,
 .exercise-select-row img {
+  display: block !important;
   object-fit: contain !important;
-  background: #070c0d !important;
+  background: transparent !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+}
+
+.muscle-picker-card img {
+  width: 126px !important;
+  height: 126px !important;
+  flex: 0 0 126px !important;
+  transform: scale(1.35) !important;
+  transform-origin: center center !important;
+}
+
+.muscle-picker-card b,
+.muscle-picker-card strong,
+.muscle-picker-card span {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+@media (max-width: 560px) {
+  .muscle-picker-card {
+    min-height: 132px !important;
+  }
+
+  .muscle-picker-card img {
+    width: 112px !important;
+    height: 112px !important;
+    flex-basis: 112px !important;
+    padding: 6px !important;
+    transform: scale(1.38) !important;
+  }
 }
