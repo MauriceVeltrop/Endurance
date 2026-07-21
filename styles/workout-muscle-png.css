@@ -7,13 +7,19 @@ img[src$="/triceps.png"] { content: url("/images/muscles/triceps.png") !importan
 img[src$="/legs.png"] { content: url("/images/muscles/legs.png") !important; }
 img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
 
-/* One single card: the illustration fills the outer card directly. */
+/* Compact two-column layout, based on the Route Creator card spacing. */
+.muscle-picker-grid {
+  gap: 10px !important;
+  margin-top: 18px !important;
+}
+
 .muscle-picker-card {
   position: relative !important;
-  min-height: 150px !important;
+  min-height: 138px !important;
   overflow: hidden !important;
   isolation: isolate !important;
   padding: 0 !important;
+  border-radius: 24px !important;
 }
 
 .muscle-picker-card img {
@@ -38,33 +44,56 @@ img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
 
 /* Keep the neck and both highlighted deltoids fully visible. */
 .muscle-picker-card img[src$="/shoulders.png"] {
-  object-position: 50% 18% !important;
+  object-position: 50% 8% !important;
 }
 
 /* Subtle bottom fade keeps every label readable without creating another frame. */
 .muscle-picker-card::after {
   content: "";
   position: absolute;
-  inset: 42% 0 0;
+  inset: 45% 0 0;
   z-index: 1;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(3, 8, 9, .38) 48%, rgba(3, 8, 9, .88) 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(3, 8, 9, .32) 42%, rgba(3, 8, 9, .88) 100%);
 }
 
-/* All muscle-group labels use exactly the same position and alignment. */
-.muscle-picker-card b,
-.muscle-picker-card strong,
-.muscle-picker-card span {
+/* Muscle name: consistent bottom-left alignment. */
+.muscle-picker-card > span {
   position: absolute !important;
-  left: 18px !important;
-  right: 18px !important;
-  bottom: 16px !important;
+  left: 16px !important;
+  right: 52px !important;
+  bottom: 14px !important;
   z-index: 2 !important;
   margin: 0 !important;
   text-align: left !important;
   line-height: 1 !important;
   color: #fff !important;
   text-shadow: 0 2px 12px rgba(0, 0, 0, .9) !important;
+}
+
+/* Selected check: small, clear and fixed in the top-right corner. */
+.muscle-picker-card > b {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  bottom: auto !important;
+  z-index: 3 !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 2px solid #e6ff00 !important;
+  background: rgba(5, 9, 10, .78) !important;
+  color: #e6ff00 !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .38) !important;
+  text-shadow: none !important;
 }
 
 /* Exercise rows keep their compact thumbnail layout. */
@@ -77,19 +106,31 @@ img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
 }
 
 @media (max-width: 560px) {
+  .muscle-picker-grid {
+    gap: 8px !important;
+    margin-top: 14px !important;
+  }
+
   .muscle-picker-card {
-    min-height: 132px !important;
+    min-height: 122px !important;
+    border-radius: 21px !important;
   }
 
   .muscle-picker-card img[src$="/shoulders.png"] {
-    object-position: 50% 14% !important;
+    object-position: 50% 5% !important;
   }
 
-  .muscle-picker-card b,
-  .muscle-picker-card strong,
-  .muscle-picker-card span {
-    left: 14px !important;
-    right: 14px !important;
-    bottom: 13px !important;
+  .muscle-picker-card > span {
+    left: 12px !important;
+    right: 46px !important;
+    bottom: 11px !important;
+  }
+
+  .muscle-picker-card > b {
+    top: 9px !important;
+    right: 9px !important;
+    width: 31px !important;
+    height: 31px !important;
+    font-size: 18px !important;
   }
 }
