@@ -36,9 +36,9 @@ img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
   transform: none !important;
 }
 
-/* Show the complete deltoids by placing the shoulders illustration slightly lower. */
+/* Keep the neck and both highlighted deltoids fully visible. */
 .muscle-picker-card img[src$="/shoulders.png"] {
-  object-position: 50% 35% !important;
+  object-position: 50% 18% !important;
 }
 
 /* Subtle bottom fade keeps every label readable without creating another frame. */
@@ -79,6 +79,10 @@ img[src$="/core.png"] { content: url("/images/muscles/core.png") !important; }
 @media (max-width: 560px) {
   .muscle-picker-card {
     min-height: 132px !important;
+  }
+
+  .muscle-picker-card img[src$="/shoulders.png"] {
+    object-position: 50% 14% !important;
   }
 
   .muscle-picker-card b,
